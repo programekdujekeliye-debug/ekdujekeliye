@@ -549,7 +549,7 @@ export default function AdminDashboard() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
           <div>
             <h1 className="text-3xl font-extrabold text-slate-100 tracking-tight flex items-center gap-3">
-              <span className="w-3 h-8 bg-amber-500 rounded-full inline-block"></span>
+              <img src="/logo.png" alt="Ek Duje Ke Liye Logo" className="h-9 w-auto object-contain" />
               Admin Dashboard
             </h1>
             <p className="text-slate-400 text-sm mt-1">

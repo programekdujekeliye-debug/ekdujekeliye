@@ -334,10 +334,8 @@ export default function Home() {
       <header className="py-6 px-8 border-b border-slate-800 bg-slate-950/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center font-bold text-slate-950 text-xl tracking-tight">
-              C
-            </div>
-            <span className="text-xl font-bold tracking-wider text-slate-100">COUPLE CARD GENERATOR</span>
+            <img src="/logo.png" alt="Ek Duje Ke Liye Logo" className="h-10 w-auto object-contain" />
+            <span className="text-xl font-bold tracking-wider text-slate-100 uppercase">Ek Duje Ke Liye</span>
           </div>
           <div className="flex items-center gap-2 text-sm text-slate-400">
             <span className={step >= 1 ? 'text-amber-500 font-semibold' : ''}>1. Info</span>
