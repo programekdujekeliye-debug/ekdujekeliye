@@ -24,3 +24,60 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes floatHeart {
+  0% {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.4;
+  }
+  90% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(-105vh) rotate(360deg) scale(1.3);
+    opacity: 0;
+  }
+}
+
+.animate-float-heart {
+  animation-name: floatHeart;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+
+@keyframes heartbeat {
+  0%, 100% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.02);
+  }
+  40% {
+    transform: scale(1);
+  }
+  55% {
+    transform: scale(1.02);
+  }
+}
+
+.animate-heartbeat {
+  animation: heartbeat 2s infinite ease-in-out;
+}
+
+@keyframes burstHeart {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0.3);
+    opacity: 0;
+  }
+}
+
+.animate-burst-heart {
+  animation: burstHeart 0.8s cubic-bezier(0.15, 0.85, 0.35, 1) forwards;
+}

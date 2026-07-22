@@ -48,6 +48,38 @@ export default function Home() {
   });
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [hearts, setHearts] = useState<{ id: number; left: number; size: number; delay: number; duration: number }[]>([]);
+  const [clickHearts, setClickHearts] = useState<{ id: number; x: number; y: number; tx: number; ty: number; size: number }[]>([]);
+
+  useEffect(() => {
+    const generated = Array.from({ length: 25 }).map((_, i) => ({
+      id: i,
+      left: Math.random() * 100,
+      size: Math.random() * 20 + 12,
+      delay: Math.random() * 8,
+      duration: Math.random() * 6 + 6
+    }));
+    setHearts(generated);
+  }, []);
+
+  const handleGlobalClick = (e: React.MouseEvent) => {
+    const newHearts = Array.from({ length: 6 }).map((_, i) => {
+      const angle = (i * 60 * Math.PI) / 180 + (Math.random() * 0.2 - 0.1);
+      const distance = Math.random() * 80 + 40;
+      return {
+        id: Date.now() + i + Math.random(),
+        x: e.clientX,
+        y: e.clientY,
+        tx: Math.cos(angle) * distance,
+        ty: Math.sin(angle) * distance,
+        size: Math.random() * 12 + 10
+      };
+    });
+    setClickHearts(prev => [...prev, ...newHearts]);
+    setTimeout(() => {
+      setClickHearts(prev => prev.filter(h => !newHearts.some(nh => nh.id === h.id)));
+    }, 800);
+  };
 
   useEffect(() => {
     const fetchPrograms = async () => {
@@ -329,30 +361,68 @@ export default function Home() {
   const selectedProgramName = programs.find(p => p.id === selectedProgramId)?.name || 'Couple Pass';
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-between font-sans">
+    <div 
+      onClick={handleGlobalClick}
+      className="min-h-screen bg-gradient-to-br from-[#1a050d] via-[#0c0306] to-[#080205] text-slate-100 flex flex-col justify-between font-sans relative overflow-hidden"
+    >
+      {/* Floating Hearts Background */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        {hearts.map((h) => (
+          <span
+            key={h.id}
+            className="absolute bottom-[-50px] text-rose-500/15 animate-float-heart"
+            style={{
+              left: `${h.left}%`,
+              fontSize: `${h.size}px`,
+              animationDelay: `${h.delay}s`,
+              animationDuration: `${h.duration}s`,
+            }}
+          >
+            ❤️
+          </span>
+        ))}
+      </div>
+
+      {/* Click Burst Hearts */}
+      {clickHearts.map((h) => (
+        <span
+          key={h.id}
+          className="fixed pointer-events-none text-rose-500 z-50 animate-burst-heart"
+          style={{
+            left: h.x,
+            top: h.y,
+            fontSize: `${h.size}px`,
+            '--tx': `${h.tx}px`,
+            '--ty': `${h.ty}px`,
+          } as React.CSSProperties}
+        >
+          ❤️
+        </span>
+      ))}
+
       {/* Header */}
-      <header className="py-6 px-8 border-b border-slate-800 bg-slate-950/50 backdrop-blur-md sticky top-0 z-50">
+      <header className="py-6 px-8 border-b border-rose-950/40 bg-slate-950/40 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Ek Duje Ke Liye Logo" className="h-10 w-auto object-contain" />
             <span className="text-xl font-bold tracking-wider text-slate-100 uppercase">Ek Duje Ke Liye</span>
           </div>
           <div className="flex items-center gap-2 text-sm text-slate-400">
-            <span className={step >= 1 ? 'text-amber-500 font-semibold' : ''}>1. Info</span>
+            <span className={step >= 1 ? 'text-rose-400 font-semibold' : ''}>1. Info</span>
             <span>&bull;</span>
-            <span className={step >= 2 ? 'text-amber-500 font-semibold' : ''}>2. Payment</span>
+            <span className={step >= 2 ? 'text-rose-400 font-semibold' : ''}>2. Payment</span>
             <span>&bull;</span>
-            <span className={step >= 3 ? 'text-amber-500 font-semibold' : ''}>3. Card</span>
+            <span className={step >= 3 ? 'text-rose-400 font-semibold' : ''}>3. Card</span>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-grow flex items-center justify-center p-6 md:p-12">
-        <div className="w-full max-w-xl bg-slate-950/70 border border-slate-800/80 rounded-3xl p-8 backdrop-blur-xl shadow-2xl relative overflow-hidden">
+      <main className="flex-grow flex items-center justify-center p-6 md:p-12 z-10">
+        <div className="w-full max-w-xl bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] relative overflow-hidden">
           {/* Ambient Glows */}
-          <div className="absolute -top-40 -right-40 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -top-40 -right-40 w-96 h-96 bg-rose-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-red-500/10 rounded-full blur-3xl pointer-events-none" />
 
           {error && (
             <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
@@ -371,7 +441,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setShowStatusCheck(false)}
-                  className="text-xs text-amber-500 hover:underline font-semibold border border-amber-500/35 hover:bg-amber-500/10 px-3 py-1.5 rounded-xl transition-all"
+                  className="text-xs text-rose-400 hover:underline font-semibold border border-rose-500/30 hover:bg-rose-500/10 px-3 py-1.5 rounded-xl transition-all"
                 >
                   Back to Register
                 </button>
@@ -385,7 +455,7 @@ export default function Home() {
                   value={searchInquiryId}
                   onChange={(e) => setSearchInquiryId(e.target.value)}
                   placeholder="Enter INQ-XXXX"
-                  className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors uppercase font-mono tracking-wider"
+                  className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors uppercase font-mono tracking-wider"
                 />
               </div>
 
@@ -396,7 +466,7 @@ export default function Home() {
                     window.location.href = `/pass/${searchInquiryId.toUpperCase()}`;
                   }
                 }}
-                className="w-full py-4 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-bold rounded-2xl transition-all shadow-lg shadow-amber-500/20"
+                className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-bold rounded-2xl transition-all shadow-lg shadow-rose-500/20 animate-heartbeat"
               >
                 Check Status & Download
               </button>
@@ -419,7 +489,7 @@ export default function Home() {
                     value={husbandName}
                     onChange={(e) => setHusbandName(e.target.value)}
                     placeholder="Enter Husband's Name"
-                    className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
+                    className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
                   />
                 </div>
                 <div>
@@ -430,7 +500,7 @@ export default function Home() {
                     value={wifeName}
                     onChange={(e) => setWifeName(e.target.value)}
                     placeholder="Enter Wife's Name"
-                    className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
+                    className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
                   />
                 </div>
               </div>
@@ -443,7 +513,7 @@ export default function Home() {
                   value={surname}
                   onChange={(e) => setSurname(e.target.value)}
                   placeholder="Enter Surname"
-                  className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
@@ -455,7 +525,7 @@ export default function Home() {
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   placeholder="Enter Phone Number"
-                  className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
@@ -465,7 +535,7 @@ export default function Home() {
                   required
                   value={selectedProgramId}
                   onChange={(e) => setSelectedProgramId(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
                 >
                   <option value="" className="text-slate-500">Choose an available slot</option>
                   {programs.map((prog) => {
@@ -487,7 +557,7 @@ export default function Home() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Couple Photo</label>
-                <div className="border-2 border-dashed border-slate-800 hover:border-amber-500/50 rounded-2xl p-6 text-center cursor-pointer transition-colors relative">
+                <div className="border-2 border-dashed border-rose-950/40 hover:border-rose-500/50 rounded-2xl p-6 text-center cursor-pointer transition-colors relative">
                   <input
                     type="file"
                     accept="image/*"
@@ -516,7 +586,7 @@ export default function Home() {
 
               <button
                 type="submit"
-                className="w-full py-4 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-bold rounded-2xl transition-all shadow-lg shadow-amber-500/20"
+                className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-bold rounded-2xl transition-all shadow-lg shadow-rose-500/20 animate-heartbeat"
               >
                 Proceed to Payment
               </button>
@@ -541,14 +611,14 @@ export default function Home() {
                   />
                 </div>
                 <div className="text-center">
-                  <p className="text-amber-500 font-bold text-lg">Amount: ₹{Number(upiSettings.amount).toFixed(2)}</p>
+                  <p className="text-rose-400 font-bold text-lg">Amount: ₹{Number(upiSettings.amount).toFixed(2)}</p>
                   <p className="text-xs text-slate-500 mt-1">UPI ID: {upiSettings.upiId}</p>
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Upload Payment Screenshot</label>
-                <div className="border-2 border-dashed border-slate-800 hover:border-amber-500/50 rounded-2xl p-6 text-center cursor-pointer transition-colors relative">
+                <div className="border-2 border-dashed border-rose-950/40 hover:border-rose-500/50 rounded-2xl p-6 text-center cursor-pointer transition-colors relative">
                   <input
                     type="file"
                     accept="image/*"
@@ -585,7 +655,7 @@ export default function Home() {
                 <button
                   onClick={handlePaymentSubmit}
                   disabled={submitting}
-                  className="flex-1 py-4 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 active:scale-[0.99] text-slate-950 font-bold rounded-2xl transition-all shadow-lg shadow-amber-500/20"
+                  className="flex-1 py-4 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 active:scale-[0.99] text-white font-bold rounded-2xl transition-all shadow-lg shadow-rose-500/20 animate-heartbeat"
                 >
                   {submitting ? 'Verifying...' : 'Submit & Generate'}
                 </button>
@@ -596,7 +666,7 @@ export default function Home() {
           {/* STEP 3: Pass Result & Download (Pending Approval View) */}
           {step === 3 && (
             <div className="space-y-6 flex flex-col items-center py-4">
-              <div className="w-16 h-16 rounded-full bg-amber-500/15 text-amber-500 flex items-center justify-center text-3xl animate-bounce">
+              <div className="w-16 h-16 rounded-full bg-rose-500/15 text-rose-400 flex items-center justify-center text-3xl animate-bounce">
                 ⏳
               </div>
               
@@ -607,7 +677,7 @@ export default function Home() {
 
               <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xs text-center my-2">
                 <span className="text-xs text-slate-500 uppercase tracking-wider block">Inquiry ID</span>
-                <span className="text-2xl font-extrabold text-amber-500 tracking-wider font-mono">{inquiryId}</span>
+                <span className="text-2xl font-extrabold text-rose-400 tracking-wider font-mono">{inquiryId}</span>
               </div>
 
               <div className="w-full space-y-3">
