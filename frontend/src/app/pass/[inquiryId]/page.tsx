@@ -170,11 +170,15 @@ export default function PassDownloadPage() {
         const finalOffsetX = offsetX - (finalW - drawW) / 2;
         const finalOffsetY = offsetY - (finalH - drawH) / 2;
 
+        ctx.save();
+        drawHeartMask(ctx, hX, hY, hW, hH);
+        ctx.clip();
         ctx.drawImage(coupleImg, hX + finalOffsetX, hY + finalOffsetY, finalW, finalH);
+        ctx.restore();
         ctx.drawImage(tempCanvas, 0, 0);
         drawTextDetails(ctx, sub);
       };
-      coupleImg.src = `${API_BASE_URL}${sub.couplePhoto}`;
+      coupleImg.src = sub.couplePhoto.startsWith('data:') ? sub.couplePhoto : `${API_BASE_URL}${sub.couplePhoto}`;
     };
     templateImg.src = '/card_template.png';
   };

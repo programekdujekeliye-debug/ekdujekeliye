@@ -262,6 +262,29 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteSubmission = async (inquiryId: string) => {
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    if (!confirm(`Are you sure you want to delete submission ${inquiryId}? This will free up 2 seats in the program and permanently remove the couple's registration.`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': activePassword }
+      });
+      if (res.ok) {
+        fetchSubmissions(undefined, false);
+        fetchPrograms();
+      } else {
+        const errData = await res.json();
+        alert(errData.error || 'Failed to delete submission.');
+      }
+    } catch (err) {
+      alert('Network error.');
+    }
+  };
+
+
   useEffect(() => {
     const savedPassword = sessionStorage.getItem('adminPassword');
     if (savedPassword) {
@@ -358,7 +381,7 @@ export default function AdminDashboard() {
 
         try {
           // Load couple photo
-          const coupleImg = await loadImage(`${API_BASE_URL}${sub.couplePhoto}`);
+          const coupleImg = await loadImage(sub.couplePhoto.startsWith('data:') ? sub.couplePhoto : `${API_BASE_URL}${sub.couplePhoto}`);
 
           // Clear canvas
           ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -425,6 +448,15 @@ export default function AdminDashboard() {
 
   const downloadImage = async (imagePath: string) => {
     try {
+      if (imagePath.startsWith('data:')) {
+        const a = document.createElement('a');
+        a.href = imagePath;
+        a.download = 'database_image.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
       const filename = imagePath.split('/').pop() || 'download';
       const response = await fetch(`${API_BASE_URL}${imagePath}`);
       const blob = await response.blob();
@@ -437,7 +469,7 @@ export default function AdminDashboard() {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      window.open(`${API_BASE_URL}${imagePath}`, '_blank');
+      window.open(imagePath.startsWith('data:') ? imagePath : `${API_BASE_URL}${imagePath}`, '_blank');
     }
   };
 
@@ -518,12 +550,12 @@ export default function AdminDashboard() {
         >
           <div className="relative max-w-3xl max-h-[85vh] overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 flex flex-col">
             <img 
-              src={`${API_BASE_URL}${selectedImage}`} 
+              src={selectedImage.startsWith('data:') ? selectedImage : `${API_BASE_URL}${selectedImage}`} 
               alt="Preview" 
               className="max-w-full max-h-[70vh] object-contain"
             />
             <div className="p-4 bg-slate-950/90 border-t border-slate-800 flex justify-between items-center gap-4">
-              <span className="text-xs text-slate-400 font-mono truncate">{selectedImage}</span>
+              <span className="text-xs text-slate-400 font-mono truncate">{selectedImage.startsWith('data:') ? 'Inline Database Image' : selectedImage}</span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -901,7 +933,7 @@ export default function AdminDashboard() {
                             onClick={() => setSelectedImage(sub.couplePhoto)}
                           >
                             <img 
-                              src={`${API_BASE_URL}${sub.couplePhoto}`} 
+                              src={sub.couplePhoto.startsWith('data:') ? sub.couplePhoto : `${API_BASE_URL}${sub.couplePhoto}`} 
                               alt="Couple" 
                               className="w-full h-full object-cover"
                             />
@@ -922,7 +954,7 @@ export default function AdminDashboard() {
                               onClick={() => setSelectedImage(sub.paymentScreenshot)}
                             >
                               <img 
-                                src={`${API_BASE_URL}${sub.paymentScreenshot}`} 
+                                src={sub.paymentScreenshot.startsWith('data:') ? sub.paymentScreenshot : `${API_BASE_URL}${sub.paymentScreenshot}`} 
                                 alt="Payment" 
                                 className="w-full h-full object-cover"
                               />
@@ -997,6 +1029,14 @@ export default function AdminDashboard() {
                             Rejected
                           </span>
                         )}
+                        <div className="pt-2 border-t border-slate-800/40">
+                          <button
+                            onClick={() => handleDeleteSubmission(sub.inquiryId)}
+                            className="w-full px-3 py-1 bg-red-950/20 hover:bg-red-900/30 border border-red-900/30 text-red-400 hover:text-red-300 font-bold rounded-lg text-[10px] transition-all"
+                          >
+                            🗑️ Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

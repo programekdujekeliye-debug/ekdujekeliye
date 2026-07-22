@@ -27,17 +27,8 @@ if (!fs.existsSync(uploadsDir)) {
 // Serve uploaded files statically
 app.use('/uploads', express.static(uploadsDir));
 
-// Setup Multer for disk storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
+// Setup Multer for memory storage (avoids ephemeral disk deletion on Render)
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 // MongoDB Connection
@@ -213,7 +204,7 @@ app.post('/api/submit', upload.fields([
     // Validate if the uploaded payment screenshot is actually the QR code itself
     if (paymentScreenshotFile) {
       try {
-        const image = await Jimp.read(paymentScreenshotFile.path);
+        const image = await Jimp.read(paymentScreenshotFile.buffer);
         const qrCode = jsQR(
           new Uint8ClampedArray(image.bitmap.data),
           image.bitmap.width,
@@ -221,9 +212,6 @@ app.post('/api/submit', upload.fields([
         );
         if (qrCode && qrCode.data) {
           if (qrCode.data.includes('upi://pay')) {
-            // Delete uploaded files to clean up
-            fs.unlinkSync(couplePhotoFile.path);
-            fs.unlinkSync(paymentScreenshotFile.path);
             return res.status(400).json({
               error: 'તમે પેમેન્ટનો QR કોડ અપલોડ કર્યો છે. કૃપા કરીને પેમેન્ટ થયા પછીનો સક્સેસ સ્ક્રીનશોટ (Receipt) અપલોડ કરો!'
             });
@@ -237,7 +225,7 @@ app.post('/api/submit', upload.fields([
       // OCR check: scan text to see if it contains transaction-related keywords
       try {
         const ocrResult = await Tesseract.recognize(
-          paymentScreenshotFile.path,
+          paymentScreenshotFile.buffer,
           'eng'
         );
         const originalText = ocrResult.data.text;
@@ -252,9 +240,6 @@ app.post('/api/submit', upload.fields([
 
         const hasKeyword = keywords.some(kw => text.includes(kw));
         if (!hasKeyword) {
-          // Delete uploaded files to clean up
-          fs.unlinkSync(couplePhotoFile.path);
-          fs.unlinkSync(paymentScreenshotFile.path);
           return res.status(400).json({
             error: 'અપલોડ કરેલી ઈમેજ પેમેન્ટ રિસીપ્ટ કે કન્ફર્મેશન સ્ક્રીનશોટ નથી. કૃપા કરીને સાચો સક્સેસ સ્ક્રીનશોટ (Receipt) અપલોડ કરો!'
           });
@@ -303,8 +288,8 @@ app.post('/api/submit', upload.fields([
       programId,
       programName: program.name,
       programDate: program.date,
-      couplePhoto: `/uploads/${couplePhotoFile.filename}`,
-      paymentScreenshot: paymentScreenshotFile ? `/uploads/${paymentScreenshotFile.filename}` : null,
+      couplePhoto: `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`,
+      paymentScreenshot: paymentScreenshotFile ? `data:${paymentScreenshotFile.mimetype};base64,${paymentScreenshotFile.buffer.toString('base64')}` : null,
       payeeNameFromReceipt: req.payeeNameFromReceipt || 'Not detected',
       status: 'pending', // Default status is pending
       createdAt: new Date()
@@ -357,6 +342,35 @@ app.post('/api/submissions/:inquiryId/reject', requireAuth, async (req, res) => 
     res.status(500).json({ error: 'Server error rejecting submission.' });
   }
 });
+
+// Delete a single submission (Admin only)
+app.delete('/api/submissions/:inquiryId', requireAuth, async (req, res) => {
+  try {
+    const { inquiryId } = req.params;
+    const submission = await Submission.findOne({ inquiryId });
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found.' });
+    }
+
+    // Release bookings (seats) in the program
+    if (submission.programId) {
+      const program = await Program.findOne({ id: submission.programId });
+      if (program) {
+        program.bookingsCount = Math.max(0, program.bookingsCount - 2);
+        await program.save();
+      }
+    }
+
+    // Delete submission document
+    await Submission.deleteOne({ inquiryId });
+
+    res.json({ success: true, message: `Submission ${inquiryId} deleted successfully, and bookings released.` });
+  } catch (error) {
+    console.error('Error deleting submission:', error);
+    res.status(500).json({ error: 'Server error while deleting submission.' });
+  }
+});
+
 
 // Public status check by Inquiry ID
 app.get('/api/submissions/status/:inquiryId', async (req, res) => {
@@ -413,14 +427,7 @@ app.post('/api/submissions/clear', requireSuperAuth, async (req, res) => {
     await Program.deleteMany({});
     await Counter.findOneAndUpdate({ name: 'inquiryNumber' }, { seq: 999 }, { upsert: true });
 
-    // Clear uploads folder files
-    const uploadsDir = path.join(__dirname, 'uploads');
-    if (fs.existsSync(uploadsDir)) {
-      const files = fs.readdirSync(uploadsDir);
-      for (const file of files) {
-        fs.unlinkSync(path.join(uploadsDir, file));
-      }
-    }
+
 
     res.json({ success: true, message: 'All registration data and uploads have been cleared successfully.' });
   } catch (error) {
