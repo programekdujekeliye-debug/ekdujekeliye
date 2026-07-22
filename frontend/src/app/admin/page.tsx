@@ -21,6 +21,61 @@ interface Submission {
   payeeNameFromReceipt?: string;
 }
 
+const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.7): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            } else {
+              resolve(file);
+            }
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+};
+
 interface Program {
   id: string;
   name: string;
@@ -53,6 +108,18 @@ export default function AdminDashboard() {
   const [zipping, setZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState('');
   const [sentPassIds, setSentPassIds] = useState<string[]>([]);
+
+  // Editing States
+  const [editingSubmission, setEditingSubmission] = useState<Submission | null>(null);
+  const [editHusbandName, setEditHusbandName] = useState('');
+  const [editWifeName, setEditWifeName] = useState('');
+  const [editSurname, setEditSurname] = useState('');
+  const [editPhoneNumber, setEditPhoneNumber] = useState('');
+  const [editProgramId, setEditProgramId] = useState('');
+  const [editCouplePhoto, setEditCouplePhoto] = useState<File | null>(null);
+  const [editPaymentScreenshot, setEditPaymentScreenshot] = useState<File | null>(null);
+  const [updating, setUpdating] = useState(false);
+  const [editError, setEditError] = useState('');
   // Payment Settings States
   const [upiId, setUpiId] = useState('');
   const [payeeName, setPayeeName] = useState('');
@@ -282,6 +349,82 @@ export default function AdminDashboard() {
     } catch (err) {
       alert('Network error.');
     }
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSubmission) return;
+    setUpdating(true);
+    setEditError('');
+
+    try {
+      let compressedPhoto = editCouplePhoto;
+      let compressedScreenshot = editPaymentScreenshot;
+
+      if (editCouplePhoto) {
+        try {
+          compressedPhoto = await compressImage(editCouplePhoto);
+        } catch (err) {
+          console.error('Error compressing edit photo:', err);
+        }
+      }
+
+      if (editPaymentScreenshot) {
+        try {
+          compressedScreenshot = await compressImage(editPaymentScreenshot);
+        } catch (err) {
+          console.error('Error compressing edit screenshot:', err);
+        }
+      }
+
+      const formData = new FormData();
+      formData.append('husbandName', editHusbandName);
+      formData.append('wifeName', editWifeName);
+      formData.append('surname', editSurname);
+      formData.append('phoneNumber', editPhoneNumber);
+      formData.append('programId', editProgramId);
+      
+      if (compressedPhoto) {
+        formData.append('couplePhoto', compressedPhoto);
+      }
+      if (compressedScreenshot) {
+        formData.append('paymentScreenshot', compressedScreenshot);
+      }
+
+      const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+      const res = await fetch(`${API_BASE_URL}/api/submissions/${editingSubmission.inquiryId}`, {
+        method: 'PUT',
+        headers: { 'Authorization': activePassword },
+        body: formData
+      });
+
+      if (res.ok) {
+        setEditingSubmission(null);
+        setEditCouplePhoto(null);
+        setEditPaymentScreenshot(null);
+        fetchSubmissions(undefined, false);
+        fetchPrograms();
+      } else {
+        const errData = await res.json();
+        setEditError(errData.error || 'Failed to update submission.');
+      }
+    } catch (err) {
+      setEditError('Network error updating submission.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const startEditing = (sub: Submission) => {
+    setEditingSubmission(sub);
+    setEditHusbandName(sub.husbandName);
+    setEditWifeName(sub.wifeName);
+    setEditSurname(sub.surname);
+    setEditPhoneNumber(sub.phoneNumber);
+    setEditProgramId(sub.programId || '');
+    setEditCouplePhoto(null);
+    setEditPaymentScreenshot(null);
+    setEditError('');
   };
 
 
@@ -572,6 +715,143 @@ export default function AdminDashboard() {
             >
               &times;
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Submission Modal */}
+      {editingSubmission && (
+        <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="relative w-full max-w-xl bg-slate-950 border border-slate-800 rounded-3xl p-6 md:p-8 backdrop-blur-xl shadow-2xl space-y-6">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-100 tracking-tight">Edit Couple Registration</h2>
+                <p className="text-xs text-slate-400 font-mono mt-1">Inquiry ID: {editingSubmission.inquiryId}</p>
+              </div>
+              <button 
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm"
+                onClick={() => setEditingSubmission(null)}
+              >
+                &times;
+              </button>
+            </div>
+
+            {editError && (
+              <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl">
+                {editError}
+              </div>
+            )}
+
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Husband Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editHusbandName}
+                    onChange={(e) => setEditHusbandName(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Wife Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editWifeName}
+                    onChange={(e) => setEditWifeName(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Surname</label>
+                  <input
+                    type="text"
+                    required
+                    value={editSurname}
+                    onChange={(e) => setEditSurname(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Phone Number</label>
+                  <input
+                    type="text"
+                    required
+                    value={editPhoneNumber}
+                    onChange={(e) => setEditPhoneNumber(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Select Program Slot</label>
+                <select
+                  required
+                  value={editProgramId}
+                  onChange={(e) => setEditProgramId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500"
+                >
+                  <option value="">Choose an available slot</option>
+                  {programs.map((prog) => (
+                    <option key={prog.id} value={prog.id}>
+                      {prog.name} ({prog.date})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Replace Couple Photo</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setEditCouplePhoto(e.target.files[0]);
+                      }
+                    }}
+                    className="w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Replace Payment Receipt</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setEditPaymentScreenshot(e.target.files[0]);
+                      }
+                    }}
+                    className="w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex gap-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingSubmission(null)}
+                  className="flex-1 py-2.5 border border-slate-800 hover:bg-slate-900 text-slate-300 font-bold rounded-xl text-xs transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updating}
+                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20"
+                >
+                  {updating ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -1029,7 +1309,13 @@ export default function AdminDashboard() {
                             Rejected
                           </span>
                         )}
-                        <div className="pt-2 border-t border-slate-800/40">
+                        <div className="pt-2 border-t border-slate-800/40 flex flex-col gap-1.5">
+                          <button
+                            onClick={() => startEditing(sub)}
+                            className="w-full px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 font-bold rounded-lg text-[10px] transition-all"
+                          >
+                            ✏️ Edit
+                          </button>
                           <button
                             onClick={() => handleDeleteSubmission(sub.inquiryId)}
                             className="w-full px-3 py-1 bg-red-950/20 hover:bg-red-900/30 border border-red-900/30 text-red-400 hover:text-red-300 font-bold rounded-lg text-[10px] transition-all"

@@ -371,6 +371,78 @@ app.delete('/api/submissions/:inquiryId', requireAuth, async (req, res) => {
   }
 });
 
+// Edit a registration submission (Admin only)
+app.put('/api/submissions/:inquiryId', requireAuth, upload.fields([
+  { name: 'couplePhoto', maxCount: 1 },
+  { name: 'paymentScreenshot', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const { inquiryId } = req.params;
+    const { husbandName, wifeName, surname, phoneNumber, programId } = req.body;
+
+    const submission = await Submission.findOne({ inquiryId });
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found.' });
+    }
+
+    // Update simple fields
+    if (husbandName) submission.husbandName = husbandName;
+    if (wifeName) submission.wifeName = wifeName;
+    if (surname) submission.surname = surname;
+    if (phoneNumber) submission.phoneNumber = phoneNumber;
+
+    // Handle program/slot changes
+    if (programId && programId !== submission.programId) {
+      const newProgram = await Program.findOne({ id: programId });
+      if (!newProgram) {
+        return res.status(400).json({ error: 'Invalid program slot selected.' });
+      }
+
+      // Check capacity in the new program
+      if (newProgram.bookingsCount + 2 > newProgram.capacity) {
+        return res.status(400).json({ error: 'Selected program slot is sold out.' });
+      }
+
+      // Release seats from old program
+      if (submission.programId) {
+        const oldProgram = await Program.findOne({ id: submission.programId });
+        if (oldProgram) {
+          oldProgram.bookingsCount = Math.max(0, oldProgram.bookingsCount - 2);
+          await oldProgram.save();
+        }
+      }
+
+      // Book seats in the new program
+      newProgram.bookingsCount += 2;
+      await newProgram.save();
+
+      submission.programId = programId;
+      submission.programName = newProgram.name;
+      submission.programDate = newProgram.date;
+    }
+
+    // Handle photo updates (Base64 conversion)
+    const couplePhotoFile = req.files && req.files['couplePhoto'] ? req.files['couplePhoto'][0] : null;
+    const paymentScreenshotFile = req.files && req.files['paymentScreenshot'] ? req.files['paymentScreenshot'][0] : null;
+
+    if (couplePhotoFile) {
+      submission.couplePhoto = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
+    }
+
+    if (paymentScreenshotFile) {
+      submission.paymentScreenshot = `data:${paymentScreenshotFile.mimetype};base64,${paymentScreenshotFile.buffer.toString('base64')}`;
+    }
+
+    await submission.save();
+
+    res.json({ success: true, message: `Submission ${inquiryId} updated successfully.`, data: submission });
+  } catch (error) {
+    console.error('Error updating submission:', error);
+    res.status(500).json({ error: 'Server error while updating submission.' });
+  }
+});
+
+
 
 // Public status check by Inquiry ID
 app.get('/api/submissions/status/:inquiryId', async (req, res) => {
