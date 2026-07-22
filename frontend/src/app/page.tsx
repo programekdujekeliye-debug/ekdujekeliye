@@ -480,7 +480,7 @@ export default function Home() {
                         disabled={isSoldOut}
                         className={isSoldOut ? "text-slate-600" : "text-slate-100"}
                       >
-                        {prog.name} (📅 {prog.date}) {isSoldOut ? "[SOLD OUT]" : `(${Math.floor(remainingSeats / 2)} couples left)`}
+                        {prog.name} ({prog.date}) {isSoldOut ? "[SOLD OUT]" : `(${Math.floor(remainingSeats / 2)} couples left)`}
                       </option>
                     );
                   })}

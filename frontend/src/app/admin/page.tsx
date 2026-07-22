@@ -801,7 +801,7 @@ export default function AdminDashboard() {
               >
                 <option value="">-- Choose Program Slot --</option>
                 {programs.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} (📅 {p.date})</option>
+                  <option key={p.id} value={p.id}>{p.name} ({p.date})</option>
                 ))}
               </select>
             </div>
