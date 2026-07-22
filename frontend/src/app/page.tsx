@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 
 interface SubmissionData {
   inquiryId: string;
@@ -51,7 +52,7 @@ export default function Home() {
   useEffect(() => {
     const fetchPrograms = async () => {
       try {
-        const res = await fetch('http://localhost:5001/api/programs');
+        const res = await fetch(`${API_BASE_URL}/api/programs`);
         if (res.ok) {
           const data = await res.json();
           setPrograms(data);
@@ -62,7 +63,7 @@ export default function Home() {
     };
     const fetchSettings = async () => {
       try {
-        const res = await fetch('http://localhost:5001/api/settings');
+        const res = await fetch(`${API_BASE_URL}/api/settings`);
         if (res.ok) {
           const data = await res.json();
           setUpiSettings(data);
@@ -297,7 +298,7 @@ export default function Home() {
       formData.append('paymentScreenshot', paymentScreenshot!);
       formData.append('programId', selectedProgramId);
 
-      const response = await fetch('http://localhost:5001/api/submit', {
+      const response = await fetch(`${API_BASE_URL}/api/submit`, {
         method: 'POST',
         body: formData,
       });

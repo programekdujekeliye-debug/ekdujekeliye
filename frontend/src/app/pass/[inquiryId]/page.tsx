@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
+import { API_BASE_URL } from '../../../config';
 
 interface Submission {
   inquiryId: string;
@@ -31,7 +32,7 @@ export default function PassDownloadPage() {
 
     const fetchStatus = async () => {
       try {
-        const res = await fetch(`http://localhost:5001/api/submissions/status/${inquiryId}`);
+        const res = await fetch(`${API_BASE_URL}/api/submissions/status/${inquiryId}`);
         if (res.ok) {
           const data = await res.json();
           setSubmission(data);
@@ -173,7 +174,7 @@ export default function PassDownloadPage() {
         ctx.drawImage(tempCanvas, 0, 0);
         drawTextDetails(ctx, sub);
       };
-      coupleImg.src = `http://localhost:5001${sub.couplePhoto}`;
+      coupleImg.src = `${API_BASE_URL}${sub.couplePhoto}`;
     };
     templateImg.src = '/card_template.png';
   };

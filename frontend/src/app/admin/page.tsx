@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import JSZip from 'jszip';
+import { API_BASE_URL } from '../../config';
 
 interface Submission {
   inquiryId: string;
@@ -61,7 +62,7 @@ export default function AdminDashboard() {
 
   const fetchPrograms = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/programs');
+      const res = await fetch(`${API_BASE_URL}/api/programs`);
       if (res.ok) {
         const data = await res.json();
         setPrograms(data);
@@ -73,7 +74,7 @@ export default function AdminDashboard() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/settings');
+      const res = await fetch(`${API_BASE_URL}/api/settings`);
       if (res.ok) {
         const data = await res.json();
         setUpiId(data.upiId);
@@ -93,7 +94,7 @@ export default function AdminDashboard() {
     }
     try {
       if (showSpinner) setLoading(true);
-      const res = await fetch('http://localhost:5001/api/submissions', {
+      const res = await fetch(`${API_BASE_URL}/api/submissions`, {
         headers: {
           'Authorization': activePassword
         }
@@ -109,7 +110,7 @@ export default function AdminDashboard() {
 
         // Fetch user role
         try {
-          const roleRes = await fetch('http://localhost:5001/api/auth/verify', {
+          const roleRes = await fetch(`${API_BASE_URL}/api/auth/verify`, {
             headers: { 'Authorization': activePassword }
           });
           if (roleRes.ok) {
@@ -143,7 +144,7 @@ export default function AdminDashboard() {
       return;
     }
     try {
-      const res = await fetch('http://localhost:5001/api/programs', {
+      const res = await fetch(`${API_BASE_URL}/api/programs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -175,7 +176,7 @@ export default function AdminDashboard() {
     const activePassword = password || sessionStorage.getItem('adminPassword') || '';
     if (!confirm('Are you sure you want to delete this program?')) return;
     try {
-      const res = await fetch(`http://localhost:5001/api/programs/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/programs/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': activePassword
@@ -202,7 +203,7 @@ export default function AdminDashboard() {
     try {
       setSettingsSuccess('');
       setSettingsError('');
-      const res = await fetch('http://localhost:5001/api/settings', {
+      const res = await fetch(`${API_BASE_URL}/api/settings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -224,7 +225,7 @@ export default function AdminDashboard() {
   const handleApproveSubmission = async (inquiryId: string) => {
     const activePassword = password || sessionStorage.getItem('adminPassword') || '';
     try {
-      const res = await fetch(`http://localhost:5001/api/submissions/${inquiryId}/approve`, {
+      const res = await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}/approve`, {
         method: 'POST',
         headers: { 'Authorization': activePassword }
       });
@@ -243,7 +244,7 @@ export default function AdminDashboard() {
     const reason = prompt('Enter reason for rejection:');
     if (reason === null) return;
     try {
-      const res = await fetch(`http://localhost:5001/api/submissions/${inquiryId}/reject`, {
+      const res = await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}/reject`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -283,7 +284,7 @@ export default function AdminDashboard() {
       return;
     }
     try {
-      const res = await fetch('http://localhost:5001/api/submissions/clear', {
+      const res = await fetch(`${API_BASE_URL}/api/submissions/clear`, {
         method: 'POST',
         headers: { 'Authorization': activePassword }
       });
@@ -357,7 +358,7 @@ export default function AdminDashboard() {
 
         try {
           // Load couple photo
-          const coupleImg = await loadImage(`http://localhost:5001${sub.couplePhoto}`);
+          const coupleImg = await loadImage(`${API_BASE_URL}${sub.couplePhoto}`);
 
           // Clear canvas
           ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -425,7 +426,7 @@ export default function AdminDashboard() {
   const downloadImage = async (imagePath: string) => {
     try {
       const filename = imagePath.split('/').pop() || 'download';
-      const response = await fetch(`http://localhost:5001${imagePath}`);
+      const response = await fetch(`${API_BASE_URL}${imagePath}`);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -436,7 +437,7 @@ export default function AdminDashboard() {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      window.open(`http://localhost:5001${imagePath}`, '_blank');
+      window.open(`${API_BASE_URL}${imagePath}`, '_blank');
     }
   };
 
@@ -517,7 +518,7 @@ export default function AdminDashboard() {
         >
           <div className="relative max-w-3xl max-h-[85vh] overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 flex flex-col">
             <img 
-              src={`http://localhost:5001${selectedImage}`} 
+              src={`${API_BASE_URL}${selectedImage}`} 
               alt="Preview" 
               className="max-w-full max-h-[70vh] object-contain"
             />
@@ -900,7 +901,7 @@ export default function AdminDashboard() {
                             onClick={() => setSelectedImage(sub.couplePhoto)}
                           >
                             <img 
-                              src={`http://localhost:5001${sub.couplePhoto}`} 
+                              src={`${API_BASE_URL}${sub.couplePhoto}`} 
                               alt="Couple" 
                               className="w-full h-full object-cover"
                             />
@@ -921,7 +922,7 @@ export default function AdminDashboard() {
                               onClick={() => setSelectedImage(sub.paymentScreenshot)}
                             >
                               <img 
-                                src={`http://localhost:5001${sub.paymentScreenshot}`} 
+                                src={`${API_BASE_URL}${sub.paymentScreenshot}`} 
                                 alt="Payment" 
                                 className="w-full h-full object-cover"
                               />
