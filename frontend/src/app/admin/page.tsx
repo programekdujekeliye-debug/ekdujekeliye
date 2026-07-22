@@ -974,7 +974,7 @@ export default function AdminDashboard() {
                           const isSent = sentPassIds.includes(sub.inquiryId);
                           return (
                             <a
-                              href={`https://wa.me/${waPhone}?text=${encodeURIComponent(`Hello! Your payment has been verified. You can view and download your pass here: http://localhost:3000/pass/${sub.inquiryId}`)}`}
+                              href={`https://wa.me/${waPhone}?text=${encodeURIComponent(`Hello! Your payment has been verified. You can view and download your pass here: ${typeof window !== 'undefined' ? window.location.origin : 'https://ekdujekeliye.vercel.app'}/pass/${sub.inquiryId}`)}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={() => {
