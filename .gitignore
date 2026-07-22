@@ -1,0 +1,23 @@
+# Dependency directories
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Next.js build output
+frontend/.next/
+frontend/out/
+
+# Local databases and configs
+backend/submissions.json
+backend/programs.json
+backend/settings.json
+
+# Local user uploads (contains sensitive couple photos/screenshots)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# OS generated files
+.DS_Store
+.DS_Store?
+ehthumbs.db
+Thumbs.db
