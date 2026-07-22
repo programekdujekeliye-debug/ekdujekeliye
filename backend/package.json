@@ -13,6 +13,7 @@
     "express": "^4.19.2",
     "jimp": "^1.6.1",
     "jsqr": "^1.4.0",
+    "mongoose": "^9.8.0",
     "multer": "^2.2.0",
     "tesseract.js": "^7.0.0"
   },

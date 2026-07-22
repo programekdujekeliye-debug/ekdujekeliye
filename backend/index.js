@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { Jimp } from 'jimp';
 import jsQR from 'jsqr';
 import Tesseract from 'tesseract.js';
+import mongoose from 'mongoose';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,76 +40,77 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// Database simulation (JSON file)
-const DB_FILE = path.join(__dirname, 'submissions.json');
-let submissions = [];
-let nextInquiryNumber = 1001;
+// MongoDB Connection
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('Successfully connected to MongoDB database.'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
-if (fs.existsSync(DB_FILE)) {
-  try {
-    const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-    submissions = data.submissions || [];
-    nextInquiryNumber = data.nextInquiryNumber || 1001;
-  } catch (err) {
-    console.error('Error reading database file:', err);
-  }
-}
-
-const saveDatabase = () => {
-  try {
-    fs.writeFileSync(DB_FILE, JSON.stringify({ submissions, nextInquiryNumber }, null, 2));
-  } catch (err) {
-    console.error('Error saving database file:', err);
-  }
-};
-
-const SETTINGS_FILE = path.join(__dirname, 'settings.json');
-let settings = {
-  upiId: 'payee@upi',
-  payeeName: 'Couple Pass',
-  amount: '100'
-};
-
-if (fs.existsSync(SETTINGS_FILE)) {
-  try {
-    settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
-  } catch (err) {
-    console.error('Error reading settings file:', err);
-  }
-}
-
-const saveSettings = () => {
-  try {
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
-  } catch (err) {
-    console.error('Error saving settings file:', err);
-  }
-};
-
-const PROGRAMS_FILE = path.join(__dirname, 'programs.json');
-let programs = [];
-
-if (fs.existsSync(PROGRAMS_FILE)) {
-  try {
-    programs = JSON.parse(fs.readFileSync(PROGRAMS_FILE, 'utf8'));
-  } catch (err) {
-    console.error('Error reading programs database file:', err);
-  }
-}
-
-const savePrograms = () => {
-  try {
-    fs.writeFileSync(PROGRAMS_FILE, JSON.stringify(programs, null, 2));
-  } catch (err) {
-    console.error('Error saving programs file:', err);
-  }
-};
-
-// Health Check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Backend server is running successfully.' });
+// Database Schemas & Models
+const ProgramSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  name: { type: String, required: true },
+  date: { type: String, required: true },
+  capacity: { type: Number, required: true },
+  bookingsCount: { type: Number, default: 0 }
 });
+const Program = mongoose.model('Program', ProgramSchema);
 
+const SubmissionSchema = new mongoose.Schema({
+  inquiryId: { type: String, required: true, unique: true },
+  husbandName: { type: String, required: true },
+  wifeName: { type: String, required: true },
+  surname: { type: String, required: true },
+  phoneNumber: { type: String, required: true },
+  programId: { type: String, required: true },
+  programName: { type: String, required: true },
+  programDate: { type: String, required: true },
+  couplePhoto: { type: String, required: true },
+  paymentScreenshot: { type: String },
+  payeeNameFromReceipt: { type: String, default: 'Not detected' },
+  status: { type: String, default: 'pending' },
+  rejectionReason: { type: String, default: '' },
+  createdAt: { type: Date, default: Date.now }
+});
+const Submission = mongoose.model('Submission', SubmissionSchema);
+
+const SettingSchema = new mongoose.Schema({
+  key: { type: String, default: 'main', unique: true },
+  upiId: { type: String, default: 'payee@upi' },
+  payeeName: { type: String, default: 'Couple Pass' },
+  amount: { type: String, default: '100' }
+});
+const Setting = mongoose.model('Setting', SettingSchema);
+
+const CounterSchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
+  seq: { type: Number, default: 1000 }
+});
+const Counter = mongoose.model('Counter', CounterSchema);
+
+const getNextInquiryNumber = async () => {
+  const counter = await Counter.findOneAndUpdate(
+    { name: 'inquiryNumber' },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true }
+  );
+  return counter.seq;
+};
+
+// Initialize Settings
+const initSettings = async () => {
+  try {
+    const existing = await Setting.findOne({ key: 'main' });
+    if (!existing) {
+      await Setting.create({ key: 'main', upiId: 'payee@upi', payeeName: 'Couple Pass', amount: '100' });
+    }
+  } catch (err) {
+    console.error('Error initializing settings:', err);
+  }
+};
+initSettings();
+
+// Security / Authentication Configurations
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Manas@1177';
 const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || 'Manish@1177';
 
@@ -130,39 +132,53 @@ const requireSuperAuth = (req, res, next) => {
   }
 };
 
+// Health Check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Backend server is running successfully.' });
+});
+
 // Get all programs
-app.get('/api/programs', (req, res) => {
-  res.json(programs);
+app.get('/api/programs', async (req, res) => {
+  try {
+    const programs = await Program.find();
+    res.json(programs);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error fetching programs.' });
+  }
 });
 
 // Create a new program (Admin protected)
-app.post('/api/programs', requireAuth, (req, res) => {
+app.post('/api/programs', requireAuth, async (req, res) => {
   const { name, date, capacity } = req.body;
   if (!name || !date || !capacity) {
     return res.status(400).json({ error: 'Name, date, and capacity are required.' });
   }
-  const newProgram = {
-    id: `prog-${Date.now()}`,
-    name,
-    date,
-    capacity: parseInt(capacity, 10),
-    bookingsCount: 0
-  };
-  programs.push(newProgram);
-  savePrograms();
-  res.status(201).json(newProgram);
+  try {
+    const newProgram = await Program.create({
+      id: `prog-${Date.now()}`,
+      name,
+      date,
+      capacity: parseInt(capacity, 10),
+      bookingsCount: 0
+    });
+    res.status(201).json(newProgram);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error creating program.' });
+  }
 });
 
 // Delete a program (Admin protected)
-app.delete('/api/programs/:id', requireAuth, (req, res) => {
+app.delete('/api/programs/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
-  const index = programs.findIndex(p => p.id === id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'Program not found.' });
+  try {
+    const deleted = await Program.findOneAndDelete({ id });
+    if (!deleted) {
+      return res.status(404).json({ error: 'Program not found.' });
+    }
+    res.json({ success: true, message: 'Program deleted successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error deleting program.' });
   }
-  programs.splice(index, 1);
-  savePrograms();
-  res.json({ success: true, message: 'Program deleted successfully.' });
 });
 
 // Submit Form
@@ -178,7 +194,7 @@ app.post('/api/submit', upload.fields([
     }
 
     // Find selected program and check capacity
-    const program = programs.find(p => p.id === programId);
+    const program = await Program.findOne({ id: programId });
     if (!program) {
       return res.status(400).json({ error: 'Invalid program/slot selected' });
     }
@@ -271,13 +287,14 @@ app.post('/api/submit', upload.fields([
       req.payeeNameFromReceipt = payeeNameFromReceipt;
     }
 
-    const inquiryId = `INQ-${nextInquiryNumber++}`;
+    const nextSeq = await getNextInquiryNumber();
+    const inquiryId = `INQ-${nextSeq}`;
 
     // Increment bookings count by 2 (since it is a couple registration)
     program.bookingsCount += 2;
-    savePrograms();
+    await program.save();
 
-    const newSubmission = {
+    const newSubmission = await Submission.create({
       inquiryId,
       husbandName,
       wifeName,
@@ -290,11 +307,8 @@ app.post('/api/submit', upload.fields([
       paymentScreenshot: paymentScreenshotFile ? `/uploads/${paymentScreenshotFile.filename}` : null,
       payeeNameFromReceipt: req.payeeNameFromReceipt || 'Not detected',
       status: 'pending', // Default status is pending
-      createdAt: new Date().toISOString()
-    };
-
-    submissions.push(newSubmission);
-    saveDatabase();
+      createdAt: new Date()
+    });
 
     res.status(201).json({
       success: true,
@@ -308,56 +322,76 @@ app.post('/api/submit', upload.fields([
 });
 
 // Approve Submission (Admin protected)
-app.post('/api/submissions/:inquiryId/approve', requireAuth, (req, res) => {
+app.post('/api/submissions/:inquiryId/approve', requireAuth, async (req, res) => {
   const { inquiryId } = req.params;
-  const submission = submissions.find(s => s.inquiryId === inquiryId);
-  if (!submission) {
-    return res.status(404).json({ error: 'Submission not found.' });
+  try {
+    const submission = await Submission.findOneAndUpdate(
+      { inquiryId },
+      { status: 'approved' },
+      { new: true }
+    );
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found.' });
+    }
+    res.json({ success: true, message: 'Submission approved successfully.', data: submission });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error approving submission.' });
   }
-  submission.status = 'approved';
-  saveDatabase();
-  res.json({ success: true, message: 'Submission approved successfully.', data: submission });
 });
 
 // Reject Submission (Admin protected)
-app.post('/api/submissions/:inquiryId/reject', requireAuth, (req, res) => {
+app.post('/api/submissions/:inquiryId/reject', requireAuth, async (req, res) => {
   const { inquiryId } = req.params;
   const { reason } = req.body;
-  const submission = submissions.find(s => s.inquiryId === inquiryId);
-  if (!submission) {
-    return res.status(404).json({ error: 'Submission not found.' });
+  try {
+    const submission = await Submission.findOneAndUpdate(
+      { inquiryId },
+      { status: 'rejected', rejectionReason: reason || 'Payment verification failed.' },
+      { new: true }
+    );
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found.' });
+    }
+    res.json({ success: true, message: 'Submission rejected.', data: submission });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error rejecting submission.' });
   }
-  submission.status = 'rejected';
-  submission.rejectionReason = reason || 'Payment verification failed.';
-  saveDatabase();
-  res.json({ success: true, message: 'Submission rejected.', data: submission });
 });
 
 // Public status check by Inquiry ID
-app.get('/api/submissions/status/:inquiryId', (req, res) => {
+app.get('/api/submissions/status/:inquiryId', async (req, res) => {
   const { inquiryId } = req.params;
-  const submission = submissions.find(s => s.inquiryId.toUpperCase() === inquiryId.toUpperCase());
-  if (!submission) {
-    return res.status(404).json({ error: 'Inquiry ID not found.' });
+  try {
+    const submission = await Submission.findOne({ inquiryId: new RegExp(`^${inquiryId}$`, 'i') });
+    if (!submission) {
+      return res.status(404).json({ error: 'Inquiry ID not found.' });
+    }
+    res.json({
+      inquiryId: submission.inquiryId,
+      husbandName: submission.husbandName,
+      wifeName: submission.wifeName,
+      surname: submission.surname,
+      phoneNumber: submission.phoneNumber,
+      programId: submission.programId,
+      programName: submission.programName,
+      programDate: submission.programDate,
+      couplePhoto: submission.couplePhoto,
+      status: submission.status,
+      rejectionReason: submission.rejectionReason
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error checking status.' });
   }
-  res.json({
-    inquiryId: submission.inquiryId,
-    husbandName: submission.husbandName,
-    wifeName: submission.wifeName,
-    surname: submission.surname,
-    phoneNumber: submission.phoneNumber,
-    programId: submission.programId,
-    programName: submission.programName,
-    programDate: submission.programDate,
-    couplePhoto: submission.couplePhoto,
-    status: submission.status,
-    rejectionReason: submission.rejectionReason
-  });
 });
 
 // Get all submissions (for admin view/verification)
-app.get('/api/submissions', requireAuth, (req, res) => {
-  res.json(submissions);
+app.get('/api/submissions', requireAuth, async (req, res) => {
+  try {
+    const submissions = await Submission.find();
+    res.json(submissions);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error fetching submissions.' });
+  }
 });
 
 // Verify login and retrieve role
@@ -373,15 +407,11 @@ app.get('/api/auth/verify', (req, res) => {
 });
 
 // Clear all data (Super Admin only)
-app.post('/api/submissions/clear', requireSuperAuth, (req, res) => {
+app.post('/api/submissions/clear', requireSuperAuth, async (req, res) => {
   try {
-    submissions = [];
-    nextInquiryNumber = 1001;
-    saveDatabase();
-
-    // Clear all programs/slots
-    programs = [];
-    savePrograms();
+    await Submission.deleteMany({});
+    await Program.deleteMany({});
+    await Counter.findOneAndUpdate({ name: 'inquiryNumber' }, { seq: 1000 }, { upsert: true });
 
     // Clear uploads folder files
     const uploadsDir = path.join(__dirname, 'uploads');
@@ -400,21 +430,31 @@ app.post('/api/submissions/clear', requireSuperAuth, (req, res) => {
 });
 
 // Get payment settings (public)
-app.get('/api/settings', (req, res) => {
-  res.json(settings);
+app.get('/api/settings', async (req, res) => {
+  try {
+    const settings = await Setting.findOne({ key: 'main' });
+    res.json(settings || { upiId: 'payee@upi', payeeName: 'Couple Pass', amount: '100' });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error fetching settings.' });
+  }
 });
 
 // Update payment settings (Admin only)
-app.post('/api/settings', requireAuth, (req, res) => {
+app.post('/api/settings', requireAuth, async (req, res) => {
   const { upiId, payeeName, amount } = req.body;
   if (!upiId || !payeeName || !amount) {
     return res.status(400).json({ error: 'UPI ID, Payee Name, and Amount are required.' });
   }
-  settings.upiId = upiId;
-  settings.payeeName = payeeName;
-  settings.amount = amount;
-  saveSettings();
-  res.json({ success: true, settings });
+  try {
+    const settings = await Setting.findOneAndUpdate(
+      { key: 'main' },
+      { upiId, payeeName, amount },
+      { new: true, upsert: true }
+    );
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error updating settings.' });
+  }
 });
 
 app.listen(PORT, () => {
