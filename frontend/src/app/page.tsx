@@ -285,7 +285,7 @@ export default function Home() {
     // Token ID
     ctx.fillStyle = '#D4AF37';
     ctx.font = 'bold 12px monospace';
-    ctx.fillText(`${inqNum || 'INQ-XXXX'}`, sideX + sideW / 2, sideY + 118);
+    ctx.fillText(`${inqNum || 'CPL-XXXX'}`, sideX + sideW / 2, sideY + 118);
     ctx.restore();
 
   };
@@ -454,7 +454,7 @@ export default function Home() {
                   required
                   value={searchInquiryId}
                   onChange={(e) => setSearchInquiryId(e.target.value)}
-                  placeholder="Enter INQ-XXXX"
+                  placeholder="Enter CPL-XXXX"
                   className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors uppercase font-mono tracking-wider"
                 />
               </div>

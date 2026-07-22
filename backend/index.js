@@ -84,7 +84,7 @@ const Setting = mongoose.model('Setting', SettingSchema);
 
 const CounterSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
-  seq: { type: Number, default: 1000 }
+  seq: { type: Number, default: 999 }
 });
 const Counter = mongoose.model('Counter', CounterSchema);
 
@@ -288,7 +288,7 @@ app.post('/api/submit', upload.fields([
     }
 
     const nextSeq = await getNextInquiryNumber();
-    const inquiryId = `INQ-${nextSeq}`;
+    const inquiryId = `CPL-${nextSeq}`;
 
     // Increment bookings count by 2 (since it is a couple registration)
     program.bookingsCount += 2;
@@ -411,7 +411,7 @@ app.post('/api/submissions/clear', requireSuperAuth, async (req, res) => {
   try {
     await Submission.deleteMany({});
     await Program.deleteMany({});
-    await Counter.findOneAndUpdate({ name: 'inquiryNumber' }, { seq: 1000 }, { upsert: true });
+    await Counter.findOneAndUpdate({ name: 'inquiryNumber' }, { seq: 999 }, { upsert: true });
 
     // Clear uploads folder files
     const uploadsDir = path.join(__dirname, 'uploads');
