@@ -917,7 +917,7 @@ export default function AdminDashboard() {
           <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-6">
             <div>
               <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-                <span>📅</span> Add Program Slot
+                Add Program Slot
               </h2>
               <p className="text-slate-400 text-xs mt-1">Schedule a program with a specific date and seat capacity.</p>
             </div>
@@ -1008,7 +1008,7 @@ export default function AdminDashboard() {
                           )}
                         </div>
                         <div className="text-xs text-slate-400 flex items-center gap-4">
-                          <span>📅 {prog.date}</span>
+                          <span>{prog.date}</span>
                           <span>👥 Booked Couples: <strong className={isSoldOut ? "text-red-400" : "text-amber-500"}>{Math.floor(prog.bookingsCount / 2)}</strong> / {Math.floor(prog.capacity / 2)}</span>
                         </div>
                       </div>
@@ -1195,7 +1195,7 @@ export default function AdminDashboard() {
                         {sub.programName ? (
                           <div>
                             <div className="font-semibold text-slate-200">{sub.programName}</div>
-                            <div className="text-xs text-slate-500">📅 {sub.programDate}</div>
+                            <div className="text-xs text-slate-500">{sub.programDate}</div>
                           </div>
                         ) : (
                           <span className="text-xs text-slate-500">N/A</span>
