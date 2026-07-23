@@ -19,6 +19,8 @@ interface Submission {
   status?: string;
   rejectionReason?: string;
   payeeNameFromReceipt?: string;
+  photoZoom?: number;
+  photoOffsetY?: number;
 }
 
 const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.7): Promise<File> => {
@@ -76,12 +78,82 @@ const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 
   });
 };
 
+const detectHeartCutout = (base64Image: string): Promise<{ x: number, y: number, w: number, h: number } | null> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 576; // Match standard card width
+      canvas.height = 1024; // Match standard card height
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      let minX = canvas.width;
+      let maxX = 0;
+      let minY = canvas.height;
+      let maxY = 0;
+
+      const scanXStart = 20;
+      const scanYStart = 50;
+      const scanWidth = canvas.width - 40;
+      const scanHeight = 500;
+
+      const templateData = ctx.getImageData(scanXStart, scanYStart, scanWidth, scanHeight);
+      const pixels = templateData.data;
+
+      for (let y = 0; y < scanHeight; y++) {
+        for (let x = 0; x < scanWidth; x++) {
+          const idx = (y * scanWidth + x) * 4;
+          const r = pixels[idx];
+          const g = pixels[idx + 1];
+          const b = pixels[idx + 2];
+          const a = pixels[idx + 3];
+
+          const isTransparent = a < 50;
+
+          if (isTransparent) {
+            const actualX = scanXStart + x;
+            const actualY = scanYStart + y;
+            if (actualX < minX) minX = actualX;
+            if (actualX > maxX) maxX = actualX;
+            if (actualY < minY) minY = actualY;
+            if (actualY > maxY) maxY = actualY;
+          }
+        }
+      }
+
+      if (maxX > minX && maxY > minY) {
+        resolve({
+          x: minX,
+          y: minY,
+          w: maxX - minX,
+          h: maxY - minY
+        });
+      } else {
+        resolve(null);
+      }
+    };
+    img.src = base64Image;
+  });
+};
+
 interface Program {
   id: string;
   name: string;
   date: string;
   capacity: number;
   bookingsCount: number;
+  cardTemplate?: string;
+  heartX?: number;
+  heartY?: number;
+  heartWidth?: number;
+  heartHeight?: number;
+  photoZoom?: number;
+  photoOffsetY?: number;
 }
 
 export default function AdminDashboard() {
@@ -90,7 +162,7 @@ export default function AdminDashboard() {
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  
+
   // Security States
   const [password, setPassword] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -101,6 +173,13 @@ export default function AdminDashboard() {
   const [newProgramName, setNewProgramName] = useState('');
   const [newProgramDate, setNewProgramDate] = useState('');
   const [newProgramCapacity, setNewProgramCapacity] = useState<number | ''>('');
+  const [newProgramCardTemplate, setNewProgramCardTemplate] = useState<string | null>(null);
+  const [newProgramHeartX, setNewProgramHeartX] = useState<number>(144);
+  const [newProgramHeartY, setNewProgramHeartY] = useState<number>(112);
+  const [newProgramHeartWidth, setNewProgramHeartWidth] = useState<number>(288);
+  const [newProgramHeartHeight, setNewProgramHeartHeight] = useState<number>(260);
+  const [newProgramPhotoZoom, setNewProgramPhotoZoom] = useState<number>(1.0);
+  const [newProgramPhotoOffsetY, setNewProgramPhotoOffsetY] = useState<number>(0);
   const [programError, setProgramError] = useState('');
   const [programSuccess, setProgramSuccess] = useState('');
   // Frame Zipping states
@@ -110,6 +189,50 @@ export default function AdminDashboard() {
   const [sentPassIds, setSentPassIds] = useState<string[]>([]);
 
   // Editing States
+  const [editingProgram, setEditingProgram] = useState<Program | null>(null);
+  const [editProgramName, setEditProgramName] = useState('');
+  const [editProgramDate, setEditProgramDate] = useState('');
+  const [editProgramCapacity, setEditProgramCapacity] = useState<number | ''>('');
+  const [editProgramCardTemplate, setEditProgramCardTemplate] = useState<string | null>(null);
+  const [editProgramHeartX, setEditProgramHeartX] = useState<number>(144);
+  const [editProgramHeartY, setEditProgramHeartY] = useState<number>(112);
+  const [editProgramHeartWidth, setEditProgramHeartWidth] = useState<number>(288);
+  const [editProgramHeartHeight, setEditProgramHeartHeight] = useState<number>(260);
+  const [editProgramPhotoZoom, setEditProgramPhotoZoom] = useState<number>(1.0);
+  const [editProgramPhotoOffsetY, setEditProgramPhotoOffsetY] = useState<number>(0);
+  const [editProgramError, setEditProgramError] = useState('');
+  const [editProgramSuccess, setEditProgramSuccess] = useState('');
+
+  // Bulk Review States
+  const [reviewingProgramForFrames, setReviewingProgramForFrames] = useState<Program | null>(null);
+
+  const updateSubmissionCoordInState = (inquiryId: string, field: 'photoZoom' | 'photoOffsetY', value: number) => {
+    setSubmissions(prev => prev.map(sub => {
+      if (sub.inquiryId === inquiryId) {
+        return { ...sub, [field]: value };
+      }
+      return sub;
+    }));
+  };
+
+  const [dbStats, setDbStats] = useState<{ dataSizeMB: number, storageSizeMB: number, totalLimitMB: number } | null>(null);
+
+  const fetchDbStats = async (passVal?: string) => {
+    const activePassword = passVal || password || sessionStorage.getItem('adminPassword') || '';
+    if (!activePassword) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/db-status`, {
+        headers: { 'Authorization': activePassword }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDbStats(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch database statistics:', err);
+    }
+  };
+
   const [editingSubmission, setEditingSubmission] = useState<Submission | null>(null);
   const [editHusbandName, setEditHusbandName] = useState('');
   const [editWifeName, setEditWifeName] = useState('');
@@ -174,6 +297,7 @@ export default function AdminDashboard() {
         setError('');
         fetchPrograms();
         fetchSettings();
+        fetchDbStats(activePassword);
 
         // Fetch user role
         try {
@@ -220,7 +344,14 @@ export default function AdminDashboard() {
         body: JSON.stringify({
           name: newProgramName,
           date: newProgramDate,
-          capacity: Number(newProgramCapacity)
+          capacity: Number(newProgramCapacity),
+          cardTemplate: newProgramCardTemplate,
+          heartX: Number(newProgramHeartX),
+          heartY: Number(newProgramHeartY),
+          heartWidth: Number(newProgramHeartWidth),
+          heartHeight: Number(newProgramHeartHeight),
+          photoZoom: Number(newProgramPhotoZoom),
+          photoOffsetY: Number(newProgramPhotoOffsetY)
         })
       });
       if (res.ok) {
@@ -229,6 +360,16 @@ export default function AdminDashboard() {
         setNewProgramName('');
         setNewProgramDate('');
         setNewProgramCapacity('');
+        setNewProgramCardTemplate(null);
+        setNewProgramHeartX(144);
+        setNewProgramHeartY(112);
+        setNewProgramHeartWidth(288);
+        setNewProgramHeartHeight(260);
+        setNewProgramPhotoZoom(1.0);
+        setNewProgramPhotoOffsetY(0);
+        // Reset the file input field
+        const fileInput = document.getElementById('programCardTemplateInput') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
         fetchPrograms();
       } else {
         const data = await res.json();
@@ -257,6 +398,63 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       alert('Network error deleting program.');
+    }
+  };
+
+  const handleEditProgramClick = (prog: Program) => {
+    setEditingProgram(prog);
+    setEditProgramName(prog.name);
+    setEditProgramDate(prog.date);
+    setEditProgramCapacity(prog.capacity);
+    setEditProgramCardTemplate(prog.cardTemplate || null);
+    setEditProgramHeartX(prog.heartX ?? 144);
+    setEditProgramHeartY(prog.heartY ?? 112);
+    setEditProgramHeartWidth(prog.heartWidth ?? 288);
+    setEditProgramHeartHeight(prog.heartHeight ?? 260);
+    setEditProgramPhotoZoom(prog.photoZoom ?? 1.0);
+    setEditProgramPhotoOffsetY(prog.photoOffsetY ?? 0);
+    setEditProgramError('');
+    setEditProgramSuccess('');
+  };
+
+  const handleUpdateProgram = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProgram) return;
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    if (!editProgramName || !editProgramDate || !editProgramCapacity) {
+      setEditProgramError('Please fill in all program fields.');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/programs/${editingProgram.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': activePassword
+        },
+        body: JSON.stringify({
+          name: editProgramName,
+          date: editProgramDate,
+          capacity: Number(editProgramCapacity),
+          cardTemplate: editProgramCardTemplate,
+          heartX: Number(editProgramHeartX),
+          heartY: Number(editProgramHeartY),
+          heartWidth: Number(editProgramHeartWidth),
+          heartHeight: Number(editProgramHeartHeight),
+          photoZoom: Number(editProgramPhotoZoom),
+          photoOffsetY: Number(editProgramPhotoOffsetY)
+        })
+      });
+      if (res.ok) {
+        setEditProgramSuccess('Program updated successfully.');
+        setTimeout(() => setEditingProgram(null), 1000);
+        fetchPrograms();
+      } else {
+        const data = await res.json();
+        setEditProgramError(data.error || 'Failed to update program.');
+      }
+    } catch (err) {
+      setEditProgramError('Network error updating program.');
     }
   };
 
@@ -313,9 +511,9 @@ export default function AdminDashboard() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}/reject`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Authorization': activePassword 
+          'Authorization': activePassword
         },
         body: JSON.stringify({ reason })
       });
@@ -383,7 +581,7 @@ export default function AdminDashboard() {
       formData.append('surname', editSurname);
       formData.append('phoneNumber', editPhoneNumber);
       formData.append('programId', editProgramId);
-      
+
       if (compressedPhoto) {
         formData.append('couplePhoto', compressedPhoto);
       }
@@ -438,6 +636,175 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  // Live Invitation Preview in Edit Modal
+  useEffect(() => {
+    if (!editingProgram) return;
+
+    const canvas = document.getElementById('programEditPreviewCanvas') as HTMLCanvasElement;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = 576;
+    canvas.height = 1024;
+
+    const templateImg = new Image();
+    templateImg.crossOrigin = 'anonymous';
+    templateImg.onload = () => {
+      // Paint solid white background first to avoid transparent areas blending with black canvas background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      if (tempCtx) {
+        tempCtx.drawImage(templateImg, 0, 0, canvas.width, canvas.height);
+
+        const hX = editProgramHeartX;
+        const hY = editProgramHeartY;
+        const hW = editProgramHeartWidth;
+        const hH = editProgramHeartHeight;
+
+        // Make white area transparent strictly inside the heart bounding box coordinates
+        try {
+          const imgData = tempCtx.getImageData(hX, hY, hW, hH);
+          const data = imgData.data;
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            if (r > 220 && g > 220 && b > 220) {
+              data[i + 3] = 0; // Make transparent
+            }
+          }
+          tempCtx.putImageData(imgData, hX, hY);
+        } catch (e) { }
+      }
+
+      const coupleImg = new Image();
+      coupleImg.crossOrigin = 'anonymous';
+      coupleImg.onload = () => {
+        const hX = editProgramHeartX;
+        const hY = editProgramHeartY;
+        const hW = editProgramHeartWidth;
+        const hH = editProgramHeartHeight;
+
+        const imgAspect = coupleImg.width / coupleImg.height;
+        const heartAspect = hW / hH;
+        let drawW = hW;
+        let drawH = hH;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        if (imgAspect > heartAspect) {
+          drawW = hH * imgAspect;
+          offsetX = -(drawW - hW) / 2;
+        } else {
+          drawH = hW / imgAspect;
+          offsetY = -(drawH - hH) / 2;
+        }
+
+        const zoom = editProgramPhotoZoom;
+        const finalW = drawW * zoom;
+        const finalH = drawH * zoom;
+        const finalOffsetX = offsetX - (finalW - drawW) / 2;
+        const finalOffsetY = (offsetY - (finalH - drawH) / 2) + editProgramPhotoOffsetY;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(hX, hY, hW, hH);
+        ctx.clip();
+
+        ctx.drawImage(coupleImg, hX + finalOffsetX, hY + finalOffsetY, finalW, finalH);
+        ctx.restore();
+
+        ctx.drawImage(tempCanvas, 0, 0);
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(26, 6, 6, 0.95)';
+        ctx.strokeStyle = '#D4AF37';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(385, 230, 176, 135, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#D4AF37';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('COUPLE ENTRY', 385 + 176 / 2, 230 + 20);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillText('HUSBAND NAME', 385 + 176 / 2, 230 + 45);
+        ctx.fillText('& WIFE NAME', 385 + 176 / 2, 230 + 65);
+        ctx.fillText('SURNAME', 385 + 176 / 2, 230 + 85);
+
+        ctx.strokeStyle = 'rgba(212, 175, 55, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(385 + 15, 230 + 98);
+        ctx.lineTo(385 + 176 - 15, 230 + 98);
+        ctx.stroke();
+
+        ctx.fillStyle = '#D4AF37';
+        ctx.font = 'bold 12px monospace';
+        ctx.fillText('CPL-SAMPLE', 385 + 176 / 2, 230 + 118);
+        ctx.restore();
+      };
+      coupleImg.onerror = () => {
+        // Draw template anyway if couple photo fails to load
+        ctx.drawImage(tempCanvas, 0, 0);
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(26, 6, 6, 0.95)';
+        ctx.strokeStyle = '#D4AF37';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(385, 230, 176, 135, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#D4AF37';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('COUPLE ENTRY', 385 + 176 / 2, 230 + 20);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillText('HUSBAND NAME', 385 + 176 / 2, 230 + 45);
+        ctx.fillText('& WIFE NAME', 385 + 176 / 2, 230 + 65);
+        ctx.fillText('SURNAME', 385 + 176 / 2, 230 + 85);
+
+        ctx.strokeStyle = 'rgba(212, 175, 55, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(385 + 15, 230 + 98);
+        ctx.lineTo(385 + 176 - 15, 230 + 98);
+        ctx.stroke();
+
+        ctx.fillStyle = '#D4AF37';
+        ctx.font = 'bold 12px monospace';
+        ctx.fillText('CPL-SAMPLE', 385 + 176 / 2, 230 + 118);
+        ctx.restore();
+      };
+      // Use local sample_couple.png which is guaranteed to load without CORS issues
+      coupleImg.src = '/sample_couple.png';
+    };
+    templateImg.src = editProgramCardTemplate || '/card_template.png';
+  }, [
+    editingProgram,
+    editProgramCardTemplate,
+    editProgramHeartX,
+    editProgramHeartY,
+    editProgramHeartWidth,
+    editProgramHeartHeight,
+    editProgramPhotoZoom,
+    editProgramPhotoOffsetY
+  ]);
+
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!password) return;
@@ -475,13 +842,87 @@ export default function AdminDashboard() {
     setRole(null);
   };
 
-  const handleDownloadFramedZip = async () => {
-    const prog = programs.find(p => p.id === selectedProgramIdForFrames);
+  // Live Frame Previews in Review Modal
+  useEffect(() => {
+    if (!reviewingProgramForFrames) return;
+
+    const frameImg = new Image();
+    frameImg.crossOrigin = 'anonymous';
+    frameImg.onload = () => {
+      const progSubmissions = submissions.filter(sub => sub.programId === reviewingProgramForFrames.id && sub.couplePhoto && sub.status === 'approved');
+
+      progSubmissions.forEach(sub => {
+        const canvas = document.getElementById(`review-canvas-${sub.inquiryId}`) as HTMLCanvasElement;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        canvas.width = 384; 
+        canvas.height = 512; 
+
+        const coupleImg = new Image();
+        coupleImg.crossOrigin = 'anonymous';
+        coupleImg.onload = () => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          const startX = canvas.width * 0.08;
+          const startY = canvas.height * 0.08;
+          const drawWidth = canvas.width * 0.84;
+          const drawHeight = canvas.height * 0.84;
+
+          const imgAspect = coupleImg.width / coupleImg.height;
+          const targetAspect = drawWidth / drawHeight;
+          let tempW = drawWidth;
+          let tempH = drawHeight;
+          let offsetX = 0;
+          let offsetY = 0;
+
+          if (imgAspect > targetAspect) {
+            tempW = drawHeight * imgAspect;
+            offsetX = -(tempW - drawWidth) / 2;
+          } else {
+            tempH = drawWidth / imgAspect;
+            offsetY = -(tempH - drawHeight) / 2;
+          }
+
+          const zoom = sub.photoZoom ?? 1.0;
+          const w = tempW * zoom;
+          const h = tempH * zoom;
+          const ox = offsetX - (w - tempW) / 2;
+          const oy = (offsetY - (h - tempH) / 2) + (sub.photoOffsetY ?? 0) / 2; 
+
+          ctx.save();
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(startX, startY, drawWidth, drawHeight);
+          ctx.clip();
+          ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
+          ctx.restore();
+
+          // Draw frame over it
+          ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+
+          // Draw inquiryId below the logo
+          ctx.save();
+          ctx.fillStyle = '#7a0c0c';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
+          ctx.restore();
+        };
+        coupleImg.src = sub.couplePhoto.startsWith('data:') ? sub.couplePhoto : `${API_BASE_URL}${sub.couplePhoto}`;
+      });
+    };
+    frameImg.src = '/frame_template.png';
+  }, [reviewingProgramForFrames, submissions]);
+
+  const handleDownloadFramedZip = async (specificProg?: Program) => {
+    const prog = specificProg || programs.find(p => p.id === selectedProgramIdForFrames);
     if (!prog) return;
 
-    const progSubmissions = submissions.filter(sub => sub.programId === selectedProgramIdForFrames && sub.couplePhoto);
+    const progSubmissions = submissions.filter(sub => sub.programId === prog.id && sub.couplePhoto && sub.status === 'approved');
     if (progSubmissions.length === 0) {
-      alert('No registrations with couple photos found for this program.');
+      alert('No approved registrations with couple photos found for this program.');
       return;
     }
 
@@ -552,6 +993,14 @@ export default function AdminDashboard() {
           // Draw frame over it
           ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
 
+          // Draw inquiryId (Unique ID) below the logo
+          ctx.save();
+          ctx.fillStyle = '#7a0c0c'; // Premium dark red matching invitation theme
+          ctx.font = 'bold 22px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
+          ctx.restore();
+
           // Convert canvas to blob
           const dataUrl = canvas.toDataURL('image/png');
           const base64Data = dataUrl.split(',')[1];
@@ -559,34 +1008,63 @@ export default function AdminDashboard() {
           // Add to zip
           const filename = `${sub.surname}_${sub.husbandName}_${sub.wifeName}_${sub.inquiryId}.png`;
           zip.file(filename, base64Data, { base64: true });
-        } catch (err) {
-          console.error(`Failed to process ${sub.inquiryId}:`, err);
+        } catch (err: any) {
+          console.error('Error drawing framed photo for submission:', sub.inquiryId, err);
         }
       }
 
       setZipProgress('Generating ZIP file...');
       const content = await zip.generateAsync({ type: 'blob' });
-
+      
       setZipProgress('Downloading...');
-      const url = window.URL.createObjectURL(content);
       const a = document.createElement('a');
-      a.href = url;
+      a.href = URL.createObjectURL(content);
       a.download = `${prog.name}_framed_photos.zip`.replace(/\s+/g, '_');
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-
       setZipProgress('Done!');
       setTimeout(() => {
         setZipping(false);
         setZipProgress('');
-      }, 2000);
+      }, 1500);
     } catch (error: any) {
       alert('Error creating zip: ' + error.message);
       setZipping(false);
       setZipProgress('');
     }
+  };
+
+  const handleSaveAndDownloadZip = async () => {
+    if (!reviewingProgramForFrames) return;
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    const progSubmissions = submissions.filter(sub => sub.programId === reviewingProgramForFrames.id && sub.couplePhoto && sub.status === 'approved');
+
+    setZipping(true);
+    setZipProgress('Saving alignments to database...');
+
+    try {
+      // Save coordinates of all submissions to backend
+      await Promise.all(progSubmissions.map(async (sub) => {
+        const body = {
+          photoZoom: sub.photoZoom ?? 1.0,
+          photoOffsetY: sub.photoOffsetY ?? 0
+        };
+        await fetch(`${API_BASE_URL}/api/submissions/${sub.inquiryId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': activePassword
+          },
+          body: JSON.stringify(body)
+        });
+      }));
+    } catch (e) {
+      console.error('Failed to persist photo coordinates:', e);
+    }
+
+    // Now trigger download zip using the updated coordinates
+    await handleDownloadFramedZip(reviewingProgramForFrames);
   };
 
   const downloadImage = async (imagePath: string) => {
@@ -687,14 +1165,14 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans p-6 md:p-12">
       {/* Lightbox / Modal */}
       {selectedImage && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
           onClick={() => setSelectedImage(null)}
         >
           <div className="relative max-w-3xl max-h-[85vh] overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 flex flex-col">
-            <img 
-              src={selectedImage.startsWith('data:') ? selectedImage : `${API_BASE_URL}${selectedImage}`} 
-              alt="Preview" 
+            <img
+              src={selectedImage.startsWith('data:') ? selectedImage : `${API_BASE_URL}${selectedImage}`}
+              alt="Preview"
               className="max-w-full max-h-[70vh] object-contain"
             />
             <div className="p-4 bg-slate-950/90 border-t border-slate-800 flex justify-between items-center gap-4">
@@ -709,7 +1187,7 @@ export default function AdminDashboard() {
                 Download File
               </button>
             </div>
-            <button 
+            <button
               className="absolute top-4 right-4 bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-full w-10 h-10 flex items-center justify-center font-bold text-lg"
               onClick={() => setSelectedImage(null)}
             >
@@ -728,7 +1206,7 @@ export default function AdminDashboard() {
                 <h2 className="text-xl font-bold text-slate-100 tracking-tight">Edit Couple Registration</h2>
                 <p className="text-xs text-slate-400 font-mono mt-1">Inquiry ID: {editingSubmission.inquiryId}</p>
               </div>
-              <button 
+              <button
                 className="bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm"
                 onClick={() => setEditingSubmission(null)}
               >
@@ -751,7 +1229,8 @@ export default function AdminDashboard() {
                     required
                     value={editHusbandName}
                     onChange={(e) => setEditHusbandName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500"
+                    placeholder="First Name"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
                   />
                 </div>
                 <div>
@@ -761,75 +1240,86 @@ export default function AdminDashboard() {
                     required
                     value={editWifeName}
                     onChange={(e) => setEditWifeName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Surname</label>
-                  <input
-                    type="text"
-                    required
-                    value={editSurname}
-                    onChange={(e) => setEditSurname(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Phone Number</label>
-                  <input
-                    type="text"
-                    required
-                    value={editPhoneNumber}
-                    onChange={(e) => setEditPhoneNumber(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500"
+                    placeholder="First Name"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Select Program Slot</label>
-                <select
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Surname / Family Name</label>
+                <input
+                  type="text"
                   required
-                  value={editProgramId}
-                  onChange={(e) => setEditProgramId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500"
-                >
-                  <option value="">Choose an available slot</option>
-                  {programs.map((prog) => (
-                    <option key={prog.id} value={prog.id}>
-                      {prog.name} ({prog.date})
-                    </option>
-                  ))}
-                </select>
+                  value={editSurname}
+                  onChange={(e) => setEditSurname(e.target.value)}
+                  placeholder="e.g. Patel"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Phone Number (WhatsApp)</label>
+                <input
+                  type="tel"
+                  required
+                  value={editPhoneNumber}
+                  onChange={(e) => setEditPhoneNumber(e.target.value)}
+                  placeholder="10-digit number"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Replace Couple Photo</label>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Select Program Slot</label>
+                  <select
+                    value={editProgramId}
+                    onChange={(e) => setEditProgramId(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                  >
+                    {programs.map((p) => {
+                      const isSoldOut = p.bookingsCount + 2 > p.capacity;
+                      const remainingSeats = p.capacity - p.bookingsCount;
+                      const isCurrent = p.id === editingSubmission.programId;
+                      return (
+                        <option
+                          key={p.id}
+                          value={p.id}
+                          disabled={isSoldOut && !isCurrent}
+                        >
+                          {p.name} ({p.date}) {isSoldOut && !isCurrent ? "[SOLD OUT]" : `(${Math.floor(remainingSeats / 2)} left)`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Status</label>
+                  <div className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 text-xs font-semibold capitalize">
+                    {editingSubmission.status}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Update Couple Photo</label>
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        setEditCouplePhoto(e.target.files[0]);
-                      }
-                    }}
+                    onChange={(e) => setEditCouplePhoto(e.target.files?.[0] || null)}
                     className="w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Replace Payment Receipt</label>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Update Payment Screenshot</label>
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        setEditPaymentScreenshot(e.target.files[0]);
-                      }
-                    }}
+                    onChange={(e) => setEditPaymentScreenshot(e.target.files?.[0] || null)}
                     className="w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer"
                   />
                 </div>
@@ -856,6 +1346,333 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {editingProgram && (
+        <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="relative w-full max-w-md bg-slate-950 border border-slate-800 rounded-3xl p-6 md:p-8 backdrop-blur-xl shadow-2xl space-y-6">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-100 tracking-tight">Edit Program Slot</h2>
+              </div>
+              <button
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm"
+                onClick={() => setEditingProgram(null)}
+              >
+                &times;
+              </button>
+            </div>
+
+            {editProgramError && (
+              <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl">
+                {editProgramError}
+              </div>
+            )}
+            {editProgramSuccess && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-xl">
+                {editProgramSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateProgram} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Program Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editProgramName}
+                  onChange={(e) => setEditProgramName(e.target.value)}
+                  placeholder="e.g. Couples Gala Dinner"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Program Date</label>
+                <input
+                  type="date"
+                  required
+                  value={editProgramDate}
+                  onChange={(e) => setEditProgramDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Hall Capacity (Seats)</label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  value={editProgramCapacity}
+                  onChange={(e) => setEditProgramCapacity(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="e.g. 600"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+
+              <div className="border border-slate-800 rounded-xl p-3 bg-slate-900/30 space-y-4">
+                <span className="block text-[10px] font-bold text-amber-500 uppercase tracking-wider">Pass Design Adjustments</span>
+
+                {/* Live Preview canvas */}
+                <div className="w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950 p-2 flex justify-center">
+                  <canvas
+                    id="programEditPreviewCanvas"
+                    style={{ width: '150px', height: '266px' }}
+                    className="bg-slate-950 rounded-lg shadow-inner"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Heart X Position ({editProgramHeartX}px)</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="576"
+                      value={editProgramHeartX}
+                      onChange={(e) => setEditProgramHeartX(Number(e.target.value))}
+                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Heart Y Position ({editProgramHeartY}px)</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1024"
+                      value={editProgramHeartY}
+                      onChange={(e) => setEditProgramHeartY(Number(e.target.value))}
+                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Heart Width ({editProgramHeartWidth}px)</label>
+                    <input
+                      type="range"
+                      min="50"
+                      max="500"
+                      value={editProgramHeartWidth}
+                      onChange={(e) => setEditProgramHeartWidth(Number(e.target.value))}
+                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Heart Height ({editProgramHeartHeight}px)</label>
+                    <input
+                      type="range"
+                      min="50"
+                      max="500"
+                      value={editProgramHeartHeight}
+                      onChange={(e) => setEditProgramHeartHeight(Number(e.target.value))}
+                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Photo Zoom ({editProgramPhotoZoom}x)</label>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="2.5"
+                      step="0.05"
+                      value={editProgramPhotoZoom}
+                      onChange={(e) => setEditProgramPhotoZoom(Number(e.target.value))}
+                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Photo Vertical Shift ({editProgramPhotoOffsetY}px)</label>
+                    <input
+                      type="range"
+                      min="-300"
+                      max="300"
+                      value={editProgramPhotoOffsetY}
+                      onChange={(e) => setEditProgramPhotoOffsetY(Number(e.target.value))}
+                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                    />
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditProgramHeartX(144);
+                        setEditProgramHeartY(112);
+                        setEditProgramHeartWidth(288);
+                        setEditProgramHeartHeight(260);
+                        setEditProgramPhotoZoom(1.0);
+                        setEditProgramPhotoOffsetY(0);
+                      }}
+                      className="w-full py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-all border border-slate-700"
+                    >
+                      Reset to Default Layout
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Entry Pass Template Image (Optional)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = async () => {
+                        const base64 = reader.result as string;
+                        setEditProgramCardTemplate(base64);
+                        const coords = await detectHeartCutout(base64);
+                        if (coords) {
+                          setEditProgramHeartX(coords.x);
+                          setEditProgramHeartY(coords.y);
+                          setEditProgramHeartWidth(coords.w);
+                          setEditProgramHeartHeight(coords.h);
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="w-full text-slate-400 text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 file:cursor-pointer cursor-pointer bg-slate-900 border border-slate-800 rounded-xl px-3 py-2"
+                />
+                {editProgramCardTemplate && (
+                  <div className="mt-2 text-[10px] text-emerald-400 flex items-center gap-1.5">
+                    <span>✓ Template loaded</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditProgramCardTemplate(null)}
+                      className="text-red-400 hover:text-red-300 font-bold underline"
+                    >
+                      Clear/Remove
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-4 flex gap-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingProgram(null)}
+                  className="flex-1 py-2.5 border border-slate-800 hover:bg-slate-900 text-slate-300 font-bold rounded-xl text-xs transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {reviewingProgramForFrames && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
+          <div className="relative w-full max-w-4xl h-[90vh] bg-slate-950 border border-slate-800 rounded-3xl p-6 md:p-8 backdrop-blur-xl shadow-2xl flex flex-col space-y-6">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-100 tracking-tight">Review & Adjust Framed Photos</h2>
+                <p className="text-xs text-slate-400 mt-1">Program: {reviewingProgramForFrames.name} ({reviewingProgramForFrames.date})</p>
+              </div>
+              <button 
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm"
+                onClick={() => setReviewingProgramForFrames(null)}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Scrollable list of registrations */}
+            <div className="flex-1 overflow-y-auto pr-2 space-y-4">
+              {submissions.filter(sub => sub.programId === reviewingProgramForFrames.id && sub.couplePhoto && sub.status === 'approved').length === 0 ? (
+                <p className="text-center text-slate-500 text-sm py-12">No approved couple registrations with photos found in this program slot.</p>
+              ) : (
+                submissions.filter(sub => sub.programId === reviewingProgramForFrames.id && sub.couplePhoto && sub.status === 'approved').map((sub) => (
+                  <div key={sub.inquiryId} className="flex flex-col sm:flex-row items-center gap-6 bg-slate-900/40 border border-slate-850 rounded-2xl p-4 shadow-sm">
+                    {/* Live Preview canvas */}
+                    <div className="w-[120px] h-[160px] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center flex-shrink-0">
+                      <canvas
+                        id={`review-canvas-${sub.inquiryId}`}
+                        style={{ width: '120px', height: '160px' }}
+                        className="bg-slate-950 shadow-inner"
+                      />
+                    </div>
+
+                    <div className="flex-1 w-full space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-bold text-slate-200 text-sm leading-snug">{sub.husbandName} & {sub.wifeName} {sub.surname}</h4>
+                          <span className="text-[10px] text-amber-500 font-mono font-bold tracking-wider uppercase">{sub.inquiryId}</span>
+                        </div>
+                        <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-md uppercase">Approved</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Photo Zoom ({(sub.photoZoom ?? 1.0).toFixed(2)}x)</label>
+                          <input
+                            type="range"
+                            min="0.5"
+                            max="2.0"
+                            step="0.05"
+                            value={sub.photoZoom ?? 1.0}
+                            onChange={(e) => updateSubmissionCoordInState(sub.inquiryId, 'photoZoom', Number(e.target.value))}
+                            className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Photo Vertical Shift ({sub.photoOffsetY ?? 0}px)</label>
+                          <input
+                            type="range"
+                            min="-150"
+                            max="150"
+                            value={sub.photoOffsetY ?? 0}
+                            onChange={(e) => updateSubmissionCoordInState(sub.inquiryId, 'photoOffsetY', Number(e.target.value))}
+                            className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Modal actions */}
+            <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row gap-4 items-center justify-between">
+              <span className="text-[11px] text-slate-500">
+                Adjusting sliders here updates the crop of their framed photo instantly, and also permanently saves it to the database for their pass!
+              </span>
+              <div className="flex gap-3 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setReviewingProgramForFrames(null)}
+                  className="px-5 py-2.5 bg-slate-900 border border-slate-800 hover:bg-slate-850 text-slate-300 font-bold rounded-xl text-xs transition-all w-full sm:w-auto text-center"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAndDownloadZip}
+                  disabled={zipping || submissions.filter(sub => sub.programId === reviewingProgramForFrames.id && sub.couplePhoto && sub.status === 'approved').length === 0}
+                  className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-extrabold rounded-xl text-xs transition-all w-full sm:w-auto text-center shadow-lg shadow-amber-500/20"
+                >
+                  {zipping ? `Processing (${zipProgress})` : 'Save Alignments & Download ZIP'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
@@ -871,20 +1688,20 @@ export default function AdminDashboard() {
           </div>
           <div className="flex items-center gap-4 w-full md:w-auto">
             {role === 'superadmin' && (
-              <button 
+              <button
                 onClick={handleClearData}
                 className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-red-600/20"
               >
                 Clear All Data
               </button>
             )}
-            <button 
+            <button
               onClick={() => fetchSubmissions()}
               className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold rounded-xl text-sm transition-all border border-slate-700"
             >
               Refresh Data
             </button>
-            <button 
+            <button
               onClick={handleLogout}
               className="px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold rounded-xl text-sm transition-all border border-red-500/20"
             >
@@ -894,7 +1711,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Stats Row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-2xl backdrop-blur-md">
             <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Total Inquiries</span>
             <span className="text-4xl font-extrabold text-slate-100 mt-2 block">{submissions.length}</span>
@@ -904,6 +1721,29 @@ export default function AdminDashboard() {
             <span className="text-4xl font-extrabold text-amber-500 mt-2 block">
               {submissions.length > 0 ? submissions[submissions.length - 1].inquiryId : 'N/A'}
             </span>
+          </div>
+          <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-2xl backdrop-blur-md">
+            <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Database Storage</span>
+            <span className="text-2xl font-extrabold text-slate-100 mt-2 block">
+              {dbStats ? `${dbStats.storageSizeMB.toFixed(1)} MB / ${dbStats.totalLimitMB} MB` : 'Loading...'}
+            </span>
+            {dbStats && (
+              <div className="mt-3 space-y-1.5">
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div 
+                    className={`h-1.5 rounded-full transition-all duration-500 ${
+                      (dbStats.storageSizeMB / dbStats.totalLimitMB) > 0.8 ? 'bg-red-500' : 
+                      (dbStats.storageSizeMB / dbStats.totalLimitMB) > 0.5 ? 'bg-amber-500' : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${Math.min(100, (dbStats.storageSizeMB / dbStats.totalLimitMB) * 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[9px] text-slate-500 font-bold">
+                  <span>{((dbStats.storageSizeMB / dbStats.totalLimitMB) * 100).toFixed(2)}% Used</span>
+                  <span>{(dbStats.totalLimitMB - dbStats.storageSizeMB).toFixed(1)} MB Free</span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-2xl backdrop-blur-md">
             <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">System Status</span>
@@ -970,6 +1810,52 @@ export default function AdminDashboard() {
                 />
               </div>
 
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Entry Pass Template Image (Optional)</label>
+                <input
+                  id="programCardTemplateInput"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = async () => {
+                        const base64 = reader.result as string;
+                        setNewProgramCardTemplate(base64);
+                        const coords = await detectHeartCutout(base64);
+                        if (coords) {
+                          setNewProgramHeartX(coords.x);
+                          setNewProgramHeartY(coords.y);
+                          setNewProgramHeartWidth(coords.w);
+                          setNewProgramHeartHeight(coords.h);
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                    } else {
+                      setNewProgramCardTemplate(null);
+                    }
+                  }}
+                  className="w-full text-slate-400 text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 file:cursor-pointer cursor-pointer bg-slate-900 border border-slate-800 rounded-xl px-3 py-2"
+                />
+                {newProgramCardTemplate && (
+                  <div className="mt-2 text-[10px] text-emerald-400 flex items-center gap-1.5">
+                    <span>✓ Template loaded</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewProgramCardTemplate(null);
+                        const fileInput = document.getElementById('programCardTemplateInput') as HTMLInputElement;
+                        if (fileInput) fileInput.value = '';
+                      }}
+                      className="text-red-400 hover:text-red-300 font-bold underline"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <button
                 type="submit"
                 className="w-full py-3 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-bold rounded-xl text-sm transition-all"
@@ -1007,17 +1893,30 @@ export default function AdminDashboard() {
                             <span className="px-2 py-0.5 text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full font-bold uppercase tracking-wider">Active</span>
                           )}
                         </div>
-                        <div className="text-xs text-slate-400 flex items-center gap-4">
+                        <div className="text-xs text-slate-400 flex items-center gap-4 flex-wrap">
                           <span>{prog.date}</span>
                           <span>👥 Booked Couples: <strong className={isSoldOut ? "text-red-400" : "text-amber-500"}>{Math.floor(prog.bookingsCount / 2)}</strong> / {Math.floor(prog.capacity / 2)}</span>
+                          {prog.cardTemplate && (
+                            <span className="text-[10px] text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                              🖼️ Custom Pass
+                            </span>
+                          )}
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleDeleteProgram(prog.id)}
-                        className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs font-semibold transition-all border border-red-500/20"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEditProgramClick(prog)}
+                          className="p-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg text-xs font-semibold transition-all border border-amber-500/20"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProgram(prog.id)}
+                          className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs font-semibold transition-all border border-red-500/20"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   );
                 })
@@ -1123,16 +2022,19 @@ export default function AdminDashboard() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl">
               <div>
                 <p className="text-sm font-semibold text-slate-200">
-                  Total Couples with Photo: <span className="text-amber-500 font-bold">{submissions.filter(sub => sub.programId === selectedProgramIdForFrames && sub.couplePhoto).length}</span>
+                  Total Approved Couples with Photo: <span className="text-amber-500 font-bold">{submissions.filter(sub => sub.programId === selectedProgramIdForFrames && sub.couplePhoto && sub.status === 'approved').length}</span>
                 </p>
-                <p className="text-xs text-slate-500 mt-1">Batch draws all couple photos into the custom template frame and downloads them together as a ZIP archive.</p>
+                <p className="text-xs text-slate-500 mt-1">Review registrations line by line, slide to adjust their photo zoom/position, and download all framed photos in a single ZIP file.</p>
               </div>
               <button
-                onClick={handleDownloadFramedZip}
+                onClick={() => {
+                  const prog = programs.find(p => p.id === selectedProgramIdForFrames);
+                  if (prog) setReviewingProgramForFrames(prog);
+                }}
                 disabled={zipping}
                 className="w-full sm:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20 text-center"
               >
-                {zipping ? `Zipping (${zipProgress})` : 'Download All Framed Photos (ZIP)'}
+                {zipping ? `Processing (${zipProgress})` : 'Review & Download ZIP'}
               </button>
             </div>
           )}
@@ -1141,7 +2043,7 @@ export default function AdminDashboard() {
         {/* Filters and Search */}
         <div className="flex items-center bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 gap-3">
           <span className="text-slate-500 pl-2">🔍</span>
-          <input 
+          <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -1208,13 +2110,13 @@ export default function AdminDashboard() {
                       <td className="py-4 px-6 font-mono text-slate-300">{sub.phoneNumber}</td>
                       <td className="py-4 px-6">
                         <div className="flex flex-col items-center gap-2">
-                          <div 
+                          <div
                             className="w-12 h-12 rounded-lg overflow-hidden border border-slate-800 cursor-pointer hover:border-amber-500/50 transition-colors"
                             onClick={() => setSelectedImage(sub.couplePhoto)}
                           >
-                            <img 
-                              src={sub.couplePhoto.startsWith('data:') ? sub.couplePhoto : `${API_BASE_URL}${sub.couplePhoto}`} 
-                              alt="Couple" 
+                            <img
+                              src={sub.couplePhoto.startsWith('data:') ? sub.couplePhoto : `${API_BASE_URL}${sub.couplePhoto}`}
+                              alt="Couple"
                               className="w-full h-full object-cover"
                             />
                           </div>
@@ -1229,13 +2131,13 @@ export default function AdminDashboard() {
                       <td className="py-4 px-6">
                         {sub.paymentScreenshot ? (
                           <div className="flex flex-col items-center gap-2">
-                            <div 
+                            <div
                               className="w-12 h-12 rounded-lg overflow-hidden border border-slate-800 cursor-pointer hover:border-amber-500/50 transition-colors"
                               onClick={() => setSelectedImage(sub.paymentScreenshot)}
                             >
-                              <img 
-                                src={sub.paymentScreenshot.startsWith('data:') ? sub.paymentScreenshot : `${API_BASE_URL}${sub.paymentScreenshot}`} 
-                                alt="Payment" 
+                              <img
+                                src={sub.paymentScreenshot.startsWith('data:') ? sub.paymentScreenshot : `${API_BASE_URL}${sub.paymentScreenshot}`}
+                                alt="Payment"
                                 className="w-full h-full object-cover"
                               />
                             </div>
@@ -1254,11 +2156,10 @@ export default function AdminDashboard() {
                         )}
                       </td>
                       <td className="py-4 px-6">
-                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase ${
-                          isApproved ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400' :
+                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase ${isApproved ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400' :
                           isRejected ? 'bg-red-500/15 border border-red-500/30 text-red-400' :
-                          'bg-amber-500/15 border border-amber-500/30 text-amber-400'
-                        }`}>
+                            'bg-amber-500/15 border border-amber-500/30 text-amber-400'
+                          }`}>
                           {sub.status ? sub.status : 'pending'}
                         </span>
                       </td>
@@ -1294,11 +2195,10 @@ export default function AdminDashboard() {
                                   setSentPassIds(prev => [...prev, sub.inquiryId]);
                                 }
                               }}
-                              className={`inline-block px-3 py-1.5 font-bold rounded-lg text-xs transition-all text-center ${
-                                isSent 
-                                  ? 'bg-slate-800 hover:bg-slate-750 text-slate-400 border border-slate-700' 
-                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                              }`}
+                              className={`inline-block px-3 py-1.5 font-bold rounded-lg text-xs transition-all text-center ${isSent
+                                ? 'bg-slate-800 hover:bg-slate-750 text-slate-400 border border-slate-700'
+                                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                }`}
                             >
                               {isSent ? '💬 Sent' : '💬 Send Pass'}
                             </a>

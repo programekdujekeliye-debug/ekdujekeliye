@@ -16,7 +16,8 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ limit: '20mb', extended: true }));
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -42,8 +43,16 @@ const ProgramSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   name: { type: String, required: true },
   date: { type: String, required: true },
+  time: { type: String, default: "8:30 PM" },
   capacity: { type: Number, required: true },
-  bookingsCount: { type: Number, default: 0 }
+  bookingsCount: { type: Number, default: 0 },
+  cardTemplate: { type: String },
+  heartX: { type: Number, default: 144 },
+  heartY: { type: Number, default: 112 },
+  heartWidth: { type: Number, default: 288 },
+  heartHeight: { type: Number, default: 260 },
+  photoZoom: { type: Number, default: 1.0 },
+  photoOffsetY: { type: Number, default: 0 }
 });
 const Program = mongoose.model('Program', ProgramSchema);
 
@@ -56,6 +65,7 @@ const SubmissionSchema = new mongoose.Schema({
   programId: { type: String, required: true },
   programName: { type: String, required: true },
   programDate: { type: String, required: true },
+  programTime: { type: String, default: "8:30 PM" },
   couplePhoto: { type: String, required: true },
   paymentScreenshot: { type: String },
   payeeNameFromReceipt: { type: String, default: 'Not detected' },
@@ -140,7 +150,7 @@ app.get('/api/programs', async (req, res) => {
 
 // Create a new program (Admin protected)
 app.post('/api/programs', requireAuth, async (req, res) => {
-  const { name, date, capacity } = req.body;
+  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY } = req.body;
   if (!name || !date || !capacity) {
     return res.status(400).json({ error: 'Name, date, and capacity are required.' });
   }
@@ -149,8 +159,16 @@ app.post('/api/programs', requireAuth, async (req, res) => {
       id: `prog-${Date.now()}`,
       name,
       date,
+      time: time || '8:30 PM',
       capacity: parseInt(capacity, 10),
-      bookingsCount: 0
+      bookingsCount: 0,
+      cardTemplate,
+      heartX: heartX !== undefined ? parseInt(heartX, 10) : 144,
+      heartY: heartY !== undefined ? parseInt(heartY, 10) : 112,
+      heartWidth: heartWidth !== undefined ? parseInt(heartWidth, 10) : 288,
+      heartHeight: heartHeight !== undefined ? parseInt(heartHeight, 10) : 260,
+      photoZoom: photoZoom !== undefined ? parseFloat(photoZoom) : 1.0,
+      photoOffsetY: photoOffsetY !== undefined ? parseInt(photoOffsetY, 10) : 0
     });
     res.status(201).json(newProgram);
   } catch (err) {
@@ -172,6 +190,35 @@ app.delete('/api/programs/:id', requireAuth, async (req, res) => {
   }
 });
 
+// Update a program (Admin protected)
+app.put('/api/programs/:id', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY } = req.body;
+  try {
+    const program = await Program.findOne({ id });
+    if (!program) {
+      return res.status(404).json({ error: 'Program not found.' });
+    }
+
+    if (name) program.name = name;
+    if (date) program.date = date;
+    if (time !== undefined) program.time = time;
+    if (capacity) program.capacity = parseInt(capacity, 10);
+    if (cardTemplate !== undefined) program.cardTemplate = cardTemplate;
+    if (heartX !== undefined) program.heartX = parseInt(heartX, 10);
+    if (heartY !== undefined) program.heartY = parseInt(heartY, 10);
+    if (heartWidth !== undefined) program.heartWidth = parseInt(heartWidth, 10);
+    if (heartHeight !== undefined) program.heartHeight = parseInt(heartHeight, 10);
+    if (photoZoom !== undefined) program.photoZoom = parseFloat(photoZoom);
+    if (photoOffsetY !== undefined) program.photoOffsetY = parseInt(photoOffsetY, 10);
+
+    await program.save();
+    res.json({ success: true, message: 'Program updated successfully.', data: program });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error updating program.' });
+  }
+});
+
 // Submit Form
 app.post('/api/submit', upload.fields([
   { name: 'couplePhoto', maxCount: 1 },
@@ -182,6 +229,10 @@ app.post('/api/submit', upload.fields([
 
     if (!husbandName || !wifeName || !surname || !phoneNumber || !programId) {
       return res.status(400).json({ error: 'All fields including program/slot selection are required' });
+    }
+
+    if (!/^[6-9]\d{9}$/.test(phoneNumber)) {
+      return res.status(400).json({ error: 'કૃપા કરીને સાચો 10-આંકડાનો મોબાઇલ નંબર દાખલ કરો!' });
     }
 
     // Find selected program and check capacity
@@ -238,7 +289,16 @@ app.post('/api/submit', upload.fields([
           'sent', 'upi', 'to:', 'from:', 'rs', 'received', 'debit', 'credit'
         ];
 
-        const hasKeyword = keywords.some(kw => text.includes(kw));
+        const hasKeyword = keywords.some(kw => {
+          const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+          // Enforce word boundary for short keywords to prevent false positives (e.g. 'rs' matching 'years')
+          if (kw.length <= 3 || kw.endsWith(':')) {
+            const regex = new RegExp(`\\b${escaped}`, 'i');
+            return regex.test(text);
+          }
+          return text.includes(kw);
+        });
+
         if (!hasKeyword) {
           return res.status(400).json({
             error: 'અપલોડ કરેલી ઈમેજ પેમેન્ટ રિસીપ્ટ કે કન્ફર્મેશન સ્ક્રીનશોટ નથી. કૃપા કરીને સાચો સક્સેસ સ્ક્રીનશોટ (Receipt) અપલોડ કરો!'
@@ -288,6 +348,7 @@ app.post('/api/submit', upload.fields([
       programId,
       programName: program.name,
       programDate: program.date,
+      programTime: program.time || "8:30 PM",
       couplePhoto: `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`,
       paymentScreenshot: paymentScreenshotFile ? `data:${paymentScreenshotFile.mimetype};base64,${paymentScreenshotFile.buffer.toString('base64')}` : null,
       payeeNameFromReceipt: req.payeeNameFromReceipt || 'Not detected',
@@ -378,7 +439,7 @@ app.put('/api/submissions/:inquiryId', requireAuth, upload.fields([
 ]), async (req, res) => {
   try {
     const { inquiryId } = req.params;
-    const { husbandName, wifeName, surname, phoneNumber, programId } = req.body;
+    const { husbandName, wifeName, surname, phoneNumber, programId, photoZoom, photoOffsetY } = req.body;
 
     const submission = await Submission.findOne({ inquiryId });
     if (!submission) {
@@ -389,7 +450,14 @@ app.put('/api/submissions/:inquiryId', requireAuth, upload.fields([
     if (husbandName) submission.husbandName = husbandName;
     if (wifeName) submission.wifeName = wifeName;
     if (surname) submission.surname = surname;
-    if (phoneNumber) submission.phoneNumber = phoneNumber;
+    if (phoneNumber) {
+      if (!/^[6-9]\d{9}$/.test(phoneNumber)) {
+        return res.status(400).json({ error: 'કૃપા કરીને સાચો 10-આંકડાનો મોબાઇલ નંબર દાખલ કરો!' });
+      }
+      submission.phoneNumber = phoneNumber;
+    }
+    if (photoZoom !== undefined) submission.photoZoom = parseFloat(photoZoom);
+    if (photoOffsetY !== undefined) submission.photoOffsetY = parseInt(photoOffsetY, 10);
 
     // Handle program/slot changes
     if (programId && programId !== submission.programId) {
@@ -419,6 +487,7 @@ app.put('/api/submissions/:inquiryId', requireAuth, upload.fields([
       submission.programId = programId;
       submission.programName = newProgram.name;
       submission.programDate = newProgram.date;
+      submission.programTime = newProgram.time || "8:30 PM";
     }
 
     // Handle photo updates (Base64 conversion)
@@ -452,6 +521,31 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
     if (!submission) {
       return res.status(404).json({ error: 'Inquiry ID not found.' });
     }
+
+    // Look up the program to get the cardTemplate, layouts, and time
+    let cardTemplate = null;
+    let heartX = 144;
+    let heartY = 112;
+    let heartWidth = 288;
+    let heartHeight = 260;
+    let photoZoom = 1.0;
+    let photoOffsetY = 0;
+    let programTime = submission.programTime || "8:30 PM";
+
+    if (submission.programId) {
+      const program = await Program.findOne({ id: submission.programId });
+      if (program) {
+        if (program.cardTemplate) cardTemplate = program.cardTemplate;
+        if (program.heartX !== undefined) heartX = program.heartX;
+        if (program.heartY !== undefined) heartY = program.heartY;
+        if (program.heartWidth !== undefined) heartWidth = program.heartWidth;
+        if (program.heartHeight !== undefined) heartHeight = program.heartHeight;
+        if (program.photoZoom !== undefined) photoZoom = program.photoZoom;
+        if (program.photoOffsetY !== undefined) photoOffsetY = program.photoOffsetY;
+        if (program.time) programTime = program.time;
+      }
+    }
+
     res.json({
       inquiryId: submission.inquiryId,
       husbandName: submission.husbandName,
@@ -461,9 +555,17 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
       programId: submission.programId,
       programName: submission.programName,
       programDate: submission.programDate,
+      programTime,
       couplePhoto: submission.couplePhoto,
       status: submission.status,
-      rejectionReason: submission.rejectionReason
+      rejectionReason: submission.rejectionReason,
+      cardTemplate,
+      heartX,
+      heartY,
+      heartWidth,
+      heartHeight,
+      photoZoom,
+      photoOffsetY
     });
   } catch (err) {
     res.status(500).json({ error: 'Server error checking status.' });
@@ -533,6 +635,23 @@ app.post('/api/settings', requireAuth, async (req, res) => {
     res.json({ success: true, settings });
   } catch (err) {
     res.status(500).json({ error: 'Server error updating settings.' });
+  }
+});
+
+// Database storage statistics (Admin only)
+app.get('/api/db-status', requireAuth, async (req, res) => {
+  try {
+    const stats = await mongoose.connection.db.stats();
+    const dataSizeMB = (stats.dataSize / (1024 * 1024)).toFixed(2);
+    const storageSizeMB = (stats.storageSize / (1024 * 1024)).toFixed(2);
+    res.json({
+      dataSizeMB: parseFloat(dataSizeMB),
+      storageSizeMB: parseFloat(storageSizeMB),
+      totalLimitMB: 512 // MongoDB Atlas Free Tier Limit
+    });
+  } catch (err) {
+    console.error('Error fetching db stats:', err);
+    res.status(500).json({ error: 'Server error fetching database stats.' });
   }
 });
 

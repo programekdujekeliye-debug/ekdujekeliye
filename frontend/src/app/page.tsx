@@ -20,7 +20,7 @@ interface Program {
   bookingsCount: number;
 }
 
-const ADMIN_WHATSAPP_NUMBER = '919586979897'; // Configure Admin WhatsApp number here
+const ADMIN_WHATSAPP_NUMBER = '918200302328'; // Configure Admin WhatsApp number here
 
 const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.7): Promise<File> => {
   return new Promise((resolve, reject) => {
@@ -358,6 +358,10 @@ export default function Home() {
       setError('Please fill in all details, select a program slot, and upload your photo.');
       return;
     }
+    if (!/^[6-9]\d{9}$/.test(phoneNumber)) {
+      setError('કૃપા કરીને સાચો 10-આંકડાનો મોબાઇલ નંબર દાખલ કરો!');
+      return;
+    }
     const selectedProgram = programs.find(p => p.id === selectedProgramId);
     if (selectedProgram && selectedProgram.bookingsCount + 2 > selectedProgram.capacity) {
       setError('The selected program slot is sold out (not enough seats left for a couple). Please select another slot.');
@@ -592,9 +596,10 @@ export default function Home() {
                 <input
                   type="tel"
                   required
+                  maxLength={10}
                   value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="Enter Phone Number"
+                  onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="Enter 10-digit Phone Number"
                   className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>

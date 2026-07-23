@@ -16,6 +16,13 @@ interface Submission {
   couplePhoto: string;
   status: string;
   rejectionReason?: string;
+  cardTemplate?: string;
+  heartX?: number;
+  heartY?: number;
+  heartWidth?: number;
+  heartHeight?: number;
+  photoZoom?: number;
+  photoOffsetY?: number;
 }
 
 export default function PassDownloadPage() {
@@ -25,6 +32,8 @@ export default function PassDownloadPage() {
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [userZoom, setUserZoom] = useState<number>(1.0);
+  const [userOffsetY, setUserOffsetY] = useState<number>(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -122,33 +131,33 @@ export default function PassDownloadPage() {
 
       tempCtx.drawImage(templateImg, 0, 0, canvas.width, canvas.height);
 
-      const scanX = 140;
-      const scanY = 100;
-      const scanW = 300;
-      const scanH = 280;
-      const imgData = tempCtx.getImageData(scanX, scanY, scanW, scanH);
-      const data = imgData.data;
+      const hX = sub.heartX ?? 144;
+      const hY = sub.heartY ?? 112;
+      const hW = sub.heartWidth ?? 288;
+      const hH = sub.heartHeight ?? 260;
 
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        if (r > 230 && g > 230 && b > 230) {
-          data[i + 3] = 0;
+      // Make white area transparent strictly inside the heart bounding box coordinates
+      try {
+        const imgData = tempCtx.getImageData(hX, hY, hW, hH);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          if (r > 220 && g > 220 && b > 220) {
+            data[i + 3] = 0; // Make transparent
+          }
         }
+        tempCtx.putImageData(imgData, hX, hY);
+      } catch (e) {
+        console.error("Error doing transparency scan: ", e);
       }
-      tempCtx.putImageData(imgData, scanX, scanY);
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const coupleImg = new Image();
       coupleImg.crossOrigin = 'anonymous';
       coupleImg.onload = () => {
-        const hX = 144;
-        const hY = 112;
-        const hW = 288;
-        const hH = 260;
-
         const imgAspect = coupleImg.width / coupleImg.height;
         const heartAspect = hW / hH;
         let drawW = hW;
@@ -164,14 +173,15 @@ export default function PassDownloadPage() {
           offsetY = -(drawH - hH) / 2;
         }
 
-        const zoom = 1.1;
+        const zoom = (sub.photoZoom ?? 1.0) * userZoom;
         const finalW = drawW * zoom;
         const finalH = drawH * zoom;
         const finalOffsetX = offsetX - (finalW - drawW) / 2;
-        const finalOffsetY = offsetY - (finalH - drawH) / 2;
+        const finalOffsetY = (offsetY - (finalH - drawH) / 2) + (sub.photoOffsetY ?? 0) + userOffsetY;
 
         ctx.save();
-        drawHeartMask(ctx, hX, hY, hW, hH);
+        ctx.beginPath();
+        ctx.rect(hX, hY, hW, hH);
         ctx.clip();
         ctx.drawImage(coupleImg, hX + finalOffsetX, hY + finalOffsetY, finalW, finalH);
         ctx.restore();
@@ -180,15 +190,14 @@ export default function PassDownloadPage() {
       };
       coupleImg.src = sub.couplePhoto.startsWith('data:') ? sub.couplePhoto : `${API_BASE_URL}${sub.couplePhoto}`;
     };
-    templateImg.src = '/card_template.png';
+    templateImg.src = sub.cardTemplate || '/card_template.png';
   };
 
   useEffect(() => {
     if (submission && submission.status === 'approved') {
-      // Draw card after short delay to make sure canvas ref is bound
-      setTimeout(() => drawCard(submission), 100);
+      drawCard(submission);
     }
-  }, [submission]);
+  }, [submission, userZoom, userOffsetY]);
 
   const downloadCard = () => {
     const canvas = canvasRef.current;
@@ -254,7 +263,7 @@ export default function PassDownloadPage() {
               <p className="text-xs text-slate-500">
                 Please wait for the administrator to approve your details. Once approved, refresh this page to download your pass.
               </p>
-              <button 
+              <button
                 onClick={() => window.location.reload()}
                 className="w-full py-3 border border-slate-800 hover:bg-slate-900 active:scale-[0.99] text-slate-300 font-bold rounded-xl transition-all"
               >
@@ -294,12 +303,44 @@ export default function PassDownloadPage() {
                 <p className="text-slate-400 text-sm mt-1">Your payment was verified. Use the button below to download the invitation pass.</p>
               </div>
 
-              <div className="overflow-hidden rounded-2xl border border-slate-800 shadow-xl max-w-full my-4">
+              <div className="overflow-hidden rounded-2xl border border-slate-800 shadow-xl max-w-full my-2">
                 <canvas
                   ref={canvasRef}
                   style={{ width: '300px', height: '533px' }}
                   className="mx-auto block bg-slate-950"
                 />
+              </div>
+
+              {/* User Image Adjustment Sliders */}
+              <div className="w-full bg-slate-900/60 border border-slate-800 rounded-2xl p-4 my-2 space-y-4 max-w-sm">
+                <span className="block text-[10px] font-bold text-amber-500 uppercase tracking-wider text-left">Adjust Your Photo / ફોટો સરખો કરો</span>
+
+                <div className="space-y-3 text-left">
+                  <div>
+                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Zoom (મોટો/નાનો કરો)</label>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="2.0"
+                      step="0.05"
+                      value={userZoom}
+                      onChange={(e) => setUserZoom(Number(e.target.value))}
+                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Position (ઉપર/નીચે કરો)</label>
+                    <input
+                      type="range"
+                      min="-150"
+                      max="150"
+                      value={userOffsetY}
+                      onChange={(e) => setUserOffsetY(Number(e.target.value))}
+                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                    />
+                  </div>
+                </div>
               </div>
 
               <button
