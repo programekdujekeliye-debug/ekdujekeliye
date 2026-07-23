@@ -71,6 +71,7 @@ const SubmissionSchema = new mongoose.Schema({
   payeeNameFromReceipt: { type: String, default: 'Not detected' },
   status: { type: String, default: 'pending' },
   rejectionReason: { type: String, default: '' },
+  passSent: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 const Submission = mongoose.model('Submission', SubmissionSchema);
@@ -439,7 +440,7 @@ app.put('/api/submissions/:inquiryId', requireAuth, upload.fields([
 ]), async (req, res) => {
   try {
     const { inquiryId } = req.params;
-    const { husbandName, wifeName, surname, phoneNumber, programId, photoZoom, photoOffsetY } = req.body;
+    const { husbandName, wifeName, surname, phoneNumber, programId, photoZoom, photoOffsetY, passSent } = req.body;
 
     const submission = await Submission.findOne({ inquiryId });
     if (!submission) {
@@ -458,6 +459,7 @@ app.put('/api/submissions/:inquiryId', requireAuth, upload.fields([
     }
     if (photoZoom !== undefined) submission.photoZoom = parseFloat(photoZoom);
     if (photoOffsetY !== undefined) submission.photoOffsetY = parseInt(photoOffsetY, 10);
+    if (passSent !== undefined) submission.passSent = passSent === 'true' || passSent === true;
 
     // Handle program/slot changes
     if (programId && programId !== submission.programId) {
