@@ -21,7 +21,6 @@ interface Submission {
   payeeNameFromReceipt?: string;
   photoZoom?: number;
   photoOffsetY?: number;
-  passSent?: boolean;
 }
 
 const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.7): Promise<File> => {
@@ -525,29 +524,6 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       alert('Network error.');
-    }
-  };
-
-  const handleMarkPassSent = async (inquiryId: string) => {
-    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
-    setSubmissions(prev => prev.map(sub => {
-      if (sub.inquiryId === inquiryId) {
-        return { ...sub, passSent: true };
-      }
-      return sub;
-    }));
-
-    try {
-      await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': activePassword
-        },
-        body: JSON.stringify({ passSent: true })
-      });
-    } catch (err) {
-      console.error('Failed to update passSent status in database:', err);
     }
   };
 
@@ -2208,14 +2184,16 @@ export default function AdminDashboard() {
                           </div>
                         )}
                         {isApproved && (() => {
-                          const isSent = sub.passSent === true;
+                          const isSent = sentPassIds.includes(sub.inquiryId);
                           return (
                             <a
                               href={`https://wa.me/${waPhone}?text=${encodeURIComponent(`Hello! Your payment has been verified. You can view and download your pass here: ${typeof window !== 'undefined' ? window.location.origin : 'https://ekdujekeliye.vercel.app'}/pass/${sub.inquiryId}`)}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={() => {
-                                handleMarkPassSent(sub.inquiryId);
+                                if (!isSent) {
+                                  setSentPassIds(prev => [...prev, sub.inquiryId]);
+                                }
                               }}
                               className={`inline-block px-3 py-1.5 font-bold rounded-lg text-xs transition-all text-center ${isSent
                                 ? 'bg-slate-800 hover:bg-slate-750 text-slate-400 border border-slate-700'

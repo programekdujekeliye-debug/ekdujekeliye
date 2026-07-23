@@ -20,7 +20,7 @@ interface Program {
   bookingsCount: number;
 }
 
-const ADMIN_WHATSAPP_NUMBER = '918200302328'; // Configure Admin WhatsApp number here
+const ADMIN_WHATSAPP_NUMBER = '919213532835'; // Configure Admin WhatsApp number here
 
 const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.7): Promise<File> => {
   return new Promise((resolve, reject) => {
