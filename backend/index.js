@@ -33,7 +33,7 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 // MongoDB Connection
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
+const MONGO_URI = (process.env.MONGO_URI || 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority').trim();
 mongoose.connect(MONGO_URI)
   .then(() => console.log('Successfully connected to MongoDB database.'))
   .catch(err => console.error('MongoDB connection error:', err));
