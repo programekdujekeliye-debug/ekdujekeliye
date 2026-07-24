@@ -572,13 +572,92 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
   }
 });
 
-// Get all submissions (for admin view/verification)
+// Get all submissions (for admin view/verification) - optimized to exclude heavy base64 data
 app.get('/api/submissions', requireAuth, async (req, res) => {
   try {
-    const submissions = await Submission.find();
-    res.json(submissions);
+    const submissions = await Submission.find({}, {
+      inquiryId: 1,
+      husbandName: 1,
+      wifeName: 1,
+      surname: 1,
+      phoneNumber: 1,
+      programId: 1,
+      programName: 1,
+      programDate: 1,
+      programTime: 1,
+      payeeNameFromReceipt: 1,
+      status: 1,
+      rejectionReason: 1,
+      createdAt: 1,
+      couplePhoto: { $cond: [ { $eq: [ "$couplePhoto", null ] }, null, "present" ] },
+      paymentScreenshot: { $cond: [ { $eq: [ "$paymentScreenshot", null ] }, null, "present" ] }
+    });
+    
+    // Map submissions to include dynamic URL paths for images instead of base64
+    const mappedSubmissions = submissions.map(sub => {
+      const obj = sub.toObject();
+      obj.couplePhoto = sub.couplePhoto ? `/api/submissions/${sub.inquiryId}/photo` : null;
+      obj.paymentScreenshot = sub.paymentScreenshot ? `/api/submissions/${sub.inquiryId}/screenshot` : null;
+      return obj;
+    });
+
+    res.json(mappedSubmissions);
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching submissions.' });
+  }
+});
+
+// Stream couple photo endpoint
+app.get('/api/submissions/:inquiryId/photo', async (req, res) => {
+  try {
+    const submission = await Submission.findOne({ inquiryId: req.params.inquiryId }, { couplePhoto: 1 });
+    if (!submission || !submission.couplePhoto) {
+      return res.status(404).send('Photo not found');
+    }
+    
+    const match = submission.couplePhoto.match(/^data:([^;]+);base64,(.+)$/);
+    if (match) {
+      const contentType = match[1];
+      const base64Data = match[2];
+      const img = Buffer.from(base64Data, 'base64');
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Length': img.length,
+        'Cache-Control': 'public, max-age=86400' // cache for 1 day
+      });
+      res.end(img);
+    } else {
+      res.status(400).send('Invalid photo format');
+    }
+  } catch (err) {
+    res.status(500).send('Server error');
+  }
+});
+
+// Stream payment screenshot endpoint
+app.get('/api/submissions/:inquiryId/screenshot', async (req, res) => {
+  try {
+    const submission = await Submission.findOne({ inquiryId: req.params.inquiryId }, { paymentScreenshot: 1 });
+    if (!submission || !submission.paymentScreenshot) {
+      return res.status(404).send('Screenshot not found');
+    }
+    
+    const match = submission.paymentScreenshot.match(/^data:([^;]+);base64,(.+)$/);
+    if (match) {
+      const contentType = match[1];
+      const base64Data = match[2];
+      const img = Buffer.from(base64Data, 'base64');
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Length': img.length,
+        'Cache-Control': 'public, max-age=86400'
+      });
+      res.end(img);
+    } else {
+      res.status(400).send('Invalid screenshot format');
+    }
+  } catch (err) {
+    res.status(500).send('Server error');
   }
 });
 
