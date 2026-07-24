@@ -138,13 +138,50 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Backend server is running successfully.' });
 });
 
-// Get all programs
+// Get all programs (optimized to exclude heavy cardTemplate by default to speed up slot selection)
 app.get('/api/programs', async (req, res) => {
   try {
-    const programs = await Program.find();
-    res.json(programs);
+    const programs = await Program.find({}, { cardTemplate: 0 });
+    
+    // Map programs to include absolute URL path for cardTemplate instead of base64
+    const host = req.get('host');
+    const protocol = req.protocol;
+    const mapped = programs.map(p => {
+      const obj = p.toObject();
+      obj.cardTemplate = p.cardTemplate !== null ? `${protocol}://${host}/api/programs/${p.id}/template` : null;
+      return obj;
+    });
+    
+    res.json(mapped);
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching programs.' });
+  }
+});
+
+// Stream program card template endpoint
+app.get('/api/programs/:id/template', async (req, res) => {
+  try {
+    const program = await Program.findOne({ id: req.params.id }, { cardTemplate: 1 });
+    if (!program || !program.cardTemplate) {
+      return res.status(404).send('Template not found');
+    }
+    
+    const match = program.cardTemplate.match(/^data:([^;]+);base64,(.+)$/);
+    if (match) {
+      const contentType = match[1];
+      const base64Data = match[2];
+      const img = Buffer.from(base64Data, 'base64');
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Length': img.length,
+        'Cache-Control': 'public, max-age=86400' // cache for 1 day
+      });
+      res.end(img);
+    } else {
+      res.status(400).send('Invalid template format');
+    }
+  } catch (err) {
+    res.status(500).send('Server error');
   }
 });
 
