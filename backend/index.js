@@ -760,6 +760,39 @@ app.get('/api/db-status', requireAuth, async (req, res) => {
   }
 });
 
+// Unauthenticated DB connection diagnostic endpoint
+app.get('/api/debug-db', async (req, res) => {
+  try {
+    const state = mongoose.connection.readyState;
+    const states = {
+      0: 'disconnected',
+      1: 'connected',
+      2: 'connecting',
+      3: 'disconnecting',
+      99: 'uninitialized'
+    };
+    
+    let testResult = 'Not run';
+    let queryError = null;
+    try {
+      const p = await Program.findOne({}, { id: 1 }).maxTimeMS(2000);
+      testResult = p ? `Found program: ${p.id}` : 'No programs found';
+    } catch (e) {
+      queryError = e.message;
+    }
+
+    res.json({
+      mongooseState: states[state] || state,
+      mongoUriConfigured: !!process.env.MONGO_URI,
+      testResult,
+      queryError,
+      envUriLength: process.env.MONGO_URI ? process.env.MONGO_URI.length : 0
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
