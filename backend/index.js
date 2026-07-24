@@ -252,86 +252,6 @@ app.post('/api/submit', upload.fields([
       return res.status(400).json({ error: 'Couple photo is required' });
     }
 
-    // Validate if the uploaded payment screenshot is actually the QR code itself
-    if (paymentScreenshotFile) {
-      try {
-        const image = await Jimp.read(paymentScreenshotFile.buffer);
-        const qrCode = jsQR(
-          new Uint8ClampedArray(image.bitmap.data),
-          image.bitmap.width,
-          image.bitmap.height
-        );
-        if (qrCode && qrCode.data) {
-          if (qrCode.data.includes('upi://pay')) {
-            return res.status(400).json({
-              error: 'તમે પેમેન્ટનો QR કોડ અપલોડ કર્યો છે. કૃપા કરીને પેમેન્ટ થયા પછીનો સક્સેસ સ્ક્રીનશોટ (Receipt) અપલોડ કરો!'
-            });
-          }
-        }
-      } catch (qrErr) {
-        console.error('Error scanning QR code in screenshot:', qrErr);
-      }
-
-      let payeeNameFromReceipt = 'Not detected';
-      // OCR check: scan text to see if it contains transaction-related keywords
-      try {
-        const ocrResult = await Tesseract.recognize(
-          paymentScreenshotFile.buffer,
-          'eng'
-        );
-        const originalText = ocrResult.data.text;
-        const text = originalText.toLowerCase();
-
-        // Keywords typical for GPAY, Paytm, PhonePe, BHIM, Bank transfer receipts
-        const keywords = [
-          'success', 'successful', 'paid', 'payment', 'transferred', 'completed',
-          'utr', 'txn', 'transaction', 'ref', 'gpay', 'phonepe', 'paytm', 'bhim',
-          'sent', 'upi', 'to:', 'from:', 'rs', 'received', 'debit', 'credit'
-        ];
-
-        const hasKeyword = keywords.some(kw => {
-          const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-          // Enforce word boundary for short keywords to prevent false positives (e.g. 'rs' matching 'years')
-          if (kw.length <= 3 || kw.endsWith(':')) {
-            const regex = new RegExp(`\\b${escaped}`, 'i');
-            return regex.test(text);
-          }
-          return text.includes(kw);
-        });
-
-        if (!hasKeyword) {
-          return res.status(400).json({
-            error: 'અપલોડ કરેલી ઈમેજ પેમેન્ટ રિસીપ્ટ કે કન્ફર્મેશન સ્ક્રીનશોટ નથી. કૃપા કરીને સાચો સક્સેસ સ્ક્રીનશોટ (Receipt) અપલોડ કરો!'
-          });
-        }
-
-        // Try to extract who was paid
-        const patterns = [
-          /to\s*:\s*([A-Za-z0-9\s\.\-\&]+)/i,
-          /paid\s+to\s+([A-Za-z0-9\s\.\-\&]+)/i,
-          /transfer\s+to\s+([A-Za-z0-9\s\.\-\&]+)/i,
-          /payment\s+to\s+([A-Za-z0-9\s\.\-\&]+)/i,
-          /sent\s+to\s+([A-Za-z0-9\s\.\-\&]+)/i
-        ];
-
-        for (const pattern of patterns) {
-          const match = originalText.match(pattern);
-          if (match && match[1]) {
-            const extracted = match[1].split('\n')[0].trim();
-            if (extracted.length > 2 && !/^\d+$/.test(extracted)) {
-              payeeNameFromReceipt = extracted;
-              break;
-            }
-          }
-        }
-      } catch (ocrErr) {
-        console.error('OCR validation error:', ocrErr);
-        // Do not block if OCR library fails internally to avoid breaking registration
-      }
-
-      req.payeeNameFromReceipt = payeeNameFromReceipt;
-    }
-
     const nextSeq = await getNextInquiryNumber();
     const inquiryId = `CPL-${nextSeq}`;
 
@@ -351,15 +271,121 @@ app.post('/api/submit', upload.fields([
       programTime: program.time || "8:30 PM",
       couplePhoto: `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`,
       paymentScreenshot: paymentScreenshotFile ? `data:${paymentScreenshotFile.mimetype};base64,${paymentScreenshotFile.buffer.toString('base64')}` : null,
-      payeeNameFromReceipt: req.payeeNameFromReceipt || 'Not detected',
+      payeeNameFromReceipt: paymentScreenshotFile ? 'Processing...' : 'No payment file',
       status: 'pending', // Default status is pending
       createdAt: new Date()
     });
 
+    // Send instant response to client
     res.status(201).json({
       success: true,
       data: newSubmission
     });
+
+    // Run heavy QR scan and Tesseract OCR text recognition asynchronously in the background
+    if (paymentScreenshotFile) {
+      setImmediate(async () => {
+        try {
+          let payeeNameFromReceipt = 'Not detected';
+          let isUpiQr = false;
+          let isValidReceipt = true;
+
+          // 1. Jimp + jsQR check to see if the user uploaded the raw UPI QR code instead of receipt
+          try {
+            const image = await Jimp.read(paymentScreenshotFile.buffer);
+            const qrCode = jsQR(
+              new Uint8ClampedArray(image.bitmap.data),
+              image.bitmap.width,
+              image.bitmap.height
+            );
+            if (qrCode && qrCode.data && qrCode.data.includes('upi://pay')) {
+              isUpiQr = true;
+            }
+          } catch (qrErr) {
+            console.error('Error scanning QR code in background:', qrErr);
+          }
+
+          if (isUpiQr) {
+            await Submission.updateOne(
+              { inquiryId },
+              {
+                status: 'rejected',
+                rejectionReason: 'તમે પેમેન્ટનો QR કોડ અપલોડ કર્યો છે. કૃપા કરીને પેમેન્ટ થયા પછીનો સક્સેસ સ્ક્રીનશોટ (Receipt) અપલોડ કરો!'
+              }
+            );
+            return;
+          }
+
+          // 2. Tesseract OCR processing to verify text keywords
+          try {
+            const ocrResult = await Tesseract.recognize(
+              paymentScreenshotFile.buffer,
+              'eng'
+            );
+            const originalText = ocrResult.data.text;
+            const text = originalText.toLowerCase();
+
+            const keywords = [
+              'success', 'successful', 'paid', 'payment', 'transferred', 'completed',
+              'utr', 'txn', 'transaction', 'ref', 'gpay', 'phonepe', 'paytm', 'bhim',
+              'sent', 'upi', 'to:', 'from:', 'rs', 'received', 'debit', 'credit'
+            ];
+
+            const hasKeyword = keywords.some(kw => {
+              const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+              if (kw.length <= 3 || kw.endsWith(':')) {
+                const regex = new RegExp(`\\b${escaped}`, 'i');
+                return regex.test(text);
+              }
+              return text.includes(kw);
+            });
+
+            if (!hasKeyword) {
+              isValidReceipt = false;
+            } else {
+              // Attempt to parse who was paid
+              const patterns = [
+                /to\s*:\s*([A-Za-z0-9\s\.\-\&]+)/i,
+                /paid\s+to\s+([A-Za-z0-9\s\.\-\&]+)/i,
+                /transfer\s+to\s+([A-Za-z0-9\s\.\-\&]+)/i,
+                /payment\s+to\s+([A-Za-z0-9\s\.\-\&]+)/i,
+                /sent\s+to\s+([A-Za-z0-9\s\.\-\&]+)/i
+              ];
+
+              for (const pattern of patterns) {
+                const match = originalText.match(pattern);
+                if (match && match[1]) {
+                  const extracted = match[1].split('\n')[0].trim();
+                  if (extracted.length > 2 && !/^\d+$/.test(extracted)) {
+                    payeeNameFromReceipt = extracted;
+                    break;
+                  }
+                }
+              }
+            }
+          } catch (ocrErr) {
+            console.error('Background OCR validation error:', ocrErr);
+          }
+
+          if (!isValidReceipt) {
+            await Submission.updateOne(
+              { inquiryId },
+              {
+                status: 'rejected',
+                rejectionReason: 'અપલોડ કરેલી ઈમેજ પેમેન્ટ રિસીપ્ટ કે કન્ફર્મેશન સ્ક્રીનશોટ નથી. કૃપા કરીને સાચો સક્સેસ સ્ક્રીનશોટ (Receipt) અપલોડ કરો!'
+              }
+            );
+          } else {
+            await Submission.updateOne(
+              { inquiryId },
+              { payeeNameFromReceipt }
+            );
+          }
+        } catch (bgErr) {
+          console.error('Background submission processing error:', bgErr);
+        }
+      });
+    }
 
   } catch (error) {
     console.error('Error handling submission:', error);
@@ -589,10 +615,10 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
       status: 1,
       rejectionReason: 1,
       createdAt: 1,
-      couplePhoto: { $cond: [ { $eq: [ "$couplePhoto", null ] }, null, "present" ] },
-      paymentScreenshot: { $cond: [ { $eq: [ "$paymentScreenshot", null ] }, null, "present" ] }
+      couplePhoto: { $cond: [{ $eq: ["$couplePhoto", null] }, null, "present"] },
+      paymentScreenshot: { $cond: [{ $eq: ["$paymentScreenshot", null] }, null, "present"] }
     });
-    
+
     // Map submissions to include dynamic URL paths for images instead of base64
     const mappedSubmissions = submissions.map(sub => {
       const obj = sub.toObject();
@@ -614,7 +640,7 @@ app.get('/api/submissions/:inquiryId/photo', async (req, res) => {
     if (!submission || !submission.couplePhoto) {
       return res.status(404).send('Photo not found');
     }
-    
+
     const match = submission.couplePhoto.match(/^data:([^;]+);base64,(.+)$/);
     if (match) {
       const contentType = match[1];
@@ -641,7 +667,7 @@ app.get('/api/submissions/:inquiryId/screenshot', async (req, res) => {
     if (!submission || !submission.paymentScreenshot) {
       return res.status(404).send('Screenshot not found');
     }
-    
+
     const match = submission.paymentScreenshot.match(/^data:([^;]+);base64,(.+)$/);
     if (match) {
       const contentType = match[1];
