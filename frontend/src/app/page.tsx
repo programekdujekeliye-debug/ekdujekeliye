@@ -93,6 +93,7 @@ export default function Home() {
   const [error, setError] = useState('');
 
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [loadingPrograms, setLoadingPrograms] = useState(true);
   const [selectedProgramId, setSelectedProgramId] = useState('');
   const [searchInquiryId, setSearchInquiryId] = useState('');
   const [showStatusCheck, setShowStatusCheck] = useState(false);
@@ -139,6 +140,7 @@ export default function Home() {
   useEffect(() => {
     const fetchPrograms = async () => {
       try {
+        setLoadingPrograms(true);
         const res = await fetch(`${API_BASE_URL}/api/programs`);
         if (res.ok) {
           const data = await res.json();
@@ -146,6 +148,8 @@ export default function Home() {
         }
       } catch (err) {
         console.error('Failed to fetch programs:', err);
+      } finally {
+        setLoadingPrograms(false);
       }
     };
     const fetchSettings = async () => {
@@ -612,21 +616,27 @@ export default function Home() {
                   onChange={(e) => setSelectedProgramId(e.target.value)}
                   className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
                 >
-                  <option value="" className="text-slate-500">Choose an available slot</option>
-                  {programs.map((prog) => {
-                    const remainingSeats = prog.capacity - prog.bookingsCount;
-                    const isSoldOut = remainingSeats < 2;
-                    return (
-                      <option 
-                        key={prog.id} 
-                        value={prog.id} 
-                        disabled={isSoldOut}
-                        className={isSoldOut ? "text-slate-600" : "text-slate-100"}
-                      >
-                        {prog.name} ({prog.date}) {isSoldOut ? "[SOLD OUT]" : `(${Math.floor(remainingSeats / 2)} couples left)`}
-                      </option>
-                    );
-                  })}
+                  {loadingPrograms ? (
+                    <option value="" className="text-slate-500">Loading slots, please wait...</option>
+                  ) : (
+                    <>
+                      <option value="" className="text-slate-500">Choose an available slot</option>
+                      {programs.map((prog) => {
+                        const remainingSeats = prog.capacity - prog.bookingsCount;
+                        const isSoldOut = remainingSeats < 2;
+                        return (
+                          <option 
+                            key={prog.id} 
+                            value={prog.id} 
+                            disabled={isSoldOut}
+                            className={isSoldOut ? "text-slate-600" : "text-slate-100"}
+                          >
+                            {prog.name} ({prog.date}) {isSoldOut ? "[SOLD OUT]" : `(${Math.floor(remainingSeats / 2)} couples left)`}
+                          </option>
+                        );
+                      })}
+                    </>
+                  )}
                 </select>
               </div>
 
