@@ -53,7 +53,7 @@ const ProgramSchema = new mongoose.Schema({
   heartHeight: { type: Number, default: 260 },
   photoZoom: { type: Number, default: 1.0 },
   photoOffsetY: { type: Number, default: 0 }
-});
+}, { collection: 'program' });
 const Program = mongoose.model('Program', ProgramSchema);
 
 const SubmissionSchema = new mongoose.Schema({
@@ -72,7 +72,7 @@ const SubmissionSchema = new mongoose.Schema({
   status: { type: String, default: 'pending' },
   rejectionReason: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now }
-});
+}, { collection: 'submission' });
 const Submission = mongoose.model('Submission', SubmissionSchema);
 
 const SettingSchema = new mongoose.Schema({
@@ -80,13 +80,13 @@ const SettingSchema = new mongoose.Schema({
   upiId: { type: String, default: 'payee@upi' },
   payeeName: { type: String, default: 'Couple Pass' },
   amount: { type: String, default: '100' }
-});
+}, { collection: 'setting' });
 const Setting = mongoose.model('Setting', SettingSchema);
 
 const CounterSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
   seq: { type: Number, default: 999 }
-});
+}, { collection: 'counter' });
 const Counter = mongoose.model('Counter', CounterSchema);
 
 const getNextInquiryNumber = async () => {
