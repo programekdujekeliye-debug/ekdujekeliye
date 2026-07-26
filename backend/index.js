@@ -643,10 +643,31 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
   }
 });
 
-// Get all submissions (for admin view/verification) - optimized to exclude heavy base64 data
+// Get all submissions (for admin view/verification) - optimized with server-side pagination, sorting, and search
 app.get('/api/submissions', requireAuth, async (req, res) => {
   try {
-    const submissions = await Submission.find({}, {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+
+    let filter = {};
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+      filter = {
+        $or: [
+          { inquiryId: searchRegex },
+          { husbandName: searchRegex },
+          { wifeName: searchRegex },
+          { surname: searchRegex },
+          { phoneNumber: searchRegex }
+        ]
+      };
+    }
+
+    const totalSubmissions = await Submission.countDocuments(filter);
+    const totalPages = Math.ceil(totalSubmissions / limit);
+
+    const submissions = await Submission.find(filter, {
       inquiryId: 1,
       husbandName: 1,
       wifeName: 1,
@@ -662,7 +683,10 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
       createdAt: 1,
       couplePhoto: { $cond: [{ $eq: ["$couplePhoto", null] }, null, "present"] },
       paymentScreenshot: { $cond: [{ $eq: ["$paymentScreenshot", null] }, null, "present"] }
-    });
+    })
+    .sort({ createdAt: -1 })
+    .skip((page - 1) * limit)
+    .limit(limit);
 
     // Map submissions to include dynamic URL paths for images instead of base64
     const mappedSubmissions = submissions.map(sub => {
@@ -672,7 +696,12 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
       return obj;
     });
 
-    res.json(mappedSubmissions);
+    res.json({
+      submissions: mappedSubmissions,
+      totalPages,
+      currentPage: page,
+      totalSubmissions
+    });
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching submissions.' });
   }

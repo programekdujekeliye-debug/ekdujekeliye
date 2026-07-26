@@ -162,6 +162,11 @@ export default function AdminDashboard() {
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  
+  // Pagination States
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalSubmissions, setTotalSubmissions] = useState(0);
 
   // Security States
   const [password, setPassword] = useState('');
@@ -276,22 +281,30 @@ export default function AdminDashboard() {
     }
   };
 
-  const fetchSubmissions = async (passVal?: string, showSpinner = true) => {
-    const activePassword = passVal || password || sessionStorage.getItem('adminPassword') || '';
+  const fetchSubmissions = async (options?: { page?: number; search?: string; password?: string; showSpinner?: boolean }) => {
+    const activePage = options?.page !== undefined ? options.page : currentPage;
+    const activeSearch = options?.search !== undefined ? options.search : searchQuery;
+    const activePassword = options?.password || password || sessionStorage.getItem('adminPassword') || '';
+    const showSpinner = options?.showSpinner !== false;
+
     if (!activePassword) {
       setLoading(false);
       return;
     }
     try {
       if (showSpinner) setLoading(true);
-      const res = await fetch(`${API_BASE_URL}/api/submissions`, {
+      const res = await fetch(`${API_BASE_URL}/api/submissions?page=${activePage}&limit=10&search=${encodeURIComponent(activeSearch)}`, {
         headers: {
           'Authorization': activePassword
         }
       });
       if (res.ok) {
         const data = await res.json();
-        setSubmissions(data);
+        setSubmissions(data.submissions || []);
+        setTotalPages(data.totalPages || 1);
+        setTotalSubmissions(data.totalSubmissions || 0);
+        setCurrentPage(data.currentPage || activePage);
+
         setIsAuthenticated(true);
         sessionStorage.setItem('adminPassword', activePassword);
         setError('');
@@ -495,7 +508,7 @@ export default function AdminDashboard() {
         headers: { 'Authorization': activePassword }
       });
       if (res.ok) {
-        fetchSubmissions(undefined, false);
+        fetchSubmissions({ showSpinner: false });
       } else {
         alert('Failed to approve submission.');
       }
@@ -518,7 +531,7 @@ export default function AdminDashboard() {
         body: JSON.stringify({ reason })
       });
       if (res.ok) {
-        fetchSubmissions(undefined, false);
+        fetchSubmissions({ showSpinner: false });
       } else {
         alert('Failed to reject submission.');
       }
@@ -538,7 +551,7 @@ export default function AdminDashboard() {
         headers: { 'Authorization': activePassword }
       });
       if (res.ok) {
-        fetchSubmissions(undefined, false);
+        fetchSubmissions({ showSpinner: false });
         fetchPrograms();
       } else {
         const errData = await res.json();
@@ -600,7 +613,7 @@ export default function AdminDashboard() {
         setEditingSubmission(null);
         setEditCouplePhoto(null);
         setEditPaymentScreenshot(null);
-        fetchSubmissions(undefined, false);
+        fetchSubmissions({ showSpinner: false });
         fetchPrograms();
       } else {
         const errData = await res.json();
@@ -629,12 +642,23 @@ export default function AdminDashboard() {
   useEffect(() => {
     const savedPassword = sessionStorage.getItem('adminPassword');
     if (savedPassword) {
-      fetchSubmissions(savedPassword);
+      fetchSubmissions({ password: savedPassword });
     } else {
       setLoading(false);
       fetchSettings();
     }
   }, []);
+
+  // Debounced search query fetching
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    
+    const delayDebounceFn = setTimeout(() => {
+      fetchSubmissions({ page: 1, search: searchQuery });
+    }, 4000); // 400ms debounce
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery, isAuthenticated]);
 
   // Live Invitation Preview in Edit Modal
   useEffect(() => {
@@ -808,7 +832,7 @@ export default function AdminDashboard() {
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!password) return;
-    fetchSubmissions(password);
+    fetchSubmissions({ password });
   };
 
   const handleClearData = async () => {
@@ -823,7 +847,7 @@ export default function AdminDashboard() {
       });
       if (res.ok) {
         alert('All data cleared successfully.');
-        fetchSubmissions();
+        fetchSubmissions({ page: 1 });
       } else {
         alert('Failed to clear data.');
       }
@@ -1094,16 +1118,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const filteredSubmissions = submissions.filter((sub) => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      sub.inquiryId.toLowerCase().includes(searchLower) ||
-      sub.husbandName.toLowerCase().includes(searchLower) ||
-      sub.wifeName.toLowerCase().includes(searchLower) ||
-      sub.surname.toLowerCase().includes(searchLower) ||
-      sub.phoneNumber.includes(searchLower)
-    );
-  });
+  const filteredSubmissions = submissions;
 
   // Login view if not authenticated
   if (!isAuthenticated) {
@@ -2066,7 +2081,8 @@ export default function AdminDashboard() {
             No registrations found.
           </div>
         ) : (
-          <div className="overflow-x-auto border border-slate-800 rounded-2xl bg-slate-950/40">
+          <>
+            <div className="overflow-x-auto border border-slate-800 rounded-2xl bg-slate-950/40">
             <table className="w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-950/80 text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -2230,6 +2246,39 @@ export default function AdminDashboard() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalSubmissions > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 p-4 bg-slate-950/20 border border-slate-800/80 rounded-2xl">
+              <span className="text-xs text-slate-400 font-medium">
+                Showing <span className="text-amber-500 font-bold">{totalSubmissions === 0 ? 0 : (currentPage - 1) * 10 + 1}</span> to{' '}
+                <span className="text-amber-500 font-bold">{Math.min(currentPage * 10, totalSubmissions)}</span> of{' '}
+                <span className="text-amber-500 font-bold">{totalSubmissions}</span> registrations
+              </span>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={currentPage <= 1 || loading}
+                    onClick={() => fetchSubmissions({ page: currentPage - 1 })}
+                    className="px-4 py-2 border border-slate-800 hover:border-amber-500/30 hover:bg-slate-900/60 disabled:opacity-40 disabled:hover:border-slate-800 disabled:hover:bg-transparent text-slate-300 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+                  >
+                    ◀ Previous
+                  </button>
+                  <span className="text-xs text-slate-300 font-semibold px-3 bg-slate-900 border border-slate-800/80 rounded-lg py-1.5 min-w-[80px] text-center">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    disabled={currentPage >= totalPages || loading}
+                    onClick={() => fetchSubmissions({ page: currentPage + 1 })}
+                    className="px-4 py-2 border border-slate-800 hover:border-amber-500/30 hover:bg-slate-900/60 disabled:opacity-40 disabled:hover:border-slate-800 disabled:hover:bg-transparent text-slate-300 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+                  >
+                    Next ▶
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          </>
         )}
       </div>
     </div>
