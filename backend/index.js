@@ -81,6 +81,7 @@ const SubmissionSchema = new mongoose.Schema({
   rejectionReason: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now }
 }, { collection: 'submission' });
+SubmissionSchema.index({ createdAt: -1 });
 const Submission = mongoose.model('Submission', SubmissionSchema);
 
 const SettingSchema = new mongoose.Schema({
@@ -683,7 +684,7 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
       createdAt: 1,
       couplePhoto: { $cond: [{ $eq: ["$couplePhoto", null] }, null, "present"] },
       paymentScreenshot: { $cond: [{ $eq: ["$paymentScreenshot", null] }, null, "present"] }
-    })
+    }, { allowDiskUse: true })
     .sort({ createdAt: -1 })
     .skip((page - 1) * limit)
     .limit(limit);
@@ -703,6 +704,7 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
       totalSubmissions
     });
   } catch (err) {
+    console.error('Error fetching submissions:', err);
     res.status(500).json({ error: 'Server error fetching submissions.' });
   }
 });
