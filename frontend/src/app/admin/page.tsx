@@ -167,6 +167,7 @@ export default function AdminDashboard() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalSubmissions, setTotalSubmissions] = useState(0);
+  const [latestTokenId, setLatestTokenId] = useState('N/A');
 
   // Security States
   const [password, setPassword] = useState('');
@@ -304,6 +305,10 @@ export default function AdminDashboard() {
         setTotalPages(data.totalPages || 1);
         setTotalSubmissions(data.totalSubmissions || 0);
         setCurrentPage(data.currentPage || activePage);
+        
+        if (activePage === 1 && data.submissions && data.submissions.length > 0) {
+          setLatestTokenId(data.submissions[0].inquiryId);
+        }
 
         setIsAuthenticated(true);
         sessionStorage.setItem('adminPassword', activePassword);
@@ -1729,13 +1734,11 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-2xl backdrop-blur-md">
             <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Total Inquiries</span>
-            <span className="text-4xl font-extrabold text-slate-100 mt-2 block">{submissions.length}</span>
+            <span className="text-4xl font-extrabold text-slate-100 mt-2 block">{totalSubmissions}</span>
           </div>
           <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-2xl backdrop-blur-md">
             <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Latest Token ID</span>
-            <span className="text-4xl font-extrabold text-amber-500 mt-2 block">
-              {submissions.length > 0 ? submissions[submissions.length - 1].inquiryId : 'N/A'}
-            </span>
+            <span className="text-4xl font-extrabold text-amber-500 mt-2 block">{latestTokenId}</span>
           </div>
           <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-2xl backdrop-blur-md">
             <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Database Storage</span>
