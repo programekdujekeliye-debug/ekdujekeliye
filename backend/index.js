@@ -804,18 +804,37 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
       status: 1,
       rejectionReason: 1,
       createdAt: 1,
-      couplePhoto: { $cond: [{ $eq: ["$couplePhoto", null] }, null, "present"] },
-      paymentScreenshot: { $cond: [{ $eq: ["$paymentScreenshot", null] }, null, "present"] }
+      couplePhoto: 1,
+      paymentScreenshot: 1
     }, { allowDiskUse: true })
     .sort({ createdAt: -1 })
     .skip((page - 1) * limit)
     .limit(limit);
 
-    // Map submissions to include dynamic URL paths for images instead of base64
+    // Map submissions to include direct Cloudinary URLs or fallback to local path
     const mappedSubmissions = submissions.map(sub => {
       const obj = sub.toObject();
-      obj.couplePhoto = sub.couplePhoto ? `/api/submissions/${sub.inquiryId}/photo` : null;
-      obj.paymentScreenshot = sub.paymentScreenshot ? `/api/submissions/${sub.inquiryId}/screenshot` : null;
+      
+      if (sub.couplePhoto) {
+        if (sub.couplePhoto.startsWith('http://') || sub.couplePhoto.startsWith('https://')) {
+          obj.couplePhoto = sub.couplePhoto;
+        } else {
+          obj.couplePhoto = `/api/submissions/${sub.inquiryId}/photo`;
+        }
+      } else {
+        obj.couplePhoto = null;
+      }
+
+      if (sub.paymentScreenshot) {
+        if (sub.paymentScreenshot.startsWith('http://') || sub.paymentScreenshot.startsWith('https://')) {
+          obj.paymentScreenshot = sub.paymentScreenshot;
+        } else {
+          obj.paymentScreenshot = `/api/submissions/${sub.inquiryId}/screenshot`;
+        }
+      } else {
+        obj.paymentScreenshot = null;
+      }
+
       return obj;
     });
 
