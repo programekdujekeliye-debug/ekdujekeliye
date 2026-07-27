@@ -840,6 +840,7 @@ app.get('/api/submissions/:inquiryId/photo', async (req, res) => {
     }
 
     if (submission.couplePhoto.startsWith('http://') || submission.couplePhoto.startsWith('https://')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       return res.redirect(submission.couplePhoto);
     }
 
@@ -851,7 +852,7 @@ app.get('/api/submissions/:inquiryId/photo', async (req, res) => {
       res.writeHead(200, {
         'Content-Type': contentType,
         'Content-Length': img.length,
-        'Cache-Control': 'public, max-age=86400' // cache for 1 day
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
       });
       res.end(img);
     } else {
@@ -871,6 +872,7 @@ app.get('/api/submissions/:inquiryId/screenshot', async (req, res) => {
     }
 
     if (submission.paymentScreenshot.startsWith('http://') || submission.paymentScreenshot.startsWith('https://')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       return res.redirect(submission.paymentScreenshot);
     }
 
@@ -882,7 +884,7 @@ app.get('/api/submissions/:inquiryId/screenshot', async (req, res) => {
       res.writeHead(200, {
         'Content-Type': contentType,
         'Content-Length': img.length,
-        'Cache-Control': 'public, max-age=86400'
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
       });
       res.end(img);
     } else {
