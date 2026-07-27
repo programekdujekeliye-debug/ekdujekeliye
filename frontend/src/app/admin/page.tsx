@@ -968,7 +968,8 @@ export default function AdminDashboard() {
           ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
           ctx.restore();
         };
-        coupleImg.src = sub.couplePhoto.startsWith('data:') ? sub.couplePhoto : `${API_BASE_URL}${sub.couplePhoto}`;
+        const photoPath = sub.couplePhoto;
+        coupleImg.src = (photoPath.startsWith('data:') || photoPath.startsWith('http://') || photoPath.startsWith('https://')) ? photoPath : `${API_BASE_URL}${photoPath}`;
       });
     };
     frameImg.src = '/frame_template.png';
@@ -1023,7 +1024,9 @@ export default function AdminDashboard() {
 
         try {
           // Load couple photo
-          const coupleImg = await loadImage(sub.couplePhoto.startsWith('data:') ? sub.couplePhoto : `${API_BASE_URL}${sub.couplePhoto}`);
+          const photoPath = sub.couplePhoto;
+          const fullPhotoUrl = (photoPath.startsWith('data:') || photoPath.startsWith('http://') || photoPath.startsWith('https://')) ? photoPath : `${API_BASE_URL}${photoPath}`;
+          const coupleImg = await loadImage(fullPhotoUrl);
 
           // Clear canvas
           ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1137,7 +1140,8 @@ export default function AdminDashboard() {
         return;
       }
       const filename = imagePath.split('/').pop() || 'download';
-      const response = await fetch(`${API_BASE_URL}${imagePath}`);
+      const fullUrl = (imagePath.startsWith('http://') || imagePath.startsWith('https://')) ? imagePath : `${API_BASE_URL}${imagePath}`;
+      const response = await fetch(fullUrl);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1148,7 +1152,8 @@ export default function AdminDashboard() {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      window.open(imagePath.startsWith('data:') ? imagePath : `${API_BASE_URL}${imagePath}`, '_blank');
+      const fullUrl = (imagePath.startsWith('data:') || imagePath.startsWith('http://') || imagePath.startsWith('https://')) ? imagePath : `${API_BASE_URL}${imagePath}`;
+      window.open(fullUrl, '_blank');
     }
   };
 
@@ -2180,7 +2185,7 @@ export default function AdminDashboard() {
                             onClick={() => setSelectedImage(sub.couplePhoto)}
                           >
                             <img
-                              src={sub.couplePhoto.startsWith('data:') ? sub.couplePhoto : `${API_BASE_URL}${sub.couplePhoto}`}
+                              src={(sub.couplePhoto.startsWith('data:') || sub.couplePhoto.startsWith('http://') || sub.couplePhoto.startsWith('https://')) ? sub.couplePhoto : `${API_BASE_URL}${sub.couplePhoto}`}
                               alt="Couple"
                               className="w-full h-full object-cover"
                             />
@@ -2201,7 +2206,7 @@ export default function AdminDashboard() {
                               onClick={() => setSelectedImage(sub.paymentScreenshot)}
                             >
                               <img
-                                src={sub.paymentScreenshot.startsWith('data:') ? sub.paymentScreenshot : `${API_BASE_URL}${sub.paymentScreenshot}`}
+                                src={(sub.paymentScreenshot.startsWith('data:') || sub.paymentScreenshot.startsWith('http://') || sub.paymentScreenshot.startsWith('https://')) ? sub.paymentScreenshot : `${API_BASE_URL}${sub.paymentScreenshot}`}
                                 alt="Payment"
                                 className="w-full h-full object-cover"
                               />
