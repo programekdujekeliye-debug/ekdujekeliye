@@ -644,9 +644,21 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
   }
 });
 
-// Export all submissions to CSV
-app.get('/api/submissions/export', requireAuth, async (req, res) => {
+// Export all submissions to CSV (supports header Authorization or query key parameter for Google Sheets)
+app.get('/api/submissions/export', async (req, res) => {
   try {
+    const authHeader = req.headers['authorization'];
+    const queryKey = req.query.key;
+
+    if (
+      authHeader !== ADMIN_PASSWORD &&
+      authHeader !== SUPER_ADMIN_PASSWORD &&
+      queryKey !== ADMIN_PASSWORD &&
+      queryKey !== SUPER_ADMIN_PASSWORD
+    ) {
+      return res.status(401).json({ error: 'Unauthorized. Invalid password.' });
+    }
+
     const submissions = await Submission.find({}).sort({ createdAt: -1 });
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
     const host = req.get('host');
