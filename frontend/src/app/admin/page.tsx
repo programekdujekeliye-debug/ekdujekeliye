@@ -191,6 +191,7 @@ export default function AdminDashboard() {
   // Frame Zipping states
   const [selectedProgramIdForFrames, setSelectedProgramIdForFrames] = useState<string>('');
   const [zipping, setZipping] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [zipProgress, setZipProgress] = useState('');
   const [sentPassIds, setSentPassIds] = useState<string[]>([]);
 
@@ -858,6 +859,34 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       alert('Network error.');
+    }
+  };
+
+  const handleExportCSV = async () => {
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    setIsExporting(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/submissions/export`, {
+        method: 'GET',
+        headers: { 'Authorization': activePassword }
+      });
+      if (!res.ok) {
+        throw new Error('Export request failed.');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `submissions_export_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Error exporting CSV: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -1715,6 +1744,23 @@ export default function AdminDashboard() {
                 Clear All Data
               </button>
             )}
+            <button
+              onClick={handleExportCSV}
+              disabled={isExporting}
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-2"
+            >
+              {isExporting ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Exporting...
+                </>
+              ) : (
+                'Export to Sheet'
+              )}
+            </button>
             <button
               onClick={() => fetchSubmissions()}
               className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold rounded-xl text-sm transition-all border border-slate-700"

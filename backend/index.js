@@ -644,6 +644,75 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
   }
 });
 
+// Export all submissions to CSV
+app.get('/api/submissions/export', requireAuth, async (req, res) => {
+  try {
+    const submissions = await Submission.find({}).sort({ createdAt: -1 });
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const host = req.get('host');
+    const baseUrl = `${protocol}://${host}`;
+
+    const headers = [
+      'Inquiry ID',
+      'Husband Name',
+      'Wife Name',
+      'Surname',
+      'Phone Number',
+      'Program ID',
+      'Program Name',
+      'Program Date',
+      'Program Time',
+      'Couple Photo URL',
+      'Payment Screenshot URL',
+      'Payee Name From Receipt',
+      'Status',
+      'Rejection Reason',
+      'Created At'
+    ];
+
+    const escapeCSV = (val) => {
+      if (val === null || val === undefined) return '';
+      let str = String(val);
+      str = str.replace(/"/g, '""');
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str}"`;
+      }
+      return str;
+    };
+
+    const rows = submissions.map(sub => {
+      const couplePhotoUrl = sub.couplePhoto ? `${baseUrl}/api/submissions/${sub.inquiryId}/photo` : '';
+      const paymentScreenshotUrl = sub.paymentScreenshot ? `${baseUrl}/api/submissions/${sub.inquiryId}/screenshot` : '';
+      return [
+        sub.inquiryId,
+        sub.husbandName,
+        sub.wifeName,
+        sub.surname,
+        sub.phoneNumber,
+        sub.programId,
+        sub.programName,
+        sub.programDate,
+        sub.programTime || '8:30 PM',
+        couplePhotoUrl,
+        paymentScreenshotUrl,
+        sub.payeeNameFromReceipt || 'Not detected',
+        sub.status,
+        sub.rejectionReason || '',
+        sub.createdAt ? sub.createdAt.toISOString() : ''
+      ].map(escapeCSV).join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n'); // Add BOM for Excel UTF-8 support
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=submissions_export_${new Date().toISOString().split('T')[0]}.csv`);
+    res.status(200).send(csvContent);
+  } catch (err) {
+    console.error('Error exporting submissions:', err);
+    res.status(500).json({ error: 'Server error exporting submissions.' });
+  }
+});
+
 // Get all submissions (for admin view/verification) - optimized with server-side pagination, sorting, and search
 app.get('/api/submissions', requireAuth, async (req, res) => {
   try {
