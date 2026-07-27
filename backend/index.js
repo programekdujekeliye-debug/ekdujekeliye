@@ -674,8 +674,8 @@ app.get('/api/submissions/export', async (req, res) => {
       'Program Name',
       'Program Date',
       'Program Time',
-      'Couple Photo URL',
-      'Payment Screenshot URL',
+      'Couple Photo',
+      'Payment Screenshot',
       'Payee Name From Receipt',
       'Status',
       'Rejection Reason',
@@ -693,8 +693,8 @@ app.get('/api/submissions/export', async (req, res) => {
     };
 
     const rows = submissions.map(sub => {
-      const couplePhotoUrl = sub.couplePhoto ? `${baseUrl}/api/submissions/${sub.inquiryId}/photo` : '';
-      const paymentScreenshotUrl = sub.paymentScreenshot ? `${baseUrl}/api/submissions/${sub.inquiryId}/screenshot` : '';
+      const couplePhotoFormula = sub.couplePhoto ? `=IMAGE("${baseUrl}/api/submissions/${sub.inquiryId}/photo")` : '';
+      const paymentScreenshotFormula = sub.paymentScreenshot ? `=IMAGE("${baseUrl}/api/submissions/${sub.inquiryId}/screenshot")` : '';
       return [
         sub.inquiryId,
         sub.husbandName,
@@ -705,8 +705,8 @@ app.get('/api/submissions/export', async (req, res) => {
         sub.programName,
         sub.programDate,
         sub.programTime || '8:30 PM',
-        couplePhotoUrl,
-        paymentScreenshotUrl,
+        couplePhotoFormula,
+        paymentScreenshotFormula,
         sub.payeeNameFromReceipt || 'Not detected',
         sub.status,
         sub.rejectionReason || '',
