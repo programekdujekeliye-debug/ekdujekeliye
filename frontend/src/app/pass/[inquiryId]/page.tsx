@@ -188,7 +188,8 @@ export default function PassDownloadPage() {
         ctx.drawImage(tempCanvas, 0, 0);
         drawTextDetails(ctx, sub);
       };
-      coupleImg.src = sub.couplePhoto.startsWith('data:') ? sub.couplePhoto : `${API_BASE_URL}${sub.couplePhoto}`;
+      const photoPath = sub.couplePhoto;
+      coupleImg.src = (photoPath.startsWith('data:') || photoPath.startsWith('http://') || photoPath.startsWith('https://')) ? photoPath : `${API_BASE_URL}${photoPath}`;
     };
     templateImg.src = sub.cardTemplate || '/card_template.png';
   };
