@@ -8,9 +8,34 @@ import { Jimp } from 'jimp';
 import jsQR from 'jsqr';
 import Tesseract from 'tesseract.js';
 import mongoose from 'mongoose';
+import { v2 as cloudinary } from 'cloudinary';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'rh3wmfta',
+  api_key: process.env.CLOUDINARY_API_KEY || '733288215373621',
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'dPBA6hRfCtO2gx-jZ6r1Bo98Hiw'
+});
+
+const uploadToCloudinary = async (base64Data, folder = 'ekdujekeliye') => {
+  if (!base64Data) return null;
+  if (base64Data.startsWith('http://') || base64Data.startsWith('https://')) {
+    return base64Data;
+  }
+  try {
+    const result = await cloudinary.uploader.upload(base64Data, {
+      folder: folder,
+      resource_type: 'auto'
+    });
+    return result.secure_url;
+  } catch (err) {
+    console.error('Cloudinary upload error:', err);
+    throw err;
+  }
+};
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -301,6 +326,16 @@ app.post('/api/submit', upload.fields([
     const nextSeq = await getNextInquiryNumber();
     const inquiryId = `CPL-${nextSeq}`;
 
+    // Upload files to Cloudinary
+    const couplePhotoBase64 = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
+    const couplePhotoUrl = await uploadToCloudinary(couplePhotoBase64, 'couplePhotos');
+
+    let paymentScreenshotUrl = null;
+    if (paymentScreenshotFile) {
+      const paymentScreenshotBase64 = `data:${paymentScreenshotFile.mimetype};base64,${paymentScreenshotFile.buffer.toString('base64')}`;
+      paymentScreenshotUrl = await uploadToCloudinary(paymentScreenshotBase64, 'paymentScreenshots');
+    }
+
     // Increment bookings count by 2 (since it is a couple registration)
     program.bookingsCount += 2;
     await program.save();
@@ -315,8 +350,8 @@ app.post('/api/submit', upload.fields([
       programName: program.name,
       programDate: program.date,
       programTime: program.time || "8:30 PM",
-      couplePhoto: `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`,
-      paymentScreenshot: paymentScreenshotFile ? `data:${paymentScreenshotFile.mimetype};base64,${paymentScreenshotFile.buffer.toString('base64')}` : null,
+      couplePhoto: couplePhotoUrl,
+      paymentScreenshot: paymentScreenshotUrl,
       payeeNameFromReceipt: paymentScreenshotFile ? 'Processing...' : 'No payment file',
       status: 'pending', // Default status is pending
       createdAt: new Date()
@@ -562,16 +597,18 @@ app.put('/api/submissions/:inquiryId', requireAuth, upload.fields([
       submission.programTime = newProgram.time || "8:30 PM";
     }
 
-    // Handle photo updates (Base64 conversion)
+    // Handle photo updates (Cloudinary upload)
     const couplePhotoFile = req.files && req.files['couplePhoto'] ? req.files['couplePhoto'][0] : null;
     const paymentScreenshotFile = req.files && req.files['paymentScreenshot'] ? req.files['paymentScreenshot'][0] : null;
 
     if (couplePhotoFile) {
-      submission.couplePhoto = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
+      const couplePhotoBase64 = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
+      submission.couplePhoto = await uploadToCloudinary(couplePhotoBase64, 'couplePhotos');
     }
 
     if (paymentScreenshotFile) {
-      submission.paymentScreenshot = `data:${paymentScreenshotFile.mimetype};base64,${paymentScreenshotFile.buffer.toString('base64')}`;
+      const paymentScreenshotBase64 = `data:${paymentScreenshotFile.mimetype};base64,${paymentScreenshotFile.buffer.toString('base64')}`;
+      submission.paymentScreenshot = await uploadToCloudinary(paymentScreenshotBase64, 'paymentScreenshots');
     }
 
     await submission.save();
@@ -693,8 +730,12 @@ app.get('/api/submissions/export', async (req, res) => {
     };
 
     const rows = submissions.map(sub => {
-      const couplePhotoFormula = sub.couplePhoto ? `=IMAGE("${baseUrl}/api/submissions/${sub.inquiryId}/photo")` : '';
-      const paymentScreenshotFormula = sub.paymentScreenshot ? `=IMAGE("${baseUrl}/api/submissions/${sub.inquiryId}/screenshot")` : '';
+      const couplePhotoFormula = sub.couplePhoto
+        ? (sub.couplePhoto.startsWith('http') ? `=IMAGE("${sub.couplePhoto}")` : `=IMAGE("${baseUrl}/api/submissions/${sub.inquiryId}/photo")`)
+        : '';
+      const paymentScreenshotFormula = sub.paymentScreenshot
+        ? (sub.paymentScreenshot.startsWith('http') ? `=IMAGE("${sub.paymentScreenshot}")` : `=IMAGE("${baseUrl}/api/submissions/${sub.inquiryId}/screenshot")`)
+        : '';
       return [
         sub.inquiryId,
         sub.husbandName,
@@ -798,6 +839,10 @@ app.get('/api/submissions/:inquiryId/photo', async (req, res) => {
       return res.status(404).send('Photo not found');
     }
 
+    if (submission.couplePhoto.startsWith('http://') || submission.couplePhoto.startsWith('https://')) {
+      return res.redirect(submission.couplePhoto);
+    }
+
     const match = submission.couplePhoto.match(/^data:([^;]+);base64,(.+)$/);
     if (match) {
       const contentType = match[1];
@@ -823,6 +868,10 @@ app.get('/api/submissions/:inquiryId/screenshot', async (req, res) => {
     const submission = await Submission.findOne({ inquiryId: req.params.inquiryId }, { paymentScreenshot: 1 });
     if (!submission || !submission.paymentScreenshot) {
       return res.status(404).send('Screenshot not found');
+    }
+
+    if (submission.paymentScreenshot.startsWith('http://') || submission.paymentScreenshot.startsWith('https://')) {
+      return res.redirect(submission.paymentScreenshot);
     }
 
     const match = submission.paymentScreenshot.match(/^data:([^;]+);base64,(.+)$/);
