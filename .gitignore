@@ -27,4 +27,6 @@ Thumbs.db
 .env.*
 backend/.env
 backend/backup_submissions.json
+backend/backups/
+
 

@@ -9,6 +9,7 @@ import jsQR from 'jsqr';
 import Tesseract from 'tesseract.js';
 import mongoose from 'mongoose';
 import { v2 as cloudinary } from 'cloudinary';
+import cron from 'node-cron';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1270,6 +1271,64 @@ app.get('/api/debug-db', async (req, res) => {
   }
 });
 
+// Function to run database backup
+const runDatabaseBackup = async () => {
+  try {
+    const backupsDir = path.join(__dirname, 'backups');
+    if (!fs.existsSync(backupsDir)) {
+      fs.mkdirSync(backupsDir, { recursive: true });
+    }
+
+    console.log('[Backup] Starting scheduled database backup...');
+    const programs = await Program.find({});
+    const submissions = await Submission.find({});
+    
+    const backupData = {
+      timestamp: new Date().toISOString(),
+      programs,
+      submissions
+    };
+
+    const dateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const filename = `backup_${dateStr}.json`;
+    const filePath = path.join(backupsDir, filename);
+
+    fs.writeFileSync(filePath, JSON.stringify(backupData, null, 2), 'utf8');
+    console.log(`[Backup] Database backup saved successfully to ${filePath}`);
+
+    // Cleanup backups older than 15 days
+    const files = fs.readdirSync(backupsDir);
+    const fifteenDaysAgo = Date.now() - 15 * 24 * 60 * 60 * 1000;
+
+    for (const file of files) {
+      if (file.startsWith('backup_') && file.endsWith('.json')) {
+        const fileFull = path.join(backupsDir, file);
+        const stats = fs.statSync(fileFull);
+        if (stats.mtimeMs < fifteenDaysAgo) {
+          fs.unlinkSync(fileFull);
+          console.log(`[Backup] Deleted old backup file: ${file}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Backup] Error running database backup:', err);
+  }
+};
+
+// Schedule backup to run every evening at 10:00 PM (22:00)
+// Cron syntax: minute hour day-of-month month day-of-week
+cron.schedule('0 22 * * *', () => {
+  console.log('[Backup] Cron triggered: Running evening database backup...');
+  runDatabaseBackup();
+});
+
+// Run a backup once on startup (after 5s) to verify configuration
+setTimeout(() => {
+  console.log('[Backup] Running startup database backup...');
+  runDatabaseBackup();
+}, 5000);
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
