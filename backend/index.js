@@ -123,6 +123,13 @@ const CounterSchema = new mongoose.Schema({
 }, { collection: 'counter' });
 const Counter = mongoose.model('Counter', CounterSchema);
 
+const WhatsappTemplateSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  text: { type: String, required: true },
+  isActive: { type: Boolean, default: false }
+}, { collection: 'whatsapp_template' });
+const WhatsappTemplate = mongoose.model('WhatsappTemplate', WhatsappTemplateSchema);
+
 const getNextInquiryNumber = async () => {
   const counter = await Counter.findOneAndUpdate(
     { name: 'inquiryNumber' },
@@ -144,6 +151,24 @@ const initSettings = async () => {
   }
 };
 initSettings();
+
+// Initialize WhatsApp Templates
+const initWhatsappTemplates = async () => {
+  try {
+    const count = await WhatsappTemplate.countDocuments();
+    if (count === 0) {
+      await WhatsappTemplate.create({
+        name: 'Default Pass Delivery',
+        text: 'Hello! Your payment has been verified. You can view and download your pass here: {passUrl}',
+        isActive: true
+      });
+      console.log('Default WhatsApp template initialized.');
+    }
+  } catch (err) {
+    console.error('Failed to initialize WhatsApp templates:', err);
+  }
+};
+initWhatsappTemplates();
 
 // Security / Authentication Configurations
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Manas@1177';
@@ -994,6 +1019,79 @@ app.post('/api/settings', requireAuth, async (req, res) => {
     res.json({ success: true, settings });
   } catch (err) {
     res.status(500).json({ error: 'Server error updating settings.' });
+  }
+});
+
+// Get all WhatsApp templates (Admin only)
+app.get('/api/whatsapp-templates', requireAuth, async (req, res) => {
+  try {
+    const templates = await WhatsappTemplate.find({});
+    res.json(templates);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error fetching WhatsApp templates.' });
+  }
+});
+
+// Create a new WhatsApp template (Admin only)
+app.post('/api/whatsapp-templates', requireAuth, async (req, res) => {
+  const { name, text } = req.body;
+  if (!name || !text) {
+    return res.status(400).json({ error: 'Template name and text are required.' });
+  }
+  try {
+    const count = await WhatsappTemplate.countDocuments();
+    const isActive = count === 0;
+
+    const newTemplate = await WhatsappTemplate.create({ name, text, isActive });
+    res.status(201).json({ success: true, template: newTemplate });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error creating WhatsApp template.' });
+  }
+});
+
+// Set WhatsApp template as active (Admin only)
+app.post('/api/whatsapp-templates/:id/use', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await WhatsappTemplate.updateMany({}, { isActive: false });
+    const template = await WhatsappTemplate.findByIdAndUpdate(id, { isActive: true }, { new: true });
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found.' });
+    }
+    res.json({ success: true, message: 'WhatsApp template activated.', template });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error activating WhatsApp template.' });
+  }
+});
+
+// Delete a WhatsApp template (Admin only)
+app.delete('/api/whatsapp-templates/:id', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const template = await WhatsappTemplate.findById(id);
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found.' });
+    }
+    if (template.isActive) {
+      return res.status(400).json({ error: 'Cannot delete the active template. Please set another template as active first.' });
+    }
+    await WhatsappTemplate.findByIdAndDelete(id);
+    res.json({ success: true, message: 'WhatsApp template deleted.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error deleting WhatsApp template.' });
+  }
+});
+
+// Get the active WhatsApp template (Admin only)
+app.get('/api/whatsapp-templates/active', requireAuth, async (req, res) => {
+  try {
+    const activeTemplate = await WhatsappTemplate.findOne({ isActive: true });
+    if (!activeTemplate) {
+      return res.json({ text: 'Hello! Your payment has been verified. You can view and download your pass here: {passUrl}' });
+    }
+    res.json(activeTemplate);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error fetching active WhatsApp template.' });
   }
 });
 

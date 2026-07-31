@@ -264,6 +264,10 @@ export default function AdminDashboard() {
   const [settingsSuccess, setSettingsSuccess] = useState('');
   const [settingsError, setSettingsError] = useState('');
 
+  // WhatsApp Templates States
+  const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>([]);
+  const [activeWhatsappTemplate, setActiveWhatsappTemplate] = useState('Hello! Your payment has been verified. You can view and download your pass here: {passUrl}');
+
   const fetchPrograms = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/programs`);
@@ -288,6 +292,52 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error('Failed to fetch settings:', err);
     }
+  };
+
+  const fetchActiveWhatsappTemplate = async () => {
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    if (!activePassword) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/whatsapp-templates/active`, {
+        headers: { 'Authorization': activePassword }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.text) {
+          setActiveWhatsappTemplate(data.text);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch active WhatsApp template:', err);
+    }
+  };
+
+  const fetchWhatsappTemplates = async () => {
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    if (!activePassword) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/whatsapp-templates`, {
+        headers: { 'Authorization': activePassword }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWhatsappTemplates(data || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch WhatsApp templates:', err);
+    }
+  };
+
+  const formatWhatsappMessage = (template: string, sub: Submission) => {
+    const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://ekdujekeliye.vercel.app';
+    const passUrl = `${siteUrl}/pass/${sub.inquiryId}`;
+    
+    return template
+      .replace(/{husbandName}/g, sub.husbandName || '')
+      .replace(/{wifeName}/g, sub.wifeName || '')
+      .replace(/{surname}/g, sub.surname || '')
+      .replace(/{inquiryId}/g, sub.inquiryId || '')
+      .replace(/{passUrl}/g, passUrl);
   };
 
   const fetchSubmissions = async (options?: {
@@ -339,6 +389,8 @@ export default function AdminDashboard() {
         fetchPrograms();
         fetchSettings();
         fetchDbStats(activePassword);
+        fetchActiveWhatsappTemplate();
+        fetchWhatsappTemplates();
 
         // Fetch user role
         try {
@@ -2214,6 +2266,161 @@ export default function AdminDashboard() {
           </form>
         </div>
 
+        {/* WhatsApp Message Templates Section */}
+        <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-6">
+          <div>
+            <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+              <span>💬</span> WhatsApp Message Templates
+            </h2>
+            <p className="text-slate-400 text-xs mt-1">
+              Add multiple templates, view them in a list, and click <strong>"Use"</strong> to make a specific template active for pass delivery links.
+            </p>
+          </div>
+
+          {/* Add Template Form */}
+          <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 space-y-4">
+            <h3 className="text-sm font-bold text-slate-200">Create New Template</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              <div className="md:col-span-1">
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Template Name</label>
+                <input
+                  type="text"
+                  id="newTemplateName"
+                  placeholder="e.g. Gujarati Pass Msg"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+              <div className="md:col-span-2 flex gap-4">
+                <div className="flex-grow">
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Message Text</label>
+                  <input
+                    type="text"
+                    id="newTemplateText"
+                    placeholder="Hello! Download your pass here: {passUrl}"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+                <button
+                  onClick={async () => {
+                    const nameEl = document.getElementById('newTemplateName') as HTMLInputElement;
+                    const textEl = document.getElementById('newTemplateText') as HTMLInputElement;
+                    if (!nameEl.value || !textEl.value) {
+                      alert('Please fill template name and message text.');
+                      return;
+                    }
+                    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/api/whatsapp-templates`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': activePassword
+                        },
+                        body: JSON.stringify({ name: nameEl.value, text: textEl.value })
+                      });
+                      if (res.ok) {
+                        nameEl.value = '';
+                        textEl.value = '';
+                        fetchWhatsappTemplates();
+                        fetchActiveWhatsappTemplate();
+                      } else {
+                        const errData = await res.json();
+                        alert(errData.error || 'Failed to create template.');
+                      }
+                    } catch (e) {
+                      alert('Network error.');
+                    }
+                  }}
+                  className="px-5 py-2 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-bold rounded-xl text-xs transition-all h-[38px] self-end"
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+            <div className="text-[10px] text-slate-500 flex flex-wrap gap-x-4">
+              <span>Supported Variables:</span>
+              <span><code>{`{husbandName}`}</code></span>
+              <span><code>{`{wifeName}`}</code></span>
+              <span><code>{`{surname}`}</code></span>
+              <span><code>{`{inquiryId}`}</code></span>
+              <span><code>{`{passUrl}`}</code></span>
+            </div>
+          </div>
+
+          {/* Templates List */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-bold text-slate-200">Available Templates</h3>
+            {whatsappTemplates.length === 0 ? (
+              <p className="text-xs text-slate-500 italic">No templates available. The default template will be used.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-3">
+                {whatsappTemplates.map((t) => (
+                  <div key={t._id} className={`flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-slate-900 border rounded-xl gap-4 ${t.isActive ? 'border-amber-500/50 bg-amber-500/[0.02]' : 'border-slate-800'}`}>
+                    <div className="space-y-1 flex-grow">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-200 text-sm">{t.name}</span>
+                        {t.isActive && (
+                          <span className="px-2 py-0.5 text-[9px] bg-amber-500/10 border border-amber-500/25 text-amber-500 rounded-full font-bold uppercase">Active</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 font-mono break-all bg-slate-950/40 p-2 rounded-lg border border-slate-850 mt-1.5">{t.text}</p>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0 mt-2 sm:mt-0">
+                      {!t.isActive && (
+                        <button
+                          onClick={async () => {
+                            const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+                            try {
+                              const res = await fetch(`${API_BASE_URL}/api/whatsapp-templates/${t._id}/use`, {
+                                method: 'POST',
+                                headers: { 'Authorization': activePassword }
+                              });
+                              if (res.ok) {
+                                fetchWhatsappTemplates();
+                                fetchActiveWhatsappTemplate();
+                              }
+                            } catch (e) {
+                              alert('Network error.');
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition-all border border-slate-700"
+                        >
+                          Use
+                        </button>
+                      )}
+                      {!t.isActive && (
+                        <button
+                          onClick={async () => {
+                            if (!confirm('Are you sure you want to delete this template?')) return;
+                            const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+                            try {
+                              const res = await fetch(`${API_BASE_URL}/api/whatsapp-templates/${t._id}`, {
+                                method: 'DELETE',
+                                headers: { 'Authorization': activePassword }
+                              });
+                              if (res.ok) {
+                                fetchWhatsappTemplates();
+                              } else {
+                                const errData = await res.json();
+                                alert(errData.error || 'Failed to delete template.');
+                              }
+                            } catch (e) {
+                              alert('Network error.');
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-red-950/20 hover:bg-red-900/30 text-red-400 rounded-lg text-xs font-semibold transition-all border border-red-900/30"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Frame Download Option Section */}
         <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-6">
           <div>
@@ -2473,7 +2680,7 @@ export default function AdminDashboard() {
                           const isSent = sentPassIds.includes(sub.inquiryId);
                           return (
                             <a
-                              href={`https://wa.me/${waPhone}?text=${encodeURIComponent(`Hello! Your payment has been verified. You can view and download your pass here: ${typeof window !== 'undefined' ? window.location.origin : 'https://ekdujekeliye.vercel.app'}/pass/${sub.inquiryId}`)}`}
+                              href={`https://wa.me/${waPhone}?text=${encodeURIComponent(formatWhatsappMessage(activeWhatsappTemplate, sub))}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={() => {
