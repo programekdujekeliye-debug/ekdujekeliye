@@ -306,6 +306,12 @@ app.post('/api/submit', upload.fields([
       return res.status(400).json({ error: 'કૃપા કરીને સાચો 10-આંકડાનો મોબાઇલ નંબર દાખલ કરો!' });
     }
 
+    // Check if phone number is already registered (excluding rejected ones)
+    const existingRegistration = await Submission.findOne({ phoneNumber, status: { $ne: 'rejected' } });
+    if (existingRegistration) {
+      return res.status(400).json({ error: 'આ મોબાઇલ નંબર પરથી રજીસ્ટ્રેશન પહેલેથી જ થઈ ગયું છે!' });
+    }
+
     // Find selected program and check capacity
     const program = await Program.findOne({ id: programId });
     if (!program) {
@@ -696,7 +702,12 @@ app.get('/api/submissions/export', async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized. Invalid password.' });
     }
 
-    const submissions = await Submission.find({}).sort({ createdAt: -1 });
+    const { programId, status } = req.query;
+    const query = {};
+    if (programId) query.programId = programId;
+    if (status) query.status = status;
+
+    const submissions = await Submission.find(query).sort({ createdAt: -1 });
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
     const host = req.get('host');
     const baseUrl = `${protocol}://${host}`;
@@ -772,20 +783,36 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const search = req.query.search || '';
+    const status = req.query.status || '';
+    const programId = req.query.programId || '';
+    const sortBy = req.query.sortBy || 'createdAt';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
 
     let filter = {};
     if (search) {
-      const searchRegex = new RegExp(search, 'i');
-      filter = {
-        $or: [
+      const trimmedSearch = search.trim();
+      const isExactToken = /^cpl-\d+$/i.test(trimmedSearch);
+      if (isExactToken) {
+        filter.inquiryId = { $regex: new RegExp(`^${trimmedSearch}$`, 'i') };
+      } else {
+        const searchRegex = new RegExp(trimmedSearch, 'i');
+        filter.$or = [
           { inquiryId: searchRegex },
           { husbandName: searchRegex },
           { wifeName: searchRegex },
           { surname: searchRegex },
           { phoneNumber: searchRegex }
-        ]
-      };
+        ];
+      }
     }
+    if (status) {
+      filter.status = status;
+    }
+    if (programId) {
+      filter.programId = programId;
+    }
+
+    console.log('--- API query:', req.query, 'Mongo filter:', JSON.stringify(filter));
 
     const totalSubmissions = await Submission.countDocuments(filter);
     const totalPages = Math.ceil(totalSubmissions / limit);
@@ -807,7 +834,7 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
       couplePhoto: 1,
       paymentScreenshot: 1
     }, { allowDiskUse: true })
-    .sort({ createdAt: -1 })
+    .sort({ [sortBy]: sortOrder })
     .skip((page - 1) * limit)
     .limit(limit);
 

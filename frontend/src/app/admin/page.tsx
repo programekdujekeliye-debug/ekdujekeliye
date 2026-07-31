@@ -161,6 +161,10 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [programFilter, setProgramFilter] = useState('');
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortOrder, setSortOrder] = useState('desc');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
   // Pagination States
@@ -168,6 +172,7 @@ export default function AdminDashboard() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalSubmissions, setTotalSubmissions] = useState(0);
   const [latestTokenId, setLatestTokenId] = useState('N/A');
+  const [goToPageInput, setGoToPageInput] = useState('1');
 
   // Security States
   const [password, setPassword] = useState('');
@@ -192,6 +197,7 @@ export default function AdminDashboard() {
   const [selectedProgramIdForFrames, setSelectedProgramIdForFrames] = useState<string>('');
   const [zipping, setZipping] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [zipProgress, setZipProgress] = useState('');
   const [sentPassIds, setSentPassIds] = useState<string[]>([]);
 
@@ -212,6 +218,7 @@ export default function AdminDashboard() {
 
   // Bulk Review States
   const [reviewingProgramForFrames, setReviewingProgramForFrames] = useState<Program | null>(null);
+  const [approvedSubmissionsForFrames, setApprovedSubmissionsForFrames] = useState<Submission[]>([]);
 
   const updateSubmissionCoordInState = (inquiryId: string, field: 'photoZoom' | 'photoOffsetY', value: number) => {
     setSubmissions(prev => prev.map(sub => {
@@ -283,9 +290,22 @@ export default function AdminDashboard() {
     }
   };
 
-  const fetchSubmissions = async (options?: { page?: number; search?: string; password?: string; showSpinner?: boolean }) => {
+  const fetchSubmissions = async (options?: {
+    page?: number;
+    search?: string;
+    status?: string;
+    programId?: string;
+    sortBy?: string;
+    sortOrder?: string;
+    password?: string;
+    showSpinner?: boolean;
+  }) => {
     const activePage = options?.page !== undefined ? options.page : currentPage;
     const activeSearch = options?.search !== undefined ? options.search : searchQuery;
+    const activeStatus = options?.status !== undefined ? options.status : statusFilter;
+    const activeProgramId = options?.programId !== undefined ? options.programId : programFilter;
+    const activeSortBy = options?.sortBy !== undefined ? options.sortBy : sortBy;
+    const activeSortOrder = options?.sortOrder !== undefined ? options.sortOrder : sortOrder;
     const activePassword = options?.password || password || sessionStorage.getItem('adminPassword') || '';
     const showSpinner = options?.showSpinner !== false;
 
@@ -295,7 +315,8 @@ export default function AdminDashboard() {
     }
     try {
       if (showSpinner) setLoading(true);
-      const res = await fetch(`${API_BASE_URL}/api/submissions?page=${activePage}&limit=10&search=${encodeURIComponent(activeSearch)}`, {
+      const url = `${API_BASE_URL}/api/submissions?page=${activePage}&limit=10&search=${encodeURIComponent(activeSearch)}&status=${activeStatus}&programId=${activeProgramId}&sortBy=${activeSortBy}&sortOrder=${activeSortOrder}`;
+      const res = await fetch(url, {
         headers: {
           'Authorization': activePassword
         }
@@ -306,6 +327,7 @@ export default function AdminDashboard() {
         setTotalPages(data.totalPages || 1);
         setTotalSubmissions(data.totalSubmissions || 0);
         setCurrentPage(data.currentPage || activePage);
+        setGoToPageInput(String(data.currentPage || activePage));
         
         if (activePage === 1 && data.submissions && data.submissions.length > 0) {
           setLatestTokenId(data.submissions[0].inquiryId);
@@ -515,6 +537,7 @@ export default function AdminDashboard() {
       });
       if (res.ok) {
         fetchSubmissions({ showSpinner: false });
+        fetchApprovedSubmissionsForFrames();
       } else {
         alert('Failed to approve submission.');
       }
@@ -538,6 +561,7 @@ export default function AdminDashboard() {
       });
       if (res.ok) {
         fetchSubmissions({ showSpinner: false });
+        fetchApprovedSubmissionsForFrames();
       } else {
         alert('Failed to reject submission.');
       }
@@ -559,6 +583,7 @@ export default function AdminDashboard() {
       if (res.ok) {
         fetchSubmissions({ showSpinner: false });
         fetchPrograms();
+        fetchApprovedSubmissionsForFrames();
       } else {
         const errData = await res.json();
         alert(errData.error || 'Failed to delete submission.');
@@ -655,16 +680,51 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  const fetchApprovedSubmissionsForFrames = async () => {
+    if (!selectedProgramIdForFrames) {
+      setApprovedSubmissionsForFrames([]);
+      return;
+    }
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    if (!activePassword) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/submissions?limit=1000&status=approved&programId=${selectedProgramIdForFrames}`, {
+        headers: { 'Authorization': activePassword }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const withPhoto = (data.submissions || []).filter((sub: any) => sub.couplePhoto);
+        setApprovedSubmissionsForFrames(withPhoto);
+      }
+    } catch (err) {
+      console.error('Failed to fetch approved submissions for frames:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchApprovedSubmissionsForFrames();
+    }
+  }, [selectedProgramIdForFrames, isAuthenticated]);
+
   // Debounced search query fetching
   useEffect(() => {
     if (!isAuthenticated) return;
     
     const delayDebounceFn = setTimeout(() => {
-      fetchSubmissions({ page: 1, search: searchQuery });
-    }, 4000); // 400ms debounce
+      fetchSubmissions({
+        page: 1,
+        search: searchQuery,
+        status: statusFilter,
+        programId: programFilter,
+        sortBy: sortBy,
+        sortOrder: sortOrder
+      });
+    }, 400); // 400ms debounce
 
     return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery, isAuthenticated]);
+  }, [searchQuery, statusFilter, programFilter, sortBy, sortOrder, isAuthenticated]);
 
   // Live Invitation Preview in Edit Modal
   useEffect(() => {
@@ -862,11 +922,21 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleExportCSV = async () => {
+  const handleExportCSV = async (exportProgramId: string, exportStatus: string) => {
     const activePassword = password || sessionStorage.getItem('adminPassword') || '';
     setIsExporting(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/submissions/export`, {
+      const urlParams = new URLSearchParams();
+      if (exportProgramId) {
+        urlParams.append('programId', exportProgramId);
+      }
+      if (exportStatus) {
+        urlParams.append('status', exportStatus);
+      }
+      const queryStr = urlParams.toString();
+      const fetchUrl = `${API_BASE_URL}/api/submissions/export${queryStr ? `?${queryStr}` : ''}`;
+
+      const res = await fetch(fetchUrl, {
         method: 'GET',
         headers: { 'Authorization': activePassword }
       });
@@ -877,7 +947,25 @@ export default function AdminDashboard() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `submissions_export_${new Date().toISOString().split('T')[0]}.csv`;
+      
+      let filename = `submissions_export_${new Date().toISOString().split('T')[0]}.csv`;
+      let programPart = '';
+      if (exportProgramId) {
+        const prog = programs.find(p => p.id === exportProgramId);
+        programPart = prog ? prog.name.replace(/[^a-zA-Z0-9]/g, '_') : exportProgramId;
+      }
+      
+      let statusPart = exportStatus ? exportStatus : '';
+      
+      if (programPart && statusPart) {
+        filename = `submissions_${programPart}_${statusPart}_export_${new Date().toISOString().split('T')[0]}.csv`;
+      } else if (programPart) {
+        filename = `submissions_${programPart}_export_${new Date().toISOString().split('T')[0]}.csv`;
+      } else if (statusPart) {
+        filename = `submissions_${statusPart}_export_${new Date().toISOString().split('T')[0]}.csv`;
+      }
+      
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -907,7 +995,7 @@ export default function AdminDashboard() {
     const frameImg = new Image();
     frameImg.crossOrigin = 'anonymous';
     frameImg.onload = () => {
-      const progSubmissions = submissions.filter(sub => sub.programId === reviewingProgramForFrames.id && sub.couplePhoto && sub.status === 'approved');
+      const progSubmissions = approvedSubmissionsForFrames;
 
       progSubmissions.forEach(sub => {
         const canvas = document.getElementById(`review-canvas-${sub.inquiryId}`) as HTMLCanvasElement;
@@ -973,13 +1061,13 @@ export default function AdminDashboard() {
       });
     };
     frameImg.src = '/frame_template.png';
-  }, [reviewingProgramForFrames, submissions]);
+  }, [reviewingProgramForFrames, approvedSubmissionsForFrames]);
 
   const handleDownloadFramedZip = async (specificProg?: Program) => {
     const prog = specificProg || programs.find(p => p.id === selectedProgramIdForFrames);
     if (!prog) return;
 
-    const progSubmissions = submissions.filter(sub => sub.programId === prog.id && sub.couplePhoto && sub.status === 'approved');
+    const progSubmissions = approvedSubmissionsForFrames;
     if (progSubmissions.length === 0) {
       alert('No approved registrations with couple photos found for this program.');
       return;
@@ -1099,7 +1187,7 @@ export default function AdminDashboard() {
   const handleSaveAndDownloadZip = async () => {
     if (!reviewingProgramForFrames) return;
     const activePassword = password || sessionStorage.getItem('adminPassword') || '';
-    const progSubmissions = submissions.filter(sub => sub.programId === reviewingProgramForFrames.id && sub.couplePhoto && sub.status === 'approved');
+    const progSubmissions = approvedSubmissionsForFrames;
 
     setZipping(true);
     setZipProgress('Saving alignments to database...');
@@ -1247,6 +1335,70 @@ export default function AdminDashboard() {
             >
               &times;
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Export Program Selection Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-6">
+            <div>
+              <h3 className="text-lg font-bold text-slate-100">Export Submissions</h3>
+              <p className="text-xs text-slate-400 mt-1">Select which program slot data you want to export as a CSV sheet.</p>
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-300">Program Slot</label>
+              <select
+                id="exportProgramSelect"
+                defaultValue=""
+                className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+              >
+                <option value="">All Programs (આખો ડેટા)</option>
+                {programs.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-300">Status</label>
+              <select
+                id="exportStatusSelect"
+                defaultValue=""
+                className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+              >
+                <option value="">All Statuses (બધો ડેટા)</option>
+                <option value="pending">Pending Only</option>
+                <option value="approved">Approved Only</option>
+                <option value="rejected">Rejected Only</option>
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="px-4 py-2 border border-slate-800 hover:bg-slate-900/60 text-slate-300 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const selectEl = document.getElementById('exportProgramSelect') as HTMLSelectElement;
+                  const statusEl = document.getElementById('exportStatusSelect') as HTMLSelectElement;
+                  const selectedProgramId = selectEl?.value || '';
+                  const selectedStatus = statusEl?.value || '';
+                  setShowExportModal(false);
+                  handleExportCSV(selectedProgramId, selectedStatus);
+                }}
+                className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+              >
+                Export Now
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1645,10 +1797,10 @@ export default function AdminDashboard() {
 
             {/* Scrollable list of registrations */}
             <div className="flex-1 overflow-y-auto pr-2 space-y-4">
-              {submissions.filter(sub => sub.programId === reviewingProgramForFrames.id && sub.couplePhoto && sub.status === 'approved').length === 0 ? (
+              {approvedSubmissionsForFrames.length === 0 ? (
                 <p className="text-center text-slate-500 text-sm py-12">No approved couple registrations with photos found in this program slot.</p>
               ) : (
-                submissions.filter(sub => sub.programId === reviewingProgramForFrames.id && sub.couplePhoto && sub.status === 'approved').map((sub) => (
+                approvedSubmissionsForFrames.map((sub) => (
                   <div key={sub.inquiryId} className="flex flex-col sm:flex-row items-center gap-6 bg-slate-900/40 border border-slate-850 rounded-2xl p-4 shadow-sm">
                     {/* Live Preview canvas */}
                     <div className="w-[120px] h-[160px] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center flex-shrink-0">
@@ -1716,7 +1868,7 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   onClick={handleSaveAndDownloadZip}
-                  disabled={zipping || submissions.filter(sub => sub.programId === reviewingProgramForFrames.id && sub.couplePhoto && sub.status === 'approved').length === 0}
+                  disabled={zipping || approvedSubmissionsForFrames.length === 0}
                   className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-extrabold rounded-xl text-xs transition-all w-full sm:w-auto text-center shadow-lg shadow-amber-500/20"
                 >
                   {zipping ? `Processing (${zipProgress})` : 'Save Alignments & Download ZIP'}
@@ -1750,7 +1902,7 @@ export default function AdminDashboard() {
               </button>
             )}
             <button
-              onClick={handleExportCSV}
+              onClick={() => setShowExportModal(true)}
               disabled={isExporting}
               className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-2"
             >
@@ -2091,7 +2243,7 @@ export default function AdminDashboard() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl">
               <div>
                 <p className="text-sm font-semibold text-slate-200">
-                  Total Approved Couples with Photo: <span className="text-amber-500 font-bold">{submissions.filter(sub => sub.programId === selectedProgramIdForFrames && sub.couplePhoto && sub.status === 'approved').length}</span>
+                  Total Approved Couples with Photo: <span className="text-amber-500 font-bold">{approvedSubmissionsForFrames.length}</span>
                 </p>
                 <p className="text-xs text-slate-500 mt-1">Review registrations line by line, slide to adjust their photo zoom/position, and download all framed photos in a single ZIP file.</p>
               </div>
@@ -2110,15 +2262,79 @@ export default function AdminDashboard() {
         </div>
 
         {/* Filters and Search */}
-        <div className="flex items-center bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 gap-3">
-          <span className="text-slate-500 pl-2">🔍</span>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by token, names, surname, or phone..."
-            className="w-full bg-transparent border-none text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-0 text-sm py-1"
-          />
+        <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
+          <div className="flex-1 flex items-center bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 gap-3">
+            <span className="text-slate-500 pl-2">🔍</span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by token, names, surname, or phone..."
+              className="w-full bg-transparent border-none text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-0 text-sm py-1"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Status Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400 font-semibold">Status:</span>
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setStatusFilter(val);
+                  fetchSubmissions({ page: 1, status: val });
+                }}
+                className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500/50"
+              >
+                <option value="">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+
+            {/* Program Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400 font-semibold">Program:</span>
+              <select
+                value={programFilter}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setProgramFilter(val);
+                  fetchSubmissions({ page: 1, programId: val });
+                }}
+                className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+              >
+                <option value="">All Programs</option>
+                {programs.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Sort Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400 font-semibold">Sort By:</span>
+              <select
+                value={`${sortBy}-${sortOrder}`}
+                onChange={(e) => {
+                  const [field, order] = e.target.value.split('-');
+                  setSortBy(field);
+                  setSortOrder(order);
+                  fetchSubmissions({ page: 1, sortBy: field, sortOrder: order });
+                }}
+                className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+              >
+                <option value="createdAt-desc">Newest First</option>
+                <option value="createdAt-asc">Oldest First</option>
+                <option value="inquiryId-asc">Token ID (Ascending)</option>
+                <option value="inquiryId-desc">Token ID (Descending)</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         {/* Table / Grid */}
@@ -2275,9 +2491,22 @@ export default function AdminDashboard() {
                           );
                         })()}
                         {isRejected && (
-                          <span className="text-xs text-red-500 block max-w-[120px] break-words">
-                            Rejected
-                          </span>
+                          <div className="flex flex-col gap-2">
+                            <span className="text-xs text-red-500 block max-w-[120px] break-words font-bold">
+                              Rejected
+                            </span>
+                            {sub.rejectionReason && (
+                              <span className="text-[10px] text-red-400/80 block max-w-[120px] break-words bg-red-950/20 border border-red-950/30 p-1.5 rounded-md italic">
+                                {sub.rejectionReason}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => handleApproveSubmission(sub.inquiryId)}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all text-center"
+                            >
+                              Approve
+                            </button>
+                          </div>
                         )}
                         <div className="pt-2 border-t border-slate-800/40 flex flex-col gap-1.5">
                           <button
@@ -2310,24 +2539,57 @@ export default function AdminDashboard() {
                 <span className="text-amber-500 font-bold">{totalSubmissions}</span> registrations
               </span>
               {totalPages > 1 && (
-                <div className="flex items-center gap-2">
-                  <button
-                    disabled={currentPage <= 1 || loading}
-                    onClick={() => fetchSubmissions({ page: currentPage - 1 })}
-                    className="px-4 py-2 border border-slate-800 hover:border-amber-500/30 hover:bg-slate-900/60 disabled:opacity-40 disabled:hover:border-slate-800 disabled:hover:bg-transparent text-slate-300 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
-                  >
-                    ◀ Previous
-                  </button>
-                  <span className="text-xs text-slate-300 font-semibold px-3 bg-slate-900 border border-slate-800/80 rounded-lg py-1.5 min-w-[80px] text-center">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <button
-                    disabled={currentPage >= totalPages || loading}
-                    onClick={() => fetchSubmissions({ page: currentPage + 1 })}
-                    className="px-4 py-2 border border-slate-800 hover:border-amber-500/30 hover:bg-slate-900/60 disabled:opacity-40 disabled:hover:border-slate-800 disabled:hover:bg-transparent text-slate-300 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
-                  >
-                    Next ▶
-                  </button>
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={currentPage <= 1 || loading}
+                      onClick={() => fetchSubmissions({ page: currentPage - 1 })}
+                      className="px-4 py-2 border border-slate-800 hover:border-amber-500/30 hover:bg-slate-900/60 disabled:opacity-40 disabled:hover:border-slate-800 disabled:hover:bg-transparent text-slate-300 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+                    >
+                      ◀ Previous
+                    </button>
+                    <span className="text-xs text-slate-300 font-semibold px-3 bg-slate-900 border border-slate-800/80 rounded-lg py-1.5 min-w-[80px] text-center">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      disabled={currentPage >= totalPages || loading}
+                      onClick={() => fetchSubmissions({ page: currentPage + 1 })}
+                      className="px-4 py-2 border border-slate-800 hover:border-amber-500/30 hover:bg-slate-900/60 disabled:opacity-40 disabled:hover:border-slate-800 disabled:hover:bg-transparent text-slate-300 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+                    >
+                      Next ▶
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-slate-400">Go to:</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={totalPages}
+                      value={goToPageInput}
+                      onChange={(e) => setGoToPageInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const page = parseInt(goToPageInput, 10);
+                          if (page >= 1 && page <= totalPages) {
+                            fetchSubmissions({ page });
+                          }
+                        }
+                      }}
+                      className="w-14 px-2 py-1 bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-lg focus:outline-none focus:border-amber-500 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <button
+                      onClick={() => {
+                        const page = parseInt(goToPageInput, 10);
+                        if (page >= 1 && page <= totalPages) {
+                          fetchSubmissions({ page });
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-slate-900 border border-slate-800 hover:border-amber-500/30 text-slate-300 font-bold rounded-lg text-xs transition-all active:scale-[0.98]"
+                    >
+                      Go
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
