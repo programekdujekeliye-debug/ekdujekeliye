@@ -153,6 +153,17 @@ export default function Home() {
         setLoadingPrograms(false);
       }
     };
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/settings`);
+        if (res.ok) {
+          const data = await res.json();
+          setUpiSettings(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch settings:', err);
+      }
+    };
     const fetchPaymentRequestTemplate = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/whatsapp-templates/active?type=payment_request`);
