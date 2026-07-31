@@ -126,6 +126,7 @@ const Counter = mongoose.model('Counter', CounterSchema);
 const WhatsappTemplateSchema = new mongoose.Schema({
   name: { type: String, required: true },
   text: { type: String, required: true },
+  type: { type: String, enum: ['pass_delivery', 'payment_request'], default: 'pass_delivery' },
   isActive: { type: Boolean, default: false }
 }, { collection: 'whatsapp_template' });
 const WhatsappTemplate = mongoose.model('WhatsappTemplate', WhatsappTemplateSchema);
@@ -155,14 +156,25 @@ initSettings();
 // Initialize WhatsApp Templates
 const initWhatsappTemplates = async () => {
   try {
-    const count = await WhatsappTemplate.countDocuments();
-    if (count === 0) {
+    const passDeliveryExists = await WhatsappTemplate.findOne({ type: 'pass_delivery' });
+    if (!passDeliveryExists) {
       await WhatsappTemplate.create({
         name: 'Default Pass Delivery',
         text: 'Hello! Your payment has been verified. You can view and download your pass here: {passUrl}',
+        type: 'pass_delivery',
         isActive: true
       });
-      console.log('Default WhatsApp template initialized.');
+      console.log('Default Pass Delivery WhatsApp template initialized.');
+    }
+    const paymentRequestExists = await WhatsappTemplate.findOne({ type: 'payment_request' });
+    if (!paymentRequestExists) {
+      await WhatsappTemplate.create({
+        name: 'Default Payment Verification Request',
+        text: 'Hello! I have registered for the {programName}. My Inquiry ID is {inquiryId}. My phone number is {phoneNumber}. Please verify my payment screenshot.',
+        type: 'payment_request',
+        isActive: true
+      });
+      console.log('Default Payment Verification Request WhatsApp template initialized.');
     }
   } catch (err) {
     console.error('Failed to initialize WhatsApp templates:', err);
@@ -1034,15 +1046,16 @@ app.get('/api/whatsapp-templates', requireAuth, async (req, res) => {
 
 // Create a new WhatsApp template (Admin only)
 app.post('/api/whatsapp-templates', requireAuth, async (req, res) => {
-  const { name, text } = req.body;
+  const { name, text, type } = req.body;
   if (!name || !text) {
     return res.status(400).json({ error: 'Template name and text are required.' });
   }
+  const activeType = type || 'pass_delivery';
   try {
-    const count = await WhatsappTemplate.countDocuments();
+    const count = await WhatsappTemplate.countDocuments({ type: activeType });
     const isActive = count === 0;
 
-    const newTemplate = await WhatsappTemplate.create({ name, text, isActive });
+    const newTemplate = await WhatsappTemplate.create({ name, text, type: activeType, isActive });
     res.status(201).json({ success: true, template: newTemplate });
   } catch (err) {
     res.status(500).json({ error: 'Server error creating WhatsApp template.' });
@@ -1053,12 +1066,14 @@ app.post('/api/whatsapp-templates', requireAuth, async (req, res) => {
 app.post('/api/whatsapp-templates/:id/use', requireAuth, async (req, res) => {
   const { id } = req.params;
   try {
-    await WhatsappTemplate.updateMany({}, { isActive: false });
-    const template = await WhatsappTemplate.findByIdAndUpdate(id, { isActive: true }, { new: true });
-    if (!template) {
+    const target = await WhatsappTemplate.findById(id);
+    if (!target) {
       return res.status(404).json({ error: 'Template not found.' });
     }
-    res.json({ success: true, message: 'WhatsApp template activated.', template });
+    await WhatsappTemplate.updateMany({ type: target.type }, { isActive: false });
+    target.isActive = true;
+    await target.save();
+    res.json({ success: true, message: 'WhatsApp template activated.', template: target });
   } catch (err) {
     res.status(500).json({ error: 'Server error activating WhatsApp template.' });
   }
@@ -1082,11 +1097,15 @@ app.delete('/api/whatsapp-templates/:id', requireAuth, async (req, res) => {
   }
 });
 
-// Get the active WhatsApp template (Admin only)
-app.get('/api/whatsapp-templates/active', requireAuth, async (req, res) => {
+// Get the active WhatsApp template (Public - used by registration page too)
+app.get('/api/whatsapp-templates/active', async (req, res) => {
+  const activeType = req.query.type || 'pass_delivery';
   try {
-    const activeTemplate = await WhatsappTemplate.findOne({ isActive: true });
+    const activeTemplate = await WhatsappTemplate.findOne({ type: activeType, isActive: true });
     if (!activeTemplate) {
+      if (activeType === 'payment_request') {
+        return res.json({ text: 'Hello! I have registered for the {programName}. My Inquiry ID is {inquiryId}. My phone number is {phoneNumber}. Please verify my payment screenshot.' });
+      }
       return res.json({ text: 'Hello! Your payment has been verified. You can view and download your pass here: {passUrl}' });
     }
     res.json(activeTemplate);

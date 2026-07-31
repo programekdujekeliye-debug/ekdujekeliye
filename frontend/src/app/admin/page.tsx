@@ -267,6 +267,8 @@ export default function AdminDashboard() {
   // WhatsApp Templates States
   const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>([]);
   const [activeWhatsappTemplate, setActiveWhatsappTemplate] = useState('Hello! Your payment has been verified. You can view and download your pass here: {passUrl}');
+  const [activePaymentRequestTemplate, setActivePaymentRequestTemplate] = useState('Hello! I have registered for the {programName}. My Inquiry ID is {inquiryId}. My phone number is {phoneNumber}. Please verify my payment screenshot.');
+  const [whatsappTemplateTab, setWhatsappTemplateTab] = useState<'pass_delivery' | 'payment_request'>('pass_delivery');
 
   const fetchPrograms = async () => {
     try {
@@ -298,17 +300,26 @@ export default function AdminDashboard() {
     const activePassword = password || sessionStorage.getItem('adminPassword') || '';
     if (!activePassword) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/whatsapp-templates/active`, {
+      const res1 = await fetch(`${API_BASE_URL}/api/whatsapp-templates/active?type=pass_delivery`, {
         headers: { 'Authorization': activePassword }
       });
-      if (res.ok) {
-        const data = await res.json();
+      if (res1.ok) {
+        const data = await res1.json();
         if (data && data.text) {
           setActiveWhatsappTemplate(data.text);
         }
       }
+      const res2 = await fetch(`${API_BASE_URL}/api/whatsapp-templates/active?type=payment_request`, {
+        headers: { 'Authorization': activePassword }
+      });
+      if (res2.ok) {
+        const data = await res2.json();
+        if (data && data.text) {
+          setActivePaymentRequestTemplate(data.text);
+        }
+      }
     } catch (err) {
-      console.error('Failed to fetch active WhatsApp template:', err);
+      console.error('Failed to fetch active WhatsApp templates:', err);
     }
   };
 
@@ -2268,25 +2279,47 @@ export default function AdminDashboard() {
 
         {/* WhatsApp Message Templates Section */}
         <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-6">
-          <div>
-            <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-              <span>💬</span> WhatsApp Message Templates
-            </h2>
-            <p className="text-slate-400 text-xs mt-1">
-              Add multiple templates, view them in a list, and click <strong>"Use"</strong> to make a specific template active for pass delivery links.
-            </p>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+                <span>💬</span> WhatsApp Message Templates
+              </h2>
+              <p className="text-slate-400 text-xs mt-1">
+                Manage templates for sending passes to users, and messages sent by users after registration.
+              </p>
+            </div>
+            
+            {/* Tab switcher */}
+            <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800 self-stretch sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setWhatsappTemplateTab('pass_delivery')}
+                className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${whatsappTemplateTab === 'pass_delivery' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                Pass Delivery (Admin to User)
+              </button>
+              <button
+                type="button"
+                onClick={() => setWhatsappTemplateTab('payment_request')}
+                className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${whatsappTemplateTab === 'payment_request' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                Payment Request (User to Admin)
+              </button>
+            </div>
           </div>
 
           {/* Add Template Form */}
           <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 space-y-4">
-            <h3 className="text-sm font-bold text-slate-200">Create New Template</h3>
+            <h3 className="text-sm font-bold text-slate-200">
+              Create New {whatsappTemplateTab === 'pass_delivery' ? 'Pass Delivery' : 'Payment Request'} Template
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div className="md:col-span-1">
                 <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Template Name</label>
                 <input
                   type="text"
                   id="newTemplateName"
-                  placeholder="e.g. Gujarati Pass Msg"
+                  placeholder={whatsappTemplateTab === 'pass_delivery' ? "e.g. Gujarati Pass Msg" : "e.g. Payment Done Request"}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
                 />
               </div>
@@ -2296,11 +2329,12 @@ export default function AdminDashboard() {
                   <input
                     type="text"
                     id="newTemplateText"
-                    placeholder="Hello! Download your pass here: {passUrl}"
+                    placeholder={whatsappTemplateTab === 'pass_delivery' ? "Hello! Download your pass here: {passUrl}" : "Hello! Verified. Inquiry ID: {inquiryId}"}
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
                   />
                 </div>
                 <button
+                  type="button"
                   onClick={async () => {
                     const nameEl = document.getElementById('newTemplateName') as HTMLInputElement;
                     const textEl = document.getElementById('newTemplateText') as HTMLInputElement;
@@ -2316,7 +2350,7 @@ export default function AdminDashboard() {
                           'Content-Type': 'application/json',
                           'Authorization': activePassword
                         },
-                        body: JSON.stringify({ name: nameEl.value, text: textEl.value })
+                        body: JSON.stringify({ name: nameEl.value, text: textEl.value, type: whatsappTemplateTab })
                       });
                       if (res.ok) {
                         nameEl.value = '';
@@ -2339,22 +2373,34 @@ export default function AdminDashboard() {
             </div>
             <div className="text-[10px] text-slate-500 flex flex-wrap gap-x-4">
               <span>Supported Variables:</span>
-              <span><code>{`{husbandName}`}</code></span>
-              <span><code>{`{wifeName}`}</code></span>
-              <span><code>{`{surname}`}</code></span>
-              <span><code>{`{inquiryId}`}</code></span>
-              <span><code>{`{passUrl}`}</code></span>
+              {whatsappTemplateTab === 'pass_delivery' ? (
+                <>
+                  <span><code>{`{husbandName}`}</code></span>
+                  <span><code>{`{wifeName}`}</code></span>
+                  <span><code>{`{surname}`}</code></span>
+                  <span><code>{`{inquiryId}`}</code></span>
+                  <span><code>{`{passUrl}`}</code></span>
+                </>
+              ) : (
+                <>
+                  <span><code>{`{programName}`}</code></span>
+                  <span><code>{`{inquiryId}`}</code></span>
+                  <span><code>{`{phoneNumber}`}</code></span>
+                </>
+              )}
             </div>
           </div>
 
           {/* Templates List */}
           <div className="space-y-3">
-            <h3 className="text-sm font-bold text-slate-200">Available Templates</h3>
-            {whatsappTemplates.length === 0 ? (
-              <p className="text-xs text-slate-500 italic">No templates available. The default template will be used.</p>
+            <h3 className="text-sm font-bold text-slate-200">
+              Available {whatsappTemplateTab === 'pass_delivery' ? 'Pass Delivery' : 'Payment Request'} Templates
+            </h3>
+            {whatsappTemplates.filter(t => t.type === whatsappTemplateTab).length === 0 ? (
+              <p className="text-xs text-slate-500 italic">No templates of this type available. The default message will be used.</p>
             ) : (
               <div className="grid grid-cols-1 gap-3">
-                {whatsappTemplates.map((t) => (
+                {whatsappTemplates.filter(t => t.type === whatsappTemplateTab).map((t) => (
                   <div key={t._id} className={`flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-slate-900 border rounded-xl gap-4 ${t.isActive ? 'border-amber-500/50 bg-amber-500/[0.02]' : 'border-slate-800'}`}>
                     <div className="space-y-1 flex-grow">
                       <div className="flex items-center gap-2">
@@ -2368,6 +2414,7 @@ export default function AdminDashboard() {
                     <div className="flex gap-2 flex-shrink-0 mt-2 sm:mt-0">
                       {!t.isActive && (
                         <button
+                          type="button"
                           onClick={async () => {
                             const activePassword = password || sessionStorage.getItem('adminPassword') || '';
                             try {
@@ -2390,6 +2437,7 @@ export default function AdminDashboard() {
                       )}
                       {!t.isActive && (
                         <button
+                          type="button"
                           onClick={async () => {
                             if (!confirm('Are you sure you want to delete this template?')) return;
                             const activePassword = password || sessionStorage.getItem('adminPassword') || '';

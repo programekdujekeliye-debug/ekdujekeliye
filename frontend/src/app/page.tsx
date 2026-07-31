@@ -102,6 +102,7 @@ export default function Home() {
     payeeName: 'Couple Pass',
     amount: '100'
   });
+  const [paymentRequestMsgTemplate, setPaymentRequestMsgTemplate] = useState('Hello! I have registered for the {programName}. My Inquiry ID is {inquiryId}. My phone number is {phoneNumber}. Please verify my payment screenshot.');
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hearts, setHearts] = useState<{ id: number; left: number; size: number; delay: number; duration: number }[]>([]);
@@ -152,19 +153,22 @@ export default function Home() {
         setLoadingPrograms(false);
       }
     };
-    const fetchSettings = async () => {
+    const fetchPaymentRequestTemplate = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/settings`);
+        const res = await fetch(`${API_BASE_URL}/api/whatsapp-templates/active?type=payment_request`);
         if (res.ok) {
           const data = await res.json();
-          setUpiSettings(data);
+          if (data && data.text) {
+            setPaymentRequestMsgTemplate(data.text);
+          }
         }
       } catch (err) {
-        console.error('Failed to fetch settings:', err);
+        console.error('Failed to fetch payment request WhatsApp template:', err);
       }
     };
     fetchPrograms();
     fetchSettings();
+    fetchPaymentRequestTemplate();
   }, []);
 
   // Setup preview URLs
@@ -767,7 +771,12 @@ export default function Home() {
 
               <div className="w-full space-y-3">
                 <a
-                  href={`https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hello! I have registered for the ${selectedProgramName}. My Inquiry ID is ${inquiryId}. My phone number is ${phoneNumber}. Please verify my payment screenshot.`)}`}
+                  href={`https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${encodeURIComponent(
+                    paymentRequestMsgTemplate
+                      .replace(/{programName}/g, selectedProgramName)
+                      .replace(/{inquiryId}/g, inquiryId)
+                      .replace(/{phoneNumber}/g, phoneNumber)
+                  )}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold rounded-2xl transition-all shadow-lg shadow-emerald-600/20 text-center"
