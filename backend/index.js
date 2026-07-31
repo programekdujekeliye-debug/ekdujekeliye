@@ -914,6 +914,112 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
   }
 });
 
+// Get duplicate submissions grouped by conflict type (phone or name)
+app.get('/api/submissions/duplicates', requireAuth, async (req, res) => {
+  try {
+    // 1. Phone number duplicates
+    const phoneDuplicates = await Submission.aggregate([
+      {
+        $group: {
+          _id: "$phoneNumber",
+          count: { $sum: 1 },
+          submissions: { $push: "$$ROOT" }
+        }
+      },
+      {
+        $match: {
+          count: { $gt: 1 }
+        }
+      }
+    ]);
+
+    // 2. Name duplicates (trim and lowercase)
+    const nameDuplicates = await Submission.aggregate([
+      {
+        $group: {
+          _id: {
+            husbandName: { $trim: { input: { $toLower: "$husbandName" } } },
+            wifeName: { $trim: { input: { $toLower: "$wifeName" } } },
+            surname: { $trim: { input: { $toLower: "$surname" } } }
+          },
+          count: { $sum: 1 },
+          submissions: { $push: "$$ROOT" }
+        }
+      },
+      {
+        $match: {
+          count: { $gt: 1 }
+        }
+      }
+    ]);
+
+    const groups = [];
+
+    const mapUrls = (sub) => {
+      const obj = { ...sub };
+      if (obj.couplePhoto) {
+        if (obj.couplePhoto.startsWith('http://') || obj.couplePhoto.startsWith('https://')) {
+          obj.couplePhoto = obj.couplePhoto;
+        } else {
+          obj.couplePhoto = `/api/submissions/${obj.inquiryId}/photo`;
+        }
+      } else {
+        obj.couplePhoto = null;
+      }
+
+      if (obj.paymentScreenshot) {
+        if (obj.paymentScreenshot.startsWith('http://') || obj.paymentScreenshot.startsWith('https://')) {
+          obj.paymentScreenshot = obj.paymentScreenshot;
+        } else {
+          obj.paymentScreenshot = `/api/submissions/${obj.inquiryId}/screenshot`;
+        }
+      } else {
+        obj.paymentScreenshot = null;
+      }
+      return obj;
+    };
+
+    // Format phone duplicates
+    for (const group of phoneDuplicates) {
+      groups.push({
+        id: `phone-${group._id}`,
+        type: 'phone',
+        conflictValue: group._id,
+        label: `Duplicate Phone Number: ${group._id}`,
+        submissions: group.submissions.map(mapUrls)
+      });
+    }
+
+    // Format name duplicates
+    for (const group of nameDuplicates) {
+      const husband = group.submissions[0].husbandName;
+      const wife = group.submissions[0].wifeName;
+      const surname = group.submissions[0].surname;
+      groups.push({
+        id: `name-${group._id.husbandName}-${group._id.wifeName}-${group._id.surname}`,
+        type: 'name',
+        conflictValue: `${husband} & ${wife} ${surname}`,
+        label: `Duplicate Names: ${husband} & ${wife} ${surname}`,
+        submissions: group.submissions.map(mapUrls)
+      });
+    }
+
+    // Sort groups by the most recent submission in the group
+    const sortedGroups = groups.sort((a, b) => {
+      const maxA = Math.max(...a.submissions.map(s => new Date(s.createdAt || 0).getTime()));
+      const maxB = Math.max(...b.submissions.map(s => new Date(s.createdAt || 0).getTime()));
+      return maxB - maxA;
+    });
+
+    res.json(sortedGroups);
+  } catch (err) {
+    console.error('Error fetching duplicate submissions:', err);
+    res.status(500).json({ error: 'Server error fetching duplicate submissions.' });
+  }
+});
+
+
+
 // Stream couple photo endpoint
 app.get('/api/submissions/:inquiryId/photo', async (req, res) => {
   try {

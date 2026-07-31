@@ -23,6 +23,15 @@ interface Submission {
   photoOffsetY?: number;
 }
 
+interface DuplicateGroup {
+  id: string;
+  type: 'phone' | 'name';
+  conflictValue: string;
+  label: string;
+  submissions: Submission[];
+}
+
+
 const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.7): Promise<File> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -215,6 +224,11 @@ export default function AdminDashboard() {
   const [editProgramPhotoOffsetY, setEditProgramPhotoOffsetY] = useState<number>(0);
   const [editProgramError, setEditProgramError] = useState('');
   const [editProgramSuccess, setEditProgramSuccess] = useState('');
+
+  // Duplicate Inquiries States
+  const [viewMode, setViewMode] = useState<'all' | 'duplicates'>('all');
+  const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
+  const [loadingDuplicates, setLoadingDuplicates] = useState(false);
 
   // Bulk Review States
   const [reviewingProgramForFrames, setReviewingProgramForFrames] = useState<Program | null>(null);
@@ -431,6 +445,30 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchDuplicates = async (options?: { password?: string }) => {
+    const activePassword = options?.password || password || sessionStorage.getItem('adminPassword') || '';
+    if (!activePassword) return;
+    try {
+      setLoadingDuplicates(true);
+      const url = `${API_BASE_URL}/api/submissions/duplicates`;
+      const res = await fetch(url, {
+        headers: {
+          'Authorization': activePassword
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDuplicateGroups(data || []);
+      } else {
+        console.error('Failed to fetch duplicate submissions');
+      }
+    } catch (err) {
+      console.error('Error fetching duplicates:', err);
+    } finally {
+      setLoadingDuplicates(false);
+    }
+  };
+
   const handleCreateProgram = async (e: React.FormEvent) => {
     e.preventDefault();
     const activePassword = password || sessionStorage.getItem('adminPassword') || '';
@@ -600,6 +638,7 @@ export default function AdminDashboard() {
       });
       if (res.ok) {
         fetchSubmissions({ showSpinner: false });
+        fetchDuplicates();
         fetchApprovedSubmissionsForFrames();
       } else {
         alert('Failed to approve submission.');
@@ -624,6 +663,7 @@ export default function AdminDashboard() {
       });
       if (res.ok) {
         fetchSubmissions({ showSpinner: false });
+        fetchDuplicates();
         fetchApprovedSubmissionsForFrames();
       } else {
         alert('Failed to reject submission.');
@@ -645,6 +685,7 @@ export default function AdminDashboard() {
       });
       if (res.ok) {
         fetchSubmissions({ showSpinner: false });
+        fetchDuplicates();
         fetchPrograms();
         fetchApprovedSubmissionsForFrames();
       } else {
@@ -708,6 +749,7 @@ export default function AdminDashboard() {
         setEditCouplePhoto(null);
         setEditPaymentScreenshot(null);
         fetchSubmissions({ showSpinner: false });
+        fetchDuplicates();
         fetchPrograms();
       } else {
         const errData = await res.json();
@@ -737,6 +779,7 @@ export default function AdminDashboard() {
     const savedPassword = sessionStorage.getItem('adminPassword');
     if (savedPassword) {
       fetchSubmissions({ password: savedPassword });
+      fetchDuplicates({ password: savedPassword });
     } else {
       setLoading(false);
       fetchSettings();
@@ -962,6 +1005,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!password) return;
     fetchSubmissions({ password });
+    fetchDuplicates({ password });
   };
 
   const handleClearData = async () => {
@@ -2516,8 +2560,31 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* Filters and Search */}
-        <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
+        {/* View Mode Tabs */}
+        <div className="flex bg-slate-950/40 p-1.5 rounded-2xl border border-slate-800/80 gap-2 mb-6">
+          <button
+            type="button"
+            onClick={() => setViewMode('all')}
+            className={`flex-1 py-3 text-center rounded-xl text-sm font-bold transition-all ${viewMode === 'all' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            📋 All Registrations (બધા રજીસ્ટ્રેશન)
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setViewMode('duplicates');
+              fetchDuplicates();
+            }}
+            className={`flex-1 py-3 text-center rounded-xl text-sm font-bold transition-all ${viewMode === 'duplicates' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            ⚠️ Duplicate Inquiries (ડુપ્લિકેટ ઇન્ક્વાયરી)
+          </button>
+        </div>
+
+        {viewMode === 'all' ? (
+          <>
+            {/* Filters and Search */}
+            <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
           <div className="flex-1 flex items-center bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 gap-3">
             <span className="text-slate-500 pl-2">🔍</span>
             <input
@@ -2850,6 +2917,147 @@ export default function AdminDashboard() {
             </div>
           )}
           </>
+        )}
+      </>
+    ) : (
+      /* Render duplicates view */
+          <div className="space-y-6">
+            {loadingDuplicates ? (
+              <div className="text-center py-20 text-slate-400">Loading duplicate inquiries...</div>
+            ) : duplicateGroups.length === 0 ? (
+              <div className="text-center py-20 text-slate-400 border border-dashed border-slate-800 rounded-2xl">
+                No duplicate inquiries found. (કોઈ ડુપ્લિકેટ ઇન્ક્વાયરી મળી નથી)
+              </div>
+            ) : (
+              duplicateGroups.map((group) => (
+                <div key={group.id} className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xl">⚠️</span>
+                      <div>
+                        <h3 className="font-bold text-slate-200 text-base">{group.label}</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">Found {group.submissions.length} conflicting submissions.</p>
+                      </div>
+                    </div>
+                    <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-full text-xs font-bold uppercase tracking-wider">
+                      {group.type === 'phone' ? 'Phone Match' : 'Name Match'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {group.submissions.map((sub) => {
+                      const isApproved = sub.status === 'approved';
+                      const isRejected = sub.status === 'rejected';
+                      const isPending = !isApproved && !isRejected;
+                      return (
+                        <div key={sub.inquiryId} className="bg-slate-900/40 border border-slate-800/80 rounded-xl p-5 flex flex-col justify-between hover:border-slate-700/80 transition-all space-y-4">
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-start gap-2">
+                              <div>
+                                <span className="font-mono text-[10px] text-slate-500">Token ID</span>
+                                <div className="font-mono text-sm text-amber-500 font-bold">{sub.inquiryId}</div>
+                              </div>
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${isApproved ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : isRejected ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}`}>
+                                {sub.status || 'pending'}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3 text-xs border-t border-b border-slate-800/40 py-2.5">
+                              <div>
+                                <span className="text-slate-500 block uppercase text-[9px] tracking-wider font-semibold">Couple Names</span>
+                                <span className="text-slate-200 font-semibold">{sub.husbandName} & {sub.wifeName}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 block uppercase text-[9px] tracking-wider font-semibold">Surname</span>
+                                <span className="text-slate-200 font-semibold">{sub.surname}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 block uppercase text-[9px] tracking-wider font-semibold">Phone</span>
+                                <span className="text-slate-200 font-mono">{sub.phoneNumber}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 block uppercase text-[9px] tracking-wider font-semibold">Program Slot</span>
+                                <span className="text-slate-200 font-semibold truncate block" title={sub.programName}>{sub.programName || 'N/A'}</span>
+                                <span className="text-[10px] text-slate-500 block">{sub.programDate}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-4">
+                              <div className="flex-1 flex flex-col items-center gap-1.5">
+                                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Couple Photo</span>
+                                <div 
+                                  className="w-full h-24 rounded-lg overflow-hidden border border-slate-800 cursor-pointer hover:border-amber-500/30 transition-all bg-slate-950/60 flex items-center justify-center"
+                                  onClick={() => setSelectedImage(sub.couplePhoto)}
+                                >
+                                  {sub.couplePhoto ? (
+                                    <img 
+                                      src={(sub.couplePhoto.startsWith('data:') || sub.couplePhoto.startsWith('http://') || sub.couplePhoto.startsWith('https://')) ? sub.couplePhoto : `${API_BASE_URL}${sub.couplePhoto}`}
+                                      alt="Couple" 
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <span className="text-slate-605 text-xs">No Photo</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex-1 flex flex-col items-center gap-1.5">
+                                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Payment Proof</span>
+                                <div 
+                                  className="w-full h-24 rounded-lg overflow-hidden border border-slate-800 cursor-pointer hover:border-amber-500/30 transition-all bg-slate-950/60 flex items-center justify-center relative"
+                                  onClick={() => sub.paymentScreenshot && setSelectedImage(sub.paymentScreenshot)}
+                                >
+                                  {sub.paymentScreenshot ? (
+                                    <img 
+                                      src={(sub.paymentScreenshot.startsWith('data:') || sub.paymentScreenshot.startsWith('http://') || sub.paymentScreenshot.startsWith('https://')) ? sub.paymentScreenshot : `${API_BASE_URL}${sub.paymentScreenshot}`}
+                                      alt="Payment Proof" 
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <span className="text-slate-605 text-xs">No Proof</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="pt-4 border-t border-slate-800/80 flex flex-wrap gap-2">
+                            {isPending && (
+                              <button
+                                onClick={() => handleApproveSubmission(sub.inquiryId)}
+                                className="flex-1 min-w-[70px] px-2.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+                              >
+                                Approve
+                              </button>
+                            )}
+                            {isPending && (
+                              <button
+                                onClick={() => handleRejectSubmission(sub.inquiryId)}
+                                className="flex-1 min-w-[70px] px-2.5 py-2 bg-red-950/30 hover:bg-red-900/30 border border-red-900/40 text-red-400 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+                              >
+                                Reject
+                              </button>
+                            )}
+                            <button
+                              onClick={() => startEditing(sub)}
+                              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl text-xs transition-all active:scale-[0.98]"
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSubmission(sub.inquiryId)}
+                              className="px-3 py-2 bg-red-950/20 hover:bg-red-900/30 border border-red-950 text-red-400 font-semibold rounded-xl text-xs transition-all active:scale-[0.98]"
+                            >
+                              🗑️ Delete
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         )}
       </div>
     </div>
