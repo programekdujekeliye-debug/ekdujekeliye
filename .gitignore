@@ -21,3 +21,10 @@ backend/uploads/*
 .DS_Store?
 ehthumbs.db
 Thumbs.db
+
+# Environments and Backups
+.env
+.env.*
+backend/.env
+backend/backup_submissions.json
+
