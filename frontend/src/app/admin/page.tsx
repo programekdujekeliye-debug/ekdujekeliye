@@ -1502,7 +1502,7 @@ export default function AdminDashboard() {
                 <option value="">All Programs (આખો ડેટા)</option>
                 {programs.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name}
+                    {p.name} ({p.date})
                   </option>
                 ))}
               </select>
@@ -2668,7 +2668,7 @@ export default function AdminDashboard() {
                 <option value="">All Programs</option>
                 {programs.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name}
+                    {p.name} ({p.date})
                   </option>
                 ))}
               </select>
