@@ -286,12 +286,9 @@ app.get('/api/programs/:id/template', async (req, res) => {
       const contentType = match[1];
       const base64Data = match[2];
       const img = Buffer.from(base64Data, 'base64');
-      res.writeHead(200, {
-        'Content-Type': contentType,
-        'Content-Length': img.length,
-        'Cache-Control': 'public, max-age=86400' // cache for 1 day
-      });
-      res.end(img);
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.send(img);
     } else {
       res.status(400).send('Invalid template format');
     }
