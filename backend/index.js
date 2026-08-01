@@ -776,7 +776,8 @@ app.put('/api/submissions/:inquiryId', requireAuth, upload.fields([
 app.get('/api/submissions/status/:inquiryId', async (req, res) => {
   const { inquiryId } = req.params;
   try {
-    const submission = await Submission.findOne({ inquiryId: new RegExp(`^${inquiryId}$`, 'i') });
+    const formattedId = (inquiryId || '').trim().toUpperCase();
+    const submission = await Submission.findOne({ inquiryId: formattedId });
     if (!submission) {
       return res.status(404).json({ error: 'Inquiry ID not found.' });
     }
@@ -937,7 +938,7 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
       const trimmedSearch = search.trim();
       const isExactToken = /^cpl-\d+$/i.test(trimmedSearch);
       if (isExactToken) {
-        filter.inquiryId = { $regex: new RegExp(`^${trimmedSearch}$`, 'i') };
+        filter.inquiryId = trimmedSearch.toUpperCase();
       } else {
         const searchRegex = new RegExp(trimmedSearch, 'i');
         filter.$or = [
