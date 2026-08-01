@@ -68,6 +68,7 @@ const upload = multer({ storage });
 
 // MongoDB Connection
 const MONGO_URI = (process.env.MONGO_URI || 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority').trim();
+mongoose.set('autoIndex', false); // Disable auto-indexing to prevent query buffering hangs on startup/restarts
 mongoose.connect(MONGO_URI)
   .then(() => console.log('Successfully connected to MongoDB database.'))
   .catch(err => console.error('MongoDB connection error:', err));
@@ -1582,10 +1583,10 @@ cron.schedule('0 22 * * *', () => {
 });
 
 // Run a backup once on startup (after 5s) to verify configuration
-setTimeout(() => {
-  console.log('[Backup] Running startup database backup...');
-  runDatabaseBackup();
-}, 5000);
+// setTimeout(() => {
+//   console.log('[Backup] Running startup database backup...');
+//   runDatabaseBackup();
+// }, 5000);
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
