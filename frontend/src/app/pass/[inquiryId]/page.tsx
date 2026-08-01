@@ -122,7 +122,10 @@ export default function PassDownloadPage() {
 
     const templateImg = new Image();
     const templatePath = sub.cardTemplate || '/card_template.png';
-    const isTemplateRemote = templatePath.startsWith('http://') || templatePath.startsWith('https://');
+    const templateImgSrc = (templatePath.startsWith('data:') || templatePath.startsWith('http://') || templatePath.startsWith('https://') || templatePath === '/card_template.png')
+      ? templatePath
+      : `${API_BASE_URL}${templatePath}`;
+    const isTemplateRemote = templateImgSrc.startsWith('http://') || templateImgSrc.startsWith('https://');
     if (isTemplateRemote) {
       templateImg.crossOrigin = 'anonymous';
     }
@@ -227,11 +230,11 @@ export default function PassDownloadPage() {
         console.warn("CORS template image load failed, retrying without CORS...");
         templateRetried = true;
         templateImg.removeAttribute('crossOrigin');
-        templateImg.src = templatePath + (templatePath.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
+        templateImg.src = templateImgSrc + (templateImgSrc.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
       }
     };
 
-    templateImg.src = templatePath;
+    templateImg.src = templateImgSrc;
   };
 
   useEffect(() => {
