@@ -583,6 +583,38 @@ app.delete('/api/submissions/:inquiryId', requireAuth, async (req, res) => {
   }
 });
 
+// Bulk delete submissions (Admin only)
+app.post('/api/submissions/bulk-delete', requireAuth, async (req, res) => {
+  try {
+    const { inquiryIds } = req.body;
+    if (!Array.isArray(inquiryIds) || inquiryIds.length === 0) {
+      return res.status(400).json({ error: 'No inquiry IDs provided.' });
+    }
+
+    const submissions = await Submission.find({ inquiryId: { $in: inquiryIds } });
+    
+    // Decrement bookingsCount for each program slot
+    for (const sub of submissions) {
+      if (sub.programId) {
+        const program = await Program.findOne({ id: sub.programId });
+        if (program) {
+          program.bookingsCount = Math.max(0, program.bookingsCount - 2);
+          await program.save();
+        }
+      }
+    }
+
+    // Delete submission documents
+    await Submission.deleteMany({ inquiryId: { $in: inquiryIds } });
+
+    res.json({ success: true, message: `${submissions.length} submissions deleted successfully, and bookings released.` });
+  } catch (error) {
+    console.error('Error bulk deleting submissions:', error);
+    res.status(500).json({ error: 'Server error while bulk deleting submissions.' });
+  }
+});
+
+
 // Edit a registration submission (Admin only)
 app.put('/api/submissions/:inquiryId', requireAuth, upload.fields([
   { name: 'couplePhoto', maxCount: 1 },
@@ -918,46 +950,12 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
 // Get duplicate submissions grouped by conflict type (phone or name)
 app.get('/api/submissions/duplicates', requireAuth, async (req, res) => {
   try {
-    // 1. Phone number duplicates
-    const phoneDuplicates = await Submission.aggregate([
-      {
-        $group: {
-          _id: "$phoneNumber",
-          count: { $sum: 1 },
-          submissions: { $push: "$$ROOT" }
-        }
-      },
-      {
-        $match: {
-          count: { $gt: 1 }
-        }
-      }
-    ]);
-
-    // 2. Name duplicates (trim and lowercase)
-    const nameDuplicates = await Submission.aggregate([
-      {
-        $group: {
-          _id: {
-            husbandName: { $trim: { input: { $toLower: "$husbandName" } } },
-            wifeName: { $trim: { input: { $toLower: "$wifeName" } } },
-            surname: { $trim: { input: { $toLower: "$surname" } } }
-          },
-          count: { $sum: 1 },
-          submissions: { $push: "$$ROOT" }
-        }
-      },
-      {
-        $match: {
-          count: { $gt: 1 }
-        }
-      }
-    ]);
-
-    const groups = [];
-
+    const allSubmissions = await Submission.find({});
+    
+    const norm = (str) => (str || '').toLowerCase().trim();
+    
     const mapUrls = (sub) => {
-      const obj = { ...sub };
+      const obj = sub.toObject ? sub.toObject() : { ...sub };
       if (obj.couplePhoto) {
         if (obj.couplePhoto.startsWith('http://') || obj.couplePhoto.startsWith('https://')) {
           obj.couplePhoto = obj.couplePhoto;
@@ -980,32 +978,83 @@ app.get('/api/submissions/duplicates', requireAuth, async (req, res) => {
       return obj;
     };
 
-    // Format phone duplicates
-    for (const group of phoneDuplicates) {
-      groups.push({
-        id: `phone-${group._id}`,
-        type: 'phone',
-        conflictValue: group._id,
-        label: `Duplicate Phone Number: ${group._id}`,
-        submissions: group.submissions.map(mapUrls)
-      });
+    const groups = [];
+    const visited = new Set();
+    
+    for (let i = 0; i < allSubmissions.length; i++) {
+      const subA = allSubmissions[i];
+      if (visited.has(subA.inquiryId)) continue;
+      
+      const conflictGroup = [subA];
+      const queue = [subA];
+      visited.add(subA.inquiryId);
+      
+      while (queue.length > 0) {
+        const current = queue.shift();
+        
+        for (let j = 0; j < allSubmissions.length; j++) {
+          const subB = allSubmissions[j];
+          if (visited.has(subB.inquiryId)) continue;
+          
+          const phoneMatch = current.phoneNumber && subB.phoneNumber && (current.phoneNumber.trim() === subB.phoneNumber.trim());
+          const nameMatch = current.husbandName && subB.husbandName &&
+                            current.wifeName && subB.wifeName &&
+                            current.surname && subB.surname &&
+                            (norm(current.husbandName) === norm(subB.husbandName)) &&
+                            (norm(current.wifeName) === norm(subB.wifeName)) &&
+                            (norm(current.surname) === norm(subB.surname));
+                            
+          if (phoneMatch || nameMatch) {
+            conflictGroup.push(subB);
+            queue.push(subB);
+            visited.add(subB.inquiryId);
+          }
+        }
+      }
+      
+      if (conflictGroup.length > 1) {
+        let hasPhoneMatch = false;
+        let hasNameMatch = false;
+        
+        for (let x = 0; x < conflictGroup.length; x++) {
+          for (let y = x + 1; y < conflictGroup.length; y++) {
+            const subX = conflictGroup[x];
+            const subY = conflictGroup[y];
+            
+            if (subX.phoneNumber && subY.phoneNumber && subX.phoneNumber.trim() === subY.phoneNumber.trim()) {
+              hasPhoneMatch = true;
+            }
+            if (norm(subX.husbandName) === norm(subY.husbandName) &&
+                norm(subX.wifeName) === norm(subY.wifeName) &&
+                norm(subX.surname) === norm(subY.surname)) {
+              hasNameMatch = true;
+            }
+          }
+        }
+        
+        let type = 'both';
+        let label = '';
+        if (hasPhoneMatch && hasNameMatch) {
+          type = 'both';
+          label = `Duplicate Phone & Names: ${conflictGroup[0].husbandName} & ${conflictGroup[0].wifeName} ${conflictGroup[0].surname} (${conflictGroup[0].phoneNumber})`;
+        } else if (hasPhoneMatch) {
+          type = 'phone';
+          label = `Duplicate Phone Number: ${conflictGroup[0].phoneNumber}`;
+        } else {
+          type = 'name';
+          label = `Duplicate Names: ${conflictGroup[0].husbandName} & ${conflictGroup[0].wifeName} ${conflictGroup[0].surname}`;
+        }
+        
+        groups.push({
+          id: `conflict-${conflictGroup[0].inquiryId}`,
+          type,
+          conflictValue: conflictGroup[0].phoneNumber,
+          label,
+          submissions: conflictGroup.map(mapUrls)
+        });
+      }
     }
 
-    // Format name duplicates
-    for (const group of nameDuplicates) {
-      const husband = group.submissions[0].husbandName;
-      const wife = group.submissions[0].wifeName;
-      const surname = group.submissions[0].surname;
-      groups.push({
-        id: `name-${group._id.husbandName}-${group._id.wifeName}-${group._id.surname}`,
-        type: 'name',
-        conflictValue: `${husband} & ${wife} ${surname}`,
-        label: `Duplicate Names: ${husband} & ${wife} ${surname}`,
-        submissions: group.submissions.map(mapUrls)
-      });
-    }
-
-    // Sort groups by the most recent submission in the group
     const sortedGroups = groups.sort((a, b) => {
       const maxA = Math.max(...a.submissions.map(s => new Date(s.createdAt || 0).getTime()));
       const maxB = Math.max(...b.submissions.map(s => new Date(s.createdAt || 0).getTime()));

@@ -25,7 +25,7 @@ interface Submission {
 
 interface DuplicateGroup {
   id: string;
-  type: 'phone' | 'name';
+  type: 'phone' | 'name' | 'both';
   conflictValue: string;
   label: string;
   submissions: Submission[];
@@ -229,6 +229,7 @@ export default function AdminDashboard() {
   const [viewMode, setViewMode] = useState<'all' | 'duplicates'>('all');
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
   const [loadingDuplicates, setLoadingDuplicates] = useState(false);
+  const [selectedInquiryIds, setSelectedInquiryIds] = useState<string[]>([]);
 
   // Bulk Review States
   const [reviewingProgramForFrames, setReviewingProgramForFrames] = useState<Program | null>(null);
@@ -691,6 +692,42 @@ export default function AdminDashboard() {
       } else {
         const errData = await res.json();
         alert(errData.error || 'Failed to delete submission.');
+      }
+    } catch (err) {
+      alert('Network error.');
+    }
+  };
+
+  const handleBulkDeleteSubmissions = async () => {
+    if (selectedInquiryIds.length === 0) {
+      alert('Please select at least one submission to delete.');
+      return;
+    }
+
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    if (!confirm(`Are you sure you want to delete the ${selectedInquiryIds.length} selected submissions? This will release ${selectedInquiryIds.length * 2} seats and permanently remove the registrations.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/submissions/bulk-delete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': activePassword
+        },
+        body: JSON.stringify({ inquiryIds: selectedInquiryIds })
+      });
+
+      if (res.ok) {
+        setSelectedInquiryIds([]);
+        fetchSubmissions({ showSpinner: false });
+        fetchDuplicates();
+        fetchPrograms();
+        fetchApprovedSubmissionsForFrames();
+      } else {
+        const errData = await res.json();
+        alert(errData.error || 'Failed to delete submissions.');
       }
     } catch (err) {
       alert('Network error.');
@@ -2929,30 +2966,96 @@ export default function AdminDashboard() {
                 No duplicate inquiries found. (કોઈ ડુપ્લિકેટ ઇન્ક્વાયરી મળી નથી)
               </div>
             ) : (
-              duplicateGroups.map((group) => (
-                <div key={group.id} className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-xl">⚠️</span>
-                      <div>
-                        <h3 className="font-bold text-slate-200 text-base">{group.label}</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">Found {group.submissions.length} conflicting submissions.</p>
+              <>
+                {/* Global Bulk Action Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-950/40 border border-slate-800/80 rounded-2xl p-4">
+                  <div className="text-xs md:text-sm font-semibold text-slate-350 flex items-center gap-2">
+                    <span>✅</span>
+                    <span>{selectedInquiryIds.length} submissions selected.</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {selectedInquiryIds.length > 0 && (
+                      <button
+                        onClick={handleBulkDeleteSubmissions}
+                        className="px-4 py-2 bg-red-650 hover:bg-red-750 text-white font-bold rounded-xl text-xs transition-all active:scale-[0.98] shadow-lg shadow-red-500/10 cursor-pointer"
+                      >
+                        🗑️ Delete Selected ({selectedInquiryIds.length})
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        const allIds = duplicateGroups.flatMap(g => g.submissions.map(s => s.inquiryId));
+                        const isAllSelected = selectedInquiryIds.length === allIds.length;
+                        setSelectedInquiryIds(isAllSelected ? [] : allIds);
+                      }}
+                      className="px-3 py-2 border border-slate-800 hover:bg-slate-900/60 text-slate-350 font-semibold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
+                    >
+                      {selectedInquiryIds.length === duplicateGroups.flatMap(g => g.submissions.map(s => s.inquiryId)).length ? 'Deselect All' : 'Select All Duplicates'}
+                    </button>
+                  </div>
+                </div>
+
+                {duplicateGroups.map((group) => (
+                  <div key={group.id} className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xl">⚠️</span>
+                        <div>
+                          <h3 className="font-bold text-slate-200 text-base">{group.label}</h3>
+                          <p className="text-xs text-slate-500 mt-0.5">Found {group.submissions.length} conflicting submissions.</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button
+                          onClick={() => {
+                            const groupIds = group.submissions.map(s => s.inquiryId);
+                            const allSelected = groupIds.every(id => selectedInquiryIds.includes(id));
+                            setSelectedInquiryIds(prev => {
+                              if (allSelected) {
+                                return prev.filter(id => !groupIds.includes(id));
+                              } else {
+                                const uniqueNew = groupIds.filter(id => !prev.includes(id));
+                                return [...prev, ...uniqueNew];
+                              }
+                            });
+                          }}
+                          className="px-2.5 py-1.5 border border-slate-800 hover:bg-slate-900/60 text-slate-350 font-semibold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
+                        >
+                          {group.submissions.map(s => s.inquiryId).every(id => selectedInquiryIds.includes(id)) ? 'Deselect Group' : 'Select Group'}
+                        </button>
+                        <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-full text-xs font-bold uppercase tracking-wider">
+                          {group.type === 'both' ? 'Phone & Name Match' : group.type === 'phone' ? 'Phone Match' : 'Name Match'}
+                        </span>
                       </div>
                     </div>
-                    <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-full text-xs font-bold uppercase tracking-wider">
-                      {group.type === 'phone' ? 'Phone Match' : 'Name Match'}
-                    </span>
-                  </div>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {group.submissions.map((sub) => {
-                      const isApproved = sub.status === 'approved';
-                      const isRejected = sub.status === 'rejected';
-                      const isPending = !isApproved && !isRejected;
-                      return (
-                        <div key={sub.inquiryId} className="bg-slate-900/40 border border-slate-800/80 rounded-xl p-5 flex flex-col justify-between hover:border-slate-700/80 transition-all space-y-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {group.submissions.map((sub) => {
+                        const isApproved = sub.status === 'approved';
+                        const isRejected = sub.status === 'rejected';
+                        const isPending = !isApproved && !isRejected;
+                        const isSelected = selectedInquiryIds.includes(sub.inquiryId);
+                        return (
+                          <div key={sub.inquiryId} className={`border rounded-xl p-5 flex flex-col justify-between hover:border-slate-700/80 transition-all space-y-4 relative ${isSelected ? 'border-amber-500/40 bg-amber-500/[0.02]' : 'border-slate-800/80 bg-slate-900/40'}`}>
+                            {/* Selection Checkbox */}
+                            <div className="absolute top-4 right-4 z-10 flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setSelectedInquiryIds(prev => 
+                                    checked 
+                                      ? [...prev, sub.inquiryId]
+                                      : prev.filter(id => id !== sub.inquiryId)
+                                  );
+                                }}
+                                className="w-4.5 h-4.5 text-amber-500 bg-slate-950 border-slate-800 rounded focus:ring-amber-500 focus:ring-offset-slate-900 cursor-pointer"
+                              />
+                            </div>
+
                           <div className="space-y-3">
-                            <div className="flex justify-between items-start gap-2">
+                            <div className="flex justify-between items-start gap-2 pr-8">
                               <div>
                                 <span className="font-mono text-[10px] text-slate-500">Token ID</span>
                                 <div className="font-mono text-sm text-amber-500 font-bold">{sub.inquiryId}</div>
@@ -3055,11 +3158,13 @@ export default function AdminDashboard() {
                     })}
                   </div>
                 </div>
-              ))
-            )}
+                ))
+              }
+            </>
+          )}
           </div>
         )}
-      </div>
+    </div>
     </div>
   );
 }

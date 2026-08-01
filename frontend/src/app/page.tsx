@@ -636,20 +636,20 @@ export default function Home() {
                   ) : (
                     <>
                       <option value="" className="text-slate-500">Choose an available slot</option>
-                      {programs.map((prog) => {
-                        const remainingSeats = prog.capacity - prog.bookingsCount;
-                        const isSoldOut = remainingSeats < 2;
-                        return (
-                          <option 
-                            key={prog.id} 
-                            value={prog.id} 
-                            disabled={isSoldOut}
-                            className={isSoldOut ? "text-slate-600" : "text-slate-100"}
-                          >
-                            {prog.name} ({prog.date}) {isSoldOut ? "[SOLD OUT]" : `(${Math.floor(remainingSeats / 2)} couples left)`}
-                          </option>
-                        );
-                      })}
+                      {programs
+                        .filter((prog) => (prog.capacity - prog.bookingsCount) >= 2)
+                        .map((prog) => {
+                          const remainingSeats = prog.capacity - prog.bookingsCount;
+                          return (
+                            <option 
+                              key={prog.id} 
+                              value={prog.id} 
+                              className="text-slate-100"
+                            >
+                              {prog.name} ({prog.date}) ({Math.floor(remainingSeats / 2)} couples left)
+                            </option>
+                          );
+                        })}
                     </>
                   )}
                 </select>
