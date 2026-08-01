@@ -154,6 +154,19 @@ const getNextInquiryNumber = async () => {
   return counter.seq;
 };
 
+const getNextInvitedNumber = async () => {
+  const existing = await Counter.findOne({ name: 'invitedNumber' });
+  if (!existing) {
+    await Counter.create({ name: 'invitedNumber', seq: 0 });
+  }
+  const counter = await Counter.findOneAndUpdate(
+    { name: 'invitedNumber' },
+    { $inc: { seq: 1 } },
+    { new: true }
+  );
+  return counter.seq;
+};
+
 // Initialize Settings
 const initSettings = async () => {
   try {
@@ -589,6 +602,61 @@ app.post('/api/submit', upload.fields([
   } catch (error) {
     console.error('Error handling submission:', error);
     res.status(500).json({ error: 'Server error processing submission' });
+  }
+});
+
+// Create manual invited people submission (Admin protected)
+app.post('/api/submissions/manual', requireAuth, upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), async (req, res) => {
+  const { husbandName, wifeName, surname, phoneNumber, programId } = req.body;
+  if (!husbandName || !wifeName || !surname || !phoneNumber || !programId) {
+    return res.status(400).json({ error: 'All fields including program/slot selection are required.' });
+  }
+  try {
+    const program = await Program.findOne({ id: programId });
+    if (!program) {
+      return res.status(400).json({ error: 'Invalid program/slot selected.' });
+    }
+    if (program.bookingsCount + 2 > program.capacity) {
+      return res.status(400).json({ error: 'This program slot is sold out.' });
+    }
+
+    let couplePhotoUrl = '/sample_couple.png';
+    const couplePhotoFile = req.files && req.files['couplePhoto'] ? req.files['couplePhoto'][0] : null;
+    if (couplePhotoFile) {
+      const couplePhotoBase64 = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
+      couplePhotoUrl = await uploadToCloudinary(couplePhotoBase64, 'couplePhotos');
+    }
+
+    const nextSeq = await getNextInvitedNumber();
+    const inquiryId = `IP-${nextSeq}`;
+
+    program.bookingsCount += 2;
+    await program.save();
+
+    const newSubmission = await Submission.create({
+      inquiryId,
+      husbandName,
+      wifeName,
+      surname,
+      phoneNumber,
+      programId,
+      programName: program.name,
+      programDate: program.date,
+      programTime: program.time || "8:30 PM",
+      couplePhoto: couplePhotoUrl,
+      paymentScreenshot: null,
+      payeeNameFromReceipt: 'Offline Invitee Entry',
+      status: 'approved',
+      createdAt: new Date()
+    });
+
+    res.status(201).json({
+      success: true,
+      data: newSubmission
+    });
+  } catch (error) {
+    console.error('Error creating manual submission:', error);
+    res.status(500).json({ error: 'Server error creating manual submission.' });
   }
 });
 

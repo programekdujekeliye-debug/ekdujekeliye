@@ -285,6 +285,18 @@ export default function AdminDashboard() {
   const [settingsError, setSettingsError] = useState('');
   const [notifications, setNotifications] = useState<any[]>([]);
 
+  // Manual Entry States
+  const [manualHusbandName, setManualHusbandName] = useState('');
+  const [manualWifeName, setManualWifeName] = useState('');
+  const [manualSurname, setManualSurname] = useState('');
+  const [manualPhoneNumber, setManualPhoneNumber] = useState('');
+  const [manualProgramId, setManualProgramId] = useState('');
+  const [manualCouplePhoto, setManualCouplePhoto] = useState<File | null>(null);
+  const [manualSuccess, setManualSuccess] = useState('');
+  const [manualError, setManualError] = useState('');
+  const [manualLoading, setManualLoading] = useState(false);
+  const [generatedPassUrl, setGeneratedPassUrl] = useState('');
+
   // WhatsApp Templates States
   const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>([]);
   const [activeWhatsappTemplate, setActiveWhatsappTemplate] = useState('Hello! Your payment has been verified. You can view and download your pass here: {passUrl}');
@@ -681,6 +693,60 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       setSettingsError('Network error updating settings.');
+    }
+  };
+
+  const handleManualEntrySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    if (!manualHusbandName || !manualWifeName || !manualSurname || !manualPhoneNumber || !manualProgramId) {
+      setManualError('All fields are required.');
+      return;
+    }
+    setManualLoading(true);
+    setManualError('');
+    setManualSuccess('');
+    setGeneratedPassUrl('');
+
+    const formData = new FormData();
+    formData.append('husbandName', manualHusbandName);
+    formData.append('wifeName', manualWifeName);
+    formData.append('surname', manualSurname);
+    formData.append('phoneNumber', manualPhoneNumber);
+    formData.append('programId', manualProgramId);
+    if (manualCouplePhoto) {
+      formData.append('couplePhoto', manualCouplePhoto);
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/submissions/manual`, {
+        method: 'POST',
+        headers: {
+          'Authorization': activePassword
+        },
+        body: formData
+      });
+      if (res.ok) {
+        const result = await res.json();
+        setManualSuccess('Invitee manual registration completed successfully!');
+        const hostUrl = window.location.origin;
+        const passLink = `${hostUrl}/pass/${result.data.inquiryId}`;
+        setGeneratedPassUrl(passLink);
+        setManualHusbandName('');
+        setManualWifeName('');
+        setManualSurname('');
+        setManualPhoneNumber('');
+        setManualCouplePhoto(null);
+        fetchSubmissions({ showSpinner: false });
+        fetchPrograms();
+      } else {
+        const data = await res.json();
+        setManualError(data.error || 'Failed to register invitee.');
+      }
+    } catch (err) {
+      setManualError('Network error registering invitee.');
+    } finally {
+      setManualLoading(false);
     }
   };
 
@@ -2487,6 +2553,153 @@ export default function AdminDashboard() {
                   Save Settings
                 </button>
               </div>
+            </div>
+          </form>
+        </div>
+
+        {/* Manual Invitee Registration Section */}
+        <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-6">
+          <div>
+            <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+              <span>✍️</span> Manual Invitee Registration (મેન્યુઅલ એન્ટ્રી)
+            </h2>
+            <p className="text-slate-400 text-xs mt-1">Directly register invited couples, generating an instant approved pass with prefix IP-.</p>
+          </div>
+
+          {manualError && (
+            <div className="p-3 text-xs bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg">
+              {manualError}
+            </div>
+          )}
+          {manualSuccess && (
+            <div className="p-3 text-xs bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg space-y-2">
+              <div>{manualSuccess}</div>
+              {generatedPassUrl && (
+                <div className="mt-3 p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <span className="font-mono text-xs text-amber-500 select-all break-all">{generatedPassUrl}</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(generatedPassUrl);
+                          alert('Pass link copied to clipboard!');
+                        }}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-100 text-[10px] font-bold rounded-lg transition-all"
+                      >
+                        Copy Link
+                      </button>
+                      <a
+                        href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`Hello! Your manual registration pass is ready. You can download it here: ${generatedPassUrl}`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg transition-all flex items-center gap-1"
+                      >
+                        Share on WhatsApp
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <form onSubmit={handleManualEntrySubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Husband Name (પતિનું નામ)</label>
+                <input
+                  type="text"
+                  required
+                  value={manualHusbandName}
+                  onChange={(e) => setManualHusbandName(e.target.value)}
+                  placeholder="Enter Husband's Name"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Wife Name (પત્નીનું નામ)</label>
+                <input
+                  type="text"
+                  required
+                  value={manualWifeName}
+                  onChange={(e) => setManualWifeName(e.target.value)}
+                  placeholder="Enter Wife's Name"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Surname (અટક)</label>
+                <input
+                  type="text"
+                  required
+                  value={manualSurname}
+                  onChange={(e) => setManualSurname(e.target.value)}
+                  placeholder="Enter Surname"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Phone Number (મોબાઇલ નંબર)</label>
+                <input
+                  type="tel"
+                  required
+                  pattern="[6-9][0-9]{9}"
+                  value={manualPhoneNumber}
+                  onChange={(e) => setManualPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="Enter 10-digit number"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Select Program Slot</label>
+                <select
+                  required
+                  value={manualProgramId}
+                  onChange={(e) => setManualProgramId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors cursor-pointer"
+                >
+                  <option value="">Choose a slot</option>
+                  {programs.map((prog) => {
+                    const remainingSeats = prog.capacity - prog.bookingsCount;
+                    const isSoldOut = remainingSeats < 2;
+                    return (
+                      <option key={prog.id} value={prog.id} disabled={isSoldOut}>
+                        {prog.name} ({prog.date}) ({Math.floor(remainingSeats / 2)} left)
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Couple Photo (Optional / મરજીયાત)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      setManualCouplePhoto(e.target.files[0]);
+                    }
+                  }}
+                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-slate-450 text-xs focus:outline-none focus:border-amber-500 file:mr-4 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-amber-500/10 file:text-amber-400 hover:file:bg-amber-500/20 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="submit"
+                disabled={manualLoading}
+                className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] disabled:opacity-50 text-slate-950 font-bold rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20"
+              >
+                {manualLoading ? 'Registering...' : 'Register Invited Guest'}
+              </button>
             </div>
           </form>
         </div>
