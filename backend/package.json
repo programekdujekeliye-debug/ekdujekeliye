@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon --ignore 'backups/*' --ignore 'submissions.json' --ignore 'backup_submissions.json' index.js"
   },
   "dependencies": {
     "cloudinary": "^2.10.0",

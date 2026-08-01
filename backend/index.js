@@ -795,7 +795,11 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
     if (submission.programId) {
       const program = await Program.findOne({ id: submission.programId });
       if (program) {
-        if (program.cardTemplate) cardTemplate = program.cardTemplate;
+        if (program.cardTemplate) {
+          const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+          const host = req.get('host');
+          cardTemplate = `${protocol}://${host}/api/programs/${program.id}/template`;
+        }
         if (program.heartX !== undefined) heartX = program.heartX;
         if (program.heartY !== undefined) heartY = program.heartY;
         if (program.heartWidth !== undefined) heartWidth = program.heartWidth;
