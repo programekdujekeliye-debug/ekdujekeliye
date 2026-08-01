@@ -31,6 +31,7 @@ export default function PassDownloadPage() {
 
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cardReady, setCardReady] = useState(false);
   const [error, setError] = useState('');
   const [userZoom, setUserZoom] = useState<number>(1.0);
   const [userOffsetY, setUserOffsetY] = useState<number>(0);
@@ -201,6 +202,7 @@ export default function PassDownloadPage() {
         ctx.restore();
         ctx.drawImage(tempCanvas, 0, 0);
         drawTextDetails(ctx, sub);
+        setCardReady(true);
       };
 
       coupleImg.onload = drawFinalCard;
@@ -212,11 +214,10 @@ export default function PassDownloadPage() {
           console.warn("CORS couple image load failed, retrying without credentials/anonymous...");
           coupleRetried = true;
           coupleImg.removeAttribute('crossOrigin');
-          // Add timestamp cache buster to force a new browser request bypass
           coupleImg.src = coupleImgSrc + (coupleImgSrc.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
         } else {
-          // If all failed, draw text details anyway so canvas isn't entirely black
           drawTextDetails(ctx, sub);
+          setCardReady(true);
         }
       };
 
@@ -231,6 +232,8 @@ export default function PassDownloadPage() {
         templateRetried = true;
         templateImg.removeAttribute('crossOrigin');
         templateImg.src = templateImgSrc + (templateImgSrc.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
+      } else {
+        setCardReady(true);
       }
     };
 
@@ -257,7 +260,7 @@ export default function PassDownloadPage() {
     }
   };
 
-  if (loading) {
+  if (loading || (submission && submission.status === 'approved' && !cardReady)) {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center font-sans p-6 text-center space-y-4">
         <div className="text-4xl animate-spin">⏳</div>
