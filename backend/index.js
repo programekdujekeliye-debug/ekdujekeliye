@@ -287,10 +287,20 @@ app.get('/api/programs', async (req, res) => {
   }
 });
 
-// Stream program card template endpoint
+// Stream program card template endpoint (In-memory cached to eliminate MongoDB network delay)
+const templateCache = new Map();
+
 app.get('/api/programs/:id/template', async (req, res) => {
+  const { id } = req.params;
   try {
-    const program = await Program.findOne({ id: req.params.id }, { cardTemplate: 1 });
+    if (templateCache.has(id)) {
+      const cached = templateCache.get(id);
+      res.setHeader('Content-Type', cached.contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.send(cached.buffer);
+    }
+
+    const program = await Program.findOne({ id }, { cardTemplate: 1 });
     if (!program || !program.cardTemplate) {
       return res.status(404).send('Template not found');
     }
@@ -300,6 +310,10 @@ app.get('/api/programs/:id/template', async (req, res) => {
       const contentType = match[1];
       const base64Data = match[2];
       const img = Buffer.from(base64Data, 'base64');
+      
+      // Cache the buffer
+      templateCache.set(id, { contentType, buffer: img });
+      
       res.setHeader('Content-Type', contentType);
       res.setHeader('Cache-Control', 'public, max-age=86400');
       res.send(img);
@@ -347,6 +361,8 @@ app.delete('/api/programs/:id', requireAuth, async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ error: 'Program not found.' });
     }
+    // Invalidate cache
+    templateCache.delete(id);
     res.json({ success: true, message: 'Program deleted successfully.' });
   } catch (err) {
     res.status(500).json({ error: 'Server error deleting program.' });
@@ -376,6 +392,8 @@ app.put('/api/programs/:id', requireAuth, async (req, res) => {
     if (photoOffsetY !== undefined) program.photoOffsetY = parseInt(photoOffsetY, 10);
 
     await program.save();
+    // Invalidate cache
+    templateCache.delete(id);
     res.json({ success: true, message: 'Program updated successfully.', data: program });
   } catch (err) {
     res.status(500).json({ error: 'Server error updating program.' });
