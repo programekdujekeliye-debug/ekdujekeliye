@@ -121,7 +121,12 @@ export default function PassDownloadPage() {
     canvas.height = 1024;
 
     const templateImg = new Image();
-    templateImg.crossOrigin = 'anonymous';
+    const templatePath = sub.cardTemplate || '/card_template.png';
+    const isTemplateRemote = templatePath.startsWith('http://') || templatePath.startsWith('https://');
+    if (isTemplateRemote) {
+      templateImg.crossOrigin = 'anonymous';
+    }
+
     templateImg.onload = () => {
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = canvas.width;
@@ -156,8 +161,14 @@ export default function PassDownloadPage() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const coupleImg = new Image();
-      coupleImg.crossOrigin = 'anonymous';
-      coupleImg.onload = () => {
+      const photoPath = sub.couplePhoto;
+      const coupleImgSrc = (photoPath.startsWith('data:') || photoPath.startsWith('http://') || photoPath.startsWith('https://')) ? photoPath : `${API_BASE_URL}${photoPath}`;
+      const isCoupleRemote = coupleImgSrc.startsWith('http://') || coupleImgSrc.startsWith('https://');
+      if (isCoupleRemote) {
+        coupleImg.crossOrigin = 'anonymous';
+      }
+
+      const drawFinalCard = () => {
         const imgAspect = coupleImg.width / coupleImg.height;
         const heartAspect = hW / hH;
         let drawW = hW;
@@ -188,10 +199,39 @@ export default function PassDownloadPage() {
         ctx.drawImage(tempCanvas, 0, 0);
         drawTextDetails(ctx, sub);
       };
-      const photoPath = sub.couplePhoto;
-      coupleImg.src = (photoPath.startsWith('data:') || photoPath.startsWith('http://') || photoPath.startsWith('https://')) ? photoPath : `${API_BASE_URL}${photoPath}`;
+
+      coupleImg.onload = drawFinalCard;
+
+      let coupleRetried = false;
+      coupleImg.onerror = (err) => {
+        console.error("Error loading coupleImg:", err);
+        if (!coupleRetried && isCoupleRemote) {
+          console.warn("CORS couple image load failed, retrying without credentials/anonymous...");
+          coupleRetried = true;
+          coupleImg.removeAttribute('crossOrigin');
+          // Add timestamp cache buster to force a new browser request bypass
+          coupleImg.src = coupleImgSrc + (coupleImgSrc.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
+        } else {
+          // If all failed, draw text details anyway so canvas isn't entirely black
+          drawTextDetails(ctx, sub);
+        }
+      };
+
+      coupleImg.src = coupleImgSrc;
     };
-    templateImg.src = sub.cardTemplate || '/card_template.png';
+
+    let templateRetried = false;
+    templateImg.onerror = (err) => {
+      console.error("Error loading templateImg:", err);
+      if (!templateRetried && isTemplateRemote) {
+        console.warn("CORS template image load failed, retrying without CORS...");
+        templateRetried = true;
+        templateImg.removeAttribute('crossOrigin');
+        templateImg.src = templatePath + (templatePath.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
+      }
+    };
+
+    templateImg.src = templatePath;
   };
 
   useEffect(() => {
@@ -203,10 +243,15 @@ export default function PassDownloadPage() {
   const downloadCard = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const link = document.createElement('a');
-    link.download = `${submission?.surname}_${submission?.husbandName}_Invitation_Pass.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    try {
+      const link = document.createElement('a');
+      link.download = `${submission?.surname}_${submission?.husbandName}_Invitation_Pass.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (err) {
+      console.error("Failed to download canvas via data URL:", err);
+      alert("કાર્ડ તૈયાર છે. ડાઉનલોડ કરવા માટે લાંબા સમય સુધી કાર્ડ પર ટચ કરી રાખીને સેવ (Save Image) કરો અથવા આ સ્ક્રીનનો સ્ક્રીનશોટ (Screenshot) પાડી લો.");
+    }
   };
 
   if (loading) {

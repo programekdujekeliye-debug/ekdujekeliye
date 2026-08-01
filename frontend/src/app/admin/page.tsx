@@ -274,10 +274,16 @@ export default function AdminDashboard() {
   const [editError, setEditError] = useState('');
   // Payment Settings States
   const [upiId, setUpiId] = useState('');
+  const [upiIdsString, setUpiIdsString] = useState('');
+  const [upiLimit, setUpiLimit] = useState(50);
+  const [activeUpiIndex, setActiveUpiIndex] = useState(0);
+  const [upiBookingsCount, setUpiBookingsCount] = useState(0);
+  const [upiIdsList, setUpiIdsList] = useState<string[]>([]);
   const [payeeName, setPayeeName] = useState('');
   const [amount, setAmount] = useState('');
   const [settingsSuccess, setSettingsSuccess] = useState('');
   const [settingsError, setSettingsError] = useState('');
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   // WhatsApp Templates States
   const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>([]);
@@ -297,14 +303,60 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchNotifications = async () => {
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    if (!activePassword) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/notifications`, {
+        headers: { 'Authorization': activePassword }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch notifications:', err);
+    }
+  };
+
+  const dismissNotification = async (id?: string) => {
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    if (!activePassword) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/notifications/dismiss`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': activePassword 
+        },
+        body: JSON.stringify({ id })
+      });
+      if (res.ok) {
+        fetchNotifications();
+      }
+    } catch (err) {
+      console.error('Failed to dismiss notification:', err);
+    }
+  };
+
   const fetchSettings = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/settings`);
       if (res.ok) {
         const data = await res.json();
-        setUpiId(data.upiId);
-        setPayeeName(data.payeeName);
-        setAmount(data.amount);
+        setUpiId(data.upiId || '');
+        setPayeeName(data.payeeName || '');
+        setAmount(data.amount || '');
+        setUpiLimit(data.upiLimit || 50);
+        setActiveUpiIndex(data.activeUpiIndex || 0);
+        setUpiBookingsCount(data.upiBookingsCount || 0);
+        if (data.upiIds && data.upiIds.length > 0) {
+          setUpiIdsList(data.upiIds);
+          setUpiIdsString(data.upiIds.join(', '));
+        } else {
+          setUpiIdsList([data.upiId || '']);
+          setUpiIdsString(data.upiId || '');
+        }
       }
     } catch (err) {
       console.error('Failed to fetch settings:', err);
@@ -417,6 +469,7 @@ export default function AdminDashboard() {
         fetchDbStats(activePassword);
         fetchActiveWhatsappTemplate();
         fetchWhatsappTemplates();
+        fetchNotifications();
 
         // Fetch user role
         try {
@@ -617,10 +670,11 @@ export default function AdminDashboard() {
           'Content-Type': 'application/json',
           'Authorization': activePassword
         },
-        body: JSON.stringify({ upiId, payeeName, amount })
+        body: JSON.stringify({ upiId, payeeName, amount, upiIds: upiIdsString, upiLimit })
       });
       if (res.ok) {
         setSettingsSuccess('Payment settings updated successfully.');
+        fetchSettings();
       } else {
         const data = await res.json();
         setSettingsError(data.error || 'Failed to update settings.');
@@ -2074,8 +2128,49 @@ export default function AdminDashboard() {
             >
               Log Out
             </button>
-          </div>
         </div>
+      </div>
+
+        {/* UPI Auto-Rotation Notifications Banner */}
+        {notifications.length > 0 && (
+          <div className="space-y-3">
+            {notifications.map((notif) => (
+              <div 
+                key={notif._id}
+                className={`p-4 rounded-2xl border flex justify-between items-start gap-4 transition-all shadow-lg ${
+                  notif.type === 'error' 
+                    ? 'bg-red-500/10 border-red-500/30 text-red-200' 
+                    : 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="text-xl mt-0.5">{notif.type === 'error' ? '🚨' : '🔔'}</span>
+                  <div>
+                    <h4 className="font-bold text-sm">{notif.title}</h4>
+                    <p className="text-xs text-slate-350 mt-1">{notif.message}</p>
+                    <span className="text-[10px] text-slate-500 mt-2 block">
+                      {new Date(notif.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => dismissNotification(notif._id)}
+                  className="px-2.5 py-1 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 text-[10px] font-semibold text-slate-300 rounded-lg cursor-pointer transition-all active:scale-[0.98]"
+                >
+                  Dismiss
+                </button>
+              </div>
+            ))}
+            <div className="flex justify-end">
+              <button
+                onClick={() => dismissNotification()}
+                className="text-xs text-slate-400 hover:text-slate-200 font-medium underline cursor-pointer"
+              >
+                Clear All Notifications
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Stats Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -2310,33 +2405,64 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          <form onSubmit={handleUpdateSettings} className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
-            <div>
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">UPI ID</label>
-              <input
-                type="text"
-                required
-                value={upiId}
-                onChange={(e) => setUpiId(e.target.value)}
-                placeholder="e.g. payee@upi"
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
-              />
+          <form onSubmit={handleUpdateSettings} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">UPI ID List (Comma separated for Auto-Rotation)</label>
+                <input
+                  type="text"
+                  required
+                  value={upiIdsString}
+                  onChange={(e) => {
+                    setUpiIdsString(e.target.value);
+                    const first = e.target.value.split(',')[0]?.trim();
+                    if (first) setUpiId(first);
+                  }}
+                  placeholder="e.g. upi1@okaxis, upi2@okicici"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Currently Active UPI ID</label>
+                <input
+                  type="text"
+                  required
+                  value={upiId}
+                  onChange={(e) => setUpiId(e.target.value)}
+                  placeholder="e.g. payee@upi"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Rotation Limit (Submissions per UPI)</label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  value={upiLimit}
+                  onChange={(e) => setUpiLimit(Number(e.target.value))}
+                  placeholder="e.g. 50"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Payee Name</label>
-              <input
-                type="text"
-                required
-                value={payeeName}
-                onChange={(e) => setPayeeName(e.target.value)}
-                placeholder="e.g. Couple Pass Org"
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
-              />
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Payee Name</label>
+                <input
+                  type="text"
+                  required
+                  value={payeeName}
+                  onChange={(e) => setPayeeName(e.target.value)}
+                  placeholder="e.g. Couple Pass Org"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
 
-            <div className="flex gap-4">
-              <div className="flex-grow">
+              <div>
                 <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Ticket Price (INR)</label>
                 <input
                   type="number"
@@ -2348,12 +2474,19 @@ export default function AdminDashboard() {
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
                 />
               </div>
-              <button
-                type="submit"
-                className="px-6 py-2 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-bold rounded-xl text-sm transition-all h-[38px] self-end"
-              >
-                Save Settings
-              </button>
+
+              <div className="flex justify-between items-center bg-slate-900/60 border border-slate-800/80 rounded-xl px-4 py-2 text-xs">
+                <div>
+                  <span className="text-slate-400">Current UPI Usage:</span>
+                  <div className="font-bold text-amber-500 text-sm">{upiBookingsCount} / {upiLimit} registrations</div>
+                </div>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-bold rounded-xl text-sm transition-all h-[38px]"
+                >
+                  Save Settings
+                </button>
+              </div>
             </div>
           </form>
         </div>

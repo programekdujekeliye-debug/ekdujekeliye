@@ -113,10 +113,23 @@ const Submission = mongoose.model('Submission', SubmissionSchema);
 const SettingSchema = new mongoose.Schema({
   key: { type: String, default: 'main', unique: true },
   upiId: { type: String, default: 'payee@upi' },
+  upiIds: { type: [String], default: ['payee@upi'] },
+  activeUpiIndex: { type: Number, default: 0 },
+  upiBookingsCount: { type: Number, default: 0 },
+  upiLimit: { type: Number, default: 50 },
   payeeName: { type: String, default: 'Couple Pass' },
   amount: { type: String, default: '100' }
 }, { collection: 'setting' });
 const Setting = mongoose.model('Setting', SettingSchema);
+
+const NotificationSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  type: { type: String, default: 'info' }, // 'info', 'warning', 'error'
+  isRead: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now }
+}, { collection: 'notifications' });
+const Notification = mongoose.model('Notification', NotificationSchema);
 
 const CounterSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
@@ -146,7 +159,37 @@ const initSettings = async () => {
   try {
     const existing = await Setting.findOne({ key: 'main' });
     if (!existing) {
-      await Setting.create({ key: 'main', upiId: 'payee@upi', payeeName: 'Couple Pass', amount: '100' });
+      await Setting.create({ 
+        key: 'main', 
+        upiId: 'payee@upi', 
+        upiIds: ['payee@upi'],
+        activeUpiIndex: 0,
+        upiBookingsCount: 0,
+        upiLimit: 50,
+        payeeName: 'Couple Pass', 
+        amount: '100' 
+      });
+    } else {
+      let updated = false;
+      if (existing.upiIds === undefined || existing.upiIds.length === 0) {
+        existing.upiIds = [existing.upiId || 'payee@upi'];
+        updated = true;
+      }
+      if (existing.activeUpiIndex === undefined) {
+        existing.activeUpiIndex = 0;
+        updated = true;
+      }
+      if (existing.upiBookingsCount === undefined) {
+        existing.upiBookingsCount = 0;
+        updated = true;
+      }
+      if (existing.upiLimit === undefined) {
+        existing.upiLimit = 50;
+        updated = true;
+      }
+      if (updated) {
+        await existing.save();
+      }
     }
   } catch (err) {
     console.error('Error initializing settings:', err);
@@ -383,6 +426,40 @@ app.post('/api/submit', upload.fields([
     // Increment bookings count by 2 (since it is a couple registration)
     program.bookingsCount += 2;
     await program.save();
+
+    // Increment UPI bookings count
+    try {
+      const settings = await Setting.findOne({ key: 'main' });
+      if (settings) {
+        settings.upiBookingsCount = (settings.upiBookingsCount || 0) + 1;
+        if (settings.upiBookingsCount >= settings.upiLimit) {
+          if (settings.upiIds && settings.upiIds.length > 1) {
+            const oldUpi = settings.upiId;
+            const nextIndex = (settings.activeUpiIndex + 1) % settings.upiIds.length;
+            settings.activeUpiIndex = nextIndex;
+            settings.upiId = settings.upiIds[nextIndex];
+            settings.upiBookingsCount = 0; // reset counter
+
+            await Notification.create({
+              title: 'UPI Auto-Rotated',
+              message: `૫૦ સબમિશન પૂર્ણ થવાના કારણે UPI ID આપોઆપ બદલાઈ ગયું છે. જૂનું UPI: ${oldUpi}, નવું એક્ટિવ UPI: ${settings.upiId}`,
+              type: 'info'
+            });
+          } else {
+            // Only 1 UPI ID exists, cannot rotate
+            settings.upiBookingsCount = settings.upiLimit; // keep at limit
+            await Notification.create({
+              title: 'UPI Limit Reached!',
+              message: `ચાલુ UPI ID (${settings.upiId}) પર ૫૦ સબમિશન પૂર્ણ થઈ ગયા છે. કૃપા કરીને એડમિન પેનલમાંથી નવું UPI ID સેટ કરો.`,
+              type: 'error'
+            });
+          }
+        }
+        await settings.save();
+      }
+    } catch (err) {
+      console.error('Error in UPI auto-rotation tracking:', err);
+    }
 
     const newSubmission = await Submission.create({
       inquiryId,
@@ -1174,19 +1251,82 @@ app.get('/api/settings', async (req, res) => {
 
 // Update payment settings (Admin only)
 app.post('/api/settings', requireAuth, async (req, res) => {
-  const { upiId, payeeName, amount } = req.body;
+  const { upiId, payeeName, amount, upiIds, upiLimit } = req.body;
   if (!upiId || !payeeName || !amount) {
     return res.status(400).json({ error: 'UPI ID, Payee Name, and Amount are required.' });
   }
   try {
+    let processedUpiIds = [upiId];
+    if (Array.isArray(upiIds)) {
+      processedUpiIds = upiIds.map(id => id.trim()).filter(Boolean);
+    } else if (typeof upiIds === 'string') {
+      processedUpiIds = upiIds.split(',').map(id => id.trim()).filter(Boolean);
+    }
+    if (processedUpiIds.length === 0) {
+      processedUpiIds = [upiId];
+    }
+
+    const limitVal = parseInt(upiLimit, 10) || 50;
+
+    const existing = await Setting.findOne({ key: 'main' });
+    let resetCount = false;
+    let newIndex = 0;
+    
+    if (existing) {
+      const listChanged = JSON.stringify(existing.upiIds) !== JSON.stringify(processedUpiIds);
+      if (listChanged) {
+        const foundIndex = processedUpiIds.indexOf(upiId);
+        newIndex = foundIndex !== -1 ? foundIndex : 0;
+        resetCount = true;
+      }
+    }
+
+    const updateObj = {
+      upiId,
+      payeeName,
+      amount,
+      upiIds: processedUpiIds,
+      upiLimit: limitVal
+    };
+
+    if (resetCount || !existing) {
+      updateObj.activeUpiIndex = newIndex;
+      updateObj.upiBookingsCount = 0;
+    }
+
     const settings = await Setting.findOneAndUpdate(
       { key: 'main' },
-      { upiId, payeeName, amount },
+      updateObj,
       { new: true, upsert: true }
     );
     res.json({ success: true, settings });
   } catch (err) {
     res.status(500).json({ error: 'Server error updating settings.' });
+  }
+});
+
+// Get notifications (Admin only)
+app.get('/api/notifications', requireAuth, async (req, res) => {
+  try {
+    const notifications = await Notification.find({ isRead: false }).sort({ createdAt: -1 });
+    res.json(notifications);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error fetching notifications.' });
+  }
+});
+
+// Dismiss notifications (Admin only)
+app.post('/api/notifications/dismiss', requireAuth, async (req, res) => {
+  const { id } = req.body;
+  try {
+    if (id) {
+      await Notification.findByIdAndUpdate(id, { isRead: true });
+    } else {
+      await Notification.updateMany({ isRead: false }, { isRead: true });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error dismissing notifications.' });
   }
 });
 
