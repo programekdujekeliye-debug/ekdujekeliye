@@ -259,8 +259,14 @@ export default function PassDownloadPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center font-sans">
-        <p className="text-lg text-slate-400">Loading your invitation pass details...</p>
+      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center font-sans p-6 text-center space-y-4">
+        <div className="text-4xl animate-spin">⏳</div>
+        <div>
+          <p className="text-lg font-semibold text-slate-200">Loading your invitation pass details...</p>
+          <p className="text-sm text-slate-400 mt-2 max-w-xs leading-relaxed">
+            કૃપા કરીને પ્રતીક્ષા કરો, તમારો પાસ લોડ થવામાં ૨ થી ૩ મિનિટ જેટલો સમય લાગી શકે છે. તે દરમિયાન પેજ રિફ્રેશ કે બંધ કરશો નહીં.
+          </p>
+        </div>
       </div>
     );
   }
