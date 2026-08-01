@@ -862,9 +862,15 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
     let programTime = submission.programTime || "8:30 PM";
 
     if (submission.programId) {
-      const program = await Program.findOne({ id: submission.programId });
+      const program = await Program.findOne(
+        { id: submission.programId },
+        {
+          id: 1, name: 1, date: 1, time: 1, heartX: 1, heartY: 1, heartWidth: 1, heartHeight: 1, photoZoom: 1, photoOffsetY: 1,
+          hasTemplate: { $cond: [ { $eq: [ { $type: "$cardTemplate" }, "string" ] }, true, false ] }
+        }
+      );
       if (program) {
-        if (program.cardTemplate) {
+        if (program.get('hasTemplate')) {
           const protocol = req.headers['x-forwarded-proto'] || req.protocol;
           const host = req.get('host');
           cardTemplate = `${protocol}://${host}/api/programs/${program.id}/template`;
