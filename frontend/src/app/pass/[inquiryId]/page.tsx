@@ -277,6 +277,9 @@ export default function PassDownloadPage() {
           <p className="text-sm text-slate-400 mt-2 max-w-xs leading-relaxed">
             કૃપા કરીને પ્રતીક્ષા કરો, તમારો પાસ લોડ થવામાં ૨ થી ૩ મિનિટ જેટલો સમય લાગી શકે છે. તે દરમિયાન પેજ રિફ્રેશ કે બંધ કરશો નહીં.
           </p>
+          <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl max-w-xs mx-auto text-amber-400 text-xs font-medium leading-relaxed">
+            નોંધ: જો પાસ લોડ થવામાં વાર લાગે, તો તમે ફક્ત તમારા CPL નંબરનું કન્ફર્મેશન (CPL Number Confirmation) બતાવીને પણ એન્ટ્રી મેળવી શકો છો.
+          </div>
         </div>
       </div>
     );
