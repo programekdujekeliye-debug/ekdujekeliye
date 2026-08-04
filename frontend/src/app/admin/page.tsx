@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import JSZip from 'jszip';
 import { API_BASE_URL } from '../../config';
 
@@ -165,6 +165,84 @@ interface Program {
   photoOffsetY?: number;
 }
 
+const LivePreviewCanvas = ({ sub, frameImg }: { sub: Submission; frameImg: HTMLImageElement | null }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [coupleImg, setCoupleImg] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    const photoPath = sub.couplePhoto;
+    const fullPhotoUrl = (photoPath.startsWith('data:') || photoPath.startsWith('http://') || photoPath.startsWith('https://')) ? photoPath : `${API_BASE_URL}${photoPath}`;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      setCoupleImg(img);
+    };
+    img.src = fullPhotoUrl;
+  }, [sub.couplePhoto]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !coupleImg || !frameImg) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = 384; 
+    canvas.height = 512; 
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const startX = canvas.width * 0.08;
+    const startY = canvas.height * 0.08;
+    const drawWidth = canvas.width * 0.84;
+    const drawHeight = canvas.height * 0.84;
+
+    const imgAspect = coupleImg.width / coupleImg.height;
+    const targetAspect = drawWidth / drawHeight;
+    let tempW = drawWidth;
+    let tempH = drawHeight;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (imgAspect > targetAspect) {
+      tempW = drawHeight * imgAspect;
+      offsetX = -(tempW - drawWidth) / 2;
+    } else {
+      tempH = drawWidth / imgAspect;
+      offsetY = -(tempH - drawHeight) / 2;
+    }
+
+    const zoom = sub.photoZoom ?? 1.0;
+    const w = tempW * zoom;
+    const h = tempH * zoom;
+    const ox = offsetX - (w - tempW) / 2;
+    const oy = (offsetY - (h - tempH) / 2) + (sub.photoOffsetY ?? 0) / 2; 
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(startX, startY, drawWidth, drawHeight);
+    ctx.clip();
+    ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
+    ctx.restore();
+
+    ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.fillStyle = '#7a0c0c';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
+    ctx.restore();
+  }, [coupleImg, frameImg, sub.photoZoom, sub.photoOffsetY, sub.inquiryId]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ width: '120px', height: '160px' }}
+      className="bg-slate-950 shadow-inner"
+    />
+  );
+};
+
 export default function AdminDashboard() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -234,9 +312,29 @@ export default function AdminDashboard() {
   // Bulk Review States
   const [reviewingProgramForFrames, setReviewingProgramForFrames] = useState<Program | null>(null);
   const [approvedSubmissionsForFrames, setApprovedSubmissionsForFrames] = useState<Submission[]>([]);
+  const [cplSearchQuery, setCplSearchQuery] = useState('');
+  const [selectedFrameInquiryIds, setSelectedFrameInquiryIds] = useState<string[]>([]);
+  const [globalFrameImg, setGlobalFrameImg] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    if (reviewingProgramForFrames) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => setGlobalFrameImg(img);
+      img.src = '/frame_template.png';
+    } else {
+      setGlobalFrameImg(null);
+    }
+  }, [reviewingProgramForFrames]);
 
   const updateSubmissionCoordInState = (inquiryId: string, field: 'photoZoom' | 'photoOffsetY', value: number) => {
     setSubmissions(prev => prev.map(sub => {
+      if (sub.inquiryId === inquiryId) {
+        return { ...sub, [field]: value };
+      }
+      return sub;
+    }));
+    setApprovedSubmissionsForFrames(prev => prev.map(sub => {
       if (sub.inquiryId === inquiryId) {
         return { ...sub, [field]: value };
       }
@@ -946,6 +1044,7 @@ export default function AdminDashboard() {
   const fetchApprovedSubmissionsForFrames = async () => {
     if (!selectedProgramIdForFrames) {
       setApprovedSubmissionsForFrames([]);
+      setSelectedFrameInquiryIds([]);
       return;
     }
     const activePassword = password || sessionStorage.getItem('adminPassword') || '';
@@ -959,6 +1058,7 @@ export default function AdminDashboard() {
         const data = await res.json();
         const withPhoto = (data.submissions || []).filter((sub: any) => sub.couplePhoto);
         setApprovedSubmissionsForFrames(withPhoto);
+        setSelectedFrameInquiryIds(withPhoto.map((sub: any) => sub.inquiryId));
       }
     } catch (err) {
       console.error('Failed to fetch approved submissions for frames:', err);
@@ -1252,88 +1352,15 @@ export default function AdminDashboard() {
     setRole(null);
   };
 
-  // Live Frame Previews in Review Modal
-  useEffect(() => {
-    if (!reviewingProgramForFrames) return;
 
-    const frameImg = new Image();
-    frameImg.crossOrigin = 'anonymous';
-    frameImg.onload = () => {
-      const progSubmissions = approvedSubmissionsForFrames;
-
-      progSubmissions.forEach(sub => {
-        const canvas = document.getElementById(`review-canvas-${sub.inquiryId}`) as HTMLCanvasElement;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        canvas.width = 384; 
-        canvas.height = 512; 
-
-        const coupleImg = new Image();
-        coupleImg.crossOrigin = 'anonymous';
-        coupleImg.onload = () => {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-          const startX = canvas.width * 0.08;
-          const startY = canvas.height * 0.08;
-          const drawWidth = canvas.width * 0.84;
-          const drawHeight = canvas.height * 0.84;
-
-          const imgAspect = coupleImg.width / coupleImg.height;
-          const targetAspect = drawWidth / drawHeight;
-          let tempW = drawWidth;
-          let tempH = drawHeight;
-          let offsetX = 0;
-          let offsetY = 0;
-
-          if (imgAspect > targetAspect) {
-            tempW = drawHeight * imgAspect;
-            offsetX = -(tempW - drawWidth) / 2;
-          } else {
-            tempH = drawWidth / imgAspect;
-            offsetY = -(tempH - drawHeight) / 2;
-          }
-
-          const zoom = sub.photoZoom ?? 1.0;
-          const w = tempW * zoom;
-          const h = tempH * zoom;
-          const ox = offsetX - (w - tempW) / 2;
-          const oy = (offsetY - (h - tempH) / 2) + (sub.photoOffsetY ?? 0) / 2; 
-
-          ctx.save();
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(startX, startY, drawWidth, drawHeight);
-          ctx.clip();
-          ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
-          ctx.restore();
-
-          // Draw frame over it
-          ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
-
-          // Draw inquiryId below the logo
-          ctx.save();
-          ctx.fillStyle = '#7a0c0c';
-          ctx.font = 'bold 11px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
-          ctx.restore();
-        };
-        const photoPath = sub.couplePhoto;
-        coupleImg.src = (photoPath.startsWith('data:') || photoPath.startsWith('http://') || photoPath.startsWith('https://')) ? photoPath : `${API_BASE_URL}${photoPath}`;
-      });
-    };
-    frameImg.src = '/frame_template.png';
-  }, [reviewingProgramForFrames, approvedSubmissionsForFrames]);
 
   const handleDownloadFramedZip = async (specificProg?: Program) => {
     const prog = specificProg || programs.find(p => p.id === selectedProgramIdForFrames);
     if (!prog) return;
 
-    const progSubmissions = approvedSubmissionsForFrames;
+    const progSubmissions = approvedSubmissionsForFrames.filter(sub => selectedFrameInquiryIds.includes(sub.inquiryId));
     if (progSubmissions.length === 0) {
-      alert('No approved registrations with couple photos found for this program.');
+      alert('No selected approved registrations with couple photos found.');
       return;
     }
 
@@ -1383,25 +1410,34 @@ export default function AdminDashboard() {
           // Clear canvas
           ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-          // Object-fit Cover calculation inside target box
-          const targetRatio = drawWidth / drawHeight;
-          const imgRatio = coupleImg.width / coupleImg.height;
-          let sx = 0, sy = 0, sw = coupleImg.width, sh = coupleImg.height;
+          // Calculate zoom/offset crops to match preview canvas
+          const imgAspect = coupleImg.width / coupleImg.height;
+          const targetAspect = drawWidth / drawHeight;
+          let tempW = drawWidth;
+          let tempH = drawHeight;
+          let offsetX = 0;
+          let offsetY = 0;
 
-          if (imgRatio > targetRatio) {
-            sh = coupleImg.height;
-            sw = sh * targetRatio;
-            sx = (coupleImg.width - sw) / 2;
-            sy = 0;
+          if (imgAspect > targetAspect) {
+            tempW = drawHeight * imgAspect;
+            offsetX = -(tempW - drawWidth) / 2;
           } else {
-            sw = coupleImg.width;
-            sh = sw / targetRatio;
-            sx = 0;
-            sy = (coupleImg.height - sh) / 2;
+            tempH = drawWidth / imgAspect;
+            offsetY = -(tempH - drawHeight) / 2;
           }
 
-          // Draw couple photo inside bounding box
-          ctx.drawImage(coupleImg, sx, sy, sw, sh, startX, startY, drawWidth, drawHeight);
+          const zoom = sub.photoZoom ?? 1.0;
+          const w = tempW * zoom;
+          const h = tempH * zoom;
+          const ox = offsetX - (w - tempW) / 2;
+          const oy = (offsetY - (h - tempH) / 2) + (sub.photoOffsetY ?? 0) * (canvas.height / 1024);
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(startX, startY, drawWidth, drawHeight);
+          ctx.clip();
+          ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
+          ctx.restore();
 
           // Draw frame over it
           ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
@@ -1418,8 +1454,8 @@ export default function AdminDashboard() {
           const dataUrl = canvas.toDataURL('image/png');
           const base64Data = dataUrl.split(',')[1];
 
-          // Add to zip
-          const filename = `${sub.surname}_${sub.husbandName}_${sub.wifeName}_${sub.inquiryId}.png`;
+          // Add to zip (using inquiry ID / CPL number as the filename)
+          const filename = `${sub.inquiryId}.png`;
           zip.file(filename, base64Data, { base64: true });
         } catch (err: any) {
           console.error('Error drawing framed photo for submission:', sub.inquiryId, err);
@@ -1451,7 +1487,7 @@ export default function AdminDashboard() {
   const handleSaveAndDownloadZip = async () => {
     if (!reviewingProgramForFrames) return;
     const activePassword = password || sessionStorage.getItem('adminPassword') || '';
-    const progSubmissions = approvedSubmissionsForFrames;
+    const progSubmissions = approvedSubmissionsForFrames.filter(sub => selectedFrameInquiryIds.includes(sub.inquiryId));
 
     setZipping(true);
     setZipProgress('Saving alignments to database...');
@@ -2061,18 +2097,14 @@ export default function AdminDashboard() {
 
             {/* Scrollable list of registrations */}
             <div className="flex-1 overflow-y-auto pr-2 space-y-4">
-              {approvedSubmissionsForFrames.length === 0 ? (
-                <p className="text-center text-slate-500 text-sm py-12">No approved couple registrations with photos found in this program slot.</p>
+              {approvedSubmissionsForFrames.filter(sub => selectedFrameInquiryIds.includes(sub.inquiryId)).length === 0 ? (
+                <p className="text-center text-slate-500 text-sm py-12">No selected couple registrations to review.</p>
               ) : (
-                approvedSubmissionsForFrames.map((sub) => (
+                approvedSubmissionsForFrames.filter(sub => selectedFrameInquiryIds.includes(sub.inquiryId)).map((sub) => (
                   <div key={sub.inquiryId} className="flex flex-col sm:flex-row items-center gap-6 bg-slate-900/40 border border-slate-850 rounded-2xl p-4 shadow-sm">
                     {/* Live Preview canvas */}
                     <div className="w-[120px] h-[160px] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center flex-shrink-0">
-                      <canvas
-                        id={`review-canvas-${sub.inquiryId}`}
-                        style={{ width: '120px', height: '160px' }}
-                        className="bg-slate-950 shadow-inner"
-                      />
+                      <LivePreviewCanvas sub={sub} frameImg={globalFrameImg} />
                     </div>
 
                     <div className="flex-1 w-full space-y-4">
@@ -2132,7 +2164,7 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   onClick={handleSaveAndDownloadZip}
-                  disabled={zipping || approvedSubmissionsForFrames.length === 0}
+                  disabled={zipping || selectedFrameInquiryIds.length === 0}
                   className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-extrabold rounded-xl text-xs transition-all w-full sm:w-auto text-center shadow-lg shadow-amber-500/20"
                 >
                   {zipping ? `Processing (${zipProgress})` : 'Save Alignments & Download ZIP'}
@@ -2902,7 +2934,7 @@ export default function AdminDashboard() {
             <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
               <span>🖼️</span> Frame Download Option
             </h2>
-            <p className="text-slate-400 text-xs mt-1">Select a program to view registrations and batch download all couple photos pre-rendered inside the custom frame.</p>
+            <p className="text-slate-400 text-xs mt-1">Select a program, filter/search multiple CPL IDs, select/deselect them, and download/adjust frames for only the selected couples.</p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
@@ -2922,23 +2954,138 @@ export default function AdminDashboard() {
           </div>
 
           {selectedProgramIdForFrames && (
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl">
-              <div>
-                <p className="text-sm font-semibold text-slate-200">
-                  Total Approved Couples with Photo: <span className="text-amber-500 font-bold">{approvedSubmissionsForFrames.length}</span>
-                </p>
-                <p className="text-xs text-slate-500 mt-1">Review registrations line by line, slide to adjust their photo zoom/position, and download all framed photos in a single ZIP file.</p>
+            <div className="space-y-4 border-t border-slate-800/60 pt-4">
+              {/* Search CPL IDs Input */}
+              <div className="w-full">
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Search Multiple CPL IDs (Comma or space separated)
+                </label>
+                <input
+                  type="text"
+                  value={cplSearchQuery}
+                  onChange={(e) => setCplSearchQuery(e.target.value)}
+                  placeholder="e.g. CPL-101, CPL-102, CPL-105"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
               </div>
-              <button
-                onClick={() => {
-                  const prog = programs.find(p => p.id === selectedProgramIdForFrames);
-                  if (prog) setReviewingProgramForFrames(prog);
-                }}
-                disabled={zipping}
-                className="w-full sm:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20 text-center"
-              >
-                {zipping ? `Processing (${zipProgress})` : 'Review & Download ZIP'}
-              </button>
+
+              {/* Selection Controls */}
+              <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Select all matched/filtered ones
+                      const matchedIds = approvedSubmissionsForFrames
+                        .filter(sub => {
+                          if (!cplSearchQuery.trim()) return true;
+                          const searchedCpls = cplSearchQuery
+                            .split(/[\s,]+/)
+                            .map(s => s.trim().toUpperCase())
+                            .filter(Boolean);
+                          return searchedCpls.some(cpl => sub.inquiryId.toUpperCase().includes(cpl));
+                        })
+                        .map(sub => sub.inquiryId);
+                      
+                      setSelectedFrameInquiryIds(prev => {
+                        const newSelection = new Set([...prev, ...matchedIds]);
+                        return Array.from(newSelection);
+                      });
+                    }}
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg font-medium transition-all"
+                  >
+                    Select All Filtered
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Deselect all matched/filtered ones
+                      const matchedIds = approvedSubmissionsForFrames
+                        .filter(sub => {
+                          if (!cplSearchQuery.trim()) return true;
+                          const searchedCpls = cplSearchQuery
+                            .split(/[\s,]+/)
+                            .map(s => s.trim().toUpperCase())
+                            .filter(Boolean);
+                          return searchedCpls.some(cpl => sub.inquiryId.toUpperCase().includes(cpl));
+                        })
+                        .map(sub => sub.inquiryId);
+                      
+                      setSelectedFrameInquiryIds(prev => prev.filter(id => !matchedIds.includes(id)));
+                    }}
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg font-medium transition-all"
+                  >
+                    Deselect All Filtered
+                  </button>
+                </div>
+                <div className="text-slate-400 font-semibold">
+                  Selected: <span className="text-amber-500">{selectedFrameInquiryIds.length}</span> / {approvedSubmissionsForFrames.length}
+                </div>
+              </div>
+
+              {/* List of Couples */}
+              <div className="max-h-48 overflow-y-auto border border-slate-800/80 rounded-xl bg-slate-900/20 p-3 space-y-2">
+                {approvedSubmissionsForFrames
+                  .filter(sub => {
+                    if (!cplSearchQuery.trim()) return true;
+                    const searchedCpls = cplSearchQuery
+                      .split(/[\s,]+/)
+                      .map(s => s.trim().toUpperCase())
+                      .filter(Boolean);
+                    return searchedCpls.some(cpl => sub.inquiryId.toUpperCase().includes(cpl));
+                  })
+                  .map(sub => {
+                    const isChecked = selectedFrameInquiryIds.includes(sub.inquiryId);
+                    return (
+                      <label key={sub.inquiryId} className="flex items-center gap-3 p-2 hover:bg-slate-900/60 rounded-lg cursor-pointer transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            if (isChecked) {
+                              setSelectedFrameInquiryIds(prev => prev.filter(id => id !== sub.inquiryId));
+                            } else {
+                              setSelectedFrameInquiryIds(prev => [...prev, sub.inquiryId]);
+                            }
+                          }}
+                          className="rounded border-slate-800 bg-slate-950 text-amber-500 focus:ring-amber-500/50 w-4 h-4 cursor-pointer"
+                        />
+                        <span className="font-mono text-xs font-bold text-amber-500 w-20">{sub.inquiryId}</span>
+                        <span className="text-xs text-slate-200">{sub.husbandName} & {sub.wifeName} {sub.surname}</span>
+                      </label>
+                    );
+                  })}
+                {approvedSubmissionsForFrames.filter(sub => {
+                  if (!cplSearchQuery.trim()) return true;
+                  const searchedCpls = cplSearchQuery
+                    .split(/[\s,]+/)
+                    .map(s => s.trim().toUpperCase())
+                    .filter(Boolean);
+                  return searchedCpls.some(cpl => sub.inquiryId.toUpperCase().includes(cpl));
+                }).length === 0 && (
+                  <p className="text-center text-xs text-slate-500 py-4">No matching couples found.</p>
+                )}
+              </div>
+
+              {/* Action and Count */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl">
+                <div>
+                  <p className="text-sm font-semibold text-slate-200">
+                    Total Selected Couples for Download: <span className="text-amber-500 font-bold">{selectedFrameInquiryIds.length}</span>
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">Review alignments line by line and download the framed photos in a single ZIP file.</p>
+                </div>
+                <button
+                  onClick={() => {
+                    const prog = programs.find(p => p.id === selectedProgramIdForFrames);
+                    if (prog) setReviewingProgramForFrames(prog);
+                  }}
+                  disabled={zipping || selectedFrameInquiryIds.length === 0}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20 text-center"
+                >
+                  {zipping ? `Processing (${zipProgress})` : 'Review & Download ZIP'}
+                </button>
+              </div>
             </div>
           )}
         </div>
