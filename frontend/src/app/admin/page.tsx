@@ -18,6 +18,7 @@ interface Submission {
   programDate?: string;
   status?: string;
   rejectionReason?: string;
+  refundReason?: string;
   payeeNameFromReceipt?: string;
   photoZoom?: number;
   photoOffsetY?: number;
@@ -375,6 +376,9 @@ export default function AdminDashboard() {
   const [editPaymentScreenshot, setEditPaymentScreenshot] = useState<File | null>(null);
   const [updating, setUpdating] = useState(false);
   const [editError, setEditError] = useState('');
+  const [editStatus, setEditStatus] = useState('');
+  const [editRejectionReason, setEditRejectionReason] = useState('');
+  const [editRefundReason, setEditRefundReason] = useState('');
   // Payment Settings States
   const [upiId, setUpiId] = useState('');
   const [upiIdsString, setUpiIdsString] = useState('');
@@ -993,6 +997,9 @@ export default function AdminDashboard() {
       formData.append('surname', editSurname);
       formData.append('phoneNumber', editPhoneNumber);
       formData.append('programId', editProgramId);
+      formData.append('status', editStatus);
+      formData.append('rejectionReason', editRejectionReason);
+      formData.append('refundReason', editRefundReason);
 
       if (compressedPhoto) {
         formData.append('couplePhoto', compressedPhoto);
@@ -1033,6 +1040,9 @@ export default function AdminDashboard() {
     setEditSurname(sub.surname);
     setEditPhoneNumber(sub.phoneNumber);
     setEditProgramId(sub.programId || '');
+    setEditStatus(sub.status || 'pending');
+    setEditRejectionReason(sub.rejectionReason || '');
+    setEditRefundReason(sub.refundReason || '');
     setEditCouplePhoto(null);
     setEditPaymentScreenshot(null);
     setEditError('');
@@ -1812,11 +1822,47 @@ export default function AdminDashboard() {
 
                 <div>
                   <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Status</label>
-                  <div className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 text-xs font-semibold capitalize">
-                    {editingSubmission.status}
-                  </div>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors font-semibold"
+                  >
+                    <option value="inquiry">Inquiry (ઇન્ક્વાયરી)</option>
+                    <option value="pending">Pending (પેન્ડિંગ)</option>
+                    <option value="approved">Approved (મંજૂર)</option>
+                    <option value="rejected">Rejected (નામંજૂર)</option>
+                    <option value="refunded">Refunded (રિફંડ કરેલ)</option>
+                  </select>
                 </div>
               </div>
+
+              {editStatus === 'rejected' && (
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Rejection Reason</label>
+                  <input
+                    type="text"
+                    required
+                    value={editRejectionReason}
+                    onChange={(e) => setEditRejectionReason(e.target.value)}
+                    placeholder="Enter reason for rejection"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+              )}
+
+              {editStatus === 'refunded' && (
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Refund Reason</label>
+                  <input
+                    type="text"
+                    required
+                    value={editRefundReason}
+                    onChange={(e) => setEditRefundReason(e.target.value)}
+                    placeholder="Enter reason for refund"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -3203,6 +3249,7 @@ export default function AdminDashboard() {
                 <option value="pending">Pending</option>
                 <option value="approved">Approved</option>
                 <option value="rejected">Rejected</option>
+                <option value="refunded">Refunded (રિફંડ કરેલ)</option>
                 <option value="inquiry">Inquiries (ઇન્ક્વાયરી)</option>
               </select>
             </div>
@@ -3287,8 +3334,9 @@ export default function AdminDashboard() {
                   const waPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
                   const isApproved = sub.status === 'approved';
                   const isRejected = sub.status === 'rejected';
+                  const isRefunded = sub.status === 'refunded';
                   const isInquiry = sub.status === 'inquiry';
-                  const isPending = !isApproved && !isRejected && !isInquiry;
+                  const isPending = !isApproved && !isRejected && !isInquiry && !isRefunded;
 
                   return (
                     <tr key={sub.inquiryId} className="hover:bg-slate-900/30 transition-colors">
@@ -3355,14 +3403,25 @@ export default function AdminDashboard() {
                           <span className="text-xs text-slate-500">None</span>
                         )}
                       </td>
-                      <td className="py-4 px-6">
+                      <td className="py-4 px-6 flex flex-col gap-1 items-start">
                         <span className={`px-2 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase ${isApproved ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400' :
                           isRejected ? 'bg-red-500/15 border border-red-500/30 text-red-400' :
-                            isInquiry ? 'bg-blue-500/15 border border-blue-500/30 text-blue-400' :
-                              'bg-amber-500/15 border border-amber-500/30 text-amber-400'
+                            isRefunded ? 'bg-purple-500/15 border border-purple-500/30 text-purple-400' :
+                              isInquiry ? 'bg-blue-500/15 border border-blue-500/30 text-blue-400' :
+                                'bg-amber-500/15 border border-amber-500/30 text-amber-400'
                           }`}>
                           {sub.status ? sub.status : 'pending'}
                         </span>
+                        {isRefunded && sub.refundReason && (
+                          <span className="text-[10px] text-purple-300 italic max-w-[120px] truncate block" title={sub.refundReason}>
+                            Reason: {sub.refundReason}
+                          </span>
+                        )}
+                        {isRejected && sub.rejectionReason && (
+                          <span className="text-[10px] text-red-300 italic max-w-[120px] truncate block" title={sub.rejectionReason}>
+                            Reason: {sub.rejectionReason}
+                          </span>
+                        )}
                       </td>
                       <td className="py-4 px-6 text-xs text-slate-500 font-mono">
                         {new Date(sub.createdAt).toLocaleString()}

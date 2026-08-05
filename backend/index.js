@@ -107,6 +107,7 @@ const SubmissionSchema = new mongoose.Schema({
   payeeNameFromReceipt: { type: String, default: 'Not detected' },
   status: { type: String, default: 'pending' },
   rejectionReason: { type: String, default: '' },
+  refundReason: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now }
 }, { collection: 'submission' });
 SubmissionSchema.index({ createdAt: -1 });
@@ -821,12 +822,47 @@ app.put('/api/submissions/:inquiryId', requireAuth, upload.fields([
 ]), async (req, res) => {
   try {
     const { inquiryId } = req.params;
-    const { husbandName, wifeName, surname, phoneNumber, programId, photoZoom, photoOffsetY } = req.body;
+    const { husbandName, wifeName, surname, phoneNumber, programId, photoZoom, photoOffsetY, status, rejectionReason, refundReason } = req.body;
 
     const submission = await Submission.findOne({ inquiryId });
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found.' });
     }
+
+    // Handle status changes and seat allocation/deallocation
+    if (status !== undefined && status !== submission.status) {
+      // If old status was approved, release seats
+      if (submission.status === 'approved') {
+        const oldProgId = programId || submission.programId;
+        if (oldProgId) {
+          const program = await Program.findOne({ id: oldProgId });
+          if (program) {
+            program.bookingsCount = Math.max(0, program.bookingsCount - 2);
+            await program.save();
+          }
+        }
+      }
+
+      // If new status is approved, verify capacity and book seats
+      if (status === 'approved') {
+        const newProgId = programId || submission.programId;
+        if (newProgId) {
+          const program = await Program.findOne({ id: newProgId });
+          if (program) {
+            if (program.bookingsCount + 2 > program.capacity) {
+              return res.status(400).json({ error: 'Cannot approve submission: Program slot is full.' });
+            }
+            program.bookingsCount += 2;
+            await program.save();
+          }
+        }
+      }
+
+      submission.status = status;
+    }
+
+    if (rejectionReason !== undefined) submission.rejectionReason = rejectionReason;
+    if (refundReason !== undefined) submission.refundReason = refundReason;
 
     // Update simple fields
     if (husbandName) submission.husbandName = husbandName;
@@ -848,23 +884,25 @@ app.put('/api/submissions/:inquiryId', requireAuth, upload.fields([
         return res.status(400).json({ error: 'Invalid program slot selected.' });
       }
 
-      // Check capacity in the new program
-      if (newProgram.bookingsCount + 2 > newProgram.capacity) {
-        return res.status(400).json({ error: 'Selected program slot is sold out.' });
-      }
-
-      // Release seats from old program
-      if (submission.programId) {
-        const oldProgram = await Program.findOne({ id: submission.programId });
-        if (oldProgram) {
-          oldProgram.bookingsCount = Math.max(0, oldProgram.bookingsCount - 2);
-          await oldProgram.save();
+      if (submission.status === 'approved') {
+        // Check capacity in the new program
+        if (newProgram.bookingsCount + 2 > newProgram.capacity) {
+          return res.status(400).json({ error: 'Selected program slot is sold out.' });
         }
-      }
 
-      // Book seats in the new program
-      newProgram.bookingsCount += 2;
-      await newProgram.save();
+        // Release seats from old program
+        if (submission.programId) {
+          const oldProgram = await Program.findOne({ id: submission.programId });
+          if (oldProgram) {
+            oldProgram.bookingsCount = Math.max(0, oldProgram.bookingsCount - 2);
+            await oldProgram.save();
+          }
+        }
+
+        // Book seats in the new program
+        newProgram.bookingsCount += 2;
+        await newProgram.save();
+      }
 
       submission.programId = programId;
       submission.programName = newProgram.name;
@@ -971,6 +1009,7 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
       couplePhoto: submission.couplePhoto,
       status: submission.status,
       rejectionReason: submission.rejectionReason,
+      refundReason: submission.refundReason || '',
       isDateFinal,
       upiId,
       payeeName,
@@ -1319,6 +1358,7 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
       payeeNameFromReceipt: 1,
       status: 1,
       rejectionReason: 1,
+      refundReason: 1,
       createdAt: 1,
       couplePhoto: 1,
       paymentScreenshot: 1
