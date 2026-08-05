@@ -873,7 +873,8 @@ export default function AdminDashboard() {
         fetchDuplicates();
         fetchApprovedSubmissionsForFrames();
       } else {
-        alert('Failed to approve submission.');
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || 'Failed to approve submission.');
       }
     } catch (err) {
       alert('Network error.');
