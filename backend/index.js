@@ -276,11 +276,14 @@ app.get('/api/programs', async (req, res) => {
     // Map programs to include absolute URL path for cardTemplate instead of base64
     const host = req.get('host');
     const protocol = req.protocol;
-    const mapped = programs.map(p => {
+    const mapped = await Promise.all(programs.map(async (p) => {
       const obj = p.toObject();
       obj.cardTemplate = p.cardTemplate !== null ? `${protocol}://${host}/api/programs/${p.id}/template` : null;
+      // Fetch count of inquiries and pending reviews
+      obj.inquiryCount = await Submission.countDocuments({ programId: p.id, status: 'inquiry' });
+      obj.pendingCount = await Submission.countDocuments({ programId: p.id, status: 'pending' });
       return obj;
-    });
+    }));
     
     res.json(mapped);
   } catch (err) {

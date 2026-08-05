@@ -164,6 +164,8 @@ interface Program {
   heartHeight?: number;
   photoZoom?: number;
   photoOffsetY?: number;
+  inquiryCount?: number;
+  pendingCount?: number;
 }
 
 const LivePreviewCanvas = ({ sub, frameImg }: { sub: Submission; frameImg: HTMLImageElement | null }) => {
@@ -2486,7 +2488,17 @@ export default function AdminDashboard() {
                         </div>
                         <div className="text-xs text-slate-400 flex items-center gap-4 flex-wrap">
                           <span>{prog.date}</span>
-                          <span>👥 Booked Couples: <strong className={isSoldOut ? "text-red-400" : "text-amber-500"}>{Math.floor(prog.bookingsCount / 2)}</strong> / {Math.floor(prog.capacity / 2)}</span>
+                          <span>👥 Booked: <strong className={isSoldOut ? "text-red-400" : "text-amber-500"}>{Math.floor(prog.bookingsCount / 2)}</strong> / {Math.floor(prog.capacity / 2)}</span>
+                          {prog.inquiryCount !== undefined && prog.inquiryCount > 0 && (
+                            <span className="flex items-center gap-1 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 text-blue-300">
+                              📝 Inquiries: <strong>{prog.inquiryCount}</strong>
+                            </span>
+                          )}
+                          {prog.pendingCount !== undefined && prog.pendingCount > 0 && (
+                            <span className="flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 text-amber-300">
+                              ⏳ Pending: <strong>{prog.pendingCount}</strong>
+                            </span>
+                          )}
                           {prog.cardTemplate && (
                             <span className="text-[10px] text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
                               🖼️ Custom Pass
