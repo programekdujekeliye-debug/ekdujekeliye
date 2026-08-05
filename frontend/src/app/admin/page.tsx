@@ -167,6 +167,8 @@ interface Program {
   photoOffsetY?: number;
   inquiryCount?: number;
   pendingCount?: number;
+  approvedCount?: number;
+  rejectedCount?: number;
 }
 
 const LivePreviewCanvas = ({ sub, frameImg }: { sub: Submission; frameImg: HTMLImageElement | null }) => {
@@ -2544,6 +2546,16 @@ export default function AdminDashboard() {
                           {prog.pendingCount !== undefined && prog.pendingCount > 0 && (
                             <span className="flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 text-amber-300">
                               ⏳ Pending: <strong>{prog.pendingCount}</strong>
+                            </span>
+                          )}
+                          {prog.approvedCount !== undefined && prog.approvedCount > 0 && (
+                            <span className="flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 text-emerald-300">
+                              ✓ Approved: <strong>{prog.approvedCount}</strong>
+                            </span>
+                          )}
+                          {prog.rejectedCount !== undefined && prog.rejectedCount > 0 && (
+                            <span className="flex items-center gap-1 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20 text-red-300">
+                              ✗ Rejected: <strong>{prog.rejectedCount}</strong>
                             </span>
                           )}
                           {prog.cardTemplate && (

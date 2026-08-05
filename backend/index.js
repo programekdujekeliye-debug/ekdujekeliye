@@ -304,6 +304,8 @@ app.get('/api/programs', async (req, res) => {
       // Fetch count of inquiries and pending reviews
       obj.inquiryCount = await Submission.countDocuments({ programId: p.id, status: 'inquiry' });
       obj.pendingCount = await Submission.countDocuments({ programId: p.id, status: 'pending' });
+      obj.approvedCount = await Submission.countDocuments({ programId: p.id, status: 'approved' });
+      obj.rejectedCount = await Submission.countDocuments({ programId: p.id, status: 'rejected' });
       return obj;
     }));
     
