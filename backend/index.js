@@ -117,7 +117,7 @@ async function getProgramBookingsCount(programId) {
   if (!programId) return 0;
   const count = await Submission.countDocuments({
     programId,
-    status: { $in: ['approved', 'pending'] }
+    status: { $in: ['approved', 'pending', 'rejected'] }
   });
   return count * 2;
 }
