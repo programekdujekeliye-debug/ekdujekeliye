@@ -113,6 +113,27 @@ const SubmissionSchema = new mongoose.Schema({
 SubmissionSchema.index({ createdAt: -1 });
 const Submission = mongoose.model('Submission', SubmissionSchema);
 
+async function getProgramBookingsCount(programId) {
+  if (!programId) return 0;
+  const count = await Submission.countDocuments({
+    programId,
+    status: { $in: ['approved', 'pending'] }
+  });
+  return count * 2;
+}
+
+async function updateProgramBookingsCount(programId) {
+  if (!programId) return 0;
+  const program = await Program.findOne({ id: programId });
+  if (program) {
+    const activeCount = await getProgramBookingsCount(programId);
+    program.bookingsCount = activeCount;
+    await program.save();
+    return activeCount;
+  }
+  return 0;
+}
+
 const SettingSchema = new mongoose.Schema({
   key: { type: String, default: 'main', unique: true },
   upiId: { type: String, default: 'payee@upi' },
@@ -442,7 +463,8 @@ app.post('/api/submit', upload.fields([
 
     const isDateFinal = program.isDateFinal !== false;
 
-    if (isDateFinal && (program.bookingsCount + 2 > program.capacity)) {
+    const activeBookings = await getProgramBookingsCount(programId);
+    if (isDateFinal && (activeBookings + 2 > program.capacity)) {
       return res.status(400).json({ error: 'This program slot is sold out (not enough seats left for a couple).' });
     }
 
@@ -522,6 +544,9 @@ app.post('/api/submit', upload.fields([
       status: isDateFinal ? 'pending' : 'inquiry', // inquiry if date not finalized
       createdAt: new Date()
     });
+
+    // Update dynamic bookingsCount for the program in DB
+    await updateProgramBookingsCount(programId);
 
     // Send instant response to client
     res.status(201).json({
@@ -665,8 +690,10 @@ app.post('/api/submissions/manual', requireAuth, upload.fields([{ name: 'coupleP
     const nextSeq = await getNextInvitedNumber();
     const inquiryId = `IP-${nextSeq}`;
 
-    program.bookingsCount += 2;
-    await program.save();
+    const activeBookings = await getProgramBookingsCount(programId);
+    if (activeBookings + 2 > program.capacity) {
+      return res.status(400).json({ error: 'Cannot create manual submission: Program slot is full.' });
+    }
 
     const newSubmission = await Submission.create({
       inquiryId,
@@ -684,6 +711,8 @@ app.post('/api/submissions/manual', requireAuth, upload.fields([{ name: 'coupleP
       status: 'approved',
       createdAt: new Date()
     });
+
+    await updateProgramBookingsCount(programId);
 
     res.status(201).json({
       success: true,
@@ -705,18 +734,24 @@ app.post('/api/submissions/:inquiryId/approve', requireAuth, async (req, res) =>
     }
 
     if (submission.status !== 'approved') {
-      if (submission.programId) {
+      const isTransitioningFromInquiry = submission.status === 'inquiry' || !submission.status;
+      if (isTransitioningFromInquiry && submission.programId) {
         const program = await Program.findOne({ id: submission.programId });
         if (program) {
-          if (program.bookingsCount + 2 > program.capacity) {
+          const activeBookings = await getProgramBookingsCount(submission.programId);
+          if (activeBookings + 2 > program.capacity) {
             return res.status(400).json({ error: 'Cannot approve submission: Program slot is already full (SOLD OUT).' });
           }
-          program.bookingsCount += 2;
-          await program.save();
         }
       }
+
       submission.status = 'approved';
       await submission.save();
+
+      // Trigger dynamic update of bookings count
+      if (submission.programId) {
+        await updateProgramBookingsCount(submission.programId);
+      }
     }
 
     res.json({ success: true, message: 'Submission approved successfully.', data: submission });
@@ -735,19 +770,15 @@ app.post('/api/submissions/:inquiryId/reject', requireAuth, async (req, res) => 
       return res.status(404).json({ error: 'Submission not found.' });
     }
 
-    if (submission.status === 'approved') {
-      if (submission.programId) {
-        const program = await Program.findOne({ id: submission.programId });
-        if (program) {
-          program.bookingsCount = Math.max(0, program.bookingsCount - 2);
-          await program.save();
-        }
-      }
-    }
+    const oldProgramId = submission.programId;
 
     submission.status = 'rejected';
     submission.rejectionReason = reason || 'Payment verification failed.';
     await submission.save();
+
+    if (oldProgramId) {
+      await updateProgramBookingsCount(oldProgramId);
+    }
 
     res.json({ success: true, message: 'Submission rejected.', data: submission });
   } catch (err) {
@@ -764,17 +795,14 @@ app.delete('/api/submissions/:inquiryId', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Submission not found.' });
     }
 
-    // Release bookings (seats) in the program only if it was approved
-    if (submission.status === 'approved' && submission.programId) {
-      const program = await Program.findOne({ id: submission.programId });
-      if (program) {
-        program.bookingsCount = Math.max(0, program.bookingsCount - 2);
-        await program.save();
-      }
-    }
+    const programId = submission.programId;
 
     // Delete submission document
     await Submission.deleteOne({ inquiryId });
+
+    if (programId) {
+      await updateProgramBookingsCount(programId);
+    }
 
     res.json({ success: true, message: `Submission ${inquiryId} deleted successfully, and bookings released.` });
   } catch (error) {
@@ -792,20 +820,15 @@ app.post('/api/submissions/bulk-delete', requireAuth, async (req, res) => {
     }
 
     const submissions = await Submission.find({ inquiryId: { $in: inquiryIds } });
+    const programIds = [...new Set(submissions.map(s => s.programId).filter(Boolean))];
     
-    // Decrement bookingsCount for each program slot only if approved
-    for (const sub of submissions) {
-      if (sub.status === 'approved' && sub.programId) {
-        const program = await Program.findOne({ id: sub.programId });
-        if (program) {
-          program.bookingsCount = Math.max(0, program.bookingsCount - 2);
-          await program.save();
-        }
-      }
-    }
-
     // Delete submission documents
     await Submission.deleteMany({ inquiryId: { $in: inquiryIds } });
+
+    // Update dynamic bookingsCount for all affected programs
+    for (const pid of programIds) {
+      await updateProgramBookingsCount(pid);
+    }
 
     res.json({ success: true, message: `${submissions.length} submissions deleted successfully, and bookings released.` });
   } catch (error) {
@@ -829,42 +852,30 @@ app.put('/api/submissions/:inquiryId', requireAuth, upload.fields([
       return res.status(404).json({ error: 'Submission not found.' });
     }
 
-    // Handle status changes and seat allocation/deallocation
-    if (status !== undefined && status !== submission.status) {
-      // If old status was approved, release seats
-      if (submission.status === 'approved') {
-        const oldProgId = programId || submission.programId;
-        if (oldProgId) {
-          const program = await Program.findOne({ id: oldProgId });
-          if (program) {
-            program.bookingsCount = Math.max(0, program.bookingsCount - 2);
-            await program.save();
-          }
+    const oldProgramId = submission.programId;
+    const newProgramId = programId || oldProgramId;
+    const oldStatus = submission.status;
+    const newStatus = status !== undefined ? status : oldStatus;
+
+    // Check capacity if the submission becomes active (pending or approved) in the target program
+    const isNowActive = ['approved', 'pending'].includes(newStatus);
+    const wasActiveInNew = ['approved', 'pending'].includes(oldStatus) && oldProgramId === newProgramId;
+
+    if (isNowActive && !wasActiveInNew) {
+      const targetProgram = await Program.findOne({ id: newProgramId });
+      if (targetProgram) {
+        const activeBookings = await getProgramBookingsCount(newProgramId);
+        if (activeBookings + 2 > targetProgram.capacity) {
+          return res.status(400).json({ error: 'Cannot update: Selected program slot is full.' });
         }
       }
-
-      // If new status is approved, verify capacity and book seats
-      if (status === 'approved') {
-        const newProgId = programId || submission.programId;
-        if (newProgId) {
-          const program = await Program.findOne({ id: newProgId });
-          if (program) {
-            if (program.bookingsCount + 2 > program.capacity) {
-              return res.status(400).json({ error: 'Cannot approve submission: Program slot is full.' });
-            }
-            program.bookingsCount += 2;
-            await program.save();
-          }
-        }
-      }
-
-      submission.status = status;
     }
 
+    // Apply updates
+    submission.status = newStatus;
     if (rejectionReason !== undefined) submission.rejectionReason = rejectionReason;
     if (refundReason !== undefined) submission.refundReason = refundReason;
 
-    // Update simple fields
     if (husbandName) submission.husbandName = husbandName;
     if (wifeName) submission.wifeName = wifeName;
     if (surname) submission.surname = surname;
@@ -877,37 +888,14 @@ app.put('/api/submissions/:inquiryId', requireAuth, upload.fields([
     if (photoZoom !== undefined) submission.photoZoom = parseFloat(photoZoom);
     if (photoOffsetY !== undefined) submission.photoOffsetY = parseInt(photoOffsetY, 10);
 
-    // Handle program/slot changes
-    if (programId && programId !== submission.programId) {
+    if (programId && programId !== oldProgramId) {
       const newProgram = await Program.findOne({ id: programId });
-      if (!newProgram) {
-        return res.status(400).json({ error: 'Invalid program slot selected.' });
+      if (newProgram) {
+        submission.programId = programId;
+        submission.programName = newProgram.name;
+        submission.programDate = newProgram.date;
+        submission.programTime = newProgram.time || "8:30 PM";
       }
-
-      if (submission.status === 'approved') {
-        // Check capacity in the new program
-        if (newProgram.bookingsCount + 2 > newProgram.capacity) {
-          return res.status(400).json({ error: 'Selected program slot is sold out.' });
-        }
-
-        // Release seats from old program
-        if (submission.programId) {
-          const oldProgram = await Program.findOne({ id: submission.programId });
-          if (oldProgram) {
-            oldProgram.bookingsCount = Math.max(0, oldProgram.bookingsCount - 2);
-            await oldProgram.save();
-          }
-        }
-
-        // Book seats in the new program
-        newProgram.bookingsCount += 2;
-        await newProgram.save();
-      }
-
-      submission.programId = programId;
-      submission.programName = newProgram.name;
-      submission.programDate = newProgram.date;
-      submission.programTime = newProgram.time || "8:30 PM";
     }
 
     // Handle photo updates (Cloudinary upload)
@@ -925,6 +913,14 @@ app.put('/api/submissions/:inquiryId', requireAuth, upload.fields([
     }
 
     await submission.save();
+
+    // Trigger dynamic update of bookings counts for both old and new programs
+    if (oldProgramId) {
+      await updateProgramBookingsCount(oldProgramId);
+    }
+    if (newProgramId && newProgramId !== oldProgramId) {
+      await updateProgramBookingsCount(newProgramId);
+    }
 
     res.json({ success: true, message: `Submission ${inquiryId} updated successfully.`, data: submission });
   } catch (error) {
@@ -1052,9 +1048,7 @@ app.post('/api/submissions/:inquiryId/pay', upload.fields([
       return res.status(400).json({ error: 'The program date is not finalized yet.' });
     }
 
-    if (program.bookingsCount + 2 > program.capacity) {
-      return res.status(400).json({ error: 'This program slot is now sold out. Cannot accept payment.' });
-    }
+
 
     const paymentScreenshotFile = req.files && req.files['paymentScreenshot'] ? req.files['paymentScreenshot'][0] : null;
     if (!paymentScreenshotFile) {
@@ -1104,6 +1098,9 @@ app.post('/api/submissions/:inquiryId/pay', upload.fields([
     submission.programDate = program.date;
     submission.programTime = program.time || "8:30 PM";
     await submission.save();
+
+    // Update dynamic bookingsCount for the program in DB
+    await updateProgramBookingsCount(submission.programId);
 
     res.json({ success: true, message: 'Payment screenshot uploaded successfully.' });
 
