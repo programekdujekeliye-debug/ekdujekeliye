@@ -467,10 +467,6 @@ app.post('/api/submit', upload.fields([
     }
 
     if (isDateFinal) {
-      // Increment bookings count by 2 (since it is a couple registration)
-      program.bookingsCount += 2;
-      await program.save();
-
       // Increment UPI bookings count
       try {
         const settings = await Setting.findOne({ key: 'main' });
@@ -699,14 +695,26 @@ app.post('/api/submissions/manual', requireAuth, upload.fields([{ name: 'coupleP
 app.post('/api/submissions/:inquiryId/approve', requireAuth, async (req, res) => {
   const { inquiryId } = req.params;
   try {
-    const submission = await Submission.findOneAndUpdate(
-      { inquiryId },
-      { status: 'approved' },
-      { new: true }
-    );
+    const submission = await Submission.findOne({ inquiryId });
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found.' });
     }
+
+    if (submission.status !== 'approved') {
+      if (submission.programId) {
+        const program = await Program.findOne({ id: submission.programId });
+        if (program) {
+          if (program.bookingsCount + 2 > program.capacity) {
+            return res.status(400).json({ error: 'Cannot approve submission: Program slot is already full (SOLD OUT).' });
+          }
+          program.bookingsCount += 2;
+          await program.save();
+        }
+      }
+      submission.status = 'approved';
+      await submission.save();
+    }
+
     res.json({ success: true, message: 'Submission approved successfully.', data: submission });
   } catch (err) {
     res.status(500).json({ error: 'Server error approving submission.' });
@@ -718,14 +726,25 @@ app.post('/api/submissions/:inquiryId/reject', requireAuth, async (req, res) => 
   const { inquiryId } = req.params;
   const { reason } = req.body;
   try {
-    const submission = await Submission.findOneAndUpdate(
-      { inquiryId },
-      { status: 'rejected', rejectionReason: reason || 'Payment verification failed.' },
-      { new: true }
-    );
+    const submission = await Submission.findOne({ inquiryId });
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found.' });
     }
+
+    if (submission.status === 'approved') {
+      if (submission.programId) {
+        const program = await Program.findOne({ id: submission.programId });
+        if (program) {
+          program.bookingsCount = Math.max(0, program.bookingsCount - 2);
+          await program.save();
+        }
+      }
+    }
+
+    submission.status = 'rejected';
+    submission.rejectionReason = reason || 'Payment verification failed.';
+    await submission.save();
+
     res.json({ success: true, message: 'Submission rejected.', data: submission });
   } catch (err) {
     res.status(500).json({ error: 'Server error rejecting submission.' });
@@ -741,8 +760,8 @@ app.delete('/api/submissions/:inquiryId', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Submission not found.' });
     }
 
-    // Release bookings (seats) in the program
-    if (submission.programId) {
+    // Release bookings (seats) in the program only if it was approved
+    if (submission.status === 'approved' && submission.programId) {
       const program = await Program.findOne({ id: submission.programId });
       if (program) {
         program.bookingsCount = Math.max(0, program.bookingsCount - 2);
@@ -770,9 +789,9 @@ app.post('/api/submissions/bulk-delete', requireAuth, async (req, res) => {
 
     const submissions = await Submission.find({ inquiryId: { $in: inquiryIds } });
     
-    // Decrement bookingsCount for each program slot
+    // Decrement bookingsCount for each program slot only if approved
     for (const sub of submissions) {
-      if (sub.programId) {
+      if (sub.status === 'approved' && sub.programId) {
         const program = await Program.findOne({ id: sub.programId });
         if (program) {
           program.bookingsCount = Math.max(0, program.bookingsCount - 2);
@@ -1002,10 +1021,6 @@ app.post('/api/submissions/:inquiryId/pay', upload.fields([
 
     const paymentScreenshotBase64 = `data:${paymentScreenshotFile.mimetype};base64,${paymentScreenshotFile.buffer.toString('base64')}`;
     const paymentScreenshotUrl = await uploadToCloudinary(paymentScreenshotBase64, 'paymentScreenshots');
-
-    // Increment bookings count
-    program.bookingsCount += 2;
-    await program.save();
 
     // Increment UPI bookings count
     try {
