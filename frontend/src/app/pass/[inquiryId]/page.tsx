@@ -13,9 +13,14 @@ interface Submission {
   programId: string;
   programName: string;
   programDate: string;
+  programTime?: string;
   couplePhoto: string;
   status: string;
   rejectionReason?: string;
+  isDateFinal?: boolean;
+  upiId?: string;
+  payeeName?: string;
+  amount?: string;
   cardTemplate?: string;
   heartX?: number;
   heartY?: number;
@@ -37,6 +42,51 @@ export default function PassDownloadPage() {
   const [userZoom, setUserZoom] = useState<number>(1.0);
   const [userOffsetY, setUserOffsetY] = useState<number>(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const [paymentScreenshot, setPaymentScreenshot] = useState<File | null>(null);
+  const [paymentPreview, setPaymentPreview] = useState<string>('');
+  const [uploadingPayment, setUploadingPayment] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+
+  useEffect(() => {
+    if (paymentScreenshot) {
+      const objectUrl = URL.createObjectURL(paymentScreenshot);
+      setPaymentPreview(objectUrl);
+      return () => URL.revokeObjectURL(objectUrl);
+    } else {
+      setPaymentPreview('');
+    }
+  }, [paymentScreenshot]);
+
+  const handleUploadPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paymentScreenshot) {
+      setUploadError('કૃપા કરીને પેમેન્ટ સ્ક્રીનશોટ અપલોડ કરો!');
+      return;
+    }
+    setUploadError('');
+    setUploadingPayment(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('paymentScreenshot', paymentScreenshot);
+
+      const res = await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}/pay`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        setUploadError(data.error || 'અપલોડ કરવામાં ભૂલ થઈ. કૃપા કરીને ફરી પ્રયાસ કરો.');
+      }
+    } catch (err) {
+      setUploadError('સર્વર સાથે કનેક્ટ થઈ શક્યું નથી.');
+    } finally {
+      setUploadingPayment(false);
+    }
+  };
 
   useEffect(() => {
     if (!inquiryId) return;
@@ -321,21 +371,117 @@ export default function PassDownloadPage() {
           <div className="absolute -top-40 -right-40 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
 
+          {submission.status === 'inquiry' && (
+            <div className="space-y-6 py-6">
+              <div className="w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto text-3xl">
+                {submission.isDateFinal ? '🎉' : '📝'}
+              </div>
+              
+              {submission.isDateFinal ? (
+                <>
+                  <h2 className="text-2xl font-bold text-slate-100">પ્રોગ્રામની તારીખ નક્કી થઈ ગઈ છે!</h2>
+                  <p className="text-slate-300 text-sm max-w-md mx-auto leading-relaxed">
+                    આ પ્રોગ્રામની તારીખ **{submission.programDate}** ({submission.programTime}) નક્કી થયેલ છે. તમારી સીટ કન્ફર્મ કરવા માટે કૃપા કરીને નીચે આપેલા QR કોડ પર ₹{submission.amount || '100'} પેમેન્ટ કરો અને તેનો સ્ક્રીનશોટ અપલોડ કરો.
+                  </p>
+                  
+                  {/* QR Code and Payee Details */}
+                  <div className="flex flex-col items-center justify-center p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 max-w-xs mx-auto">
+                    <div className="w-40 h-40 bg-white p-2 rounded-xl flex items-center justify-center shadow-lg">
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=${submission.upiId}&pn=${submission.payeeName}&am=${submission.amount}&cu=INR`)}`}
+                        alt="UPI QR Code"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="text-center space-y-1">
+                      <span className="text-[10px] text-slate-500 uppercase tracking-widest block font-semibold">Scan to Pay</span>
+                      <span className="text-xs text-rose-400 font-bold block">{submission.upiId}</span>
+                      <span className="text-[11px] text-slate-400 block font-medium">Name: {submission.payeeName}</span>
+                      <span className="text-sm text-slate-200 font-extrabold block mt-1">Amount: ₹{submission.amount}</span>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleUploadPayment} className="space-y-4 max-w-md mx-auto">
+                    <div className="border-2 border-dashed border-rose-950/40 hover:border-rose-500/50 rounded-2xl p-4 text-center cursor-pointer transition-colors relative bg-slate-900/50">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        required
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            setPaymentScreenshot(e.target.files[0]);
+                          }
+                        }}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      {paymentPreview ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <img src={paymentPreview} alt="Screenshot Preview" className="w-20 h-20 object-cover rounded-lg border border-slate-700" />
+                          <span className="text-xs text-slate-400 font-medium">{paymentScreenshot?.name}</span>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <div className="text-2xl text-slate-500">&uarr;</div>
+                          <p className="text-xs font-medium text-slate-300">Upload Payment Screenshot</p>
+                          <p className="text-[10px] text-slate-500 font-normal">Supports JPG, PNG, WEBP</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {uploadError && (
+                      <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 py-2 px-3 rounded-lg text-center font-medium">
+                        {uploadError}
+                      </p>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={uploadingPayment}
+                      className="w-full py-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 active:scale-[0.99] text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-rose-500/20"
+                    >
+                      {uploadingPayment ? 'સબમિટ થઈ રહ્યું છે...' : 'પેમેન્ટ કન્ફર્મ કરો'}
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-2xl font-bold text-slate-100">ઇન્ક્વાયરી રજીસ્ટ્રેશન સફળ!</h2>
+                  <p className="text-slate-300 text-sm max-w-sm mx-auto leading-relaxed">
+                    નમસ્તે <strong>{submission.husbandName} & {submission.wifeName}</strong>, આ પ્રોગ્રામની તારીખ હજી નક્કી થઈ નથી.
+                  </p>
+                  <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl max-w-xs mx-auto">
+                    <span className="text-xs text-slate-500 uppercase tracking-wider block">Inquiry ID</span>
+                    <span className="text-xl font-extrabold text-amber-500 tracking-wider font-mono">{submission.inquiryId}</span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed max-w-xs mx-auto">
+                    જ્યારે પણ આ પ્રોગ્રામની તારીખ નક્કી થશે ત્યારે અમે તમને વૉટ્સએપ/ફોન દ્વારા જાણ કરીશું. તારીખ નક્કી થયા પછી તમે અહીંથી જ પેમેન્ટ સબમિટ કરી શકશો.
+                  </p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="w-full py-3 border border-slate-800 hover:bg-slate-900 active:scale-[0.99] text-slate-300 font-bold rounded-xl transition-all"
+                  >
+                    Refresh Status
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
           {submission.status === 'pending' && (
             <div className="space-y-6 py-6">
               <div className="w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto text-3xl animate-bounce">
                 ⏳
               </div>
-              <h2 className="text-2xl font-bold text-slate-100">Verification Pending</h2>
+              <h2 className="text-2xl font-bold text-slate-100">પેમેન્ટ વેરિફિકેશન ચાલુ છે</h2>
               <p className="text-slate-300 text-sm max-w-sm mx-auto leading-relaxed">
-                Hello <strong>{submission.husbandName} & {submission.wifeName}</strong>, your payment verification is currently in progress.
+                નમસ્તે <strong>{submission.husbandName} & {submission.wifeName}</strong>, તમારું પેમેન્ટ સફળતાપૂર્વક અપલોડ થઈ ગયું છે. અમે વેરિફાય કરીને ટૂંક સમયમાં તમારો પાસ કન્ફર્મ કરી દઈશું.
               </p>
               <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl max-w-xs mx-auto">
                 <span className="text-xs text-slate-500 uppercase tracking-wider block">Inquiry ID</span>
                 <span className="text-xl font-extrabold text-amber-500 tracking-wider font-mono">{submission.inquiryId}</span>
               </div>
               <p className="text-xs text-slate-500">
-                Please wait for the administrator to approve your details. Once approved, refresh this page to download your pass.
+                કૃપા કરીને એડમિનિસ્ટ્રેટર દ્વારા પેમેન્ટ મંજૂર કરવાની પ્રતીક્ષા કરો. મંજૂર થયા પછી પાસ ડાઉનલોડ કરવા આ પેજને રીફ્રેશ કરો.
               </p>
               <button
                 onClick={() => window.location.reload()}

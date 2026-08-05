@@ -18,6 +18,7 @@ interface Program {
   date: string;
   capacity: number;
   bookingsCount: number;
+  isDateFinal?: boolean;
 }
 
 const ADMIN_WHATSAPP_NUMBER = '919213532835'; // Configure Admin WhatsApp number here
@@ -382,12 +383,57 @@ export default function Home() {
       return;
     }
     const selectedProgram = programs.find(p => p.id === selectedProgramId);
-    if (selectedProgram && selectedProgram.bookingsCount + 2 > selectedProgram.capacity) {
-      setError('The selected program slot is sold out (not enough seats left for a couple). Please select another slot.');
+    if (!selectedProgram) {
+      setError('પ્રોગ્રામ મળ્યો નથી!');
       return;
     }
-    setError('');
-    setStep(2); // Go to payment step
+
+    const isDateFinal = selectedProgram.isDateFinal !== false;
+    if (isDateFinal) {
+      if (selectedProgram.bookingsCount + 2 > selectedProgram.capacity) {
+        setError('The selected program slot is sold out (not enough seats left for a couple). Please select another slot.');
+        return;
+      }
+      setError('');
+      setStep(2); // Go to payment step
+    } else {
+      // Direct submit for inquiry
+      setError('');
+      setSubmitting(true);
+      try {
+        let compressedPhoto = couplePhoto!;
+        try {
+          compressedPhoto = await compressImage(couplePhoto!);
+        } catch (e) {
+          console.error('Error compressing couple photo:', e);
+        }
+
+        const formData = new FormData();
+        formData.append('husbandName', husbandName);
+        formData.append('wifeName', wifeName);
+        formData.append('surname', surname);
+        formData.append('phoneNumber', phoneNumber);
+        formData.append('couplePhoto', compressedPhoto);
+        formData.append('programId', selectedProgramId);
+
+        const response = await fetch(`${API_BASE_URL}/api/submit`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        const result = await response.json();
+        if (response.ok && result.success) {
+          setInquiryId(result.data.inquiryId);
+          setStep(3); // Go to confirmation step
+        } else {
+          setError(result.error || 'Something went wrong. Please try again.');
+        }
+      } catch (err) {
+        setError('Connection failed. Make sure backend server is running on port 5001.');
+      } finally {
+        setSubmitting(false);
+      }
+    }
   };
 
   const handlePaymentSubmit = async () => {
@@ -451,7 +497,9 @@ export default function Home() {
     link.click();
   };
 
-  const selectedProgramName = programs.find(p => p.id === selectedProgramId)?.name || 'Couple Pass';
+  const selectedProgram = programs.find(p => p.id === selectedProgramId);
+  const selectedProgramName = selectedProgram?.name || 'Couple Pass';
+  const isSelectedProgramDateFinal = selectedProgram ? selectedProgram.isDateFinal !== false : true;
 
   return (
     <div 
@@ -637,16 +685,18 @@ export default function Home() {
                     <>
                       <option value="" className="text-slate-500">Choose an available slot</option>
                       {programs
-                        .filter((prog) => (prog.capacity - prog.bookingsCount) >= 2)
+                        .filter((prog) => prog.isDateFinal === false || (prog.capacity - prog.bookingsCount) >= 2)
                         .map((prog) => {
                           const remainingSeats = prog.capacity - prog.bookingsCount;
+                          const dateStr = prog.isDateFinal !== false ? prog.date : 'Date TBD (તારીખ નક્કી થવાની બાકી)';
+                          const coupleStr = prog.isDateFinal !== false ? `(${Math.floor(remainingSeats / 2)} couples left)` : '(Inquiry Only / ફક્ત ઇન્ક્વાયરી)';
                           return (
                             <option 
                               key={prog.id} 
                               value={prog.id} 
                               className="text-slate-100"
                             >
-                              {prog.name} ({prog.date}) ({Math.floor(remainingSeats / 2)} couples left)
+                              {prog.name} - {dateStr} {coupleStr}
                             </option>
                           );
                         })}
@@ -686,9 +736,10 @@ export default function Home() {
 
               <button
                 type="submit"
-                className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-bold rounded-2xl transition-all shadow-lg shadow-rose-500/20 animate-heartbeat"
+                disabled={submitting}
+                className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-bold rounded-2xl transition-all shadow-lg shadow-rose-500/20 animate-heartbeat disabled:opacity-50"
               >
-                Proceed to Payment
+                {submitting ? 'Submitting...' : (isSelectedProgramDateFinal ? 'Proceed to Payment' : 'Submit Inquiry / ઇન્ક્વાયરી રજીસ્ટર કરો')}
               </button>
             </form>
           )}
@@ -763,16 +814,22 @@ export default function Home() {
             </div>
           )}
 
-          {/* STEP 3: Pass Result & Download (Pending Approval View) */}
+          {/* STEP 3: Pass Result & Download (Pending/Inquiry Approval View) */}
           {step === 3 && (
             <div className="space-y-6 flex flex-col items-center py-4">
               <div className="w-16 h-16 rounded-full bg-rose-500/15 text-rose-400 flex items-center justify-center text-3xl animate-bounce">
-                ⏳
+                {isSelectedProgramDateFinal ? '⏳' : '📝'}
               </div>
               
               <div className="text-center w-full">
-                <h2 className="text-2xl font-bold text-slate-100 tracking-tight">Details Submitted!</h2>
-                <p className="text-slate-400 text-sm mt-2 leading-relaxed">પાસ મેળવવા માટે પેમેન્ટ વેરિફિકેશન કરવું જરૂરી છે તે માટે નીચે આપેલા બટન પર ક્લિક કરો.</p>
+                <h2 className="text-2xl font-bold text-slate-100 tracking-tight">
+                  {isSelectedProgramDateFinal ? 'Details Submitted!' : 'Inquiry Registered!'}
+                </h2>
+                <p className="text-slate-400 text-sm mt-2 leading-relaxed">
+                  {isSelectedProgramDateFinal 
+                    ? 'પાસ મેળવવા માટે પેમેન્ટ વેરિફિકેશન કરવું જરૂરી છે તે માટે નીચે આપેલા બટન પર ક્લિક કરો.' 
+                    : 'આ પ્રોગ્રામની તારીખ હજી નક્કી થઈ નથી. તારીખ નક્કી થતાં જ અમે તમને વૉટ્સએપ/ફોન દ્વારા જાણ કરીશું જેથી તમે પેમેન્ટ કરીને તમારી સીટ કન્ફર્મ કરી શકો.'}
+                </p>
               </div>
 
               <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xs text-center my-2">
@@ -783,16 +840,18 @@ export default function Home() {
               <div className="w-full space-y-3">
                 <a
                   href={`https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${encodeURIComponent(
-                    paymentRequestMsgTemplate
-                      .replace(/{programName}/g, selectedProgramName)
-                      .replace(/{inquiryId}/g, inquiryId)
-                      .replace(/{phoneNumber}/g, phoneNumber)
+                    isSelectedProgramDateFinal
+                      ? paymentRequestMsgTemplate
+                          .replace(/{programName}/g, selectedProgramName)
+                          .replace(/{inquiryId}/g, inquiryId)
+                          .replace(/{phoneNumber}/g, phoneNumber)
+                      : `નમસ્તે, મેં ${selectedProgramName} માટે મારી ઇન્ક્વાયરી રજીસ્ટર કરી છે. મારો Inquiry ID: ${inquiryId} છે. જ્યારે આ પ્રોગ્રામની તારીખ નક્કી થાય ત્યારે કૃપા કરીને મને જાણ કરશો. આભાર!`
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold rounded-2xl transition-all shadow-lg shadow-emerald-600/20 text-center"
                 >
-                  💬 Send Details to WhatsApp
+                  {isSelectedProgramDateFinal ? '💬 Send Details to WhatsApp' : '💬 Send Inquiry details to WhatsApp'}
                 </a>
 
 

@@ -156,6 +156,7 @@ interface Program {
   date: string;
   capacity: number;
   bookingsCount: number;
+  isDateFinal?: boolean;
   cardTemplate?: string;
   heartX?: number;
   heartY?: number;
@@ -271,6 +272,7 @@ export default function AdminDashboard() {
   const [newProgramName, setNewProgramName] = useState('');
   const [newProgramDate, setNewProgramDate] = useState('');
   const [newProgramCapacity, setNewProgramCapacity] = useState<number | ''>('');
+  const [newProgramIsDateFinal, setNewProgramIsDateFinal] = useState<boolean>(true);
   const [newProgramCardTemplate, setNewProgramCardTemplate] = useState<string | null>(null);
   const [newProgramHeartX, setNewProgramHeartX] = useState<number>(144);
   const [newProgramHeartY, setNewProgramHeartY] = useState<number>(112);
@@ -293,6 +295,7 @@ export default function AdminDashboard() {
   const [editProgramName, setEditProgramName] = useState('');
   const [editProgramDate, setEditProgramDate] = useState('');
   const [editProgramCapacity, setEditProgramCapacity] = useState<number | ''>('');
+  const [editProgramIsDateFinal, setEditProgramIsDateFinal] = useState<boolean>(true);
   const [editProgramCardTemplate, setEditProgramCardTemplate] = useState<string | null>(null);
   const [editProgramHeartX, setEditProgramHeartX] = useState<number>(144);
   const [editProgramHeartY, setEditProgramHeartY] = useState<number>(112);
@@ -304,7 +307,7 @@ export default function AdminDashboard() {
   const [editProgramSuccess, setEditProgramSuccess] = useState('');
 
   // Duplicate Inquiries States
-  const [viewMode, setViewMode] = useState<'all' | 'duplicates'>('all');
+  const [viewMode, setViewMode] = useState<'all' | 'duplicates' | 'inquiries'>('all');
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
   const [loadingDuplicates, setLoadingDuplicates] = useState(false);
   const [selectedInquiryIds, setSelectedInquiryIds] = useState<string[]>([]);
@@ -636,7 +639,7 @@ export default function AdminDashboard() {
   const handleCreateProgram = async (e: React.FormEvent) => {
     e.preventDefault();
     const activePassword = password || sessionStorage.getItem('adminPassword') || '';
-    if (!newProgramName || !newProgramDate || !newProgramCapacity) {
+    if (!newProgramName || (newProgramIsDateFinal && !newProgramDate) || !newProgramCapacity) {
       setProgramError('Please fill in all program fields.');
       return;
     }
@@ -651,6 +654,7 @@ export default function AdminDashboard() {
           name: newProgramName,
           date: newProgramDate,
           capacity: Number(newProgramCapacity),
+          isDateFinal: newProgramIsDateFinal,
           cardTemplate: newProgramCardTemplate,
           heartX: Number(newProgramHeartX),
           heartY: Number(newProgramHeartY),
@@ -666,6 +670,7 @@ export default function AdminDashboard() {
         setNewProgramName('');
         setNewProgramDate('');
         setNewProgramCapacity('');
+        setNewProgramIsDateFinal(true);
         setNewProgramCardTemplate(null);
         setNewProgramHeartX(144);
         setNewProgramHeartY(112);
@@ -712,6 +717,7 @@ export default function AdminDashboard() {
     setEditProgramName(prog.name);
     setEditProgramDate(prog.date);
     setEditProgramCapacity(prog.capacity);
+    setEditProgramIsDateFinal(prog.isDateFinal !== false);
     setEditProgramCardTemplate(prog.cardTemplate || null);
     setEditProgramHeartX(prog.heartX ?? 144);
     setEditProgramHeartY(prog.heartY ?? 112);
@@ -727,7 +733,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!editingProgram) return;
     const activePassword = password || sessionStorage.getItem('adminPassword') || '';
-    if (!editProgramName || !editProgramDate || !editProgramCapacity) {
+    if (!editProgramName || (editProgramIsDateFinal && !editProgramDate) || !editProgramCapacity) {
       setEditProgramError('Please fill in all program fields.');
       return;
     }
@@ -742,6 +748,7 @@ export default function AdminDashboard() {
           name: editProgramName,
           date: editProgramDate,
           capacity: Number(editProgramCapacity),
+          isDateFinal: editProgramIsDateFinal,
           cardTemplate: editProgramCardTemplate,
           heartX: Number(editProgramHeartX),
           heartY: Number(editProgramHeartY),
@@ -1895,11 +1902,24 @@ export default function AdminDashboard() {
                 <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Program Date</label>
                 <input
                   type="date"
-                  required
+                  required={editProgramIsDateFinal}
                   value={editProgramDate}
                   onChange={(e) => setEditProgramDate(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
                 />
+              </div>
+
+              <div className="flex items-center gap-2 py-2">
+                <input
+                  type="checkbox"
+                  id="editProgramIsDateFinal"
+                  checked={editProgramIsDateFinal}
+                  onChange={(e) => setEditProgramIsDateFinal(e.target.checked)}
+                  className="rounded bg-slate-900 border-slate-800 text-amber-500 focus:ring-amber-500 h-4 w-4"
+                />
+                <label htmlFor="editProgramIsDateFinal" className="text-xs font-semibold text-slate-300 cursor-pointer">
+                  Date is Final? / Collect Payment (તારીખ નક્કી છે / પેમેન્ટ લેવું)
+                </label>
               </div>
 
               <div>
@@ -2348,11 +2368,24 @@ export default function AdminDashboard() {
                 <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Program Date</label>
                 <input
                   type="date"
-                  required
+                  required={newProgramIsDateFinal}
                   value={newProgramDate}
                   onChange={(e) => setNewProgramDate(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
                 />
+              </div>
+
+              <div className="flex items-center gap-2 py-2">
+                <input
+                  type="checkbox"
+                  id="newProgramIsDateFinal"
+                  checked={newProgramIsDateFinal}
+                  onChange={(e) => setNewProgramIsDateFinal(e.target.checked)}
+                  className="rounded bg-slate-900 border-slate-800 text-amber-500 focus:ring-amber-500 h-4 w-4"
+                />
+                <label htmlFor="newProgramIsDateFinal" className="text-xs font-semibold text-slate-300 cursor-pointer">
+                  Date is Final? / Collect Payment (તારીખ નક્કી છે / પેમેન્ટ લેવું)
+                </label>
               </div>
 
               <div>
@@ -3094,10 +3127,25 @@ export default function AdminDashboard() {
         <div className="flex bg-slate-950/40 p-1.5 rounded-2xl border border-slate-800/80 gap-2 mb-6">
           <button
             type="button"
-            onClick={() => setViewMode('all')}
+            onClick={() => {
+              setViewMode('all');
+              setStatusFilter('');
+              fetchSubmissions({ page: 1, status: '' });
+            }}
             className={`flex-1 py-3 text-center rounded-xl text-sm font-bold transition-all ${viewMode === 'all' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:text-slate-200'}`}
           >
             📋 All Registrations (બધા રજીસ્ટ્રેશન)
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setViewMode('inquiries');
+              setStatusFilter('inquiry');
+              fetchSubmissions({ page: 1, status: 'inquiry' });
+            }}
+            className={`flex-1 py-3 text-center rounded-xl text-sm font-bold transition-all ${viewMode === 'inquiries' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            📝 Inquiries Only (માત્ર ઇન્ક્વાયરી)
           </button>
           <button
             type="button"
@@ -3111,7 +3159,7 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        {viewMode === 'all' ? (
+        {viewMode === 'all' || viewMode === 'inquiries' ? (
           <>
             {/* Filters and Search */}
             <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
@@ -3143,6 +3191,7 @@ export default function AdminDashboard() {
                 <option value="pending">Pending</option>
                 <option value="approved">Approved</option>
                 <option value="rejected">Rejected</option>
+                <option value="inquiry">Inquiries (ઇન્ક્વાયરી)</option>
               </select>
             </div>
 
@@ -3226,7 +3275,8 @@ export default function AdminDashboard() {
                   const waPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
                   const isApproved = sub.status === 'approved';
                   const isRejected = sub.status === 'rejected';
-                  const isPending = !isApproved && !isRejected;
+                  const isInquiry = sub.status === 'inquiry';
+                  const isPending = !isApproved && !isRejected && !isInquiry;
 
                   return (
                     <tr key={sub.inquiryId} className="hover:bg-slate-900/30 transition-colors">
@@ -3296,7 +3346,8 @@ export default function AdminDashboard() {
                       <td className="py-4 px-6">
                         <span className={`px-2 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase ${isApproved ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400' :
                           isRejected ? 'bg-red-500/15 border border-red-500/30 text-red-400' :
-                            'bg-amber-500/15 border border-amber-500/30 text-amber-400'
+                            isInquiry ? 'bg-blue-500/15 border border-blue-500/30 text-blue-400' :
+                              'bg-amber-500/15 border border-amber-500/30 text-amber-400'
                           }`}>
                           {sub.status ? sub.status : 'pending'}
                         </span>
@@ -3316,6 +3367,26 @@ export default function AdminDashboard() {
                             <button
                               onClick={() => handleRejectSubmission(sub.inquiryId)}
                               className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs transition-all"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        )}
+                        {isInquiry && (
+                          <div className="flex flex-col gap-2">
+                            <a
+                              href={`https://wa.me/${waPhone}?text=${encodeURIComponent(
+                                `નમસ્તે ${sub.husbandName} & ${sub.wifeName}, તમે જે પ્રોગ્રામ (${sub.programName}) માટે ઇન્ક્વાયરી રજીસ્ટર કરી હતી તેની તારીખ નક્કી થઈ ગઈ છે.\n\nનક્કી થયેલ તારીખ: ${sub.programDate}\n\nકૃપા કરીને તમારી લિંક પર જઈને પેમેન્ટ કરી તમારી સીટ કન્ફર્મ કરો: ${typeof window !== 'undefined' ? window.location.origin.replace('localhost', '127.0.0.1') : ''}/pass/${sub.inquiryId}`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs transition-all text-center"
+                            >
+                              💬 Request Pay
+                            </a>
+                            <button
+                              onClick={() => handleRejectSubmission(sub.inquiryId)}
+                              className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white font-semibold rounded-lg text-xs transition-all"
                             >
                               Reject
                             </button>

@@ -81,6 +81,7 @@ const ProgramSchema = new mongoose.Schema({
   time: { type: String, default: "8:30 PM" },
   capacity: { type: Number, required: true },
   bookingsCount: { type: Number, default: 0 },
+  isDateFinal: { type: Boolean, default: true },
   cardTemplate: { type: String },
   heartX: { type: Number, default: 144 },
   heartY: { type: Number, default: 112 },
@@ -327,18 +328,20 @@ app.get('/api/programs/:id/template', async (req, res) => {
 
 // Create a new program (Admin protected)
 app.post('/api/programs', requireAuth, async (req, res) => {
-  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY } = req.body;
-  if (!name || !date || !capacity) {
+  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY, isDateFinal } = req.body;
+  const finalIsDateFinal = isDateFinal !== undefined ? isDateFinal : true;
+  if (!name || !capacity || (finalIsDateFinal && !date)) {
     return res.status(400).json({ error: 'Name, date, and capacity are required.' });
   }
   try {
     const newProgram = await Program.create({
       id: `prog-${Date.now()}`,
       name,
-      date,
+      date: finalIsDateFinal ? date : (date || 'TBD'),
       time: time || '8:30 PM',
       capacity: parseInt(capacity, 10),
       bookingsCount: 0,
+      isDateFinal: finalIsDateFinal,
       cardTemplate,
       heartX: heartX !== undefined ? parseInt(heartX, 10) : 144,
       heartY: heartY !== undefined ? parseInt(heartY, 10) : 112,
@@ -372,7 +375,7 @@ app.delete('/api/programs/:id', requireAuth, async (req, res) => {
 // Update a program (Admin protected)
 app.put('/api/programs/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
-  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY } = req.body;
+  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY, isDateFinal } = req.body;
   try {
     const program = await Program.findOne({ id });
     if (!program) {
@@ -380,7 +383,12 @@ app.put('/api/programs/:id', requireAuth, async (req, res) => {
     }
 
     if (name) program.name = name;
-    if (date) program.date = date;
+    if (isDateFinal !== undefined) program.isDateFinal = isDateFinal;
+    if (date) {
+      program.date = date;
+    } else if (program.isDateFinal === false) {
+      program.date = 'TBD';
+    }
     if (time !== undefined) program.time = time;
     if (capacity) program.capacity = parseInt(capacity, 10);
     if (cardTemplate !== undefined) program.cardTemplate = cardTemplate;
@@ -428,7 +436,9 @@ app.post('/api/submit', upload.fields([
       return res.status(400).json({ error: 'Invalid program/slot selected' });
     }
 
-    if (program.bookingsCount + 2 > program.capacity) {
+    const isDateFinal = program.isDateFinal !== false;
+
+    if (isDateFinal && (program.bookingsCount + 2 > program.capacity)) {
       return res.status(400).json({ error: 'This program slot is sold out (not enough seats left for a couple).' });
     }
 
@@ -437,6 +447,10 @@ app.post('/api/submit', upload.fields([
 
     if (!couplePhotoFile) {
       return res.status(400).json({ error: 'Couple photo is required' });
+    }
+
+    if (isDateFinal && !paymentScreenshotFile) {
+      return res.status(400).json({ error: 'Payment screenshot is required' });
     }
 
     const nextSeq = await getNextInquiryNumber();
@@ -452,42 +466,44 @@ app.post('/api/submit', upload.fields([
       paymentScreenshotUrl = await uploadToCloudinary(paymentScreenshotBase64, 'paymentScreenshots');
     }
 
-    // Increment bookings count by 2 (since it is a couple registration)
-    program.bookingsCount += 2;
-    await program.save();
+    if (isDateFinal) {
+      // Increment bookings count by 2 (since it is a couple registration)
+      program.bookingsCount += 2;
+      await program.save();
 
-    // Increment UPI bookings count
-    try {
-      const settings = await Setting.findOne({ key: 'main' });
-      if (settings) {
-        settings.upiBookingsCount = (settings.upiBookingsCount || 0) + 1;
-        if (settings.upiBookingsCount >= settings.upiLimit) {
-          if (settings.upiIds && settings.upiIds.length > 1) {
-            const oldUpi = settings.upiId;
-            const nextIndex = (settings.activeUpiIndex + 1) % settings.upiIds.length;
-            settings.activeUpiIndex = nextIndex;
-            settings.upiId = settings.upiIds[nextIndex];
-            settings.upiBookingsCount = 0; // reset counter
+      // Increment UPI bookings count
+      try {
+        const settings = await Setting.findOne({ key: 'main' });
+        if (settings) {
+          settings.upiBookingsCount = (settings.upiBookingsCount || 0) + 1;
+          if (settings.upiBookingsCount >= settings.upiLimit) {
+            if (settings.upiIds && settings.upiIds.length > 1) {
+              const oldUpi = settings.upiId;
+              const nextIndex = (settings.activeUpiIndex + 1) % settings.upiIds.length;
+              settings.activeUpiIndex = nextIndex;
+              settings.upiId = settings.upiIds[nextIndex];
+              settings.upiBookingsCount = 0; // reset counter
 
-            await Notification.create({
-              title: 'UPI Auto-Rotated',
-              message: `૫૦ સબમિશન પૂર્ણ થવાના કારણે UPI ID આપોઆપ બદલાઈ ગયું છે. જૂનું UPI: ${oldUpi}, નવું એક્ટિવ UPI: ${settings.upiId}`,
-              type: 'info'
-            });
-          } else {
-            // Only 1 UPI ID exists, cannot rotate
-            settings.upiBookingsCount = settings.upiLimit; // keep at limit
-            await Notification.create({
-              title: 'UPI Limit Reached!',
-              message: `ચાલુ UPI ID (${settings.upiId}) પર ૫૦ સબમિશન પૂર્ણ થઈ ગયા છે. કૃપા કરીને એડમિન પેનલમાંથી નવું UPI ID સેટ કરો.`,
-              type: 'error'
-            });
+              await Notification.create({
+                title: 'UPI Auto-Rotated',
+                message: `૫૦ સબમિશન પૂર્ણ થવાના કારણે UPI ID આપોઆપ બદલાઈ ગયું છે. જૂનું UPI: ${oldUpi}, નવું એક્ટિવ UPI: ${settings.upiId}`,
+                type: 'info'
+              });
+            } else {
+              // Only 1 UPI ID exists, cannot rotate
+              settings.upiBookingsCount = settings.upiLimit; // keep at limit
+              await Notification.create({
+                title: 'UPI Limit Reached!',
+                message: `ચાલુ UPI ID (${settings.upiId}) પર ૫૦ સબમિશન પૂર્ણ થઈ ગયા છે. કૃપા કરીને એડમિન પેનલમાંથી નવું UPI ID સેટ કરો.`,
+                type: 'error'
+              });
+            }
           }
+          await settings.save();
         }
-        await settings.save();
+      } catch (err) {
+        console.error('Error in UPI auto-rotation tracking:', err);
       }
-    } catch (err) {
-      console.error('Error in UPI auto-rotation tracking:', err);
     }
 
     const newSubmission = await Submission.create({
@@ -503,7 +519,7 @@ app.post('/api/submit', upload.fields([
       couplePhoto: couplePhotoUrl,
       paymentScreenshot: paymentScreenshotUrl,
       payeeNameFromReceipt: paymentScreenshotFile ? 'Processing...' : 'No payment file',
-      status: 'pending', // Default status is pending
+      status: isDateFinal ? 'pending' : 'inquiry', // inquiry if date not finalized
       createdAt: new Date()
     });
 
@@ -879,15 +895,18 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
     let photoOffsetY = 0;
     let programTime = submission.programTime || "8:30 PM";
 
+    let isDateFinal = true;
     if (submission.programId) {
       const program = await Program.findOne(
         { id: submission.programId },
         {
-          id: 1, name: 1, date: 1, time: 1, heartX: 1, heartY: 1, heartWidth: 1, heartHeight: 1, photoZoom: 1, photoOffsetY: 1,
+          id: 1, name: 1, date: 1, time: 1, isDateFinal: 1, heartX: 1, heartY: 1, heartWidth: 1, heartHeight: 1, photoZoom: 1, photoOffsetY: 1,
           hasTemplate: { $cond: [ { $eq: [ { $type: "$cardTemplate" }, "string" ] }, true, false ] }
         }
       );
       if (program) {
+        isDateFinal = program.isDateFinal !== false;
+        submission.programDate = program.date;
         if (program.get('hasTemplate')) {
           const protocol = req.headers['x-forwarded-proto'] || req.protocol;
           const host = req.get('host');
@@ -903,6 +922,20 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
       }
     }
 
+    let upiId = 'payee@upi';
+    let payeeName = 'Couple Pass';
+    let amount = '100';
+    try {
+      const setting = await Setting.findOne({ key: 'main' });
+      if (setting) {
+        upiId = setting.upiId;
+        payeeName = setting.payeeName;
+        amount = setting.amount;
+      }
+    } catch (settingErr) {
+      console.error('Error fetching settings for status:', settingErr);
+    }
+
     res.json({
       inquiryId: submission.inquiryId,
       husbandName: submission.husbandName,
@@ -916,6 +949,10 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
       couplePhoto: submission.couplePhoto,
       status: submission.status,
       rejectionReason: submission.rejectionReason,
+      isDateFinal,
+      upiId,
+      payeeName,
+      amount,
       cardTemplate,
       heartX,
       heartY,
@@ -926,6 +963,198 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Server error checking status.' });
+  }
+});
+
+// Public endpoint for submitting payment screenshot for an inquiry
+app.post('/api/submissions/:inquiryId/pay', upload.fields([
+  { name: 'paymentScreenshot', maxCount: 1 }
+]), async (req, res) => {
+  const { inquiryId } = req.params;
+  try {
+    const formattedId = (inquiryId || '').trim().toUpperCase();
+    const submission = await Submission.findOne({ inquiryId: formattedId });
+    if (!submission) {
+      return res.status(404).json({ error: 'Inquiry not found.' });
+    }
+
+    if (submission.status !== 'inquiry') {
+      return res.status(400).json({ error: 'This submission is not in inquiry state.' });
+    }
+
+    const program = await Program.findOne({ id: submission.programId });
+    if (!program) {
+      return res.status(400).json({ error: 'Program not found.' });
+    }
+
+    if (program.isDateFinal === false) {
+      return res.status(400).json({ error: 'The program date is not finalized yet.' });
+    }
+
+    if (program.bookingsCount + 2 > program.capacity) {
+      return res.status(400).json({ error: 'This program slot is now sold out. Cannot accept payment.' });
+    }
+
+    const paymentScreenshotFile = req.files && req.files['paymentScreenshot'] ? req.files['paymentScreenshot'][0] : null;
+    if (!paymentScreenshotFile) {
+      return res.status(400).json({ error: 'Payment screenshot is required.' });
+    }
+
+    const paymentScreenshotBase64 = `data:${paymentScreenshotFile.mimetype};base64,${paymentScreenshotFile.buffer.toString('base64')}`;
+    const paymentScreenshotUrl = await uploadToCloudinary(paymentScreenshotBase64, 'paymentScreenshots');
+
+    // Increment bookings count
+    program.bookingsCount += 2;
+    await program.save();
+
+    // Increment UPI bookings count
+    try {
+      const settings = await Setting.findOne({ key: 'main' });
+      if (settings) {
+        settings.upiBookingsCount = (settings.upiBookingsCount || 0) + 1;
+        if (settings.upiBookingsCount >= settings.upiLimit) {
+          if (settings.upiIds && settings.upiIds.length > 1) {
+            const oldUpi = settings.upiId;
+            const nextIndex = (settings.activeUpiIndex + 1) % settings.upiIds.length;
+            settings.activeUpiIndex = nextIndex;
+            settings.upiId = settings.upiIds[nextIndex];
+            settings.upiBookingsCount = 0; // reset counter
+
+            await Notification.create({
+              title: 'UPI Auto-Rotated',
+              message: `૫૦ સબમિશન પૂર્ણ થવાના કારણે UPI ID આપોઆપ બદલાઈ ગયું છે. જૂનું UPI: ${oldUpi}, નવું એક્ટિવ UPI: ${settings.upiId}`,
+              type: 'info'
+            });
+          } else {
+            settings.upiBookingsCount = settings.upiLimit; // keep at limit
+            await Notification.create({
+              title: 'UPI Limit Reached!',
+              message: `ચાલુ UPI ID (${settings.upiId}) પર ૫૦ સબમિશન પૂર્ણ થઈ ગયા છે. કૃપા કરીને એડમિન પેનલમાંથી નવું UPI ID સેટ કરો.`,
+              type: 'error'
+            });
+          }
+        }
+        await settings.save();
+      }
+    } catch (err) {
+      console.error('Error in UPI auto-rotation tracking:', err);
+    }
+
+    submission.paymentScreenshot = paymentScreenshotUrl;
+    submission.status = 'pending';
+    submission.payeeNameFromReceipt = 'Processing...';
+    // Update live program date details to ensure submission stays accurate
+    submission.programDate = program.date;
+    submission.programTime = program.time || "8:30 PM";
+    await submission.save();
+
+    res.json({ success: true, message: 'Payment screenshot uploaded successfully.' });
+
+    // Run heavy QR scan and Tesseract OCR text recognition asynchronously in the background
+    setImmediate(async () => {
+      try {
+        let payeeNameFromReceipt = 'Not detected';
+        let isUpiQr = false;
+        let isValidReceipt = true;
+
+        // 1. Jimp + jsQR check to see if the user uploaded the raw UPI QR code instead of receipt
+        try {
+          const image = await Jimp.read(paymentScreenshotFile.buffer);
+          const qrCode = jsQR(
+            new Uint8ClampedArray(image.bitmap.data),
+            image.bitmap.width,
+            image.bitmap.height
+          );
+          if (qrCode && qrCode.data && qrCode.data.includes('upi://pay')) {
+            isUpiQr = true;
+          }
+        } catch (qrErr) {
+          console.error('Error scanning QR code in background:', qrErr);
+        }
+
+        if (isUpiQr) {
+          await Submission.updateOne(
+            { inquiryId: formattedId },
+            {
+              status: 'rejected',
+              rejectionReason: 'તમે પેમેન્ટનો QR કોડ અપલોડ કર્યો છે. કૃપા કરીને પેમેન્ટ થયા પછીનો સક્સેસ સ્ક્રીનશોટ (Receipt) અપલોડ કરો!'
+            }
+          );
+          return;
+        }
+
+        // 2. Tesseract OCR processing to verify text keywords
+        try {
+          const ocrResult = await Tesseract.recognize(
+            paymentScreenshotFile.buffer,
+            'eng'
+          );
+          const originalText = ocrResult.data.text;
+          const text = originalText.toLowerCase();
+
+          const keywords = [
+            'success', 'successful', 'paid', 'payment', 'transferred', 'completed',
+            'utr', 'txn', 'transaction', 'ref', 'gpay', 'phonepe', 'paytm', 'bhim',
+            'sent', 'upi', 'to:', 'from:', 'rs', 'received', 'debit', 'credit'
+          ];
+
+          const hasKeyword = keywords.some(kw => {
+            const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            if (kw.length <= 3 || kw.endsWith(':')) {
+              const regex = new RegExp(`\\b${escaped}`, 'i');
+              return regex.test(text);
+            }
+            return text.includes(kw);
+          });
+
+          if (!hasKeyword) {
+            isValidReceipt = false;
+          } else {
+            // Attempt to parse who was paid
+            const patterns = [
+              /to\s*:\s*([A-Za-z0-9\s\.\-\&]+)/i,
+              /paid\s+to\s+([A-Za-z0-9\s\.\-\&]+)/i,
+              /transfer\s+to\s+([A-Za-z0-9\s\.\-\&]+)/i,
+              /payment\s+to\s+([A-Za-z0-9\s\.\-\&]+)/i,
+              /sent\s+to\s+([A-Za-z0-9\s\.\-\&]+)/i
+            ];
+
+            for (const pattern of patterns) {
+              const match = originalText.match(pattern);
+              if (match && match[1]) {
+                const extracted = match[1].split('\n')[0].trim();
+                if (extracted.length > 2 && !/^\d+$/.test(extracted)) {
+                  payeeNameFromReceipt = extracted;
+                  break;
+                }
+              }
+            }
+          }
+        } catch (ocrErr) {
+          console.error('Background OCR validation error:', ocrErr);
+        }
+
+        if (!isValidReceipt) {
+          await Submission.updateOne(
+            { inquiryId: formattedId },
+            {
+              status: 'rejected',
+              rejectionReason: 'અપલોડ કરેલી ઈમેજ પેમેન્ટ રિસીપ્ટ કે કન્ફર્મેશન સ્ક્રીનશોટ નથી. કૃપા કરીને સાચો સક્સેસ સ્ક્રીનશોટ (Receipt) અપલોડ કરો!'
+            }
+          );
+        } else {
+          await Submission.updateOne(
+            { inquiryId: formattedId },
+            { payeeNameFromReceipt }
+          );
+        }
+      } catch (bgErr) {
+        console.error('Background submission processing error:', bgErr);
+      }
+    });
+  } catch (error) {
+    console.error('Error handling payment upload:', error);
+    res.status(500).json({ error: 'Server error processing payment upload' });
   }
 });
 
