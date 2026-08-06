@@ -1622,6 +1622,207 @@ export default function AdminDashboard() {
       a.click();
       document.body.removeChild(a);
       setZipProgress('Done!');
+    }
+  };
+
+  const handleDownloadPassesZip = async (specificProg?: Program) => {
+    const prog = specificProg || programs.find(p => p.id === selectedProgramIdForFrames);
+    if (!prog) return;
+
+    const searchedCpls = cplSearchQuery
+      .split(/[\s,]+/)
+      .map(s => s.trim().toUpperCase())
+      .filter(Boolean);
+    const isBulk = searchedCpls.length > 1;
+
+    const progSubmissions = approvedSubmissionsForFrames.filter(sub => {
+      const isSelected = selectedFrameInquiryIds.includes(sub.inquiryId);
+      if (!isSelected) return false;
+      if (cplSearchQuery.trim()) {
+        return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl, isBulk));
+      }
+      return true;
+    });
+    if (progSubmissions.length === 0) {
+      alert('No selected approved registrations with couple photos found matching the filter.');
+      return;
+    }
+
+    try {
+      setZipping(true);
+      setZipProgress('Starting...');
+      const zip = new JSZip();
+
+      // Helper to load image
+      const loadImage = (src: string): Promise<HTMLImageElement> => {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => resolve(img);
+          img.onerror = (e) => reject(new Error('Failed to load image: ' + src));
+          img.src = src;
+        });
+      };
+
+      // Load program card template
+      setZipProgress('Loading pass template...');
+      const templatePath = prog.cardTemplate || '/card_template.png';
+      const templateImgSrc = (templatePath.startsWith('data:') || templatePath.startsWith('http://') || templatePath.startsWith('https://') || templatePath === '/card_template.png')
+        ? templatePath
+        : `${API_BASE_URL}${templatePath}`;
+      const templateImg = await loadImage(templateImgSrc);
+
+      // Create a temporary canvas for scanning white transparency
+      const canvas = document.createElement('canvas');
+      canvas.width = 576;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Could not get 2D context');
+
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      if (!tempCtx) throw new Error('Could not get temp 2D context');
+
+      tempCtx.drawImage(templateImg, 0, 0, canvas.width, canvas.height);
+
+      const hX = prog.heartX ?? 144;
+      const hY = prog.heartY ?? 112;
+      const hW = prog.heartWidth ?? 288;
+      const hH = prog.heartHeight ?? 260;
+
+      // Make white area transparent strictly inside the heart bounding box coordinates
+      try {
+        const imgData = tempCtx.getImageData(hX, hY, hW, hH);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          if (r > 220 && g > 220 && b > 220) {
+            data[i + 3] = 0; // Make transparent
+          }
+        }
+        tempCtx.putImageData(imgData, hX, hY);
+      } catch (e) {
+        console.error("Error doing transparency scan: ", e);
+      }
+
+      // Helper to draw text details on pass
+      const drawTextDetails = (context: CanvasRenderingContext2D, sub: any) => {
+        const sideX = 385;
+        const sideY = 230;
+        const sideW = 176;
+        const sideH = 135;
+
+        context.save();
+        context.fillStyle = 'rgba(26, 6, 6, 0.95)';
+        context.strokeStyle = '#D4AF37';
+        context.lineWidth = 2;
+        context.beginPath();
+        context.roundRect(sideX, sideY, sideW, sideH, 8);
+        context.fill();
+        context.stroke();
+
+        context.fillStyle = '#D4AF37';
+        context.font = 'bold 12px sans-serif';
+        context.textAlign = 'center';
+        context.fillText('COUPLE ENTRY', sideX + sideW / 2, sideY + 20);
+
+        context.fillStyle = '#ffffff';
+        context.font = 'bold 13px sans-serif';
+        const nameLine1 = `${sub.husbandName}`.toUpperCase();
+        const nameLine2 = `& ${sub.wifeName}`.toUpperCase();
+        const nameLine3 = `${sub.surname}`.toUpperCase();
+        context.fillText(nameLine1, sideX + sideW / 2, sideY + 45);
+        context.fillText(nameLine2, sideX + sideW / 2, sideY + 65);
+        context.fillText(nameLine3, sideX + sideW / 2, sideY + 85);
+
+        context.strokeStyle = 'rgba(212, 175, 55, 0.3)';
+        context.lineWidth = 1;
+        context.beginPath();
+        context.moveTo(sideX + 15, sideY + 98);
+        context.lineTo(sideX + sideW - 15, sideY + 98);
+        context.stroke();
+
+        context.fillStyle = '#D4AF37';
+        context.font = 'bold 12px monospace';
+        context.fillText(`${sub.inquiryId}`, sideX + sideW / 2, sideY + 118);
+        context.restore();
+      };
+
+      for (let i = 0; i < progSubmissions.length; i++) {
+        const sub = progSubmissions[i];
+        setZipProgress(`Processing pass ${i + 1} of ${progSubmissions.length}...`);
+
+        try {
+          // Load couple photo
+          const photoPath = sub.couplePhoto;
+          const fullPhotoUrl = (photoPath.startsWith('data:') || photoPath.startsWith('http://') || photoPath.startsWith('https://')) ? photoPath : `${API_BASE_URL}${photoPath}`;
+          const coupleImg = await loadImage(fullPhotoUrl);
+
+          // Clear canvas
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // Calculate zoom/offset crops to match preview canvas
+          const imgAspect = coupleImg.width / coupleImg.height;
+          const heartAspect = hW / hH;
+          let drawW = hW;
+          let drawH = hH;
+          let offsetX = 0;
+          let offsetY = 0;
+
+          if (imgAspect > heartAspect) {
+            drawW = hH * imgAspect;
+            offsetX = -(drawW - hW) / 2;
+          } else {
+            drawH = hW / imgAspect;
+            offsetY = -(drawH - hH) / 2;
+          }
+
+          const zoom = sub.photoZoom ?? prog.photoZoom ?? 1.0;
+          const finalW = drawW * zoom;
+          const finalH = drawH * zoom;
+          const finalOffsetX = offsetX - (finalW - drawW) / 2;
+          const finalOffsetY = (offsetY - (finalH - drawH) / 2) + ((sub.photoOffsetY ?? prog.photoOffsetY ?? 0));
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(hX, hY, hW, hH);
+          ctx.clip();
+          ctx.drawImage(coupleImg, hX + finalOffsetX, hY + finalOffsetY, finalW, finalH);
+          ctx.restore();
+
+          // Draw template over it
+          ctx.drawImage(tempCanvas, 0, 0);
+
+          // Draw details
+          drawTextDetails(ctx, sub);
+
+          // Convert canvas to blob
+          const dataUrl = canvas.toDataURL('image/png');
+          const base64Data = dataUrl.split(',')[1];
+
+          // Add to zip (using inquiry ID / CPL number as the filename)
+          const filename = `${sub.inquiryId}_pass.png`;
+          zip.file(filename, base64Data, { base64: true });
+        } catch (err: any) {
+          console.error('Error drawing pass for submission:', sub.inquiryId, err);
+        }
+      }
+
+      setZipProgress('Generating ZIP file...');
+      const content = await zip.generateAsync({ type: 'blob' });
+      
+      setZipProgress('Downloading...');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(content);
+      a.download = `${prog.name}_entry_passes.zip`.replace(/\s+/g, '_');
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setZipProgress('Done!');
       setTimeout(() => {
         setZipping(false);
         setZipProgress('');
@@ -3351,6 +3552,13 @@ export default function AdminDashboard() {
                     className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-slate-100 font-bold rounded-xl text-sm transition-all shadow-lg shadow-purple-600/20 text-center"
                   >
                     {zipping ? `Processing (${zipProgress})` : 'Download Raw Photos ZIP'}
+                  </button>
+                  <button
+                    onClick={() => handleDownloadPassesZip()}
+                    disabled={zipping || selectedFrameInquiryIds.length === 0}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-slate-100 font-bold rounded-xl text-sm transition-all shadow-lg shadow-emerald-600/20 text-center"
+                  >
+                    {zipping ? `Processing (${zipProgress})` : 'Download Entry Passes ZIP'}
                   </button>
                 </div>
               </div>

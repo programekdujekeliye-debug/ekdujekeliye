@@ -293,14 +293,19 @@ app.get('/api/health', (req, res) => {
 // Get all programs (optimized to exclude heavy cardTemplate by default to speed up slot selection)
 app.get('/api/programs', async (req, res) => {
   try {
-    const programs = await Program.find({}, { cardTemplate: 0 });
+    const programs = await Program.find({}, {
+      id: 1, name: 1, date: 1, time: 1, capacity: 1, bookingsCount: 1, isDateFinal: 1,
+      heartX: 1, heartY: 1, heartWidth: 1, heartHeight: 1, photoZoom: 1, photoOffsetY: 1,
+      hasTemplate: { $cond: [ { $eq: [ { $type: "$cardTemplate" }, "string" ] }, true, false ] }
+    });
     
     // Map programs to include absolute URL path for cardTemplate instead of base64
     const host = req.get('host');
     const protocol = req.protocol;
     const mapped = await Promise.all(programs.map(async (p) => {
       const obj = p.toObject();
-      obj.cardTemplate = p.cardTemplate !== null ? `${protocol}://${host}/api/programs/${p.id}/template` : null;
+      const hasTemplate = p.get('hasTemplate') || false;
+      obj.cardTemplate = hasTemplate ? `${protocol}://${host}/api/programs/${p.id}/template` : null;
       // Fetch count of inquiries and pending reviews
       obj.inquiryCount = await Submission.countDocuments({ programId: p.id, status: 'inquiry' });
       obj.pendingCount = await Submission.countDocuments({ programId: p.id, status: 'pending' });
@@ -430,7 +435,13 @@ app.put('/api/programs/:id', requireAuth, async (req, res) => {
     }
     if (time !== undefined) program.time = time;
     if (capacity) program.capacity = parseInt(capacity, 10);
-    if (cardTemplate !== undefined) program.cardTemplate = cardTemplate;
+    if (cardTemplate !== undefined) {
+      if (cardTemplate === null) {
+        program.cardTemplate = null;
+      } else if (typeof cardTemplate === 'string' && !cardTemplate.startsWith('http')) {
+        program.cardTemplate = cardTemplate;
+      }
+    }
     if (heartX !== undefined) program.heartX = parseInt(heartX, 10);
     if (heartY !== undefined) program.heartY = parseInt(heartY, 10);
     if (heartWidth !== undefined) program.heartWidth = parseInt(heartWidth, 10);
