@@ -257,6 +257,26 @@ const LivePreviewCanvas = ({ sub, frameImg }: { sub: Submission; frameImg: HTMLI
   );
 };
 
+const matchCplToken = (inquiryId: string, searchToken: string) => {
+  const id = inquiryId.trim().toUpperCase();
+  const token = searchToken.trim().toUpperCase();
+  
+  if (id === token) return true;
+  
+  // If it's a full CPL ID or IP ID, match exactly
+  if (token.startsWith('CPL-') || token.startsWith('IP-')) {
+    return id === token;
+  }
+  
+  // If token is just a number (e.g. "8")
+  if (/^\d+$/.test(token)) {
+    return id.endsWith(`-${token}`);
+  }
+  
+  // Otherwise fallback to includes
+  return id.includes(token);
+};
+
 export default function AdminDashboard() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3172,7 +3192,7 @@ export default function AdminDashboard() {
                             .split(/[\s,]+/)
                             .map(s => s.trim().toUpperCase())
                             .filter(Boolean);
-                          return searchedCpls.some(cpl => sub.inquiryId.toUpperCase().includes(cpl));
+                          return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl));
                         })
                         .map(sub => sub.inquiryId);
                       
@@ -3196,7 +3216,7 @@ export default function AdminDashboard() {
                             .split(/[\s,]+/)
                             .map(s => s.trim().toUpperCase())
                             .filter(Boolean);
-                          return searchedCpls.some(cpl => sub.inquiryId.toUpperCase().includes(cpl));
+                          return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl));
                         })
                         .map(sub => sub.inquiryId);
                       
@@ -3221,7 +3241,7 @@ export default function AdminDashboard() {
                       .split(/[\s,]+/)
                       .map(s => s.trim().toUpperCase())
                       .filter(Boolean);
-                    return searchedCpls.some(cpl => sub.inquiryId.toUpperCase().includes(cpl));
+                    return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl));
                   })
                   .map(sub => {
                     const isChecked = selectedFrameInquiryIds.includes(sub.inquiryId);
@@ -3250,7 +3270,7 @@ export default function AdminDashboard() {
                     .split(/[\s,]+/)
                     .map(s => s.trim().toUpperCase())
                     .filter(Boolean);
-                  return searchedCpls.some(cpl => sub.inquiryId.toUpperCase().includes(cpl));
+                  return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl));
                 }).length === 0 && (
                   <p className="text-center text-xs text-slate-500 py-4">No matching couples found.</p>
                 )}
