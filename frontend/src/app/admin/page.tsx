@@ -3230,6 +3230,24 @@ export default function AdminDashboard() {
                   >
                     Deselect All Filtered
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFrameInquiryIds(approvedSubmissionsForFrames.map(sub => sub.inquiryId));
+                    }}
+                    className="px-3 py-1.5 bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-900/40 text-emerald-400 rounded-lg font-medium transition-all"
+                  >
+                    Select All (બધા સિલેક્ટ કરો)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFrameInquiryIds([]);
+                    }}
+                    className="px-3 py-1.5 bg-red-950/30 hover:bg-red-900/40 border border-red-900/40 text-red-400 rounded-lg font-medium transition-all"
+                  >
+                    Clear Selection (બધા અન-સિલેક્ટ કરો)
+                  </button>
                 </div>
                 <div className="text-slate-400 font-semibold">
                   Selected: <span className="text-amber-500">{selectedFrameInquiryIds.length}</span> / {approvedSubmissionsForFrames.length}
