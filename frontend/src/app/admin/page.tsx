@@ -1410,9 +1410,22 @@ export default function AdminDashboard() {
     const prog = specificProg || programs.find(p => p.id === selectedProgramIdForFrames);
     if (!prog) return;
 
-    const progSubmissions = approvedSubmissionsForFrames.filter(sub => selectedFrameInquiryIds.includes(sub.inquiryId));
+    const searchedCpls = cplSearchQuery
+      .split(/[\s,]+/)
+      .map(s => s.trim().toUpperCase())
+      .filter(Boolean);
+    const isBulk = searchedCpls.length > 1;
+
+    const progSubmissions = approvedSubmissionsForFrames.filter(sub => {
+      const isSelected = selectedFrameInquiryIds.includes(sub.inquiryId);
+      if (!isSelected) return false;
+      if (cplSearchQuery.trim()) {
+        return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl, isBulk));
+      }
+      return true;
+    });
     if (progSubmissions.length === 0) {
-      alert('No selected approved registrations with couple photos found.');
+      alert('No selected approved registrations with couple photos found matching the filter.');
       return;
     }
 
@@ -1540,9 +1553,22 @@ export default function AdminDashboard() {
     const prog = specificProg || programs.find(p => p.id === selectedProgramIdForFrames);
     if (!prog) return;
 
-    const progSubmissions = approvedSubmissionsForFrames.filter(sub => selectedFrameInquiryIds.includes(sub.inquiryId));
+    const searchedCpls = cplSearchQuery
+      .split(/[\s,]+/)
+      .map(s => s.trim().toUpperCase())
+      .filter(Boolean);
+    const isBulk = searchedCpls.length > 1;
+
+    const progSubmissions = approvedSubmissionsForFrames.filter(sub => {
+      const isSelected = selectedFrameInquiryIds.includes(sub.inquiryId);
+      if (!isSelected) return false;
+      if (cplSearchQuery.trim()) {
+        return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl, isBulk));
+      }
+      return true;
+    });
     if (progSubmissions.length === 0) {
-      alert('No selected approved registrations with couple photos found.');
+      alert('No selected approved registrations with couple photos found matching the filter.');
       return;
     }
 
