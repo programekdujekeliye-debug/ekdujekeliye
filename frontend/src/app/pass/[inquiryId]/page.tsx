@@ -123,6 +123,14 @@ export default function PassDownloadPage() {
 
   const drawTextDetails = (ctx: CanvasRenderingContext2D, sub: Submission) => {
     ctx.save();
+    const hX = sub.heartX ?? 144;
+    const hY = sub.heartY ?? 112;
+    const hW = sub.heartWidth ?? 288;
+    const hH = sub.heartHeight ?? 260;
+
+    const textX = hX + hW / 2;
+    const textY = hY + hH + 45;
+
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
@@ -130,12 +138,12 @@ export default function PassDownloadPage() {
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 6;
     ctx.lineJoin = 'round';
-    ctx.font = 'bold 36px sans-serif';
-    ctx.strokeText(sub.inquiryId, 288, 430);
+    ctx.font = '900 38px "Montserrat", "Outfit", "Inter", system-ui, sans-serif';
+    ctx.strokeText(sub.inquiryId, textX, textY);
     
     // Draw the CPL text in gold
     ctx.fillStyle = '#D4AF37';
-    ctx.fillText(sub.inquiryId, 288, 430);
+    ctx.fillText(sub.inquiryId, textX, textY);
     ctx.restore();
   };
 

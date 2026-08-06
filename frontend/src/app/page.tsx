@@ -19,6 +19,11 @@ interface Program {
   capacity: number;
   bookingsCount: number;
   isDateFinal?: boolean;
+  cardTemplate?: string;
+  heartX?: number;
+  heartY?: number;
+  heartWidth?: number;
+  heartHeight?: number;
 }
 
 const ADMIN_WHATSAPP_NUMBER = '919213532835'; // Configure Admin WhatsApp number here
@@ -230,6 +235,17 @@ export default function Home() {
     canvas.width = 576;
     canvas.height = 1024;
 
+    const selectedProgram = programs.find(p => p.id === selectedProgramId);
+    const templatePath = selectedProgram?.cardTemplate || '/card_template.png';
+    const templateImgSrc = (templatePath.startsWith('data:') || templatePath.startsWith('http://') || templatePath.startsWith('https://') || templatePath === '/card_template.png')
+      ? templatePath
+      : `${API_BASE_URL}${templatePath}`;
+
+    const hX = selectedProgram?.heartX ?? 144;
+    const hY = selectedProgram?.heartY ?? 112;
+    const hW = selectedProgram?.heartWidth ?? 288;
+    const hH = selectedProgram?.heartHeight ?? 260;
+
     const templateImg = new Image();
     templateImg.onload = () => {
       // Create a temporary canvas to process template transparency
@@ -243,23 +259,23 @@ export default function Home() {
       tempCtx.drawImage(templateImg, 0, 0, canvas.width, canvas.height);
 
       // Retrieve pixels around the heart area to key out white pixels
-      const scanX = 140;
-      const scanY = 100;
-      const scanW = 300;
-      const scanH = 280;
-      const imgData = tempCtx.getImageData(scanX, scanY, scanW, scanH);
-      const data = imgData.data;
+      try {
+        const imgData = tempCtx.getImageData(hX, hY, hW, hH);
+        const data = imgData.data;
 
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        // If the pixel is white/near-white, make it transparent
-        if (r > 230 && g > 230 && b > 230) {
-          data[i + 3] = 0; // alpha = 0
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          // If the pixel is white/near-white, make it transparent
+          if (r > 220 && g > 220 && b > 220) {
+            data[i + 3] = 0; // alpha = 0
+          }
         }
+        tempCtx.putImageData(imgData, hX, hY);
+      } catch (e) {
+        console.error("Error doing transparency scan: ", e);
       }
-      tempCtx.putImageData(imgData, scanX, scanY);
 
       // Now render on the main canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -267,12 +283,6 @@ export default function Home() {
       if (couplePhotoPreview) {
         const coupleImg = new Image();
         coupleImg.onload = () => {
-          // Bounding box of the heart area where couple image goes
-          const hX = 144;
-          const hY = 112;
-          const hW = 288;
-          const hH = 260;
-
           const imgAspect = coupleImg.width / coupleImg.height;
           const heartAspect = hW / hH;
           let drawW = hW;
@@ -296,26 +306,36 @@ export default function Home() {
           const finalOffsetY = offsetY - (finalH - drawH) / 2;
 
           // 1. Draw couple photo first
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(hX, hY, hW, hH);
+          ctx.clip();
           ctx.drawImage(coupleImg, hX + finalOffsetX, hY + finalOffsetY, finalW, finalH);
+          ctx.restore();
 
           // 2. Overlay the processed template (with transparent heart window) on top
           ctx.drawImage(tempCanvas, 0, 0);
 
           // 3. Draw text details
-          drawTextDetails(ctx, inqNum);
+          drawTextDetails(ctx, inqNum, hX, hY, hW, hH);
         };
         coupleImg.src = couplePhotoPreview;
       } else {
         // Fallback: draw template as-is and overlay details
         ctx.drawImage(templateImg, 0, 0);
-        drawTextDetails(ctx, inqNum);
+        drawTextDetails(ctx, inqNum, hX, hY, hW, hH);
       }
     };
-    templateImg.src = '/card_template.png';
+    templateImg.src = templateImgSrc;
   };
 
-  const drawTextDetails = (ctx: CanvasRenderingContext2D, inqNum: string) => {
+  const drawTextDetails = (ctx: CanvasRenderingContext2D, inqNum: string, hX: number, hY: number, hW: number, hH: number) => {
     ctx.save();
+    
+    // Position text dynamically centered relative to the couple photo coordinates
+    const textX = hX + hW / 2;
+    const textY = hY + hH + 45;
+
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
@@ -323,12 +343,14 @@ export default function Home() {
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 6;
     ctx.lineJoin = 'round';
-    ctx.font = 'bold 36px sans-serif';
-    ctx.strokeText(inqNum || 'CPL-XXXX', 288, 430);
+    
+    // Use a premium font family stack
+    ctx.font = '900 38px "Montserrat", "Outfit", "Inter", system-ui, sans-serif';
+    ctx.strokeText(inqNum || 'CPL-XXXX', textX, textY);
     
     // Draw the CPL text in gold
     ctx.fillStyle = '#D4AF37';
-    ctx.fillText(inqNum || 'CPL-XXXX', 288, 430);
+    ctx.fillText(inqNum || 'CPL-XXXX', textX, textY);
     ctx.restore();
   };
 

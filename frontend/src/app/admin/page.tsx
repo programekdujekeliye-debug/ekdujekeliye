@@ -1228,15 +1228,18 @@ export default function AdminDashboard() {
         ctx.drawImage(tempCanvas, 0, 0);
 
         ctx.save();
+        const textX = editProgramHeartX + editProgramHeartWidth / 2;
+        const textY = editProgramHeartY + editProgramHeartHeight + 45;
+
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 6;
         ctx.lineJoin = 'round';
-        ctx.font = 'bold 36px sans-serif';
-        ctx.strokeText('CPL-SAMPLE', 288, 430);
+        ctx.font = '900 38px "Montserrat", "Outfit", "Inter", system-ui, sans-serif';
+        ctx.strokeText('CPL-SAMPLE', textX, textY);
         ctx.fillStyle = '#D4AF37';
-        ctx.fillText('CPL-SAMPLE', 288, 430);
+        ctx.fillText('CPL-SAMPLE', textX, textY);
         ctx.restore();
       };
       coupleImg.onerror = () => {
@@ -1244,15 +1247,18 @@ export default function AdminDashboard() {
         ctx.drawImage(tempCanvas, 0, 0);
 
         ctx.save();
+        const textX = editProgramHeartX + editProgramHeartWidth / 2;
+        const textY = editProgramHeartY + editProgramHeartHeight + 45;
+
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 6;
         ctx.lineJoin = 'round';
-        ctx.font = 'bold 36px sans-serif';
-        ctx.strokeText('CPL-SAMPLE', 288, 430);
+        ctx.font = '900 38px "Montserrat", "Outfit", "Inter", system-ui, sans-serif';
+        ctx.strokeText('CPL-SAMPLE', textX, textY);
         ctx.fillStyle = '#D4AF37';
-        ctx.fillText('CPL-SAMPLE', 288, 430);
+        ctx.fillText('CPL-SAMPLE', textX, textY);
         ctx.restore();
       };
       // Use local sample_couple.png which is guaranteed to load without CORS issues
@@ -1681,15 +1687,23 @@ export default function AdminDashboard() {
       // Helper to draw text details on pass
       const drawTextDetails = (context: CanvasRenderingContext2D, sub: any) => {
         context.save();
+        const localHX = sub.heartX ?? prog.heartX ?? 144;
+        const localHY = sub.heartY ?? prog.heartY ?? 112;
+        const localHW = sub.heartWidth ?? prog.heartWidth ?? 288;
+        const localHH = sub.heartHeight ?? prog.heartHeight ?? 260;
+
+        const textX = localHX + localHW / 2;
+        const textY = localHY + localHH + 45;
+
         context.textAlign = 'center';
         context.textBaseline = 'middle';
         context.strokeStyle = '#000000';
         context.lineWidth = 6;
         context.lineJoin = 'round';
-        context.font = 'bold 36px sans-serif';
-        context.strokeText(sub.inquiryId, 288, 430);
+        context.font = '900 38px "Montserrat", "Outfit", "Inter", system-ui, sans-serif';
+        context.strokeText(sub.inquiryId, textX, textY);
         context.fillStyle = '#D4AF37';
-        context.fillText(sub.inquiryId, 288, 430);
+        context.fillText(sub.inquiryId, textX, textY);
         context.restore();
       };
 
