@@ -1236,7 +1236,7 @@ export default function AdminDashboard() {
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 6;
         ctx.lineJoin = 'round';
-        ctx.font = '900 38px "Montserrat", "Outfit", "Inter", system-ui, sans-serif';
+        ctx.font = 'bold 30px "Oswald", "Impact", "Arial Narrow", sans-serif';
         ctx.strokeText('CPL-SAMPLE', textX, textY);
         ctx.fillStyle = '#D4AF37';
         ctx.fillText('CPL-SAMPLE', textX, textY);
@@ -1255,7 +1255,7 @@ export default function AdminDashboard() {
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 6;
         ctx.lineJoin = 'round';
-        ctx.font = '900 38px "Montserrat", "Outfit", "Inter", system-ui, sans-serif';
+        ctx.font = 'bold 30px "Oswald", "Impact", "Arial Narrow", sans-serif';
         ctx.strokeText('CPL-SAMPLE', textX, textY);
         ctx.fillStyle = '#D4AF37';
         ctx.fillText('CPL-SAMPLE', textX, textY);
@@ -1700,7 +1700,7 @@ export default function AdminDashboard() {
         context.strokeStyle = '#000000';
         context.lineWidth = 6;
         context.lineJoin = 'round';
-        context.font = '900 38px "Montserrat", "Outfit", "Inter", system-ui, sans-serif';
+        context.font = 'bold 30px "Oswald", "Impact", "Arial Narrow", sans-serif';
         context.strokeText(sub.inquiryId, textX, textY);
         context.fillStyle = '#D4AF37';
         context.fillText(sub.inquiryId, textX, textY);

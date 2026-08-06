@@ -344,8 +344,8 @@ export default function Home() {
     ctx.lineWidth = 6;
     ctx.lineJoin = 'round';
     
-    // Use a premium font family stack
-    ctx.font = '900 38px "Montserrat", "Outfit", "Inter", system-ui, sans-serif';
+    // Use condensed/narrow bold font matching the date font in template
+    ctx.font = 'bold 30px "Oswald", "Impact", "Arial Narrow", sans-serif';
     ctx.strokeText(inqNum || 'CPL-XXXX', textX, textY);
     
     // Draw the CPL text in gold

@@ -138,7 +138,7 @@ export default function PassDownloadPage() {
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 6;
     ctx.lineJoin = 'round';
-    ctx.font = '900 38px "Montserrat", "Outfit", "Inter", system-ui, sans-serif';
+    ctx.font = 'bold 30px "Oswald", "Impact", "Arial Narrow", sans-serif';
     ctx.strokeText(sub.inquiryId, textX, textY);
     
     // Draw the CPL text in gold
