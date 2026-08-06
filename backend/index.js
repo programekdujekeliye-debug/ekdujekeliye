@@ -306,6 +306,18 @@ app.get('/api/programs', async (req, res) => {
       obj.pendingCount = await Submission.countDocuments({ programId: p.id, status: 'pending' });
       obj.approvedCount = await Submission.countDocuments({ programId: p.id, status: 'approved' });
       obj.rejectedCount = await Submission.countDocuments({ programId: p.id, status: 'rejected' });
+      
+      // CPL counts
+      obj.cplApproved = await Submission.countDocuments({ programId: p.id, status: 'approved', inquiryId: /^CPL-/i });
+      obj.cplPending = await Submission.countDocuments({ programId: p.id, status: 'pending', inquiryId: /^CPL-/i });
+      obj.cplInquiry = await Submission.countDocuments({ programId: p.id, status: 'inquiry', inquiryId: /^CPL-/i });
+      obj.cplRejected = await Submission.countDocuments({ programId: p.id, status: 'rejected', inquiryId: /^CPL-/i });
+      
+      // IP counts
+      obj.ipApproved = await Submission.countDocuments({ programId: p.id, status: 'approved', inquiryId: /^IP-/i });
+      obj.ipPending = await Submission.countDocuments({ programId: p.id, status: 'pending', inquiryId: /^IP-/i });
+      obj.ipInquiry = await Submission.countDocuments({ programId: p.id, status: 'inquiry', inquiryId: /^IP-/i });
+      obj.ipRejected = await Submission.countDocuments({ programId: p.id, status: 'rejected', inquiryId: /^IP-/i });
       return obj;
     }));
     

@@ -169,6 +169,14 @@ interface Program {
   pendingCount?: number;
   approvedCount?: number;
   rejectedCount?: number;
+  cplApproved?: number;
+  cplPending?: number;
+  cplInquiry?: number;
+  cplRejected?: number;
+  ipApproved?: number;
+  ipPending?: number;
+  ipInquiry?: number;
+  ipRejected?: number;
 }
 
 const LivePreviewCanvas = ({ sub, frameImg }: { sub: Submission; frameImg: HTMLImageElement | null }) => {
@@ -2558,6 +2566,12 @@ export default function AdminDashboard() {
                               ✗ Rejected: <strong>{prog.rejectedCount}</strong>
                             </span>
                           )}
+                          <span className="flex items-center gap-1 bg-pink-500/10 px-2 py-0.5 rounded-full border border-pink-500/20 text-pink-300">
+                            💑 CPL: <strong>{prog.cplApproved || 0}</strong> Appr / <strong>{(prog.cplApproved || 0) + (prog.cplPending || 0) + (prog.cplInquiry || 0)}</strong> Total
+                          </span>
+                          <span className="flex items-center gap-1 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20 text-purple-300">
+                            👤 IP: <strong>{prog.ipApproved || 0}</strong> Appr / <strong>{(prog.ipApproved || 0) + (prog.ipPending || 0) + (prog.ipInquiry || 0)}</strong> Total
+                          </span>
                           {prog.cardTemplate && (
                             <span className="text-[10px] text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
                               🖼️ Custom Pass
