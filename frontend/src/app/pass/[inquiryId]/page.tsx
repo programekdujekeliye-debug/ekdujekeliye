@@ -38,6 +38,7 @@ export default function PassDownloadPage() {
   const [loading, setLoading] = useState(true);
   const [cardReady, setCardReady] = useState(false);
   const [canvasDataUrl, setCanvasDataUrl] = useState<string>('');
+  const [useCanvasDirectly, setUseCanvasDirectly] = useState(false);
   const [error, setError] = useState('');
   const [userZoom, setUserZoom] = useState<number>(1.0);
   const [userOffsetY, setUserOffsetY] = useState<number>(0);
@@ -237,8 +238,13 @@ export default function PassDownloadPage() {
         ctx.restore();
         ctx.drawImage(tempCanvas, 0, 0);
         drawTextDetails(ctx, sub);
+        try {
+          setCanvasDataUrl(canvas.toDataURL('image/png'));
+        } catch (e) {
+          console.error("Canvas export failed:", e);
+          setUseCanvasDirectly(true);
+        }
         setCardReady(true);
-        setCanvasDataUrl(canvas.toDataURL('image/png'));
       };
 
       coupleImg.onload = drawFinalCard;
@@ -253,8 +259,13 @@ export default function PassDownloadPage() {
           coupleImg.src = coupleImgSrc + (coupleImgSrc.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
         } else {
           drawTextDetails(ctx, sub);
+          try {
+            setCanvasDataUrl(canvas.toDataURL('image/png'));
+          } catch (e) {
+            console.error("Canvas export failed on couple error fallback:", e);
+            setUseCanvasDirectly(true);
+          }
           setCardReady(true);
-          setCanvasDataUrl(canvas.toDataURL('image/png'));
         }
       };
 
@@ -270,8 +281,13 @@ export default function PassDownloadPage() {
         templateImg.removeAttribute('crossOrigin');
         templateImg.src = templateImgSrc + (templateImgSrc.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
       } else {
+        try {
+          setCanvasDataUrl(canvas.toDataURL('image/png'));
+        } catch (e) {
+          console.error("Canvas export failed on template error fallback:", e);
+          setUseCanvasDirectly(true);
+        }
         setCardReady(true);
-        setCanvasDataUrl(canvas.toDataURL('image/png'));
       }
     };
 
@@ -511,19 +527,21 @@ export default function PassDownloadPage() {
                 <canvas
                   ref={canvasRef}
                   style={{ width: '300px', height: '533px' }}
-                  className="hidden"
+                  className={useCanvasDirectly ? "mx-auto block bg-slate-950" : "hidden"}
                 />
-                {canvasDataUrl ? (
-                  <img
-                    src={canvasDataUrl}
-                    alt="Invitation Card"
-                    style={{ width: '300px', height: '533px' }}
-                    className="mx-auto block bg-slate-950"
-                  />
-                ) : (
-                  <div style={{ width: '300px', height: '533px' }} className="animate-pulse bg-slate-950 flex items-center justify-center text-xs text-slate-500">
-                    Preparing pass card...
-                  </div>
+                {!useCanvasDirectly && (
+                  canvasDataUrl ? (
+                    <img
+                      src={canvasDataUrl}
+                      alt="Invitation Card"
+                      style={{ width: '300px', height: '533px' }}
+                      className="mx-auto block bg-slate-950"
+                    />
+                  ) : (
+                    <div style={{ width: '300px', height: '533px' }} className="animate-pulse bg-slate-950 flex items-center justify-center text-xs text-slate-500">
+                      Preparing pass card...
+                    </div>
+                  )
                 )}
               </div>
 
