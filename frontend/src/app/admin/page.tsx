@@ -1228,35 +1228,15 @@ export default function AdminDashboard() {
         ctx.drawImage(tempCanvas, 0, 0);
 
         ctx.save();
-        ctx.fillStyle = 'rgba(26, 6, 6, 0.95)';
-        ctx.strokeStyle = '#D4AF37';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(385, 230, 176, 135, 8);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = '#D4AF37';
-        ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('COUPLE ENTRY', 385 + 176 / 2, 230 + 20);
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 13px sans-serif';
-        ctx.fillText('HUSBAND NAME', 385 + 176 / 2, 230 + 45);
-        ctx.fillText('& WIFE NAME', 385 + 176 / 2, 230 + 65);
-        ctx.fillText('SURNAME', 385 + 176 / 2, 230 + 85);
-
-        ctx.strokeStyle = 'rgba(212, 175, 55, 0.3)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(385 + 15, 230 + 98);
-        ctx.lineTo(385 + 176 - 15, 230 + 98);
-        ctx.stroke();
-
+        ctx.textBaseline = 'middle';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 6;
+        ctx.lineJoin = 'round';
+        ctx.font = 'bold 36px sans-serif';
+        ctx.strokeText('CPL-SAMPLE', 288, 430);
         ctx.fillStyle = '#D4AF37';
-        ctx.font = 'bold 12px monospace';
-        ctx.fillText('CPL-SAMPLE', 385 + 176 / 2, 230 + 118);
+        ctx.fillText('CPL-SAMPLE', 288, 430);
         ctx.restore();
       };
       coupleImg.onerror = () => {
@@ -1264,35 +1244,15 @@ export default function AdminDashboard() {
         ctx.drawImage(tempCanvas, 0, 0);
 
         ctx.save();
-        ctx.fillStyle = 'rgba(26, 6, 6, 0.95)';
-        ctx.strokeStyle = '#D4AF37';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(385, 230, 176, 135, 8);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = '#D4AF37';
-        ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('COUPLE ENTRY', 385 + 176 / 2, 230 + 20);
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 13px sans-serif';
-        ctx.fillText('HUSBAND NAME', 385 + 176 / 2, 230 + 45);
-        ctx.fillText('& WIFE NAME', 385 + 176 / 2, 230 + 65);
-        ctx.fillText('SURNAME', 385 + 176 / 2, 230 + 85);
-
-        ctx.strokeStyle = 'rgba(212, 175, 55, 0.3)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(385 + 15, 230 + 98);
-        ctx.lineTo(385 + 176 - 15, 230 + 98);
-        ctx.stroke();
-
+        ctx.textBaseline = 'middle';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 6;
+        ctx.lineJoin = 'round';
+        ctx.font = 'bold 36px sans-serif';
+        ctx.strokeText('CPL-SAMPLE', 288, 430);
         ctx.fillStyle = '#D4AF37';
-        ctx.font = 'bold 12px monospace';
-        ctx.fillText('CPL-SAMPLE', 385 + 176 / 2, 230 + 118);
+        ctx.fillText('CPL-SAMPLE', 288, 430);
         ctx.restore();
       };
       // Use local sample_couple.png which is guaranteed to load without CORS issues
@@ -1720,44 +1680,16 @@ export default function AdminDashboard() {
 
       // Helper to draw text details on pass
       const drawTextDetails = (context: CanvasRenderingContext2D, sub: any) => {
-        const sideX = 385;
-        const sideY = 230;
-        const sideW = 176;
-        const sideH = 135;
-
         context.save();
-        context.fillStyle = 'rgba(26, 6, 6, 0.95)';
-        context.strokeStyle = '#D4AF37';
-        context.lineWidth = 2;
-        context.beginPath();
-        context.roundRect(sideX, sideY, sideW, sideH, 8);
-        context.fill();
-        context.stroke();
-
-        context.fillStyle = '#D4AF37';
-        context.font = 'bold 12px sans-serif';
         context.textAlign = 'center';
-        context.fillText('COUPLE ENTRY', sideX + sideW / 2, sideY + 20);
-
-        context.fillStyle = '#ffffff';
-        context.font = 'bold 13px sans-serif';
-        const nameLine1 = `${sub.husbandName}`.toUpperCase();
-        const nameLine2 = `& ${sub.wifeName}`.toUpperCase();
-        const nameLine3 = `${sub.surname}`.toUpperCase();
-        context.fillText(nameLine1, sideX + sideW / 2, sideY + 45);
-        context.fillText(nameLine2, sideX + sideW / 2, sideY + 65);
-        context.fillText(nameLine3, sideX + sideW / 2, sideY + 85);
-
-        context.strokeStyle = 'rgba(212, 175, 55, 0.3)';
-        context.lineWidth = 1;
-        context.beginPath();
-        context.moveTo(sideX + 15, sideY + 98);
-        context.lineTo(sideX + sideW - 15, sideY + 98);
-        context.stroke();
-
+        context.textBaseline = 'middle';
+        context.strokeStyle = '#000000';
+        context.lineWidth = 6;
+        context.lineJoin = 'round';
+        context.font = 'bold 36px sans-serif';
+        context.strokeText(sub.inquiryId, 288, 430);
         context.fillStyle = '#D4AF37';
-        context.font = 'bold 12px monospace';
-        context.fillText(`${sub.inquiryId}`, sideX + sideW / 2, sideY + 118);
+        context.fillText(sub.inquiryId, 288, 430);
         context.restore();
       };
 

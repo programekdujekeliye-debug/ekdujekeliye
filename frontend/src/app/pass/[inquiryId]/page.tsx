@@ -122,44 +122,20 @@ export default function PassDownloadPage() {
   };
 
   const drawTextDetails = (ctx: CanvasRenderingContext2D, sub: Submission) => {
-    const sideX = 385;
-    const sideY = 230;
-    const sideW = 176;
-    const sideH = 135;
-
     ctx.save();
-    ctx.fillStyle = 'rgba(26, 6, 6, 0.95)';
-    ctx.strokeStyle = '#D4AF37';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(sideX, sideY, sideW, sideH, 8);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = '#D4AF37';
-    ctx.font = 'bold 12px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('COUPLE ENTRY', sideX + sideW / 2, sideY + 20);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 13px sans-serif';
-    const nameLine1 = `${sub.husbandName}`.toUpperCase();
-    const nameLine2 = `& ${sub.wifeName}`.toUpperCase();
-    const nameLine3 = `${sub.surname}`.toUpperCase();
-    ctx.fillText(nameLine1, sideX + sideW / 2, sideY + 45);
-    ctx.fillText(nameLine2, sideX + sideW / 2, sideY + 65);
-    ctx.fillText(nameLine3, sideX + sideW / 2, sideY + 85);
-
-    ctx.strokeStyle = 'rgba(212, 175, 55, 0.3)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(sideX + 15, sideY + 98);
-    ctx.lineTo(sideX + sideW - 15, sideY + 98);
-    ctx.stroke();
-
+    ctx.textBaseline = 'middle';
+    
+    // Draw a dark outline for high contrast readability
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 6;
+    ctx.lineJoin = 'round';
+    ctx.font = 'bold 36px sans-serif';
+    ctx.strokeText(sub.inquiryId, 288, 430);
+    
+    // Draw the CPL text in gold
     ctx.fillStyle = '#D4AF37';
-    ctx.font = 'bold 12px monospace';
-    ctx.fillText(`${sub.inquiryId}`, sideX + sideW / 2, sideY + 118);
+    ctx.fillText(sub.inquiryId, 288, 430);
     ctx.restore();
   };
 
