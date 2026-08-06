@@ -1229,7 +1229,7 @@ export default function AdminDashboard() {
 
         ctx.save();
         const textX = editProgramHeartX + editProgramHeartWidth / 2;
-        const textY = editProgramHeartY + editProgramHeartHeight + 45;
+        const textY = editProgramHeartY + editProgramHeartHeight + 28;
 
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -1248,7 +1248,7 @@ export default function AdminDashboard() {
 
         ctx.save();
         const textX = editProgramHeartX + editProgramHeartWidth / 2;
-        const textY = editProgramHeartY + editProgramHeartHeight + 45;
+        const textY = editProgramHeartY + editProgramHeartHeight + 28;
 
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -1693,7 +1693,7 @@ export default function AdminDashboard() {
         const localHH = sub.heartHeight ?? prog.heartHeight ?? 260;
 
         const textX = localHX + localHW / 2;
-        const textY = localHY + localHH + 45;
+        const textY = localHY + localHH + 28;
 
         context.textAlign = 'center';
         context.textBaseline = 'middle';
