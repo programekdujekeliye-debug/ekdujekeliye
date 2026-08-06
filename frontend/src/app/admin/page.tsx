@@ -257,7 +257,7 @@ const LivePreviewCanvas = ({ sub, frameImg }: { sub: Submission; frameImg: HTMLI
   );
 };
 
-const matchCplToken = (inquiryId: string, searchToken: string) => {
+const matchCplToken = (inquiryId: string, searchToken: string, isBulk: boolean) => {
   const id = inquiryId.trim().toUpperCase();
   const token = searchToken.trim().toUpperCase();
   
@@ -272,6 +272,8 @@ const matchCplToken = (inquiryId: string, searchToken: string) => {
   if (/^\d+$/.test(token)) {
     return id.endsWith(`-${token}`);
   }
+  
+  if (isBulk) return false;
   
   // Otherwise fallback to includes
   return id.includes(token);
@@ -3192,7 +3194,8 @@ export default function AdminDashboard() {
                             .split(/[\s,]+/)
                             .map(s => s.trim().toUpperCase())
                             .filter(Boolean);
-                          return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl));
+                          const isBulk = searchedCpls.length > 1;
+                          return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl, isBulk));
                         })
                         .map(sub => sub.inquiryId);
                       
@@ -3216,7 +3219,8 @@ export default function AdminDashboard() {
                             .split(/[\s,]+/)
                             .map(s => s.trim().toUpperCase())
                             .filter(Boolean);
-                          return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl));
+                          const isBulk = searchedCpls.length > 1;
+                          return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl, isBulk));
                         })
                         .map(sub => sub.inquiryId);
                       
@@ -3241,7 +3245,8 @@ export default function AdminDashboard() {
                       .split(/[\s,]+/)
                       .map(s => s.trim().toUpperCase())
                       .filter(Boolean);
-                    return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl));
+                    const isBulk = searchedCpls.length > 1;
+                    return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl, isBulk));
                   })
                   .map(sub => {
                     const isChecked = selectedFrameInquiryIds.includes(sub.inquiryId);
@@ -3270,7 +3275,8 @@ export default function AdminDashboard() {
                     .split(/[\s,]+/)
                     .map(s => s.trim().toUpperCase())
                     .filter(Boolean);
-                  return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl));
+                  const isBulk = searchedCpls.length > 1;
+                  return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl, isBulk));
                 }).length === 0 && (
                   <p className="text-center text-xs text-slate-500 py-4">No matching couples found.</p>
                 )}
