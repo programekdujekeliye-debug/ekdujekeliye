@@ -318,7 +318,7 @@ export default function PassDownloadPage() {
     }
   };
 
-  if (loading || (submission && submission.status === 'approved' && !cardReady)) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center font-sans p-6 text-center space-y-4">
         <div className="text-4xl animate-spin">⏳</div>
