@@ -1514,6 +1514,77 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDownloadRawZip = async (specificProg?: Program) => {
+    const prog = specificProg || programs.find(p => p.id === selectedProgramIdForFrames);
+    if (!prog) return;
+
+    const progSubmissions = approvedSubmissionsForFrames.filter(sub => selectedFrameInquiryIds.includes(sub.inquiryId));
+    if (progSubmissions.length === 0) {
+      alert('No selected approved registrations with couple photos found.');
+      return;
+    }
+
+    try {
+      setZipping(true);
+      setZipProgress('Starting...');
+      const zip = new JSZip();
+
+      for (let i = 0; i < progSubmissions.length; i++) {
+        const sub = progSubmissions[i];
+        setZipProgress(`Fetching raw photo ${i + 1} of ${progSubmissions.length}...`);
+
+        try {
+          const photoPath = sub.couplePhoto;
+          const fullPhotoUrl = (photoPath.startsWith('data:') || photoPath.startsWith('http://') || photoPath.startsWith('https://')) 
+            ? photoPath 
+            : `${API_BASE_URL}${photoPath}`;
+
+          const res = await fetch(fullPhotoUrl);
+          if (!res.ok) throw new Error('Fetch failed');
+          const blob = await res.blob();
+          
+          // Determine extension from content-type or filename
+          let ext = 'png';
+          const contentType = res.headers.get('content-type');
+          if (contentType) {
+            if (contentType.includes('jpeg') || contentType.includes('jpg')) {
+              ext = 'jpg';
+            } else if (contentType.includes('webp')) {
+              ext = 'webp';
+            } else if (contentType.includes('png')) {
+              ext = 'png';
+            }
+          }
+
+          const filename = `${sub.inquiryId}.${ext}`;
+          zip.file(filename, blob);
+        } catch (err: any) {
+          console.error('Error fetching raw photo for submission:', sub.inquiryId, err);
+        }
+      }
+
+      setZipProgress('Generating ZIP file...');
+      const content = await zip.generateAsync({ type: 'blob' });
+      
+      setZipProgress('Downloading...');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(content);
+      a.download = `${prog.name}_raw_photos.zip`.replace(/\s+/g, '_');
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setZipProgress('Done!');
+      setTimeout(() => {
+        setZipping(false);
+        setZipProgress('');
+      }, 1500);
+    } catch (error: any) {
+      alert('Error creating zip: ' + error.message);
+      setZipping(false);
+      setZipProgress('');
+    }
+  };
+
   const handleSaveAndDownloadZip = async () => {
     if (!reviewingProgramForFrames) return;
     const activePassword = password || sessionStorage.getItem('adminPassword') || '';
@@ -3193,16 +3264,25 @@ export default function AdminDashboard() {
                   </p>
                   <p className="text-xs text-slate-500 mt-1">Review alignments line by line and download the framed photos in a single ZIP file.</p>
                 </div>
-                <button
-                  onClick={() => {
-                    const prog = programs.find(p => p.id === selectedProgramIdForFrames);
-                    if (prog) setReviewingProgramForFrames(prog);
-                  }}
-                  disabled={zipping || selectedFrameInquiryIds.length === 0}
-                  className="w-full sm:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20 text-center"
-                >
-                  {zipping ? `Processing (${zipProgress})` : 'Review & Download ZIP'}
-                </button>
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={() => {
+                      const prog = programs.find(p => p.id === selectedProgramIdForFrames);
+                      if (prog) setReviewingProgramForFrames(prog);
+                    }}
+                    disabled={zipping || selectedFrameInquiryIds.length === 0}
+                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20 text-center"
+                  >
+                    {zipping ? `Processing (${zipProgress})` : 'Review & Download ZIP'}
+                  </button>
+                  <button
+                    onClick={() => handleDownloadRawZip()}
+                    disabled={zipping || selectedFrameInquiryIds.length === 0}
+                    className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-slate-100 font-bold rounded-xl text-sm transition-all shadow-lg shadow-purple-600/20 text-center"
+                  >
+                    {zipping ? `Processing (${zipProgress})` : 'Download Raw Photos ZIP'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
