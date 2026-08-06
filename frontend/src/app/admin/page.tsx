@@ -1622,8 +1622,17 @@ export default function AdminDashboard() {
       a.click();
       document.body.removeChild(a);
       setZipProgress('Done!');
+      setTimeout(() => {
+        setZipping(false);
+        setZipProgress('');
+      }, 1500);
+    } catch (error: any) {
+      alert('Error creating zip: ' + error.message);
+      setZipping(false);
+      setZipProgress('');
     }
   };
+
 
   const handleDownloadPassesZip = async (specificProg?: Program) => {
     const prog = specificProg || programs.find(p => p.id === selectedProgramIdForFrames);
