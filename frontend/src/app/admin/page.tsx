@@ -1701,7 +1701,7 @@ export default function AdminDashboard() {
         const localHH = sub.heartHeight ?? prog.heartHeight ?? 260;
 
         const textX = localHX + localHW / 2;
-        const textY = localHY + localHH + 28;
+        const textY = localHY - 20;
 
         context.textAlign = 'center';
         context.textBaseline = 'middle';

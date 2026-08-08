@@ -340,7 +340,7 @@ export default function Home() {
     
     // Position text dynamically centered relative to the couple photo coordinates
     const textX = hX + hW / 2;
-    const textY = hY + hH + 28;
+    const textY = hY - 20;
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';

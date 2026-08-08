@@ -130,7 +130,7 @@ export default function PassDownloadPage() {
     const hH = sub.heartHeight ?? 260;
 
     const textX = hX + hW / 2;
-    const textY = hY + hH + 28;
+    const textY = hY - 20;
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
