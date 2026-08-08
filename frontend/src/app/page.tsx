@@ -241,12 +241,18 @@ export default function Home() {
       ? templatePath
       : `${API_BASE_URL}${templatePath}`;
 
+    let finalTemplateImgSrc = templateImgSrc;
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && finalTemplateImgSrc.startsWith('http://')) {
+      finalTemplateImgSrc = finalTemplateImgSrc.replace('http://', 'https://');
+    }
+
     const hX = selectedProgram?.heartX ?? 144;
     const hY = selectedProgram?.heartY ?? 112;
     const hW = selectedProgram?.heartWidth ?? 288;
     const hH = selectedProgram?.heartHeight ?? 260;
 
     const templateImg = new Image();
+    templateImg.crossOrigin = 'anonymous';
     templateImg.onload = () => {
       // Create a temporary canvas to process template transparency
       const tempCanvas = document.createElement('canvas');
@@ -326,7 +332,7 @@ export default function Home() {
         drawTextDetails(ctx, inqNum, hX, hY, hW, hH);
       }
     };
-    templateImg.src = templateImgSrc;
+    templateImg.src = finalTemplateImgSrc;
   };
 
   const drawTextDetails = (ctx: CanvasRenderingContext2D, inqNum: string, hX: number, hY: number, hW: number, hH: number) => {

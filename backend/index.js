@@ -39,6 +39,7 @@ const uploadToCloudinary = async (base64Data, folder = 'ekdujekeliye') => {
 };
 
 const app = express();
+app.set('trust proxy', true);
 const PORT = process.env.PORT || 5001;
 
 app.use(cors({
@@ -307,7 +308,7 @@ app.get('/api/programs', async (req, res) => {
     
     // Map programs to include absolute URL path for cardTemplate instead of base64
     const host = req.get('host');
-    const protocol = req.protocol;
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
     const mapped = await Promise.all(programs.map(async (p) => {
       const obj = p.toObject();
       const hasTemplate = p.get('hasTemplate') || false;

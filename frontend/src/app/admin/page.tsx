@@ -1403,11 +1403,15 @@ export default function AdminDashboard() {
       // Helper to load image
       const loadImage = (src: string): Promise<HTMLImageElement> => {
         return new Promise((resolve, reject) => {
+          let safeSrc = src;
+          if (typeof window !== 'undefined' && window.location.protocol === 'https:' && safeSrc.startsWith('http://')) {
+            safeSrc = safeSrc.replace('http://', 'https://');
+          }
           const img = new Image();
           img.crossOrigin = 'anonymous';
           img.onload = () => resolve(img);
-          img.onerror = (e) => reject(new Error('Failed to load image: ' + src));
-          img.src = src;
+          img.onerror = (e) => reject(new Error('Failed to load image: ' + safeSrc));
+          img.src = safeSrc;
         });
       };
 
@@ -1631,11 +1635,15 @@ export default function AdminDashboard() {
       // Helper to load image
       const loadImage = (src: string): Promise<HTMLImageElement> => {
         return new Promise((resolve, reject) => {
+          let safeSrc = src;
+          if (typeof window !== 'undefined' && window.location.protocol === 'https:' && safeSrc.startsWith('http://')) {
+            safeSrc = safeSrc.replace('http://', 'https://');
+          }
           const img = new Image();
           img.crossOrigin = 'anonymous';
           img.onload = () => resolve(img);
-          img.onerror = (e) => reject(new Error('Failed to load image: ' + src));
-          img.src = src;
+          img.onerror = (e) => reject(new Error('Failed to load image: ' + safeSrc));
+          img.src = safeSrc;
         });
       };
 
