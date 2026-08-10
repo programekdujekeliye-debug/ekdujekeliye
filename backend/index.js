@@ -95,7 +95,8 @@ const ProgramSchema = new mongoose.Schema({
   heartWidth: { type: Number, default: 288 },
   heartHeight: { type: Number, default: 260 },
   photoZoom: { type: Number, default: 1.0 },
-  photoOffsetY: { type: Number, default: 0 }
+  photoOffsetY: { type: Number, default: 0 },
+  photoLink: { type: String, default: "" }
 }, { collection: 'program' });
 const Program = mongoose.model('Program', ProgramSchema);
 
@@ -115,6 +116,8 @@ const SubmissionSchema = new mongoose.Schema({
   status: { type: String, default: 'pending' },
   rejectionReason: { type: String, default: '' },
   refundReason: { type: String, default: '' },
+  attendance: { type: String, enum: ['unmarked', 'present', 'absent'], default: 'unmarked' },
+  isDeleted: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 }, { collection: 'submission' });
 SubmissionSchema.index({ createdAt: -1 });
@@ -124,7 +127,8 @@ async function getProgramBookingsCount(programId) {
   if (!programId) return 0;
   const count = await Submission.countDocuments({
     programId,
-    status: { $in: ['approved', 'pending', 'rejected'] }
+    status: { $in: ['approved', 'pending', 'rejected'] },
+    isDeleted: { $ne: true }
   });
   return count * 2;
 }
@@ -171,7 +175,7 @@ const Counter = mongoose.model('Counter', CounterSchema);
 const WhatsappTemplateSchema = new mongoose.Schema({
   name: { type: String, required: true },
   text: { type: String, required: true },
-  type: { type: String, enum: ['pass_delivery', 'payment_request'], default: 'pass_delivery' },
+  type: { type: String, enum: ['pass_delivery', 'payment_request', 'photo_delivery'], default: 'pass_delivery' },
   isActive: { type: Boolean, default: false }
 }, { collection: 'whatsapp_template' });
 const WhatsappTemplate = mongoose.model('WhatsappTemplate', WhatsappTemplateSchema);
@@ -263,6 +267,16 @@ const initWhatsappTemplates = async () => {
         isActive: true
       });
       console.log('Default Payment Verification Request WhatsApp template initialized.');
+    }
+    const photoDeliveryExists = await WhatsappTemplate.findOne({ type: 'photo_delivery' });
+    if (!photoDeliveryExists) {
+      await WhatsappTemplate.create({
+        name: 'Default Photo Delivery',
+        text: 'નમસ્તે {husbandName} & {wifeName}, તમારા પ્રોગ્રામ ({programName}) ના સુંદર ફોટાઓ જોવા માટે નીચેની લિંક પર ક્લિક કરો:\n\nફોટો લિંક: {photoLink}\n\nઆભાર!',
+        type: 'photo_delivery',
+        isActive: true
+      });
+      console.log('Default Photo Delivery WhatsApp template initialized.');
     }
   } catch (err) {
     console.error('Failed to initialize WhatsApp templates:', err);
@@ -379,7 +393,7 @@ app.get('/api/programs/:id/template', async (req, res) => {
 
 // Create a new program (Admin protected)
 app.post('/api/programs', requireAuth, async (req, res) => {
-  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY, isDateFinal } = req.body;
+  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY, isDateFinal, photoLink } = req.body;
   const finalIsDateFinal = isDateFinal !== undefined ? isDateFinal : true;
   if (!name || !capacity || (finalIsDateFinal && !date)) {
     return res.status(400).json({ error: 'Name, date, and capacity are required.' });
@@ -399,7 +413,8 @@ app.post('/api/programs', requireAuth, async (req, res) => {
       heartWidth: heartWidth !== undefined ? parseInt(heartWidth, 10) : 288,
       heartHeight: heartHeight !== undefined ? parseInt(heartHeight, 10) : 260,
       photoZoom: photoZoom !== undefined ? parseFloat(photoZoom) : 1.0,
-      photoOffsetY: photoOffsetY !== undefined ? parseInt(photoOffsetY, 10) : 0
+      photoOffsetY: photoOffsetY !== undefined ? parseInt(photoOffsetY, 10) : 0,
+      photoLink: photoLink || ""
     });
     res.status(201).json(newProgram);
   } catch (err) {
@@ -426,7 +441,7 @@ app.delete('/api/programs/:id', requireAuth, async (req, res) => {
 // Update a program (Admin protected)
 app.put('/api/programs/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
-  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY, isDateFinal } = req.body;
+  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY, isDateFinal, photoLink } = req.body;
   try {
     const program = await Program.findOne({ id });
     if (!program) {
@@ -455,6 +470,7 @@ app.put('/api/programs/:id', requireAuth, async (req, res) => {
     if (heartHeight !== undefined) program.heartHeight = parseInt(heartHeight, 10);
     if (photoZoom !== undefined) program.photoZoom = parseFloat(photoZoom);
     if (photoOffsetY !== undefined) program.photoOffsetY = parseInt(photoOffsetY, 10);
+    if (photoLink !== undefined) program.photoLink = photoLink;
 
     await program.save();
     // Invalidate cache
@@ -818,7 +834,7 @@ app.post('/api/submissions/:inquiryId/reject', requireAuth, async (req, res) => 
   }
 });
 
-// Delete a single submission (Admin only)
+// Delete a single submission (Admin only - now soft deleted to Trash)
 app.delete('/api/submissions/:inquiryId', requireAuth, async (req, res) => {
   try {
     const { inquiryId } = req.params;
@@ -829,21 +845,22 @@ app.delete('/api/submissions/:inquiryId', requireAuth, async (req, res) => {
 
     const programId = submission.programId;
 
-    // Delete submission document
-    await Submission.deleteOne({ inquiryId });
+    // Soft delete by setting isDeleted = true
+    submission.isDeleted = true;
+    await submission.save();
 
     if (programId) {
       await updateProgramBookingsCount(programId);
     }
 
-    res.json({ success: true, message: `Submission ${inquiryId} deleted successfully, and bookings released.` });
+    res.json({ success: true, message: `Submission ${inquiryId} moved to Trash.` });
   } catch (error) {
     console.error('Error deleting submission:', error);
     res.status(500).json({ error: 'Server error while deleting submission.' });
   }
 });
 
-// Bulk delete submissions (Admin only)
+// Bulk delete submissions (Admin only - soft deleted to Trash)
 app.post('/api/submissions/bulk-delete', requireAuth, async (req, res) => {
   try {
     const { inquiryIds } = req.body;
@@ -854,18 +871,159 @@ app.post('/api/submissions/bulk-delete', requireAuth, async (req, res) => {
     const submissions = await Submission.find({ inquiryId: { $in: inquiryIds } });
     const programIds = [...new Set(submissions.map(s => s.programId).filter(Boolean))];
     
-    // Delete submission documents
-    await Submission.deleteMany({ inquiryId: { $in: inquiryIds } });
+    // Soft delete documents
+    await Submission.updateMany(
+      { inquiryId: { $in: inquiryIds } },
+      { isDeleted: true }
+    );
 
     // Update dynamic bookingsCount for all affected programs
     for (const pid of programIds) {
       await updateProgramBookingsCount(pid);
     }
 
-    res.json({ success: true, message: `${submissions.length} submissions deleted successfully, and bookings released.` });
+    res.json({ success: true, message: `${submissions.length} submissions moved to Trash.` });
   } catch (error) {
     console.error('Error bulk deleting submissions:', error);
     res.status(500).json({ error: 'Server error while bulk deleting submissions.' });
+  }
+});
+
+// Restore a single submission from Trash (Admin only)
+app.post('/api/submissions/:inquiryId/restore', requireAuth, async (req, res) => {
+  try {
+    const { inquiryId } = req.params;
+    const submission = await Submission.findOne({ inquiryId });
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found.' });
+    }
+
+    submission.isDeleted = false;
+    await submission.save();
+
+    if (submission.programId) {
+      await updateProgramBookingsCount(submission.programId);
+    }
+
+    res.json({ success: true, message: `Submission ${inquiryId} restored successfully.`, submission });
+  } catch (err) {
+    console.error('Error restoring submission:', err);
+    res.status(500).json({ error: 'Server error restoring submission.' });
+  }
+});
+
+// Permanent delete a single submission (Admin only)
+app.delete('/api/submissions/:inquiryId/permanent', requireAuth, async (req, res) => {
+  try {
+    const { inquiryId } = req.params;
+    const deleted = await Submission.findOneAndDelete({ inquiryId });
+    if (!deleted) {
+      return res.status(404).json({ error: 'Submission not found.' });
+    }
+    res.json({ success: true, message: `Submission ${inquiryId} permanently deleted.` });
+  } catch (error) {
+    console.error('Error permanently deleting submission:', error);
+    res.status(500).json({ error: 'Server error while permanently deleting submission.' });
+  }
+});
+
+// Get all trashed submissions (Admin protected)
+app.get('/api/submissions/trash', requireAuth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    let filter = { isDeleted: true };
+
+    const totalSubmissions = await Submission.countDocuments(filter);
+    const totalPages = Math.ceil(totalSubmissions / limit);
+
+    const submissions = await Submission.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    const mappedSubmissions = submissions.map(sub => {
+      const obj = sub.toObject();
+      if (obj.couplePhoto && !obj.couplePhoto.startsWith('http')) {
+        obj.couplePhoto = `/api/submissions/${sub.inquiryId}/photo`;
+      }
+      if (obj.paymentScreenshot && !obj.paymentScreenshot.startsWith('http')) {
+        obj.paymentScreenshot = `/api/submissions/${sub.inquiryId}/screenshot`;
+      }
+      return obj;
+    });
+
+    res.json({
+      submissions: mappedSubmissions,
+      totalPages,
+      totalSubmissions,
+      currentPage: page
+    });
+  } catch (err) {
+    console.error('Error fetching trash submissions:', err);
+    res.status(500).json({ error: 'Server error fetching trash submissions.' });
+  }
+});
+
+// Update attendance for a single submission (Admin protected)
+app.post('/api/submissions/:inquiryId/attendance', requireAuth, async (req, res) => {
+  const { inquiryId } = req.params;
+  const { attendance } = req.body; // 'present', 'absent', 'unmarked'
+  if (!['present', 'absent', 'unmarked'].includes(attendance)) {
+    return res.status(400).json({ error: 'Invalid attendance status.' });
+  }
+  try {
+    const sub = await Submission.findOneAndUpdate({ inquiryId }, { attendance }, { new: true });
+    if (!sub) return res.status(404).json({ error: 'Submission not found.' });
+    res.json({ success: true, submission: sub });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error updating attendance.' });
+  }
+});
+
+// Update attendance in bulk (Admin protected)
+app.post('/api/submissions/bulk-attendance', requireAuth, async (req, res) => {
+  const { inquiryIds, attendance } = req.body; // inquiryIds: Array of strings, attendance: 'present' | 'absent' | 'unmarked'
+  if (!Array.isArray(inquiryIds) || !['present', 'absent', 'unmarked'].includes(attendance)) {
+    return res.status(400).json({ error: 'Invalid payload.' });
+  }
+  try {
+    await Submission.updateMany({ inquiryId: { $in: inquiryIds } }, { attendance });
+    res.json({ success: true, message: 'Bulk attendance updated.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error updating bulk attendance.' });
+  }
+});
+
+// Update attendance by setting specified inquiry IDs as absent, and all other approved as present
+app.post('/api/submissions/attendance-by-absentees', requireAuth, async (req, res) => {
+  const { programId, absentInquiryIds } = req.body;
+  if (!programId || !Array.isArray(absentInquiryIds)) {
+    return res.status(400).json({ error: 'Program ID and absent inquiry IDs array are required.' });
+  }
+
+  try {
+    const formattedAbsentIds = absentInquiryIds.map(id => id.trim().toUpperCase()).filter(Boolean);
+
+    // 1. Mark all approved submissions for this program as 'present'
+    await Submission.updateMany(
+      { programId, status: 'approved' },
+      { attendance: 'present' }
+    );
+
+    // 2. Mark specified absent submissions as 'absent'
+    if (formattedAbsentIds.length > 0) {
+      await Submission.updateMany(
+        { programId, status: 'approved', inquiryId: { $in: formattedAbsentIds } },
+        { attendance: 'absent' }
+      );
+    }
+
+    res.json({ success: true, message: 'Attendance updated successfully by absentees list.' });
+  } catch (err) {
+    console.error('Error updating attendance by absentees:', err);
+    res.status(500).json({ error: 'Server error updating attendance by absentees.' });
   }
 });
 
@@ -1345,7 +1503,9 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
     const sortBy = req.query.sortBy || 'createdAt';
     const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
 
-    let filter = {};
+    const attendance = req.query.attendance || '';
+
+    let filter = { isDeleted: { $ne: true } };
     if (search) {
       const trimmedSearch = search.trim();
       const isExactToken = /^cpl-\d+$/i.test(trimmedSearch);
@@ -1367,6 +1527,9 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
     }
     if (programId) {
       filter.programId = programId;
+    }
+    if (attendance) {
+      filter.attendance = attendance;
     }
 
     console.log('--- API query:', req.query, 'Mongo filter:', JSON.stringify(filter));
@@ -1390,7 +1553,8 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
       refundReason: 1,
       createdAt: 1,
       couplePhoto: 1,
-      paymentScreenshot: 1
+      paymentScreenshot: 1,
+      attendance: 1
     }, { allowDiskUse: true })
     .sort({ [sortBy]: sortOrder })
     .skip((page - 1) * limit)
@@ -1438,7 +1602,7 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
 // Get duplicate submissions grouped by conflict type (phone or name)
 app.get('/api/submissions/duplicates', requireAuth, async (req, res) => {
   try {
-    const allSubmissions = await Submission.find({});
+    const allSubmissions = await Submission.find({ isDeleted: { $ne: true } });
     
     const norm = (str) => (str || '').toLowerCase().trim();
     

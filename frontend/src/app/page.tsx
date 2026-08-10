@@ -747,6 +747,12 @@ export default function Home() {
                 <p className="text-slate-400 text-sm mt-1">Scan the UPI QR code below and upload a screenshot to verify.</p>
               </div>
 
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs space-y-1">
+                <p className="font-bold">⚠️ Important Note / મહત્વની નોંધ:</p>
+                <p>• This ticket is non-refundable and non-transferable.</p>
+                <p>• આ ટિકિટ રિફંડપાત્ર કે ટ્રાન્સફરેબલ નથી.</p>
+              </div>
+
               {/* Simulated UPI QR Code */}
               <div className="flex flex-col items-center justify-center p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
                 <div className="w-48 h-48 bg-white p-2 rounded-xl flex items-center justify-center shadow-lg">

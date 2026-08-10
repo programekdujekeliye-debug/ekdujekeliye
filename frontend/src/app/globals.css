@@ -81,3 +81,13 @@ body {
 .animate-burst-heart {
   animation: burstHeart 0.8s cubic-bezier(0.15, 0.85, 0.35, 1) forwards;
 }
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}

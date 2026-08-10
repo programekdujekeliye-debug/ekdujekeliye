@@ -22,6 +22,7 @@ interface Submission {
   payeeNameFromReceipt?: string;
   photoZoom?: number;
   photoOffsetY?: number;
+  attendance?: 'unmarked' | 'present' | 'absent';
 }
 
 interface DuplicateGroup {
@@ -165,6 +166,7 @@ interface Program {
   heartHeight?: number;
   photoZoom?: number;
   photoOffsetY?: number;
+  photoLink?: string;
   inquiryCount?: number;
   pendingCount?: number;
   approvedCount?: number;
@@ -315,6 +317,7 @@ export default function AdminDashboard() {
   const [newProgramHeartHeight, setNewProgramHeartHeight] = useState<number>(260);
   const [newProgramPhotoZoom, setNewProgramPhotoZoom] = useState<number>(1.0);
   const [newProgramPhotoOffsetY, setNewProgramPhotoOffsetY] = useState<number>(0);
+  const [newProgramPhotoLink, setNewProgramPhotoLink] = useState('');
   const [programError, setProgramError] = useState('');
   const [programSuccess, setProgramSuccess] = useState('');
   // Frame Zipping states
@@ -324,6 +327,7 @@ export default function AdminDashboard() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [zipProgress, setZipProgress] = useState('');
   const [sentPassIds, setSentPassIds] = useState<string[]>([]);
+  const [sentPhotoIds, setSentPhotoIds] = useState<string[]>([]);
 
   // Editing States
   const [editingProgram, setEditingProgram] = useState<Program | null>(null);
@@ -338,14 +342,20 @@ export default function AdminDashboard() {
   const [editProgramHeartHeight, setEditProgramHeartHeight] = useState<number>(260);
   const [editProgramPhotoZoom, setEditProgramPhotoZoom] = useState<number>(1.0);
   const [editProgramPhotoOffsetY, setEditProgramPhotoOffsetY] = useState<number>(0);
+  const [editProgramPhotoLink, setEditProgramPhotoLink] = useState('');
   const [editProgramError, setEditProgramError] = useState('');
   const [editProgramSuccess, setEditProgramSuccess] = useState('');
 
   // Duplicate Inquiries States
-  const [viewMode, setViewMode] = useState<'all' | 'duplicates' | 'inquiries'>('all');
+  const [viewMode, setViewMode] = useState<'all' | 'duplicates' | 'inquiries' | 'trash'>('all');
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
   const [loadingDuplicates, setLoadingDuplicates] = useState(false);
   const [selectedInquiryIds, setSelectedInquiryIds] = useState<string[]>([]);
+  const [selectedAttendanceIds, setSelectedAttendanceIds] = useState<string[]>([]);
+  const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'unmarked' | 'present' | 'absent'>('all');
+  const [absentInput, setAbsentInput] = useState('');
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'programs' | 'registrations' | 'settings'>('dashboard');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Bulk Review States
   const [reviewingProgramForFrames, setReviewingProgramForFrames] = useState<Program | null>(null);
@@ -440,7 +450,8 @@ export default function AdminDashboard() {
   const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>([]);
   const [activeWhatsappTemplate, setActiveWhatsappTemplate] = useState('Hello! Your payment has been verified. You can view and download your pass here: {passUrl}');
   const [activePaymentRequestTemplate, setActivePaymentRequestTemplate] = useState('Hello! I have registered for the {programName}. My Inquiry ID is {inquiryId}. My phone number is {phoneNumber}. Please verify my payment screenshot.');
-  const [whatsappTemplateTab, setWhatsappTemplateTab] = useState<'pass_delivery' | 'payment_request'>('pass_delivery');
+  const [activePhotoDeliveryTemplate, setActivePhotoDeliveryTemplate] = useState('નમસ્તે {husbandName} & {wifeName}, તમારા પ્રોગ્રામ ({programName}) ના સુંદર ફોટાઓ જોવા માટે નીચેની લિંક પર ક્લિક કરો:\n\nફોટો લિંક: {photoLink}\n\nઆભાર!');
+  const [whatsappTemplateTab, setWhatsappTemplateTab] = useState<'pass_delivery' | 'payment_request' | 'photo_delivery'>('pass_delivery');
 
   const fetchPrograms = async () => {
     try {
@@ -536,6 +547,15 @@ export default function AdminDashboard() {
           setActivePaymentRequestTemplate(data.text);
         }
       }
+      const res3 = await fetch(`${API_BASE_URL}/api/whatsapp-templates/active?type=photo_delivery`, {
+        headers: { 'Authorization': activePassword }
+      });
+      if (res3.ok) {
+        const data = await res3.json();
+        if (data && data.text) {
+          setActivePhotoDeliveryTemplate(data.text);
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch active WhatsApp templates:', err);
     }
@@ -574,6 +594,7 @@ export default function AdminDashboard() {
     search?: string;
     status?: string;
     programId?: string;
+    attendance?: string;
     sortBy?: string;
     sortOrder?: string;
     password?: string;
@@ -583,6 +604,7 @@ export default function AdminDashboard() {
     const activeSearch = options?.search !== undefined ? options.search : searchQuery;
     const activeStatus = options?.status !== undefined ? options.status : statusFilter;
     const activeProgramId = options?.programId !== undefined ? options.programId : programFilter;
+    const activeAttendance = options?.attendance !== undefined ? options.attendance : attendanceFilter;
     const activeSortBy = options?.sortBy !== undefined ? options.sortBy : sortBy;
     const activeSortOrder = options?.sortOrder !== undefined ? options.sortOrder : sortOrder;
     const activePassword = options?.password || password || sessionStorage.getItem('adminPassword') || '';
@@ -594,7 +616,7 @@ export default function AdminDashboard() {
     }
     try {
       if (showSpinner) setLoading(true);
-      const url = `${API_BASE_URL}/api/submissions?page=${activePage}&limit=10&search=${encodeURIComponent(activeSearch)}&status=${activeStatus}&programId=${activeProgramId}&sortBy=${activeSortBy}&sortOrder=${activeSortOrder}`;
+      const url = `${API_BASE_URL}/api/submissions?page=${activePage}&limit=10&search=${encodeURIComponent(activeSearch)}&status=${activeStatus}&programId=${activeProgramId}&sortBy=${activeSortBy}&sortOrder=${activeSortOrder}&attendance=${activeAttendance === 'all' ? '' : activeAttendance}`;
       const res = await fetch(url, {
         headers: {
           'Authorization': activePassword
@@ -699,7 +721,8 @@ export default function AdminDashboard() {
           heartWidth: Number(newProgramHeartWidth),
           heartHeight: Number(newProgramHeartHeight),
           photoZoom: Number(newProgramPhotoZoom),
-          photoOffsetY: Number(newProgramPhotoOffsetY)
+          photoOffsetY: Number(newProgramPhotoOffsetY),
+          photoLink: newProgramPhotoLink
         })
       });
       if (res.ok) {
@@ -716,6 +739,7 @@ export default function AdminDashboard() {
         setNewProgramHeartHeight(260);
         setNewProgramPhotoZoom(1.0);
         setNewProgramPhotoOffsetY(0);
+        setNewProgramPhotoLink('');
         // Reset the file input field
         const fileInput = document.getElementById('programCardTemplateInput') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
@@ -763,6 +787,7 @@ export default function AdminDashboard() {
     setEditProgramHeartHeight(prog.heartHeight ?? 260);
     setEditProgramPhotoZoom(prog.photoZoom ?? 1.0);
     setEditProgramPhotoOffsetY(prog.photoOffsetY ?? 0);
+    setEditProgramPhotoLink(prog.photoLink || '');
     setEditProgramError('');
     setEditProgramSuccess('');
   };
@@ -793,7 +818,8 @@ export default function AdminDashboard() {
           heartWidth: Number(editProgramHeartWidth),
           heartHeight: Number(editProgramHeartHeight),
           photoZoom: Number(editProgramPhotoZoom),
-          photoOffsetY: Number(editProgramPhotoOffsetY)
+          photoOffsetY: Number(editProgramPhotoOffsetY),
+          photoLink: editProgramPhotoLink
         })
       });
       if (res.ok) {
@@ -910,6 +936,156 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       alert('Network error.');
+    }
+  };
+
+  const handleUpdateAttendance = async (inquiryId: string, attendance: 'present' | 'absent' | 'unmarked') => {
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}/attendance`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': activePassword
+        },
+        body: JSON.stringify({ attendance })
+      });
+      if (res.ok) {
+        fetchSubmissions({ showSpinner: false });
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to update attendance.');
+      }
+    } catch (err) {
+      alert('Network error updating attendance.');
+    }
+  };
+
+  const handleBulkUpdateAttendance = async (attendance: 'present' | 'absent' | 'unmarked') => {
+    if (selectedAttendanceIds.length === 0) {
+      alert('Please select at least one submission.');
+      return;
+    }
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/submissions/bulk-attendance`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': activePassword
+        },
+        body: JSON.stringify({ inquiryIds: selectedAttendanceIds, attendance })
+      });
+      if (res.ok) {
+        setSelectedAttendanceIds([]);
+        fetchSubmissions({ showSpinner: false });
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to update bulk attendance.');
+      }
+    } catch (err) {
+      alert('Network error updating bulk attendance.');
+    }
+  };
+
+  const fetchTrashSubmissions = async (options?: { page?: number }) => {
+    const activePage = options?.page !== undefined ? options.page : currentPage;
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    if (!activePassword) return;
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/submissions/trash?page=${activePage}&limit=10`, {
+        headers: { 'Authorization': activePassword }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSubmissions(data.submissions || []);
+        setTotalPages(data.totalPages || 1);
+        setTotalSubmissions(data.totalSubmissions || 0);
+        setCurrentPage(data.currentPage || activePage);
+        setGoToPageInput(String(data.currentPage || activePage));
+      }
+    } catch (err) {
+      console.error('Failed to fetch trash:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRestoreSubmission = async (inquiryId: string) => {
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}/restore`, {
+        method: 'POST',
+        headers: { 'Authorization': activePassword }
+      });
+      if (res.ok) {
+        alert('Submission restored successfully.');
+        fetchTrashSubmissions();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to restore submission.');
+      }
+    } catch (err) {
+      alert('Network error.');
+    }
+  };
+
+  const handlePermanentDeleteSubmission = async (inquiryId: string) => {
+    if (!confirm('Are you sure you want to permanently delete this submission? This action CANNOT be undone.')) return;
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}/permanent`, {
+        method: 'DELETE',
+        headers: { 'Authorization': activePassword }
+      });
+      if (res.ok) {
+        alert('Submission permanently deleted.');
+        fetchTrashSubmissions();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to delete permanently.');
+      }
+    } catch (err) {
+      alert('Network error.');
+    }
+  };
+
+  const handleQuickAttendance = async () => {
+    if (!programFilter) {
+      alert('Please select a program slot first.');
+      return;
+    }
+    if (!absentInput.trim()) {
+      alert('Please enter at least one absent token ID.');
+      return;
+    }
+
+    const absentInquiryIds = absentInput
+      .split(',')
+      .map(id => id.trim().toUpperCase())
+      .filter(Boolean);
+
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/submissions/attendance-by-absentees`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': activePassword
+        },
+        body: JSON.stringify({ programId: programFilter, absentInquiryIds })
+      });
+      if (res.ok) {
+        alert('Attendance processed: specified tokens marked Absent, and all other approved couples marked Present.');
+        setAbsentInput('');
+        fetchSubmissions({ showSpinner: false });
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to update attendance.');
+      }
+    } catch (err) {
+      alert('Network error updating quick attendance.');
     }
   };
 
@@ -1133,13 +1309,14 @@ export default function AdminDashboard() {
         search: searchQuery,
         status: statusFilter,
         programId: programFilter,
+        attendance: attendanceFilter,
         sortBy: sortBy,
         sortOrder: sortOrder
       });
     }, 400); // 400ms debounce
 
     return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery, statusFilter, programFilter, sortBy, sortOrder, isAuthenticated]);
+  }, [searchQuery, statusFilter, programFilter, attendanceFilter, sortBy, sortOrder, isAuthenticated]);
 
   // Live Invitation Preview in Edit Modal
   useEffect(() => {
@@ -1917,7 +2094,7 @@ export default function AdminDashboard() {
 
   // Dashboard view if authenticated
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans p-6 md:p-12">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row relative">
       {/* Lightbox / Modal */}
       {selectedImage && (
         <div
@@ -1977,39 +2154,22 @@ export default function AdminDashboard() {
               </select>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-300">Status</label>
-              <select
-                id="exportStatusSelect"
-                defaultValue=""
-                className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500/50 cursor-pointer"
-              >
-                <option value="">All Statuses (બધો ડેટા)</option>
-                <option value="pending">Pending Only</option>
-                <option value="approved">Approved Only</option>
-                <option value="rejected">Rejected Only</option>
-              </select>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex gap-4">
               <button
                 onClick={() => setShowExportModal(false)}
-                className="px-4 py-2 border border-slate-800 hover:bg-slate-900/60 text-slate-300 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+                className="flex-1 py-2.5 border border-slate-800 hover:bg-slate-900 text-slate-300 font-bold rounded-xl text-xs transition-all"
               >
                 Cancel
               </button>
               <button
                 onClick={() => {
-                  const selectEl = document.getElementById('exportProgramSelect') as HTMLSelectElement;
-                  const statusEl = document.getElementById('exportStatusSelect') as HTMLSelectElement;
-                  const selectedProgramId = selectEl?.value || '';
-                  const selectedStatus = statusEl?.value || '';
+                  const selectEl = document.getElementById('exportProgramSelect') as HTMLSelectElement | null;
+                  handleExportCSV(selectEl?.value || '', '');
                   setShowExportModal(false);
-                  handleExportCSV(selectedProgramId, selectedStatus);
                 }}
-                className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20"
               >
-                Export Now
+                Export CSV
               </button>
             </div>
           </div>
@@ -2019,7 +2179,7 @@ export default function AdminDashboard() {
       {/* Edit Submission Modal */}
       {editingSubmission && (
         <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="relative w-full max-w-xl bg-slate-950 border border-slate-800 rounded-3xl p-6 md:p-8 backdrop-blur-xl shadow-2xl space-y-6">
+          <div className="relative w-full max-w-lg bg-slate-950 border border-slate-800 rounded-3xl p-6 md:p-8 backdrop-blur-xl shadow-2xl space-y-6">
             <div className="flex justify-between items-center border-b border-slate-800 pb-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-100 tracking-tight">Edit Couple Registration</h2>
@@ -2184,7 +2344,7 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   onClick={() => setEditingSubmission(null)}
-                  className="flex-1 py-2.5 border border-slate-800 hover:bg-slate-900 text-slate-300 font-bold rounded-xl text-xs transition-all"
+                  className="flex-1 py-2.5 border border-slate-800 hover:bg-slate-900 text-slate-350 font-bold rounded-xl text-xs transition-all"
                 >
                   Cancel
                 </button>
@@ -2264,54 +2424,34 @@ export default function AdminDashboard() {
                 </label>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Hall Capacity (Seats)</label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={editProgramCapacity}
-                  onChange={(e) => setEditProgramCapacity(e.target.value === '' ? '' : Number(e.target.value))}
-                  placeholder="e.g. 600"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
-                />
-              </div>
+              {editProgramIsDateFinal && (
+                <div className="p-4 bg-slate-900/50 border border-slate-850 rounded-2xl space-y-4">
+                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider block">Pass Layout Configuration</span>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Heart X Offset ({editProgramHeartX}px)</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="800"
+                        value={editProgramHeartX}
+                        onChange={(e) => setEditProgramHeartX(Number(e.target.value))}
+                        className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                      />
+                    </div>
 
-              <div className="border border-slate-800 rounded-xl p-3 bg-slate-900/30 space-y-4">
-                <span className="block text-[10px] font-bold text-amber-500 uppercase tracking-wider">Pass Design Adjustments</span>
-
-                {/* Live Preview canvas */}
-                <div className="w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950 p-2 flex justify-center">
-                  <canvas
-                    id="programEditPreviewCanvas"
-                    style={{ width: '150px', height: '266px' }}
-                    className="bg-slate-950 rounded-lg shadow-inner"
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Heart X Position ({editProgramHeartX}px)</label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="576"
-                      value={editProgramHeartX}
-                      onChange={(e) => setEditProgramHeartX(Number(e.target.value))}
-                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Heart Y Position ({editProgramHeartY}px)</label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1024"
-                      value={editProgramHeartY}
-                      onChange={(e) => setEditProgramHeartY(Number(e.target.value))}
-                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                    />
+                    <div>
+                      <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Heart Y Offset ({editProgramHeartY}px)</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="800"
+                        value={editProgramHeartY}
+                        onChange={(e) => setEditProgramHeartY(Number(e.target.value))}
+                        className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -2374,13 +2514,13 @@ export default function AdminDashboard() {
                         setEditProgramPhotoZoom(1.0);
                         setEditProgramPhotoOffsetY(0);
                       }}
-                      className="w-full py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-all border border-slate-700"
+                      className="w-full py-2 bg-slate-800 hover:bg-slate-750 text-slate-350 hover:text-white rounded-lg text-xs font-bold transition-all border border-slate-700"
                     >
                       Reset to Default Layout
                     </button>
                   </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Entry Pass Template Image (Optional)</label>
@@ -2407,25 +2547,13 @@ export default function AdminDashboard() {
                   }}
                   className="w-full text-slate-400 text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 file:cursor-pointer cursor-pointer bg-slate-900 border border-slate-800 rounded-xl px-3 py-2"
                 />
-                {editProgramCardTemplate && (
-                  <div className="mt-2 text-[10px] text-emerald-400 flex items-center gap-1.5">
-                    <span>✓ Template loaded</span>
-                    <button
-                      type="button"
-                      onClick={() => setEditProgramCardTemplate(null)}
-                      className="text-red-400 hover:text-red-300 font-bold underline"
-                    >
-                      Clear/Remove
-                    </button>
-                  </div>
-                )}
               </div>
 
               <div className="pt-4 flex gap-4 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setEditingProgram(null)}
-                  className="flex-1 py-2.5 border border-slate-800 hover:bg-slate-900 text-slate-300 font-bold rounded-xl text-xs transition-all"
+                  className="flex-1 py-2.5 border border-slate-800 hover:bg-slate-900 text-slate-350 font-bold rounded-xl text-xs transition-all"
                 >
                   Cancel
                 </button>
@@ -2457,14 +2585,9 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            {/* Scrollable list of registrations */}
             <div className="flex-1 overflow-y-auto pr-2 space-y-4">
-              {approvedSubmissionsForFrames.filter(sub => selectedFrameInquiryIds.includes(sub.inquiryId)).length === 0 ? (
-                <p className="text-center text-slate-500 text-sm py-12">No selected couple registrations to review.</p>
-              ) : (
-                approvedSubmissionsForFrames.filter(sub => selectedFrameInquiryIds.includes(sub.inquiryId)).map((sub) => (
+              {approvedSubmissionsForFrames.filter(sub => selectedFrameInquiryIds.includes(sub.inquiryId)).map((sub) => (
                   <div key={sub.inquiryId} className="flex flex-col sm:flex-row items-center gap-6 bg-slate-900/40 border border-slate-850 rounded-2xl p-4 shadow-sm">
-                    {/* Live Preview canvas */}
                     <div className="w-[120px] h-[160px] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center flex-shrink-0">
                       <LivePreviewCanvas sub={sub} frameImg={globalFrameImg} />
                     </div>
@@ -2472,33 +2595,31 @@ export default function AdminDashboard() {
                     <div className="flex-1 w-full space-y-4">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h4 className="font-bold text-slate-200 text-sm leading-snug">{sub.husbandName} & {sub.wifeName} {sub.surname}</h4>
-                          <span className="text-[10px] text-amber-500 font-mono font-bold tracking-wider uppercase">{sub.inquiryId}</span>
+                          <p className="font-bold text-slate-100 text-sm">{sub.husbandName} & {sub.wifeName} {sub.surname}</p>
+                          <p className="text-[10px] text-amber-500 font-mono font-bold mt-0.5">{sub.inquiryId}</p>
                         </div>
-                        <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-md uppercase">Approved</span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Photo Zoom ({(sub.photoZoom ?? 1.0).toFixed(2)}x)</label>
+                          <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Zoom ({sub.photoZoom || 1.0}x)</label>
                           <input
                             type="range"
                             min="0.5"
-                            max="2.0"
+                            max="2.5"
                             step="0.05"
-                            value={sub.photoZoom ?? 1.0}
+                            value={sub.photoZoom || 1.0}
                             onChange={(e) => updateSubmissionCoordInState(sub.inquiryId, 'photoZoom', Number(e.target.value))}
                             className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
                           />
                         </div>
-
                         <div>
-                          <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Photo Vertical Shift ({sub.photoOffsetY ?? 0}px)</label>
+                          <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Vertical Shift ({sub.photoOffsetY || 0}px)</label>
                           <input
                             type="range"
-                            min="-150"
-                            max="150"
-                            value={sub.photoOffsetY ?? 0}
+                            min="-300"
+                            max="300"
+                            value={sub.photoOffsetY || 0}
                             onChange={(e) => updateSubmissionCoordInState(sub.inquiryId, 'photoOffsetY', Number(e.target.value))}
                             className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
                           />
@@ -2507,37 +2628,107 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 ))
-              )}
+              }
             </div>
 
-            {/* Modal actions */}
-            <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row gap-4 items-center justify-between">
-              <span className="text-[11px] text-slate-500">
-                Adjusting sliders here updates the crop of their framed photo instantly, and also permanently saves it to the database for their pass!
-              </span>
-              <div className="flex gap-3 w-full sm:w-auto">
-                <button
-                  type="button"
-                  onClick={() => setReviewingProgramForFrames(null)}
-                  className="px-5 py-2.5 bg-slate-900 border border-slate-800 hover:bg-slate-850 text-slate-300 font-bold rounded-xl text-xs transition-all w-full sm:w-auto text-center"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveAndDownloadZip}
-                  disabled={zipping || selectedFrameInquiryIds.length === 0}
-                  className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-extrabold rounded-xl text-xs transition-all w-full sm:w-auto text-center shadow-lg shadow-amber-500/20"
-                >
-                  {zipping ? `Processing (${zipProgress})` : 'Save Alignments & Download ZIP'}
-                </button>
-              </div>
+            <div className="pt-4 border-t border-slate-800 flex justify-end gap-3">
+              <button
+                onClick={() => setReviewingProgramForFrames(null)}
+                className="px-4 py-2 border border-slate-855 hover:bg-slate-900 text-slate-355 font-bold rounded-xl text-xs transition-all"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => handleDownloadFramedZip(reviewingProgramForFrames)}
+                disabled={zipping || selectedFrameInquiryIds.length === 0}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-md shadow-amber-500/10"
+              >
+                {zipping ? `Processing (${zipProgress})` : 'Save Alignments & Download ZIP'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto space-y-8">
+      {/* Sidebar Navigation */}
+      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between transform transition-transform duration-300 md:translate-x-0 ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="p-6 space-y-8 flex-grow flex flex-col">
+          {/* Logo / Title */}
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="Logo" className="h-9 w-auto object-contain" />
+            <div>
+              <h2 className="font-extrabold text-slate-100 text-sm tracking-tight">Ek Duje Ke Liye</h2>
+              <span className="text-[10px] text-slate-500 font-bold tracking-wider uppercase">Admin Panel</span>
+            </div>
+          </div>
+
+          {/* Navigation Links */}
+          <nav className="space-y-1.5 flex-grow">
+            <button
+              onClick={() => { setActiveSection('dashboard'); setMobileSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeSection === 'dashboard' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+            >
+              <span className="text-sm">📊</span> Dashboard (ડેશબોર્ડ)
+            </button>
+            <button
+              onClick={() => { setActiveSection('programs'); setMobileSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeSection === 'programs' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+            >
+              <span className="text-sm">🎟️</span> Program Slots (પ્રોગ્રામ સ્લોટ)
+            </button>
+            <button
+              onClick={() => { setActiveSection('registrations'); setMobileSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeSection === 'registrations' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+            >
+              <span className="text-sm">📋</span> Registrations (રજીસ્ટ્રેશન)
+            </button>
+            <button
+              onClick={() => { setActiveSection('settings'); setMobileSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeSection === 'settings' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+            >
+              <span className="text-sm">⚙️</span> Settings (સેટિંગ્સ)
+            </button>
+          </nav>
+        </div>
+
+        {/* Sidebar Footer */}
+        <div className="p-6 border-t border-slate-800 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-slate-850 border border-slate-700 flex items-center justify-center font-bold text-xs text-amber-500">
+              {role === 'superadmin' ? 'SA' : 'A'}
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-200 capitalize">{role}</p>
+              <span className="text-[9px] text-slate-500">Active Session</span>
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold rounded-xl text-xs transition-all border border-red-500/20 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            🚪 Log Out
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="flex-grow md:pl-64 flex flex-col min-h-screen">
+        {/* Mobile Header Bar */}
+        <header className="md:hidden bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center z-30 sticky top-0">
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="Logo" className="h-8 w-auto object-contain" />
+            <span className="font-extrabold text-slate-100 text-sm tracking-tight">EKDJK Admin</span>
+          </div>
+          <button
+            onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+            className="p-2 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-xl transition-all cursor-pointer"
+          >
+            {mobileSidebarOpen ? '✖️' : '☰'}
+          </button>
+        </header>
+
+        {/* Content Container */}
+        <main className="p-6 md:p-8 space-y-8 flex-grow overflow-y-auto max-w-[1600px] mx-auto w-full">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
           <div>
@@ -2632,8 +2823,10 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Stats Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {activeSection === 'dashboard' && (
+            <>
+              {/* Stats Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-2xl backdrop-blur-md">
             <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Total Inquiries</span>
             <span className="text-4xl font-extrabold text-slate-100 mt-2 block">{totalSubmissions}</span>
@@ -2670,8 +2863,11 @@ export default function AdminDashboard() {
             <span className="text-4xl font-extrabold text-emerald-500 mt-2 block">Secure</span>
           </div>
         </div>
+      </>
+      )}
 
-        {/* Program Slots Section */}
+      {activeSection === 'programs' && (
+        /* Program Slots Section */
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Create Program Form */}
           <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-6">
@@ -2789,6 +2985,17 @@ export default function AdminDashboard() {
                 )}
               </div>
 
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Photo Gallery Link (ફોટો ગેલેરી લિંક)</label>
+                <input
+                  type="url"
+                  value={newProgramPhotoLink}
+                  onChange={(e) => setNewProgramPhotoLink(e.target.value)}
+                  placeholder="e.g. https://photos.google.com/..."
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+
               <button
                 type="submit"
                 className="w-full py-3 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-bold rounded-xl text-sm transition-all"
@@ -2883,9 +3090,12 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+      )}
 
-        {/* Payment Settings Section */}
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-6">
+      {activeSection === 'settings' && (
+        <>
+          {/* Payment Settings Section */}
+          <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-6">
           <div>
             <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
               <span>💳</span> Payment Settings (UPI QR Code)
@@ -3165,13 +3375,20 @@ export default function AdminDashboard() {
               >
                 Payment Request (User to Admin)
               </button>
+              <button
+                type="button"
+                onClick={() => setWhatsappTemplateTab('photo_delivery')}
+                className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${whatsappTemplateTab === 'photo_delivery' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                Photo Delivery (Admin to User)
+              </button>
             </div>
           </div>
 
           {/* Add Template Form */}
           <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 space-y-4">
             <h3 className="text-sm font-bold text-slate-200">
-              Create New {whatsappTemplateTab === 'pass_delivery' ? 'Pass Delivery' : 'Payment Request'} Template
+              Create New {whatsappTemplateTab === 'pass_delivery' ? 'Pass Delivery' : whatsappTemplateTab === 'payment_request' ? 'Payment Request' : 'Photo Delivery'} Template
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div className="md:col-span-1">
@@ -3179,7 +3396,7 @@ export default function AdminDashboard() {
                 <input
                   type="text"
                   id="newTemplateName"
-                  placeholder={whatsappTemplateTab === 'pass_delivery' ? "e.g. Gujarati Pass Msg" : "e.g. Payment Done Request"}
+                  placeholder={whatsappTemplateTab === 'pass_delivery' ? "e.g. Gujarati Pass Msg" : whatsappTemplateTab === 'payment_request' ? "e.g. Payment Done Request" : "e.g. Gujarati Photo Msg"}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
                 />
               </div>
@@ -3189,7 +3406,7 @@ export default function AdminDashboard() {
                   <input
                     type="text"
                     id="newTemplateText"
-                    placeholder={whatsappTemplateTab === 'pass_delivery' ? "Hello! Download your pass here: {passUrl}" : "Hello! Verified. Inquiry ID: {inquiryId}"}
+                    placeholder={whatsappTemplateTab === 'pass_delivery' ? "Hello! Download your pass here: {passUrl}" : whatsappTemplateTab === 'payment_request' ? "Hello! Verified. Inquiry ID: {inquiryId}" : "નમસ્તે {husbandName} & {wifeName}, તમારા ફોટાઓ જોવા માટે લિંક: {photoLink}"}
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
                   />
                 </div>
@@ -3241,11 +3458,19 @@ export default function AdminDashboard() {
                   <span><code>{`{inquiryId}`}</code></span>
                   <span><code>{`{passUrl}`}</code></span>
                 </>
-              ) : (
+              ) : whatsappTemplateTab === 'payment_request' ? (
                 <>
                   <span><code>{`{programName}`}</code></span>
                   <span><code>{`{inquiryId}`}</code></span>
                   <span><code>{`{phoneNumber}`}</code></span>
+                </>
+              ) : (
+                <>
+                  <span><code>{`{husbandName}`}</code></span>
+                  <span><code>{`{wifeName}`}</code></span>
+                  <span><code>{`{surname}`}</code></span>
+                  <span><code>{`{programName}`}</code></span>
+                  <span><code>{`{photoLink}`}</code></span>
                 </>
               )}
             </div>
@@ -3254,7 +3479,7 @@ export default function AdminDashboard() {
           {/* Templates List */}
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-slate-200">
-              Available {whatsappTemplateTab === 'pass_delivery' ? 'Pass Delivery' : 'Payment Request'} Templates
+              Available {whatsappTemplateTab === 'pass_delivery' ? 'Pass Delivery' : whatsappTemplateTab === 'payment_request' ? 'Payment Request' : 'Photo Delivery'} Templates
             </h3>
             {whatsappTemplates.filter(t => t.type === whatsappTemplateTab).length === 0 ? (
               <p className="text-xs text-slate-500 italic">No templates of this type available. The default message will be used.</p>
@@ -3523,13 +3748,17 @@ export default function AdminDashboard() {
                   >
                     {zipping ? `Processing (${zipProgress})` : 'Download Entry Passes ZIP'}
                   </button>
-                </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
+    </>
+    )}
 
-        {/* View Mode Tabs */}
+      {activeSection === 'registrations' && (
+        <>
+          {/* View Mode Tabs */}
         <div className="flex bg-slate-950/40 p-1.5 rounded-2xl border border-slate-800/80 gap-2 mb-6">
           <button
             type="button"
@@ -3563,12 +3792,23 @@ export default function AdminDashboard() {
           >
             ⚠️ Duplicate Inquiries (ડુપ્લિકેટ ઇન્ક્વાયરી)
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setViewMode('trash');
+              fetchTrashSubmissions({ page: 1 });
+            }}
+            className={`flex-1 py-3 text-center rounded-xl text-sm font-bold transition-all ${viewMode === 'trash' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            🗑️ Trash (કચરાપેટી)
+          </button>
         </div>
 
-        {viewMode === 'all' || viewMode === 'inquiries' ? (
+        {viewMode === 'all' || viewMode === 'inquiries' || viewMode === 'trash' ? (
           <>
             {/* Filters and Search */}
-            <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
+            {viewMode !== 'trash' && (
+              <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
           <div className="flex-1 flex items-center bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 gap-3">
             <span className="text-slate-500 pl-2">🔍</span>
             <input
@@ -3623,6 +3863,25 @@ export default function AdminDashboard() {
               </select>
             </div>
 
+            {/* Attendance Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400 font-semibold">Attendance:</span>
+              <select
+                value={attendanceFilter}
+                onChange={(e) => {
+                  const val = e.target.value as any;
+                  setAttendanceFilter(val);
+                  fetchSubmissions({ page: 1, attendance: val });
+                }}
+                className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+              >
+                <option value="all">All</option>
+                <option value="unmarked">Unmarked (હાજરી બાકી)</option>
+                <option value="present">Present (હાજર)</option>
+                <option value="absent">Absent (ગેરહાજર)</option>
+              </select>
+            </div>
+
             {/* Sort Filter */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400 font-semibold">Sort By:</span>
@@ -3644,6 +3903,7 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Table / Grid */}
         {error && (
@@ -3660,20 +3920,102 @@ export default function AdminDashboard() {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto border border-slate-800 rounded-2xl bg-slate-950/40">
+            {selectedAttendanceIds.length > 0 && (
+              <div className="flex items-center justify-between p-4 bg-slate-900 border border-slate-800 rounded-2xl mb-4 gap-4">
+                <div className="text-xs text-slate-300 font-semibold">
+                  {selectedAttendanceIds.length} કપલ સિલેક્ટ થયેલ છે.
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleBulkUpdateAttendance('present')}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all"
+                  >
+                    Mark Present (હાજર કરો)
+                  </button>
+                  <button
+                    onClick={() => handleBulkUpdateAttendance('absent')}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-all"
+                  >
+                    Mark Absent (ગેરહાજર કરો)
+                  </button>
+                  <button
+                    onClick={() => handleBulkUpdateAttendance('unmarked')}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition-all"
+                  >
+                    Reset (અનમાર્ક કરો)
+                  </button>
+                  <button
+                    onClick={() => setSelectedAttendanceIds([])}
+                    className="px-2.5 py-1.5 text-xs text-slate-400 hover:text-slate-200"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {viewMode !== 'trash' && programFilter && (
+              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 mb-4 space-y-3">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1.5">
+                  <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider">
+                    ⚡ Quick Attendance (ઝડપી હાજરી પૂરક)
+                  </h3>
+                  <span className="text-[10px] text-slate-400">
+                    * આ સ્લોટના લિસ્ટમાં લખેલા કપલ ગેરહાજર (Absent) થશે અને બાકીના આપોઆપ હાજર (Present) માર્ક થશે.
+                  </span>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 items-end">
+                  <div className="flex-grow w-full">
+                    <label className="block text-[10px] text-slate-450 font-semibold mb-1">
+                      Absent Couple Tokens (ગેરહાજર કપલના આઈડી - અલ્પવિરામ `,` થી અલગ કરો)
+                    </label>
+                    <input
+                      type="text"
+                      value={absentInput}
+                      onChange={(e) => setAbsentInput(e.target.value)}
+                      placeholder="e.g. CPL-1302, CPL-1303"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleQuickAttendance}
+                    className="w-full sm:w-auto px-4 py-2 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-bold rounded-xl text-xs transition-all h-[36px]"
+                  >
+                    Process Attendance (હાજરી પૂરો)
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="overflow-x-auto no-scrollbar border border-slate-800 rounded-2xl bg-slate-950/40">
             <table className="w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-950/80 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  <th className="py-4 px-6">Token ID</th>
-                  <th className="py-4 px-6">Program Slot</th>
-                  <th className="py-4 px-6">Couple Names</th>
-                  <th className="py-4 px-6">Surname</th>
-                  <th className="py-4 px-6">Phone</th>
-                  <th className="py-4 px-6">Couple Photo</th>
-                  <th className="py-4 px-6">Payment Proof</th>
-                  <th className="py-4 px-6">Status</th>
-                  <th className="py-4 px-6">Submitted At</th>
-                  <th className="py-4 px-6">Actions</th>
+                  <th className="py-4 px-4 w-12 text-center">
+                    <input
+                      type="checkbox"
+                      checked={filteredSubmissions.length > 0 && filteredSubmissions.every(s => selectedAttendanceIds.includes(s.inquiryId))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          const allIds = filteredSubmissions.map(s => s.inquiryId);
+                          setSelectedAttendanceIds(allIds);
+                        } else {
+                          setSelectedAttendanceIds([]);
+                        }
+                      }}
+                      className="rounded bg-slate-900 border-slate-800 text-amber-500 focus:ring-amber-500 h-4 w-4"
+                    />
+                  </th>
+                  <th className="py-2.5 px-3">Token ID</th>
+                  <th className="py-2.5 px-3">Program Slot</th>
+                  <th className="py-2.5 px-3">Couple Names</th>
+                  <th className="py-2.5 px-3">Surname</th>
+                  <th className="py-2.5 px-3">Phone</th>
+                  <th className="py-2.5 px-3">Couple Photo</th>
+                  <th className="py-2.5 px-3">Payment Proof</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3">Attendance</th>
+                  <th className="py-2.5 px-3">Submitted At</th>
+                  <th className="py-2.5 px-3">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
@@ -3688,8 +4030,22 @@ export default function AdminDashboard() {
 
                   return (
                     <tr key={sub.inquiryId} className="hover:bg-slate-900/30 transition-colors">
-                      <td className="py-4 px-6 font-mono text-amber-500 font-bold">{sub.inquiryId}</td>
-                      <td className="py-4 px-6 text-slate-300">
+                      <td className="py-4 px-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedAttendanceIds.includes(sub.inquiryId)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedAttendanceIds(prev => [...prev, sub.inquiryId]);
+                            } else {
+                              setSelectedAttendanceIds(prev => prev.filter(id => id !== sub.inquiryId));
+                            }
+                          }}
+                          className="rounded bg-slate-900 border-slate-800 text-amber-500 focus:ring-amber-500 h-4 w-4"
+                        />
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-amber-500 font-bold">{sub.inquiryId}</td>
+                      <td className="py-2.5 px-3 text-slate-300">
                         {sub.programName ? (
                           <div>
                             <div className="font-semibold text-slate-200">{sub.programName}</div>
@@ -3699,12 +4055,12 @@ export default function AdminDashboard() {
                           <span className="text-xs text-slate-500">N/A</span>
                         )}
                       </td>
-                      <td className="py-4 px-6 font-semibold text-slate-200">
+                      <td className="py-2.5 px-3 font-semibold text-slate-200">
                         {sub.husbandName} & {sub.wifeName}
                       </td>
-                      <td className="py-4 px-6 text-slate-300">{sub.surname}</td>
-                      <td className="py-4 px-6 font-mono text-slate-300">{sub.phoneNumber}</td>
-                      <td className="py-4 px-6">
+                      <td className="py-2.5 px-3 text-slate-300">{sub.surname}</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-300">{sub.phoneNumber}</td>
+                      <td className="py-2.5 px-3">
                         <div className="flex flex-col items-center gap-2">
                           <div
                             className="w-12 h-12 rounded-lg overflow-hidden border border-slate-800 cursor-pointer hover:border-amber-500/50 transition-colors"
@@ -3724,7 +4080,7 @@ export default function AdminDashboard() {
                           </button>
                         </div>
                       </td>
-                      <td className="py-4 px-6">
+                      <td className="py-2.5 px-3">
                         {sub.paymentScreenshot ? (
                           <div className="flex flex-col items-center gap-2">
                             <div
@@ -3751,7 +4107,7 @@ export default function AdminDashboard() {
                           <span className="text-xs text-slate-500">None</span>
                         )}
                       </td>
-                      <td className="py-4 px-6 flex flex-col gap-1 items-start">
+                      <td className="py-2.5 px-3 flex flex-col gap-1 items-start">
                         <span className={`px-2 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase ${isApproved ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400' :
                           isRejected ? 'bg-red-500/15 border border-red-500/30 text-red-400' :
                             isRefunded ? 'bg-purple-500/15 border border-purple-500/30 text-purple-400' :
@@ -3771,99 +4127,174 @@ export default function AdminDashboard() {
                           </span>
                         )}
                       </td>
-                      <td className="py-4 px-6 text-xs text-slate-500 font-mono">
-                        {new Date(sub.createdAt).toLocaleString()}
-                      </td>
-                      <td className="py-4 px-6 space-y-2">
-                        {isPending && (
-                          <div className="flex flex-col gap-2">
-                            <button
-                              onClick={() => handleApproveSubmission(sub.inquiryId)}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => handleRejectSubmission(sub.inquiryId)}
-                              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs transition-all"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        )}
-                        {isInquiry && (
-                          <div className="flex flex-col gap-2">
-                            <a
-                              href={`https://wa.me/${waPhone}?text=${encodeURIComponent(
-                                `નમસ્તે ${sub.husbandName} & ${sub.wifeName}, તમે જે પ્રોગ્રામ (${sub.programName}) માટે ઇન્ક્વાયરી રજીસ્ટર કરી હતી તેની તારીખ નક્કી થઈ ગઈ છે.\n\nનક્કી થયેલ તારીખ: ${sub.programDate}\n\nકૃપા કરીને તમારી લિંક પર જઈને પેમેન્ટ કરી તમારી સીટ કન્ફર્મ કરો: ${typeof window !== 'undefined' ? window.location.origin.replace('localhost', '127.0.0.1') : ''}/pass/${sub.inquiryId}`
-                              )}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs transition-all text-center"
-                            >
-                              💬 Request Pay
-                            </a>
-                            <button
-                              onClick={() => handleRejectSubmission(sub.inquiryId)}
-                              className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white font-semibold rounded-lg text-xs transition-all"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        )}
-                        {isApproved && (() => {
-                          const isSent = sentPassIds.includes(sub.inquiryId);
-                          return (
-                            <a
-                              href={`https://wa.me/${waPhone}?text=${encodeURIComponent(formatWhatsappMessage(activeWhatsappTemplate, sub))}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => {
-                                if (!isSent) {
-                                  setSentPassIds(prev => [...prev, sub.inquiryId]);
-                                }
-                              }}
-                              className={`inline-block px-3 py-1.5 font-bold rounded-lg text-xs transition-all text-center ${isSent
-                                ? 'bg-slate-800 hover:bg-slate-750 text-slate-400 border border-slate-700'
-                                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                                }`}
-                            >
-                              {isSent ? '💬 Sent' : '💬 Send Pass'}
-                            </a>
-                          );
-                        })()}
-                        {isRejected && (
-                          <div className="flex flex-col gap-2">
-                            <span className="text-xs text-red-500 block max-w-[120px] break-words font-bold">
-                              Rejected
-                            </span>
-                            {sub.rejectionReason && (
-                              <span className="text-[10px] text-red-400/80 block max-w-[120px] break-words bg-red-950/20 border border-red-950/30 p-1.5 rounded-md italic">
-                                {sub.rejectionReason}
-                              </span>
-                            )}
-                            <button
-                              onClick={() => handleApproveSubmission(sub.inquiryId)}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all text-center"
-                            >
-                              Approve
-                            </button>
-                          </div>
-                        )}
-                        <div className="pt-2 border-t border-slate-800/40 flex flex-col gap-1.5">
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1">
                           <button
-                            onClick={() => startEditing(sub)}
-                            className="w-full px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 font-bold rounded-lg text-[10px] transition-all"
+                            onClick={() => handleUpdateAttendance(sub.inquiryId, 'present')}
+                            className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                              sub.attendance === 'present'
+                                ? 'bg-emerald-600 text-white shadow-md'
+                                : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                            }`}
+                            title="Mark Present (હાજર)"
                           >
-                            ✏️ Edit
+                            P
                           </button>
                           <button
-                            onClick={() => handleDeleteSubmission(sub.inquiryId)}
-                            className="w-full px-3 py-1 bg-red-950/20 hover:bg-red-900/30 border border-red-900/30 text-red-400 hover:text-red-300 font-bold rounded-lg text-[10px] transition-all"
+                            onClick={() => handleUpdateAttendance(sub.inquiryId, 'absent')}
+                            className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                              sub.attendance === 'absent'
+                                ? 'bg-red-600 text-white shadow-md'
+                                : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                            }`}
+                            title="Mark Absent (ગેરહાજર)"
                           >
-                            🗑️ Delete
+                            A
+                          </button>
+                          <button
+                            onClick={() => handleUpdateAttendance(sub.inquiryId, 'unmarked')}
+                            className={`px-1.5 py-1 rounded text-[9px] font-semibold transition-all ${
+                              sub.attendance === 'unmarked' || !sub.attendance
+                                ? 'bg-slate-850 text-slate-400'
+                                : 'bg-slate-900/50 text-slate-500 hover:text-slate-350'
+                            }`}
+                            title="Reset (અનમાર્ક)"
+                          >
+                            Reset
                           </button>
                         </div>
+                      </td>
+                      <td className="py-2.5 px-3 text-xs text-slate-500 font-mono">
+                        {new Date(sub.createdAt).toLocaleString()}
+                      </td>
+                      <td className="py-2.5 px-3 space-y-2">
+                        {viewMode === 'trash' ? (
+                          <div className="flex flex-col gap-2">
+                            <button
+                              onClick={() => handleRestoreSubmission(sub.inquiryId)}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all text-center"
+                            >
+                              Restore
+                            </button>
+                            <button
+                              onClick={() => handlePermanentDeleteSubmission(sub.inquiryId)}
+                              className="px-3 py-1.5 bg-red-650 hover:bg-red-700 text-white font-bold rounded-lg text-xs transition-all text-center"
+                            >
+                              Delete Permanently
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            {isPending && (
+                              <div className="flex flex-col gap-2">
+                                <button
+                                  onClick={() => handleApproveSubmission(sub.inquiryId)}
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => handleRejectSubmission(sub.inquiryId)}
+                                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs transition-all"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            )}
+                            {isInquiry && (
+                              <div className="flex flex-col gap-2">
+                                <a
+                                  href={`https://wa.me/${waPhone}?text=${encodeURIComponent(
+                                    `નમસ્તે ${sub.husbandName} & ${sub.wifeName}, તમે જે પ્રોગ્રામ (${sub.programName}) માટે ઇન્ક્વાયરી રજીસ્ટર કરી હતી તેની તારીખ નક્કી થઈ ગઈ છે.\n\nનક્કી થયેલ તારીખ: ${sub.programDate}\n\nકૃપા કરીને તમારી લિંક પર જઈને પેમેન્ટ કરી તમારી સીટ કન્ફર્મ કરો: ${typeof window !== 'undefined' ? window.location.origin.replace('localhost', '127.0.0.1') : ''}/pass/${sub.inquiryId}`
+                                  )}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs transition-all text-center"
+                                >
+                                  💬 Request Pay
+                                </a>
+                                <button
+                                  onClick={() => handleRejectSubmission(sub.inquiryId)}
+                                  className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white font-semibold rounded-lg text-xs transition-all"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            )}
+                            {isApproved && (() => {
+                              const isSent = sentPassIds.includes(sub.inquiryId);
+                              const isPhotoSent = sentPhotoIds.includes(sub.inquiryId);
+                              return (
+                                <div className="flex flex-col gap-2">
+                                  <a
+                                    href={`https://wa.me/${waPhone}?text=${encodeURIComponent(formatWhatsappMessage(activeWhatsappTemplate, sub))}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={() => {
+                                      if (!isSent) {
+                                        setSentPassIds(prev => [...prev, sub.inquiryId]);
+                                      }
+                                    }}
+                                    className={`inline-block px-3 py-1.5 font-bold rounded-lg text-xs transition-all text-center ${isSent
+                                      ? 'bg-slate-800 hover:bg-slate-750 text-slate-400 border border-slate-700'
+                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                      }`}
+                                  >
+                                    {isSent ? '💬 Sent' : '💬 Send Pass'}
+                                  </a>
+                                  <a
+                                    href={`https://wa.me/${waPhone}?text=${encodeURIComponent(formatWhatsappMessage(activePhotoDeliveryTemplate, sub))}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={() => {
+                                      if (!isPhotoSent) {
+                                        setSentPhotoIds(prev => [...prev, sub.inquiryId]);
+                                      }
+                                    }}
+                                    className={`inline-block px-3 py-1.5 font-bold rounded-lg text-xs transition-all text-center ${isPhotoSent
+                                      ? 'bg-slate-800 hover:bg-slate-750 text-slate-400 border border-slate-700'
+                                      : 'bg-amber-600 hover:bg-amber-700 text-white'
+                                      }`}
+                                  >
+                                    {isPhotoSent ? '📸 Photo Sent' : '📸 Send Photo'}
+                                  </a>
+                                </div>
+                              );
+                            })()}
+                            {isRejected && (
+                              <div className="flex flex-col gap-2">
+                                <span className="text-xs text-red-500 block max-w-[120px] break-words font-bold">
+                                  Rejected
+                                </span>
+                                {sub.rejectionReason && (
+                                  <span className="text-[10px] text-red-400/80 block max-w-[120px] break-words bg-red-950/20 border border-red-950/30 p-1.5 rounded-md italic">
+                                    {sub.rejectionReason}
+                                  </span>
+                                )}
+                                <button
+                                  onClick={() => handleApproveSubmission(sub.inquiryId)}
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all text-center"
+                                >
+                                  Approve
+                                </button>
+                              </div>
+                            )}
+                            <div className="pt-2 border-t border-slate-800/40 flex flex-col gap-1.5">
+                              <button
+                                onClick={() => startEditing(sub)}
+                                className="w-full px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 font-bold rounded-lg text-[10px] transition-all"
+                              >
+                                ✏️ Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteSubmission(sub.inquiryId)}
+                                className="w-full px-3 py-1 bg-red-950/20 hover:bg-red-900/30 border border-red-900/30 text-red-400 hover:text-red-300 font-bold rounded-lg text-[10px] transition-all"
+                              >
+                                🗑️ Delete
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </td>
                     </tr>
                   );
@@ -3885,7 +4316,13 @@ export default function AdminDashboard() {
                   <div className="flex items-center gap-2">
                     <button
                       disabled={currentPage <= 1 || loading}
-                      onClick={() => fetchSubmissions({ page: currentPage - 1 })}
+                      onClick={() => {
+                        if (viewMode === 'trash') {
+                          fetchTrashSubmissions({ page: currentPage - 1 });
+                        } else {
+                          fetchSubmissions({ page: currentPage - 1 });
+                        }
+                      }}
                       className="px-4 py-2 border border-slate-800 hover:border-amber-500/30 hover:bg-slate-900/60 disabled:opacity-40 disabled:hover:border-slate-800 disabled:hover:bg-transparent text-slate-300 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
                     >
                       ◀ Previous
@@ -3895,7 +4332,13 @@ export default function AdminDashboard() {
                     </span>
                     <button
                       disabled={currentPage >= totalPages || loading}
-                      onClick={() => fetchSubmissions({ page: currentPage + 1 })}
+                      onClick={() => {
+                        if (viewMode === 'trash') {
+                          fetchTrashSubmissions({ page: currentPage + 1 });
+                        } else {
+                          fetchSubmissions({ page: currentPage + 1 });
+                        }
+                      }}
                       className="px-4 py-2 border border-slate-800 hover:border-amber-500/30 hover:bg-slate-900/60 disabled:opacity-40 disabled:hover:border-slate-800 disabled:hover:bg-transparent text-slate-300 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
                     >
                       Next ▶
@@ -3914,7 +4357,11 @@ export default function AdminDashboard() {
                         if (e.key === 'Enter') {
                           const page = parseInt(goToPageInput, 10);
                           if (page >= 1 && page <= totalPages) {
-                            fetchSubmissions({ page });
+                            if (viewMode === 'trash') {
+                              fetchTrashSubmissions({ page });
+                            } else {
+                              fetchSubmissions({ page });
+                            }
                           }
                         }
                       }}
@@ -3924,7 +4371,11 @@ export default function AdminDashboard() {
                       onClick={() => {
                         const page = parseInt(goToPageInput, 10);
                         if (page >= 1 && page <= totalPages) {
-                          fetchSubmissions({ page });
+                          if (viewMode === 'trash') {
+                            fetchTrashSubmissions({ page });
+                          } else {
+                            fetchSubmissions({ page });
+                          }
                         }
                       }}
                       className="px-2.5 py-1 bg-slate-900 border border-slate-800 hover:border-amber-500/30 text-slate-300 font-bold rounded-lg text-xs transition-all active:scale-[0.98]"
@@ -4141,13 +4592,15 @@ export default function AdminDashboard() {
                     })}
                   </div>
                 </div>
-                ))
-              }
-            </>
-          )}
+                ))}
+              </>
+            )}
           </div>
         )}
-    </div>
-    </div>
+      </>
+      )}
+    </main>
+  </div>
+</div>
   );
 }
