@@ -24,6 +24,7 @@ interface Program {
   heartY?: number;
   heartWidth?: number;
   heartHeight?: number;
+  isInquiryClosed?: boolean;
 }
 
 const ADMIN_WHATSAPP_NUMBER = '919213532835'; // Configure Admin WhatsApp number here
@@ -680,7 +681,12 @@ export default function Home() {
                     <>
                       <option value="" className="text-slate-500">Choose an available slot</option>
                       {programs
-                        .filter((prog) => prog.isDateFinal === false || (prog.capacity - prog.bookingsCount) >= 2)
+                        .filter((prog) => {
+                          if (prog.isDateFinal === false && prog.isInquiryClosed) {
+                            return false;
+                          }
+                          return prog.isDateFinal === false || (prog.capacity - prog.bookingsCount) >= 2;
+                        })
                         .map((prog) => {
                           const remainingSeats = prog.capacity - prog.bookingsCount;
                           const dateStr = prog.isDateFinal !== false ? prog.date : 'Date TBD (તારીખ નક્કી થવાની બાકી)';

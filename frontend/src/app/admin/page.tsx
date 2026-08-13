@@ -167,6 +167,7 @@ interface Program {
   photoZoom?: number;
   photoOffsetY?: number;
   photoLink?: string;
+  isInquiryClosed?: boolean;
   inquiryCount?: number;
   pendingCount?: number;
   approvedCount?: number;
@@ -310,6 +311,7 @@ export default function AdminDashboard() {
   const [newProgramDate, setNewProgramDate] = useState('');
   const [newProgramCapacity, setNewProgramCapacity] = useState<number | ''>('');
   const [newProgramIsDateFinal, setNewProgramIsDateFinal] = useState<boolean>(true);
+  const [newProgramIsInquiryClosed, setNewProgramIsInquiryClosed] = useState<boolean>(false);
   const [newProgramCardTemplate, setNewProgramCardTemplate] = useState<string | null>(null);
   const [newProgramHeartX, setNewProgramHeartX] = useState<number>(144);
   const [newProgramHeartY, setNewProgramHeartY] = useState<number>(112);
@@ -335,6 +337,7 @@ export default function AdminDashboard() {
   const [editProgramDate, setEditProgramDate] = useState('');
   const [editProgramCapacity, setEditProgramCapacity] = useState<number | ''>('');
   const [editProgramIsDateFinal, setEditProgramIsDateFinal] = useState<boolean>(true);
+  const [editProgramIsInquiryClosed, setEditProgramIsInquiryClosed] = useState<boolean>(false);
   const [editProgramCardTemplate, setEditProgramCardTemplate] = useState<string | null>(null);
   const [editProgramHeartX, setEditProgramHeartX] = useState<number>(144);
   const [editProgramHeartY, setEditProgramHeartY] = useState<number>(112);
@@ -727,7 +730,8 @@ export default function AdminDashboard() {
           heartHeight: Number(newProgramHeartHeight),
           photoZoom: Number(newProgramPhotoZoom),
           photoOffsetY: Number(newProgramPhotoOffsetY),
-          photoLink: newProgramPhotoLink
+          photoLink: newProgramPhotoLink,
+          isInquiryClosed: newProgramIsInquiryClosed
         })
       });
       if (res.ok) {
@@ -737,6 +741,7 @@ export default function AdminDashboard() {
         setNewProgramDate('');
         setNewProgramCapacity('');
         setNewProgramIsDateFinal(true);
+        setNewProgramIsInquiryClosed(false);
         setNewProgramCardTemplate(null);
         setNewProgramHeartX(144);
         setNewProgramHeartY(112);
@@ -793,6 +798,7 @@ export default function AdminDashboard() {
     setEditProgramPhotoZoom(prog.photoZoom ?? 1.0);
     setEditProgramPhotoOffsetY(prog.photoOffsetY ?? 0);
     setEditProgramPhotoLink(prog.photoLink || '');
+    setEditProgramIsInquiryClosed(prog.isInquiryClosed || false);
     setEditProgramError('');
     setEditProgramSuccess('');
   };
@@ -824,7 +830,8 @@ export default function AdminDashboard() {
           heartHeight: Number(editProgramHeartHeight),
           photoZoom: Number(editProgramPhotoZoom),
           photoOffsetY: Number(editProgramPhotoOffsetY),
-          photoLink: editProgramPhotoLink
+          photoLink: editProgramPhotoLink,
+          isInquiryClosed: editProgramIsInquiryClosed
         })
       });
       if (res.ok) {
@@ -2470,6 +2477,21 @@ export default function AdminDashboard() {
                 </label>
               </div>
 
+              {!editProgramIsDateFinal && (
+                <div className="flex items-center gap-2 py-2">
+                  <input
+                    type="checkbox"
+                    id="editProgramIsInquiryClosed"
+                    checked={editProgramIsInquiryClosed}
+                    onChange={(e) => setEditProgramIsInquiryClosed(e.target.checked)}
+                    className="rounded bg-slate-900 border-slate-800 text-amber-500 focus:ring-amber-500 h-4 w-4"
+                  />
+                  <label htmlFor="editProgramIsInquiryClosed" className="text-xs font-semibold text-slate-300 cursor-pointer">
+                    Close Inquiry Registration? (ઇન્ક્વાયરી લેવાનું બંધ કરવું)
+                  </label>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Hall Capacity (Seats, e.g. 600 for 300 Couples)</label>
                 <input
@@ -2996,6 +3018,21 @@ export default function AdminDashboard() {
                 </label>
               </div>
 
+              {!newProgramIsDateFinal && (
+                <div className="flex items-center gap-2 py-2">
+                  <input
+                    type="checkbox"
+                    id="newProgramIsInquiryClosed"
+                    checked={newProgramIsInquiryClosed}
+                    onChange={(e) => setNewProgramIsInquiryClosed(e.target.checked)}
+                    className="rounded bg-slate-900 border-slate-800 text-amber-500 focus:ring-amber-500 h-4 w-4"
+                  />
+                  <label htmlFor="newProgramIsInquiryClosed" className="text-xs font-semibold text-slate-300 cursor-pointer">
+                    Close Inquiry Registration? (ઇન્ક્વાયરી લેવાનું બંધ કરવું)
+                  </label>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Hall Capacity (Seats, e.g. 600 for 300 Couples)</label>
                 <input
@@ -3101,6 +3138,9 @@ export default function AdminDashboard() {
                             <span className="px-2 py-0.5 text-[10px] bg-red-500/10 border border-red-500/20 text-red-400 rounded-full font-bold uppercase tracking-wider">Sold Out</span>
                           ) : (
                             <span className="px-2 py-0.5 text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full font-bold uppercase tracking-wider">Active</span>
+                          )}
+                          {prog.isDateFinal === false && prog.isInquiryClosed && (
+                            <span className="px-2 py-0.5 text-[10px] bg-amber-500/15 border border-amber-500/30 text-amber-400 rounded-full font-bold uppercase tracking-wider">Inquiry Closed</span>
                           )}
                         </div>
                         <div className="text-xs text-slate-400 flex items-center gap-4 flex-wrap">

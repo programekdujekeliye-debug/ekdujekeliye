@@ -96,7 +96,8 @@ const ProgramSchema = new mongoose.Schema({
   heartHeight: { type: Number, default: 260 },
   photoZoom: { type: Number, default: 1.0 },
   photoOffsetY: { type: Number, default: 0 },
-  photoLink: { type: String, default: "" }
+  photoLink: { type: String, default: "" },
+  isInquiryClosed: { type: Boolean, default: false }
 }, { collection: 'program' });
 const Program = mongoose.model('Program', ProgramSchema);
 
@@ -393,7 +394,7 @@ app.get('/api/programs/:id/template', async (req, res) => {
 
 // Create a new program (Admin protected)
 app.post('/api/programs', requireAuth, async (req, res) => {
-  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY, isDateFinal, photoLink } = req.body;
+  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY, isDateFinal, photoLink, isInquiryClosed } = req.body;
   const finalIsDateFinal = isDateFinal !== undefined ? isDateFinal : true;
   if (!name || !capacity || (finalIsDateFinal && !date)) {
     return res.status(400).json({ error: 'Name, date, and capacity are required.' });
@@ -414,7 +415,8 @@ app.post('/api/programs', requireAuth, async (req, res) => {
       heartHeight: heartHeight !== undefined ? parseInt(heartHeight, 10) : 260,
       photoZoom: photoZoom !== undefined ? parseFloat(photoZoom) : 1.0,
       photoOffsetY: photoOffsetY !== undefined ? parseInt(photoOffsetY, 10) : 0,
-      photoLink: photoLink || ""
+      photoLink: photoLink || "",
+      isInquiryClosed: isInquiryClosed !== undefined ? isInquiryClosed : false
     });
     res.status(201).json(newProgram);
   } catch (err) {
@@ -441,7 +443,7 @@ app.delete('/api/programs/:id', requireAuth, async (req, res) => {
 // Update a program (Admin protected)
 app.put('/api/programs/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
-  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY, isDateFinal, photoLink } = req.body;
+  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY, isDateFinal, photoLink, isInquiryClosed } = req.body;
   try {
     const program = await Program.findOne({ id });
     if (!program) {
@@ -471,6 +473,7 @@ app.put('/api/programs/:id', requireAuth, async (req, res) => {
     if (photoZoom !== undefined) program.photoZoom = parseFloat(photoZoom);
     if (photoOffsetY !== undefined) program.photoOffsetY = parseInt(photoOffsetY, 10);
     if (photoLink !== undefined) program.photoLink = photoLink;
+    if (isInquiryClosed !== undefined) program.isInquiryClosed = isInquiryClosed;
 
     await program.save();
     // Invalidate cache
