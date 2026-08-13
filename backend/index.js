@@ -319,6 +319,7 @@ app.get('/api/programs', async (req, res) => {
     const programs = await Program.find({}, {
       id: 1, name: 1, date: 1, time: 1, capacity: 1, bookingsCount: 1, isDateFinal: 1,
       heartX: 1, heartY: 1, heartWidth: 1, heartHeight: 1, photoZoom: 1, photoOffsetY: 1,
+      photoLink: 1, isInquiryClosed: 1,
       hasTemplate: { $cond: [ { $eq: [ { $type: "$cardTemplate" }, "string" ] }, true, false ] }
     });
     
