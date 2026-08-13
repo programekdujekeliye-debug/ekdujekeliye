@@ -443,16 +443,21 @@ export default function PassDownloadPage() {
                         className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors font-medium cursor-pointer"
                       >
                         <option value="" disabled>પ્રોગ્રામ સ્લોટ પસંદ કરો...</option>
-                        {programs.map((p) => {
-                          const isCurrent = p.id === submission.programId;
-                          const remainingSeats = p.capacity - p.bookingsCount;
-                          const isSoldOut = p.bookingsCount + 2 > p.capacity;
-                          return (
-                            <option key={p.id} value={p.id} disabled={isSoldOut && !isCurrent}>
-                              {p.name} ({p.date}) {isCurrent ? "[વર્તમાન]" : isSoldOut ? "[SOLD OUT]" : `(${Math.floor(remainingSeats / 2)} left)`}
-                            </option>
-                          );
-                        })}
+                        {programs
+                          .filter((p) => {
+                            const isCurrent = p.id === submission.programId;
+                            const isSoldOut = p.bookingsCount + 2 > p.capacity;
+                            return isCurrent || !isSoldOut;
+                          })
+                          .map((p) => {
+                            const isCurrent = p.id === submission.programId;
+                            const remainingSeats = p.capacity - p.bookingsCount;
+                            return (
+                              <option key={p.id} value={p.id}>
+                                {p.name} ({p.date}) {isCurrent ? "[વર્તમાન]" : `(${Math.floor(remainingSeats / 2)} left)`}
+                              </option>
+                            );
+                          })}
                       </select>
                     </div>
                     <button
