@@ -2470,6 +2470,19 @@ export default function AdminDashboard() {
                 </label>
               </div>
 
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Hall Capacity (Seats, e.g. 600 for 300 Couples)</label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  value={editProgramCapacity}
+                  onChange={(e) => setEditProgramCapacity(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="e.g. 600"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+
               {editProgramIsDateFinal && (
                 <div className="p-4 bg-slate-900/50 border border-slate-850 rounded-2xl space-y-4">
                   <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider block">Pass Layout Configuration</span>
@@ -2592,6 +2605,17 @@ export default function AdminDashboard() {
                     }
                   }}
                   className="w-full text-slate-400 text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 file:cursor-pointer cursor-pointer bg-slate-900 border border-slate-800 rounded-xl px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Photo Gallery Link (ફોટો ગેલેરી લિંક)</label>
+                <input
+                  type="url"
+                  value={editProgramPhotoLink}
+                  onChange={(e) => setEditProgramPhotoLink(e.target.value)}
+                  placeholder="e.g. https://photos.google.com/..."
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
                 />
               </div>
 
