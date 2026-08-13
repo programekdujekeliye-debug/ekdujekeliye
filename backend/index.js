@@ -889,6 +889,76 @@ app.post('/api/submissions/bulk-delete', requireAuth, async (req, res) => {
   }
 });
 
+// Bulk move submissions to another program (Admin only)
+app.post('/api/submissions/bulk-move', requireAuth, async (req, res) => {
+  try {
+    const { inquiryIds, targetProgramId } = req.body;
+    if (!Array.isArray(inquiryIds) || inquiryIds.length === 0) {
+      return res.status(400).json({ error: 'કોઈ ઇન્ક્વાયરી પસંદ કરેલ નથી.' });
+    }
+    if (!targetProgramId) {
+      return res.status(400).json({ error: 'કૃપા કરીને નવો પ્રોગ્રામ પસંદ કરો.' });
+    }
+
+    const targetProgram = await Program.findOne({ id: targetProgramId });
+    if (!targetProgram) {
+      return res.status(404).json({ error: 'પસંદ કરેલ પ્રોગ્રામ મળ્યો નથી.' });
+    }
+
+    // Find all submissions to be moved
+    const submissions = await Submission.find({ inquiryId: { $in: inquiryIds }, isDeleted: { $ne: true } });
+    if (submissions.length === 0) {
+      return res.status(400).json({ error: 'કોઈ માન્ય ઇન્ક્વાયરી મળી નથી.' });
+    }
+
+    // Identify which ones are changing their program and are active (approved/pending)
+    const activeSubmissionsToMoveCount = submissions.filter(
+      s => ['approved', 'pending'].includes(s.status) && s.programId !== targetProgramId
+    ).length;
+
+    if (activeSubmissionsToMoveCount > 0) {
+      const activeBookings = await getProgramBookingsCount(targetProgramId);
+      const neededCapacity = activeSubmissionsToMoveCount * 2;
+      if (activeBookings + neededCapacity > targetProgram.capacity) {
+        return res.status(400).json({ 
+          error: `પસંદ કરેલ પ્રોગ્રામ સ્લોટમાં પૂરતી જગ્યા નથી! (જરૂરી સીટો: ${neededCapacity}, ખાલી સીટો: ${targetProgram.capacity - activeBookings})` 
+        });
+      }
+    }
+
+    // Collect all original program IDs to update their bookingsCount later
+    const sourceProgramIds = [...new Set(submissions.map(s => s.programId).filter(Boolean))];
+
+    // Update submissions in database
+    await Submission.updateMany(
+      { inquiryId: { $in: inquiryIds } },
+      {
+        $set: {
+          programId: targetProgram.id,
+          programName: targetProgram.name,
+          programDate: targetProgram.date,
+          programTime: targetProgram.time || "8:30 PM"
+        }
+      }
+    );
+
+    // Update bookings count for all affected source programs and the target program
+    for (const pid of sourceProgramIds) {
+      await updateProgramBookingsCount(pid);
+    }
+    await updateProgramBookingsCount(targetProgramId);
+
+    res.json({ 
+      success: true, 
+      message: `${submissions.length} ઇન્ક્વાયરીઝ સફળતાપૂર્વક નવા પ્રોગ્રામમાં ટ્રાન્સફર કરવામાં આવી છે.` 
+    });
+  } catch (error) {
+    console.error('Error bulk moving submissions:', error);
+    res.status(500).json({ error: 'સર્વર ભૂલ: ઇન્ક્વાયરી ટ્રાન્સફર કરવામાં સમસ્યા આવી.' });
+  }
+});
+
+
 // Restore a single submission from Trash (Admin only)
 app.post('/api/submissions/:inquiryId/restore', requireAuth, async (req, res) => {
   try {
@@ -1399,6 +1469,58 @@ app.post('/api/submissions/:inquiryId/pay', upload.fields([
   } catch (error) {
     console.error('Error handling payment upload:', error);
     res.status(500).json({ error: 'Server error processing payment upload' });
+  }
+});
+
+// Public endpoint for a couple to change their program slot (Only allowed in 'inquiry' status)
+app.post('/api/submissions/:inquiryId/change-slot', async (req, res) => {
+  const { inquiryId } = req.params;
+  const { targetProgramId } = req.body;
+  try {
+    const formattedId = (inquiryId || '').trim().toUpperCase();
+    const submission = await Submission.findOne({ inquiryId: formattedId });
+    if (!submission) {
+      return res.status(404).json({ error: 'ઇન્ક્વાયરી મળી નથી.' });
+    }
+
+    // CRITICAL RULE: Only allow slot change if status is 'inquiry'
+    if (submission.status !== 'inquiry') {
+      return res.status(400).json({ error: 'પ્રોગ્રામ સ્લોટ ફક્ત ઇન્ક્વાયરી સ્ટેટસ દરમિયાન જ બદલી શકાય છે.' });
+    }
+
+    if (!targetProgramId) {
+      return res.status(400).json({ error: 'કૃપા કરીને નવો પ્રોગ્રામ પસંદ કરો.' });
+    }
+
+    const targetProgram = await Program.findOne({ id: targetProgramId });
+    if (!targetProgram) {
+      return res.status(404).json({ error: 'પસંદ કરેલ પ્રોગ્રામ મળ્યો નથી.' });
+    }
+
+    const oldProgramId = submission.programId;
+    if (oldProgramId !== targetProgramId) {
+      const activeBookings = await getProgramBookingsCount(targetProgramId);
+      if (activeBookings + 2 > targetProgram.capacity) {
+        return res.status(400).json({ error: 'આ પ્રોગ્રામ સ્લોટ હાઉસફુલ (SOLD OUT) છે. કૃપા કરીને બીજો સ્લોટ પસંદ કરો.' });
+      }
+    }
+
+    // Update submission
+    submission.programId = targetProgram.id;
+    submission.programName = targetProgram.name;
+    submission.programDate = targetProgram.date;
+    submission.programTime = targetProgram.time || "8:30 PM";
+    await submission.save();
+
+    if (oldProgramId) {
+      await updateProgramBookingsCount(oldProgramId);
+    }
+    await updateProgramBookingsCount(targetProgramId);
+
+    res.json({ success: true, message: 'પ્રોગ્રામ સ્લોટ સફળતાપૂર્વક બદલવામાં આવ્યો છે.', data: submission });
+  } catch (error) {
+    console.error('Error changing slot:', error);
+    res.status(500).json({ error: 'સર્વર ભૂલ: સ્લોટ બદલવામાં સમસ્યા આવી.' });
   }
 });
 

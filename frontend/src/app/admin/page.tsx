@@ -352,6 +352,8 @@ export default function AdminDashboard() {
   const [loadingDuplicates, setLoadingDuplicates] = useState(false);
   const [selectedInquiryIds, setSelectedInquiryIds] = useState<string[]>([]);
   const [selectedAttendanceIds, setSelectedAttendanceIds] = useState<string[]>([]);
+  const [selectTopCount, setSelectTopCount] = useState<number>(200);
+  const [pageSize, setPageSize] = useState<number>(10);
   const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'unmarked' | 'present' | 'absent'>('all');
   const [absentInput, setAbsentInput] = useState('');
   const [activeSection, setActiveSection] = useState<'dashboard' | 'programs' | 'registrations' | 'settings'>('dashboard');
@@ -599,6 +601,7 @@ export default function AdminDashboard() {
     sortOrder?: string;
     password?: string;
     showSpinner?: boolean;
+    limit?: number;
   }) => {
     const activePage = options?.page !== undefined ? options.page : currentPage;
     const activeSearch = options?.search !== undefined ? options.search : searchQuery;
@@ -609,6 +612,7 @@ export default function AdminDashboard() {
     const activeSortOrder = options?.sortOrder !== undefined ? options.sortOrder : sortOrder;
     const activePassword = options?.password || password || sessionStorage.getItem('adminPassword') || '';
     const showSpinner = options?.showSpinner !== false;
+    const activeLimit = options?.limit !== undefined ? options.limit : pageSize;
 
     if (!activePassword) {
       setLoading(false);
@@ -616,7 +620,7 @@ export default function AdminDashboard() {
     }
     try {
       if (showSpinner) setLoading(true);
-      const url = `${API_BASE_URL}/api/submissions?page=${activePage}&limit=10&search=${encodeURIComponent(activeSearch)}&status=${activeStatus}&programId=${activeProgramId}&sortBy=${activeSortBy}&sortOrder=${activeSortOrder}&attendance=${activeAttendance === 'all' ? '' : activeAttendance}`;
+      const url = `${API_BASE_URL}/api/submissions?page=${activePage}&limit=${activeLimit}&search=${encodeURIComponent(activeSearch)}&status=${activeStatus}&programId=${activeProgramId}&sortBy=${activeSortBy}&sortOrder=${activeSortOrder}&attendance=${activeAttendance === 'all' ? '' : activeAttendance}`;
       const res = await fetch(url, {
         headers: {
           'Authorization': activePassword
@@ -657,6 +661,7 @@ export default function AdminDashboard() {
         } catch (roleErr) {
           console.error('Error fetching role:', roleErr);
         }
+        return data.submissions;
       } else if (res.status === 401) {
         setError('Incorrect admin password. Please try again.');
         setIsAuthenticated(false);
@@ -985,6 +990,47 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       alert('Network error updating bulk attendance.');
+    }
+  };
+
+  const handleBulkMoveSubmissions = async (targetProgramId: string) => {
+    if (selectedAttendanceIds.length === 0) {
+      alert('કૃપા કરીને ઓછામાં ઓછી એક ઇન્ક્વાયરી પસંદ કરો.');
+      return;
+    }
+    if (!targetProgramId) {
+      alert('કૃપા કરીને નવો પ્રોગ્રામ પસંદ કરો.');
+      return;
+    }
+
+    const selectedProgram = programs.find(p => p.id === targetProgramId);
+    const programNameStr = selectedProgram ? `${selectedProgram.name} (${selectedProgram.date})` : 'પસંદ કરેલ પ્રોગ્રામ';
+
+    if (!confirm(`શું તમે ખરેખર પસંદ કરેલી ${selectedAttendanceIds.length} ઇન્ક્વાયરીઝને "${programNameStr}" માં ટ્રાન્સફર કરવા માંગો છો?`)) {
+      return;
+    }
+
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/submissions/bulk-move`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': activePassword
+        },
+        body: JSON.stringify({ inquiryIds: selectedAttendanceIds, targetProgramId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || 'ઇન્ક્વાયરીઝ સફળતાપૂર્વક ટ્રાન્સફર કરવામાં આવી છે.');
+        setSelectedAttendanceIds([]);
+        fetchSubmissions({ showSpinner: false });
+        fetchPrograms();
+      } else {
+        alert(data.error || 'ઇન્ક્વાયરી ટ્રાન્સફર કરવામાં નિષ્ફળતા.');
+      }
+    } catch (err) {
+      alert('नेटरवर्क भूल: इन्क्वायरी ट्रांसफर थई शकी नथी.');
     }
   };
 
@@ -3901,6 +3947,39 @@ export default function AdminDashboard() {
                 <option value="inquiryId-desc">Token ID (Descending)</option>
               </select>
             </div>
+
+            {/* Select Top N Helper */}
+            <div className="flex items-center gap-1.5 bg-slate-900/60 border border-slate-800 rounded-xl px-2.5 py-1.5">
+              <span className="text-xs text-slate-400 font-semibold">Select Top:</span>
+              <input
+                type="number"
+                min="1"
+                value={selectTopCount}
+                onChange={(e) => setSelectTopCount(e.target.value ? parseInt(e.target.value, 10) : 200)}
+                className="w-14 bg-slate-950 border border-slate-800 text-slate-100 text-xs rounded-lg px-2 py-1 text-center focus:outline-none focus:border-amber-500/50"
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  if (selectTopCount && selectTopCount > 0) {
+                    if (selectTopCount > pageSize) {
+                      setPageSize(selectTopCount);
+                      const fetched = await fetchSubmissions({ page: 1, limit: selectTopCount });
+                      if (fetched) {
+                        const ids = fetched.slice(0, selectTopCount).map((s: any) => s.inquiryId);
+                        setSelectedAttendanceIds(ids);
+                      }
+                    } else {
+                      const ids = filteredSubmissions.slice(0, selectTopCount).map(s => s.inquiryId);
+                      setSelectedAttendanceIds(ids);
+                    }
+                  }
+                }}
+                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold rounded-lg transition-all active:scale-[0.97] cursor-pointer"
+              >
+                Select (સિલેક્ટ)
+              </button>
+            </div>
           </div>
         </div>
         )}
@@ -3944,6 +4023,31 @@ export default function AdminDashboard() {
                   >
                     Reset (અનમાર્ક કરો)
                   </button>
+
+                  <div className="h-6 w-px bg-slate-800 mx-1 hidden sm:block"></div>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val) {
+                        handleBulkMoveSubmissions(val);
+                        e.target.value = "";
+                      }
+                    }}
+                    className="bg-slate-950 border border-slate-800 text-slate-250 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-amber-500/50 cursor-pointer font-bold"
+                  >
+                    <option value="" disabled>પ્રોગ્રામ બદલો (Move to...)</option>
+                    {programs.map(p => {
+                      const remainingSeats = p.capacity - p.bookingsCount;
+                      const isSoldOut = p.bookingsCount + 2 > p.capacity;
+                      return (
+                        <option key={p.id} value={p.id} disabled={isSoldOut}>
+                          {p.name} ({p.date}) {isSoldOut ? "[SOLD OUT]" : `(${Math.floor(remainingSeats / 2)} left)`}
+                        </option>
+                      );
+                    })}
+                  </select>
+
                   <button
                     onClick={() => setSelectedAttendanceIds([])}
                     className="px-2.5 py-1.5 text-xs text-slate-400 hover:text-slate-200"
@@ -4205,7 +4309,7 @@ export default function AdminDashboard() {
                               <div className="flex flex-col gap-2">
                                 <a
                                   href={`https://wa.me/${waPhone}?text=${encodeURIComponent(
-                                    `નમસ્તે ${sub.husbandName} & ${sub.wifeName}, તમે જે પ્રોગ્રામ (${sub.programName}) માટે ઇન્ક્વાયરી રજીસ્ટર કરી હતી તેની તારીખ નક્કી થઈ ગઈ છે.\n\nનક્કી થયેલ તારીખ: ${sub.programDate}\n\nકૃપા કરીને તમારી લિંક પર જઈને પેમેન્ટ કરી તમારી સીટ કન્ફર્મ કરો: ${typeof window !== 'undefined' ? window.location.origin.replace('localhost', '127.0.0.1') : ''}/pass/${sub.inquiryId}`
+                                    `નમસ્તે ${sub.husbandName} & ${sub.wifeName}, તમે જે પ્રોગ્રામ (${sub.programName}) માટે ઇન્ક્વાયરી રજીસ્ટર કરી હતી તેની તારીખ નક્કી થઈ ગઈ છે.\n\nનક્કી થયેલ તારીખ: ${sub.programDate}\n\nકૃપા કરીને તમારી લિંક પર જઈને પેમેન્ટ કરી તમારી સીટ કન્ફર્મ કરો: ${typeof window !== 'undefined' ? window.location.origin : ''}/pass/${sub.inquiryId}`
                                   )}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
@@ -4307,8 +4411,8 @@ export default function AdminDashboard() {
           {totalSubmissions > 0 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 p-4 bg-slate-950/20 border border-slate-800/80 rounded-2xl">
               <span className="text-xs text-slate-400 font-medium">
-                Showing <span className="text-amber-500 font-bold">{totalSubmissions === 0 ? 0 : (currentPage - 1) * 10 + 1}</span> to{' '}
-                <span className="text-amber-500 font-bold">{Math.min(currentPage * 10, totalSubmissions)}</span> of{' '}
+                Showing <span className="text-amber-500 font-bold">{totalSubmissions === 0 ? 0 : (currentPage - 1) * pageSize + 1}</span> to{' '}
+                <span className="text-amber-500 font-bold">{Math.min(currentPage * pageSize, totalSubmissions)}</span> of{' '}
                 <span className="text-amber-500 font-bold">{totalSubmissions}</span> registrations
               </span>
               {totalPages > 1 && (

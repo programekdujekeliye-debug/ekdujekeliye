@@ -49,6 +49,55 @@ export default function PassDownloadPage() {
   const [uploadingPayment, setUploadingPayment] = useState(false);
   const [uploadError, setUploadError] = useState('');
 
+  const [programs, setPrograms] = useState<any[]>([]);
+  const [selectedSlotId, setSelectedSlotId] = useState<string>('');
+  const [updatingSlot, setUpdatingSlot] = useState(false);
+  const [slotError, setSlotError] = useState('');
+
+  useEffect(() => {
+    const fetchPrograms = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/programs`);
+        if (res.ok) {
+          const data = await res.json();
+          setPrograms(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch programs:', err);
+      }
+    };
+    fetchPrograms();
+  }, []);
+
+  const handleChangeSlot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSlotId) {
+      setSlotError('કૃપા કરીને એક પ્રોગ્રામ સ્લોટ પસંદ કરો.');
+      return;
+    }
+    setSlotError('');
+    setUpdatingSlot(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}/change-slot`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ targetProgramId: selectedSlotId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        setSlotError(data.error || 'સ્લોટ બદલવામાં ભૂલ થઈ.');
+      }
+    } catch (err) {
+      setSlotError('નેટવર્ક ભૂલ: સ્લોટ બદલી શકાયો નથી.');
+    } finally {
+      setUpdatingSlot(false);
+    }
+  };
+
   useEffect(() => {
     if (paymentScreenshot) {
       const objectUrl = URL.createObjectURL(paymentScreenshot);
@@ -376,7 +425,52 @@ export default function PassDownloadPage() {
               <div className="w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto text-3xl">
                 {submission.isDateFinal ? '🎉' : '📝'}
               </div>
-              
+
+              {/* Slot Selection / Change Option */}
+              {programs.length > 1 && (
+                <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 text-left max-w-md mx-auto space-y-3">
+                  <span className="block text-[10px] font-bold text-amber-500 uppercase tracking-wider">
+                    પ્રોગ્રામ સ્લોટ બદલો (Change Program Slot)
+                  </span>
+                  <p className="text-[11px] text-slate-450 leading-relaxed">
+                    જો તમને ફાળવેલ તારીખ અનુકૂળ ન હોય, તો તમે નીચેથી અન્ય કોઈ ઉપલબ્ધ તારીખ પસંદ કરીને "સ્લોટ બદલો" પર ક્લિક કરી શકો છો.
+                  </p>
+                  <form onSubmit={handleChangeSlot} className="flex gap-2 items-end">
+                    <div className="flex-grow">
+                      <select
+                        value={selectedSlotId}
+                        onChange={(e) => setSelectedSlotId(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors font-medium cursor-pointer"
+                      >
+                        <option value="" disabled>પ્રોગ્રામ સ્લોટ પસંદ કરો...</option>
+                        {programs.map((p) => {
+                          const isCurrent = p.id === submission.programId;
+                          const remainingSeats = p.capacity - p.bookingsCount;
+                          const isSoldOut = p.bookingsCount + 2 > p.capacity;
+                          return (
+                            <option key={p.id} value={p.id} disabled={isSoldOut && !isCurrent}>
+                              {p.name} ({p.date}) {isCurrent ? "[વર્તમાન]" : isSoldOut ? "[SOLD OUT]" : `(${Math.floor(remainingSeats / 2)} left)`}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={updatingSlot || !selectedSlotId || selectedSlotId === submission.programId}
+                      className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 active:scale-[0.98] text-slate-950 font-bold rounded-xl text-xs transition-all cursor-pointer whitespace-nowrap"
+                    >
+                      {updatingSlot ? 'બદલાઈ રહ્યું છે...' : 'સ્લોટ બદલો'}
+                    </button>
+                  </form>
+                  {slotError && (
+                    <p className="text-[10px] text-rose-450 bg-rose-500/10 border border-rose-500/20 py-1.5 px-3.5 rounded-lg text-center font-medium">
+                      {slotError}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {submission.isDateFinal ? (
                 <>
                   <h2 className="text-2xl font-bold text-slate-100">પ્રોગ્રામની તારીખ નક્કી થઈ ગઈ છે!</h2>
