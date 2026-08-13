@@ -50,6 +50,7 @@ export default function PassDownloadPage() {
   const [uploadError, setUploadError] = useState('');
 
   const [programs, setPrograms] = useState<any[]>([]);
+  const [loadingPrograms, setLoadingPrograms] = useState(true);
   const [selectedSlotId, setSelectedSlotId] = useState<string>('');
   const [updatingSlot, setUpdatingSlot] = useState(false);
   const [slotError, setSlotError] = useState('');
@@ -57,6 +58,7 @@ export default function PassDownloadPage() {
   useEffect(() => {
     const fetchPrograms = async () => {
       try {
+        setLoadingPrograms(true);
         const res = await fetch(`${API_BASE_URL}/api/programs`);
         if (res.ok) {
           const data = await res.json();
@@ -64,6 +66,8 @@ export default function PassDownloadPage() {
         }
       } catch (err) {
         console.error('Failed to fetch programs:', err);
+      } finally {
+        setLoadingPrograms(false);
       }
     };
     fetchPrograms();
@@ -367,7 +371,7 @@ export default function PassDownloadPage() {
     }
   };
 
-  if (loading) {
+  if (loading || loadingPrograms) {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center font-sans p-6 text-center space-y-4">
         <div className="w-12 h-12 rounded-full border-4 border-amber-500/20 border-t-amber-500 animate-spin" />
