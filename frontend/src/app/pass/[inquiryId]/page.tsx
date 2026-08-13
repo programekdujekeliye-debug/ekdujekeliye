@@ -370,20 +370,12 @@ export default function PassDownloadPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center font-sans p-6 text-center space-y-4">
-        <div className="text-4xl animate-spin">⏳</div>
+        <div className="w-12 h-12 rounded-full border-4 border-amber-500/20 border-t-amber-500 animate-spin" />
         <div>
           <p className="text-lg font-semibold text-slate-200">Loading your invitation pass details...</p>
-          <p className="text-sm text-slate-400 mt-2 max-w-xs leading-relaxed">
-            કૃપા કરીને પ્રતીક્ષા કરો, તમારો પાસ લોડ થવામાં ૨ થી ૩ મિનિટ જેટલો સમય લાગી શકે છે. તે દરમિયાન પેજ રિફ્રેશ કે બંધ કરશો નહીં.
+          <p className="text-xs text-slate-450 mt-1">
+            કૃપા કરીને પ્રતીક્ષા કરો...
           </p>
-          <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl max-w-xs mx-auto space-y-2">
-            <p className="text-sm font-bold text-amber-500 tracking-wider">
-              તમારો નંબર: {inquiryId}
-            </p>
-            <p className="text-amber-400 text-xs font-medium leading-relaxed">
-              નોંધ: જો પાસ લોડ થવામાં વાર લાગે, તો તમે ફક્ત આ નંબર બતાવીને પણ એન્ટ્રી મેળવી શકો છો.
-            </p>
-          </div>
         </div>
       </div>
     );
