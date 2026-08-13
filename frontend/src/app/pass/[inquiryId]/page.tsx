@@ -427,7 +427,7 @@ export default function PassDownloadPage() {
               </div>
 
               {/* Slot Selection / Change Option */}
-              {programs.length > 1 && (
+              {programs.length > 1 && !submission.isDateFinal && (
                 <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 text-left max-w-md mx-auto space-y-3">
                   <span className="block text-[10px] font-bold text-amber-500 uppercase tracking-wider">
                     પ્રોગ્રામ સ્લોટ બદલો (Change Program Slot)
