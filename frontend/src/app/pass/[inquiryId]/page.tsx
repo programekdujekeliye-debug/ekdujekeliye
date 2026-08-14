@@ -42,7 +42,12 @@ export default function PassDownloadPage() {
   const [error, setError] = useState('');
   const [userZoom, setUserZoom] = useState<number>(1.0);
   const [userOffsetY, setUserOffsetY] = useState<number>(0);
+  const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const setCanvasRef = (node: HTMLCanvasElement | null) => {
+    canvasRef.current = node;
+    setCanvasElement(node);
+  };
 
   const [paymentScreenshot, setPaymentScreenshot] = useState<File | null>(null);
   const [paymentPreview, setPaymentPreview] = useState<string>('');
@@ -300,7 +305,9 @@ export default function PassDownloadPage() {
         setCardReady(true);
       };
 
-      coupleImg.onload = drawFinalCard;
+      coupleImg.onload = () => {
+        drawFinalCard();
+      };
 
       let coupleRetried = false;
       coupleImg.onerror = (err) => {
@@ -321,7 +328,6 @@ export default function PassDownloadPage() {
           setCardReady(true);
         }
       };
-
       coupleImg.src = coupleImgSrc;
     };
 
@@ -348,10 +354,10 @@ export default function PassDownloadPage() {
   };
 
   useEffect(() => {
-    if (submission && submission.status === 'approved') {
+    if (submission && submission.status === 'approved' && canvasElement) {
       drawCard(submission);
     }
-  }, [submission, userZoom, userOffsetY]);
+  }, [submission, userZoom, userOffsetY, canvasElement]);
 
   const downloadCard = () => {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -620,7 +626,7 @@ export default function PassDownloadPage() {
 
               <div className="overflow-hidden rounded-2xl border border-slate-800 shadow-xl max-w-full my-2 relative" style={{ width: '300px', height: '533px' }}>
                 <canvas
-                  ref={canvasRef}
+                  ref={setCanvasRef}
                   style={{ width: '300px', height: '533px' }}
                   className={useCanvasDirectly ? "mx-auto block bg-slate-950" : "hidden"}
                 />

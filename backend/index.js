@@ -364,32 +364,117 @@ app.get('/api/programs/:id/template', async (req, res) => {
   try {
     if (templateCache.has(id)) {
       const cached = templateCache.get(id);
-      res.setHeader('Content-Type', cached.contentType);
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-      return res.send(cached.buffer);
+      res.writeHead(200, {
+        'Content-Type': cached.contentType,
+        'Content-Length': cached.buffer.length,
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      });
+      return res.end(cached.buffer);
     }
 
-    const program = await Program.findOne({ id }, { cardTemplate: 1 });
+    let program = await Program.findOne({ id }, { cardTemplate: 1 });
     if (!program || !program.cardTemplate) {
       return res.status(404).send('Template not found');
     }
-    
-    const match = program.cardTemplate.match(/^data:([^;]+);base64,(.+)$/);
+
+    let templateString = program.cardTemplate;
+
+    // Check if it's an HTTP URL (which might be a self loop, reference to another program, or external Cloudinary image)
+    if (templateString.startsWith('http://') || templateString.startsWith('https://')) {
+      // 1. Check if it's a loop referring to itself (Forms a loop with this program's own template endpoint)
+      const selfLoopMatch = templateString.match(/\/api\/programs\/([^\/]+)\/template/);
+      if (selfLoopMatch) {
+        const referencedId = selfLoopMatch[1];
+        if (referencedId === id) {
+          console.warn(`Template loop detected for program ${id}. Cannot resolve template self-referencing URL.`);
+          return res.status(404).send('Template loop detected');
+        }
+
+        // 2. Resolve template from the other program internally
+        const referencedProgram = await Program.findOne({ id: referencedId }, { cardTemplate: 1 });
+        if (referencedProgram && referencedProgram.cardTemplate && !referencedProgram.cardTemplate.startsWith('http')) {
+          templateString = referencedProgram.cardTemplate;
+        } else {
+          // Fallback: try to fetch it over HTTP
+          try {
+            const response = await fetch(templateString);
+            if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+            const contentType = response.headers.get('content-type') || 'image/png';
+            const arrayBuffer = await response.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+
+            // Cache the buffer
+            templateCache.set(id, { contentType, buffer });
+
+            res.writeHead(200, {
+              'Content-Type': contentType,
+              'Content-Length': buffer.length,
+              'Cache-Control': 'public, max-age=86400',
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Methods': 'GET, OPTIONS',
+              'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+            });
+            return res.end(buffer);
+          } catch (fetchErr) {
+            console.error(`Error fetching template URL internally for ${id}:`, fetchErr);
+            return res.status(404).send('Referenced template not found or failed to load');
+          }
+        }
+      } else {
+        // External URL (e.g. Cloudinary) - Fetch and stream directly
+        try {
+          const response = await fetch(templateString);
+          if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+          const contentType = response.headers.get('content-type') || 'image/png';
+          const arrayBuffer = await response.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+
+          // Cache the buffer
+          templateCache.set(id, { contentType, buffer });
+
+          res.writeHead(200, {
+            'Content-Type': contentType,
+            'Content-Length': buffer.length,
+            'Cache-Control': 'public, max-age=86400',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+          });
+          return res.end(buffer);
+        } catch (fetchErr) {
+          console.error(`Error fetching external template URL for ${id}:`, fetchErr);
+          return res.status(404).send('External template failed to load');
+        }
+      }
+    }
+
+    // Now process templateString as base64 data URL
+    const match = templateString.match(/^data:([^;]+);base64,(.+)$/);
     if (match) {
       const contentType = match[1];
       const base64Data = match[2];
       const img = Buffer.from(base64Data, 'base64');
-      
+
       // Cache the buffer
       templateCache.set(id, { contentType, buffer: img });
-      
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-      res.send(img);
+
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Length': img.length,
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      });
+      res.end(img);
     } else {
       res.status(400).send('Invalid template format');
     }
   } catch (err) {
+    console.error(`Server error in template stream for ${id}:`, err);
     res.status(500).send('Server error');
   }
 });
@@ -1267,7 +1352,8 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
       programName: submission.programName,
       programDate: submission.programDate,
       programTime,
-      couplePhoto: submission.couplePhoto,
+      couplePhoto: submission.couplePhoto ? `/api/submissions/${submission.inquiryId}/photo` : null,
+      paymentScreenshot: submission.paymentScreenshot ? `/api/submissions/${submission.inquiryId}/screenshot` : null,
       status: submission.status,
       rejectionReason: submission.rejectionReason,
       refundReason: submission.refundReason || '',
@@ -1687,26 +1773,18 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
     .skip((page - 1) * limit)
     .limit(limit);
 
-    // Map submissions to include direct Cloudinary URLs or fallback to local path
+    // Map submissions to use proxy endpoints for consistent CORS handling
     const mappedSubmissions = submissions.map(sub => {
       const obj = sub.toObject();
       
       if (sub.couplePhoto) {
-        if (sub.couplePhoto.startsWith('http://') || sub.couplePhoto.startsWith('https://')) {
-          obj.couplePhoto = sub.couplePhoto;
-        } else {
-          obj.couplePhoto = `/api/submissions/${sub.inquiryId}/photo`;
-        }
+        obj.couplePhoto = `/api/submissions/${sub.inquiryId}/photo`;
       } else {
         obj.couplePhoto = null;
       }
 
       if (sub.paymentScreenshot) {
-        if (sub.paymentScreenshot.startsWith('http://') || sub.paymentScreenshot.startsWith('https://')) {
-          obj.paymentScreenshot = sub.paymentScreenshot;
-        } else {
-          obj.paymentScreenshot = `/api/submissions/${sub.inquiryId}/screenshot`;
-        }
+        obj.paymentScreenshot = `/api/submissions/${sub.inquiryId}/screenshot`;
       } else {
         obj.paymentScreenshot = null;
       }
@@ -1736,21 +1814,13 @@ app.get('/api/submissions/duplicates', requireAuth, async (req, res) => {
     const mapUrls = (sub) => {
       const obj = sub.toObject ? sub.toObject() : { ...sub };
       if (obj.couplePhoto) {
-        if (obj.couplePhoto.startsWith('http://') || obj.couplePhoto.startsWith('https://')) {
-          obj.couplePhoto = obj.couplePhoto;
-        } else {
-          obj.couplePhoto = `/api/submissions/${obj.inquiryId}/photo`;
-        }
+        obj.couplePhoto = `/api/submissions/${obj.inquiryId}/photo`;
       } else {
         obj.couplePhoto = null;
       }
 
       if (obj.paymentScreenshot) {
-        if (obj.paymentScreenshot.startsWith('http://') || obj.paymentScreenshot.startsWith('https://')) {
-          obj.paymentScreenshot = obj.paymentScreenshot;
-        } else {
-          obj.paymentScreenshot = `/api/submissions/${obj.inquiryId}/screenshot`;
-        }
+        obj.paymentScreenshot = `/api/submissions/${obj.inquiryId}/screenshot`;
       } else {
         obj.paymentScreenshot = null;
       }
@@ -1858,8 +1928,27 @@ app.get('/api/submissions/:inquiryId/photo', async (req, res) => {
     }
 
     if (submission.couplePhoto.startsWith('http://') || submission.couplePhoto.startsWith('https://')) {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-      return res.redirect(submission.couplePhoto);
+      try {
+        const response = await fetch(submission.couplePhoto);
+        if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Content-Length': buffer.length,
+          'Cache-Control': 'public, max-age=86400',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        });
+        return res.end(buffer);
+      } catch (fetchErr) {
+        console.error("Error streaming remote photo, redirecting instead:", fetchErr);
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        return res.redirect(submission.couplePhoto);
+      }
     }
 
     const match = submission.couplePhoto.match(/^data:([^;]+);base64,(.+)$/);
@@ -1870,7 +1959,10 @@ app.get('/api/submissions/:inquiryId/photo', async (req, res) => {
       res.writeHead(200, {
         'Content-Type': contentType,
         'Content-Length': img.length,
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
       });
       res.end(img);
     } else {
@@ -1890,8 +1982,27 @@ app.get('/api/submissions/:inquiryId/screenshot', async (req, res) => {
     }
 
     if (submission.paymentScreenshot.startsWith('http://') || submission.paymentScreenshot.startsWith('https://')) {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-      return res.redirect(submission.paymentScreenshot);
+      try {
+        const response = await fetch(submission.paymentScreenshot);
+        if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+        const contentType = response.headers.get('content-type') || 'image/png';
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Content-Length': buffer.length,
+          'Cache-Control': 'public, max-age=86400',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        });
+        return res.end(buffer);
+      } catch (fetchErr) {
+        console.error("Error streaming remote screenshot, redirecting instead:", fetchErr);
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        return res.redirect(submission.paymentScreenshot);
+      }
     }
 
     const match = submission.paymentScreenshot.match(/^data:([^;]+);base64,(.+)$/);
@@ -1902,7 +2013,10 @@ app.get('/api/submissions/:inquiryId/screenshot', async (req, res) => {
       res.writeHead(200, {
         'Content-Type': contentType,
         'Content-Length': img.length,
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
       });
       res.end(img);
     } else {
