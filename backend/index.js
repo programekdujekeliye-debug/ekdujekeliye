@@ -814,7 +814,7 @@ app.post('/api/submit', upload.fields([
 
   } catch (error) {
     console.error('Error handling submission:', error);
-    res.status(500).json({ error: 'Server error processing submission' });
+    res.status(500).json({ error: `Server error processing submission: ${error.message || error}` });
   }
 });
 
@@ -1574,7 +1574,7 @@ app.post('/api/submissions/:inquiryId/pay', upload.fields([
     });
   } catch (error) {
     console.error('Error handling payment upload:', error);
-    res.status(500).json({ error: 'Server error processing payment upload' });
+    res.status(500).json({ error: `Server error processing payment upload: ${error.message || error}` });
   }
 });
 
