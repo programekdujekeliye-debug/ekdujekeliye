@@ -307,6 +307,7 @@ const matchCplToken = (inquiryId: string, searchToken: string, isBulk: boolean) 
 export default function AdminDashboard() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submittingAction, setSubmittingAction] = useState<Record<string, 'approve' | 'reject' | 'delete' | 'restore'>>({});
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -955,12 +956,15 @@ export default function AdminDashboard() {
 
   const handleApproveSubmission = async (inquiryId: string) => {
     const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    setSubmittingAction(prev => ({ ...prev, [inquiryId]: 'approve' }));
     try {
       const res = await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}/approve`, {
         method: 'POST',
         headers: { 'Authorization': activePassword }
       });
       if (res.ok) {
+        // Optimistically update status to 'approved' to make the transition feel instant!
+        setSubmissions(prev => prev.map(sub => sub.inquiryId === inquiryId ? { ...sub, status: 'approved' } : sub));
         fetchSubmissions({ showSpinner: false });
         fetchDuplicates();
         fetchApprovedSubmissionsForFrames();
@@ -970,6 +974,12 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       alert('Network error.');
+    } finally {
+      setSubmittingAction(prev => {
+        const next = { ...prev };
+        delete next[inquiryId];
+        return next;
+      });
     }
   };
 
@@ -1168,6 +1178,7 @@ export default function AdminDashboard() {
     const activePassword = password || sessionStorage.getItem('adminPassword') || '';
     const reason = prompt('Enter reason for rejection:');
     if (reason === null) return;
+    setSubmittingAction(prev => ({ ...prev, [inquiryId]: 'reject' }));
     try {
       const res = await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}/reject`, {
         method: 'POST',
@@ -1178,6 +1189,8 @@ export default function AdminDashboard() {
         body: JSON.stringify({ reason })
       });
       if (res.ok) {
+        // Optimistically update status to 'rejected'
+        setSubmissions(prev => prev.map(sub => sub.inquiryId === inquiryId ? { ...sub, status: 'rejected', rejectionReason: reason } : sub));
         fetchSubmissions({ showSpinner: false });
         fetchDuplicates();
         fetchApprovedSubmissionsForFrames();
@@ -1186,6 +1199,12 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       alert('Network error.');
+    } finally {
+      setSubmittingAction(prev => {
+        const next = { ...prev };
+        delete next[inquiryId];
+        return next;
+      });
     }
   };
 
@@ -4379,15 +4398,17 @@ export default function AdminDashboard() {
                               <div className="flex flex-col gap-2">
                                 <button
                                   onClick={() => handleApproveSubmission(sub.inquiryId)}
-                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all"
+                                  disabled={!!submittingAction[sub.inquiryId]}
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-all"
                                 >
-                                  Approve
+                                  {submittingAction[sub.inquiryId] === 'approve' ? 'Approving...' : 'Approve'}
                                 </button>
                                 <button
                                   onClick={() => handleRejectSubmission(sub.inquiryId)}
-                                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs transition-all"
+                                  disabled={!!submittingAction[sub.inquiryId]}
+                                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-all"
                                 >
-                                  Reject
+                                  {submittingAction[sub.inquiryId] === 'reject' ? 'Rejecting...' : 'Reject'}
                                 </button>
                               </div>
                             )}
@@ -4463,9 +4484,10 @@ export default function AdminDashboard() {
                                 )}
                                 <button
                                   onClick={() => handleApproveSubmission(sub.inquiryId)}
-                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all text-center"
+                                  disabled={!!submittingAction[sub.inquiryId]}
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-all text-center"
                                 >
-                                  Approve
+                                  {submittingAction[sub.inquiryId] === 'approve' ? 'Approving...' : 'Approve'}
                                 </button>
                               </div>
                             )}
@@ -4751,17 +4773,19 @@ export default function AdminDashboard() {
                             {isPending && (
                               <button
                                 onClick={() => handleApproveSubmission(sub.inquiryId)}
-                                className="flex-1 min-w-[70px] px-2.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+                                disabled={!!submittingAction[sub.inquiryId]}
+                                className="flex-1 min-w-[70px] px-2.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
                               >
-                                Approve
+                                {submittingAction[sub.inquiryId] === 'approve' ? 'Approving...' : 'Approve'}
                               </button>
                             )}
                             {isPending && (
                               <button
                                 onClick={() => handleRejectSubmission(sub.inquiryId)}
-                                className="flex-1 min-w-[70px] px-2.5 py-2 bg-red-950/30 hover:bg-red-900/30 border border-red-900/40 text-red-400 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+                                disabled={!!submittingAction[sub.inquiryId]}
+                                className="flex-1 min-w-[70px] px-2.5 py-2 bg-red-950/30 hover:bg-red-900/30 border border-red-900/40 disabled:opacity-50 text-red-400 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
                               >
-                                Reject
+                                {submittingAction[sub.inquiryId] === 'reject' ? 'Rejecting...' : 'Reject'}
                               </button>
                             )}
                             <button

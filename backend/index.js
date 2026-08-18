@@ -78,7 +78,18 @@ const upload = multer({ storage });
 const MONGO_URI = (process.env.MONGO_URI || 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority').trim();
 mongoose.set('autoIndex', false); // Disable auto-indexing to prevent query buffering hangs on startup/restarts
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('Successfully connected to MongoDB database.'))
+  .then(() => {
+    console.log('Successfully connected to MongoDB database.');
+    setImmediate(async () => {
+      try {
+        await mongoose.model('Submission').ensureIndexes();
+        await mongoose.model('Program').ensureIndexes();
+        console.log('Database indexes synchronized successfully.');
+      } catch (err) {
+        console.error('Error synchronizing database indexes:', err);
+      }
+    });
+  })
   .catch(err => console.error('MongoDB connection error:', err));
 
 // Database Schemas & Models
@@ -123,6 +134,10 @@ const SubmissionSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 }, { collection: 'submission' });
 SubmissionSchema.index({ createdAt: -1 });
+SubmissionSchema.index({ programId: 1, status: 1, isDeleted: 1 });
+SubmissionSchema.index({ phoneNumber: 1, status: 1 });
+SubmissionSchema.index({ inquiryId: 1 });
+
 const Submission = mongoose.model('Submission', SubmissionSchema);
 
 async function getProgramBookingsCount(programId) {
