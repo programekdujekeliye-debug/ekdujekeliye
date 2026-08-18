@@ -1955,7 +1955,7 @@ app.get('/api/submissions/:inquiryId/photo', async (req, res) => {
         res.writeHead(200, {
           'Content-Type': contentType,
           'Content-Length': buffer.length,
-          'Cache-Control': 'public, max-age=86400',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization'
@@ -2009,7 +2009,7 @@ app.get('/api/submissions/:inquiryId/screenshot', async (req, res) => {
         res.writeHead(200, {
           'Content-Type': contentType,
           'Content-Length': buffer.length,
-          'Cache-Control': 'public, max-age=86400',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization'
