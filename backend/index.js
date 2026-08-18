@@ -131,6 +131,8 @@ const SubmissionSchema = new mongoose.Schema({
   refundReason: { type: String, default: '' },
   attendance: { type: String, enum: ['unmarked', 'present', 'absent'], default: 'unmarked' },
   isDeleted: { type: Boolean, default: false },
+  photoZoom: { type: Number, default: 1.0 },
+  photoOffsetY: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
 }, { collection: 'submission' });
 SubmissionSchema.index({ createdAt: -1 });
