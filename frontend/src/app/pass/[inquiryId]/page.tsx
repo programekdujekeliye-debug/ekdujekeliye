@@ -30,6 +30,83 @@ interface Submission {
   photoOffsetY?: number;
 }
 
+const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.7): Promise<File> => {
+  return new Promise((resolve) => {
+    // 3-second safety timeout: if compression hangs or fails, return the original file
+    const timeoutId = setTimeout(() => {
+      console.warn('Image compression timed out, using original file');
+      resolve(file);
+    }, 3000);
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            clearTimeout(timeoutId);
+            resolve(file);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              clearTimeout(timeoutId);
+              if (blob) {
+                const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                  type: 'image/jpeg',
+                  lastModified: Date.now(),
+                });
+                resolve(compressedFile);
+              } else {
+                resolve(file);
+              }
+            },
+            'image/jpeg',
+            quality
+          );
+        } catch (e) {
+          console.error('Error in img.onload:', e);
+          clearTimeout(timeoutId);
+          resolve(file);
+        }
+      };
+      img.onerror = (err) => {
+        console.error('img.onerror:', err);
+        clearTimeout(timeoutId);
+        resolve(file);
+      };
+    };
+    reader.onerror = (err) => {
+      console.error('reader.onerror:', err);
+      clearTimeout(timeoutId);
+      resolve(file);
+    };
+  });
+};
+
 export default function PassDownloadPage() {
   const params = useParams();
   const inquiryId = params.inquiryId as string;
@@ -127,8 +204,15 @@ export default function PassDownloadPage() {
     setUploadingPayment(true);
 
     try {
+      let compressedScreenshot = paymentScreenshot;
+      try {
+        compressedScreenshot = await compressImage(paymentScreenshot);
+      } catch (e) {
+        console.error('Error compressing payment screenshot:', e);
+      }
+
       const formData = new FormData();
-      formData.append('paymentScreenshot', paymentScreenshot);
+      formData.append('paymentScreenshot', compressedScreenshot);
 
       const res = await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}/pay`, {
         method: 'POST',

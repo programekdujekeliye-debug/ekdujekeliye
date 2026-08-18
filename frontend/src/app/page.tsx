@@ -30,57 +30,79 @@ interface Program {
 const ADMIN_WHATSAPP_NUMBER = '919213532835'; // Configure Admin WhatsApp number here
 
 const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.7): Promise<File> => {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
+    // 3-second safety timeout: if compression hangs or fails, return the original file
+    const timeoutId = setTimeout(() => {
+      console.warn('Image compression timed out, using original file');
+      resolve(file);
+    }, 3000);
+
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
       const img = new Image();
       img.src = event.target?.result as string;
       img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
+        try {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
 
-        if (width > height) {
-          if (width > maxWidth) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
-          }
-        } else {
-          if (height > maxHeight) {
-            width = Math.round((width * maxHeight) / height);
-            height = maxHeight;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(file);
-          return;
-        }
-
-        ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
-                type: 'image/jpeg',
-                lastModified: Date.now(),
-              });
-              resolve(compressedFile);
-            } else {
-              resolve(file);
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
             }
-          },
-          'image/jpeg',
-          quality
-        );
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            clearTimeout(timeoutId);
+            resolve(file);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              clearTimeout(timeoutId);
+              if (blob) {
+                const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                  type: 'image/jpeg',
+                  lastModified: Date.now(),
+                });
+                resolve(compressedFile);
+              } else {
+                resolve(file);
+              }
+            },
+            'image/jpeg',
+            quality
+          );
+        } catch (e) {
+          console.error('Error in img.onload:', e);
+          clearTimeout(timeoutId);
+          resolve(file);
+        }
       };
-      img.onerror = (err) => reject(err);
+      img.onerror = (err) => {
+        console.error('img.onerror:', err);
+        clearTimeout(timeoutId);
+        resolve(file);
+      };
     };
-    reader.onerror = (err) => reject(err);
+    reader.onerror = (err) => {
+      console.error('reader.onerror:', err);
+      clearTimeout(timeoutId);
+      resolve(file);
+    };
   });
 };
 
