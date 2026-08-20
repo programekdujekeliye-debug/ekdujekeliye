@@ -138,7 +138,6 @@ const SubmissionSchema = new mongoose.Schema({
 SubmissionSchema.index({ createdAt: -1 });
 SubmissionSchema.index({ programId: 1, status: 1, isDeleted: 1 });
 SubmissionSchema.index({ phoneNumber: 1, status: 1 });
-SubmissionSchema.index({ inquiryId: 1 });
 
 const Submission = mongoose.model('Submission', SubmissionSchema);
 
