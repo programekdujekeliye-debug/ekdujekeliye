@@ -289,7 +289,7 @@ const matchCplToken = (inquiryId: string, searchToken: string, isBulk: boolean) 
   if (id === token) return true;
   
   // If it's a full CPL ID, IP ID or EK ID, match exactly
-  if (token.startsWith('CPL-') || token.startsWith('IP-') || token.startsWith('EK')) {
+  if (token.startsWith('CPL-') || token.startsWith('IP-') || /^EK\d+-\d+$/.test(token)) {
     return id === token;
   }
   
@@ -1508,9 +1508,9 @@ export default function AdminDashboard() {
         ctx.lineWidth = 6;
         ctx.lineJoin = 'round';
         ctx.font = 'bold 30px "Oswald", "Impact", "Arial Narrow", sans-serif';
-        ctx.strokeText('EK0101-SAMPLE', textX, textY);
+        ctx.strokeText('EK01-01-SAMPLE', textX, textY);
         ctx.fillStyle = '#D4AF37';
-        ctx.fillText('EK0101-SAMPLE', textX, textY);
+        ctx.fillText('EK01-01-SAMPLE', textX, textY);
         ctx.restore();
       };
       coupleImg.onerror = () => {
@@ -1527,9 +1527,9 @@ export default function AdminDashboard() {
         ctx.lineWidth = 6;
         ctx.lineJoin = 'round';
         ctx.font = 'bold 30px "Oswald", "Impact", "Arial Narrow", sans-serif';
-        ctx.strokeText('EK0101-SAMPLE', textX, textY);
+        ctx.strokeText('EK01-01-SAMPLE', textX, textY);
         ctx.fillStyle = '#D4AF37';
-        ctx.fillText('EK0101-SAMPLE', textX, textY);
+        ctx.fillText('EK01-01-SAMPLE', textX, textY);
         ctx.restore();
       };
       // Use local sample_couple.png which is guaranteed to load without CORS issues
@@ -3741,7 +3741,7 @@ export default function AdminDashboard() {
                   type="text"
                   value={cplSearchQuery}
                   onChange={(e) => setCplSearchQuery(e.target.value)}
-                  placeholder="e.g. EK0101, EK0102, EK0105"
+                  placeholder="e.g. EK01-01, EK01-02, EK01-05"
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
                 />
               </div>
@@ -4181,7 +4181,7 @@ export default function AdminDashboard() {
                       type="text"
                       value={absentInput}
                       onChange={(e) => setAbsentInput(e.target.value)}
-                      placeholder="e.g. EK0101, EK0102"
+                      placeholder="e.g. EK01-01, EK01-02"
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
                     />
                   </div>

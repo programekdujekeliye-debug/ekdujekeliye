@@ -664,7 +664,7 @@ app.post('/api/submit', upload.fields([
       { new: true, upsert: true }
     );
     const regSeqStr = String(counterObj.seq).padStart(2, '0');
-    const inquiryId = `EK${programSeqStr}${regSeqStr}`;
+    const inquiryId = `EK${programSeqStr}-${regSeqStr}`;
 
     // Upload files to Cloudinary
     const couplePhotoBase64 = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
@@ -1077,7 +1077,7 @@ app.post('/api/submissions/bulk-move', requireAuth, async (req, res) => {
           { new: true, upsert: true }
         );
         const regSeqStr = String(counterObj.seq).padStart(2, '0');
-        sub.inquiryId = `EK${programSeqStr}${regSeqStr}`;
+        sub.inquiryId = `EK${programSeqStr}-${regSeqStr}`;
       }
       sub.programId = targetProgram.id;
       sub.programName = targetProgram.name;
@@ -1662,7 +1662,7 @@ app.post('/api/submissions/:inquiryId/change-slot', async (req, res) => {
         { new: true, upsert: true }
       );
       const regSeqStr = String(counterObj.seq).padStart(2, '0');
-      newInquiryId = `EK${programSeqStr}${regSeqStr}`;
+      newInquiryId = `EK${programSeqStr}-${regSeqStr}`;
     }
 
     submission.inquiryId = newInquiryId;
@@ -1790,7 +1790,7 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
     let filter = { isDeleted: { $ne: true } };
     if (search) {
       const trimmedSearch = search.trim();
-      const isExactToken = /^(cpl-\d+|ek\d+|ip-\d+)$/i.test(trimmedSearch);
+      const isExactToken = /^(cpl-\d+|ek\d+-\d+|ip-\d+)$/i.test(trimmedSearch);
       if (isExactToken) {
         filter.$or = [
           { inquiryId: trimmedSearch.toUpperCase() },
