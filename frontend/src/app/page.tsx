@@ -375,11 +375,11 @@ export default function Home() {
     
     // Use condensed/narrow bold font matching the date font in template
     ctx.font = 'bold 30px "Oswald", "Impact", "Arial Narrow", sans-serif';
-    ctx.strokeText(inqNum || 'CPL-XXXX', textX, textY);
+    ctx.strokeText(inqNum || 'EK0101', textX, textY);
     
     // Draw the CPL text in gold
     ctx.fillStyle = '#D4AF37';
-    ctx.fillText(inqNum || 'CPL-XXXX', textX, textY);
+    ctx.fillText(inqNum || 'EK0101', textX, textY);
     ctx.restore();
   };
 
@@ -613,7 +613,7 @@ export default function Home() {
                   required
                   value={searchInquiryId}
                   onChange={(e) => setSearchInquiryId(e.target.value)}
-                  placeholder="Enter CPL-XXXX"
+                  placeholder="Enter EK0101"
                   className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors uppercase font-mono tracking-wider"
                 />
               </div>

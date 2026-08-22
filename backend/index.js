@@ -85,8 +85,24 @@ mongoose.connect(MONGO_URI)
         await mongoose.model('Submission').ensureIndexes();
         await mongoose.model('Program').ensureIndexes();
         console.log('Database indexes synchronized successfully.');
+
+        // Migration: Assign sequenceNumber to programs that don't have it
+        const ProgramModel = mongoose.model('Program');
+        const programsWithoutSeq = await ProgramModel.find({ sequenceNumber: { $exists: false } }).sort({ id: 1 });
+        if (programsWithoutSeq.length > 0) {
+          console.log(`Running migration: Found ${programsWithoutSeq.length} programs without sequenceNumber.`);
+          const maxProg = await ProgramModel.findOne({ sequenceNumber: { $exists: true } }).sort({ sequenceNumber: -1 });
+          let nextSeq = maxProg && maxProg.sequenceNumber ? maxProg.sequenceNumber + 1 : 1;
+          for (const prog of programsWithoutSeq) {
+            prog.sequenceNumber = nextSeq;
+            await prog.save();
+            console.log(`Assigned sequenceNumber ${nextSeq} to program: ${prog.name} (${prog.id})`);
+            nextSeq++;
+          }
+          console.log('Migration completed successfully.');
+        }
       } catch (err) {
-        console.error('Error synchronizing database indexes:', err);
+        console.error('Error in index sync or program migration:', err);
       }
     });
   })
@@ -95,6 +111,7 @@ mongoose.connect(MONGO_URI)
 // Database Schemas & Models
 const ProgramSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
+  sequenceNumber: { type: Number },
   name: { type: String, required: true },
   date: { type: String, required: true },
   time: { type: String, default: "8:30 PM" },
@@ -133,6 +150,7 @@ const SubmissionSchema = new mongoose.Schema({
   isDeleted: { type: Boolean, default: false },
   photoZoom: { type: Number, default: 1.0 },
   photoOffsetY: { type: Number, default: 0 },
+  oldInquiryId: { type: String },
   createdAt: { type: Date, default: Date.now }
 }, { collection: 'submission' });
 SubmissionSchema.index({ createdAt: -1 });
@@ -353,10 +371,10 @@ app.get('/api/programs', async (req, res) => {
       obj.rejectedCount = await Submission.countDocuments({ programId: p.id, status: 'rejected' });
       
       // CPL counts
-      obj.cplApproved = await Submission.countDocuments({ programId: p.id, status: 'approved', inquiryId: /^CPL-/i });
-      obj.cplPending = await Submission.countDocuments({ programId: p.id, status: 'pending', inquiryId: /^CPL-/i });
-      obj.cplInquiry = await Submission.countDocuments({ programId: p.id, status: 'inquiry', inquiryId: /^CPL-/i });
-      obj.cplRejected = await Submission.countDocuments({ programId: p.id, status: 'rejected', inquiryId: /^CPL-/i });
+      obj.cplApproved = await Submission.countDocuments({ programId: p.id, status: 'approved', inquiryId: /^(CPL-|EK)/i });
+      obj.cplPending = await Submission.countDocuments({ programId: p.id, status: 'pending', inquiryId: /^(CPL-|EK)/i });
+      obj.cplInquiry = await Submission.countDocuments({ programId: p.id, status: 'inquiry', inquiryId: /^(CPL-|EK)/i });
+      obj.cplRejected = await Submission.countDocuments({ programId: p.id, status: 'rejected', inquiryId: /^(CPL-|EK)/i });
       
       // IP counts
       obj.ipApproved = await Submission.countDocuments({ programId: p.id, status: 'approved', inquiryId: /^IP-/i });
@@ -503,8 +521,12 @@ app.post('/api/programs', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Name, date, and capacity are required.' });
   }
   try {
+    const maxProg = await Program.findOne().sort({ sequenceNumber: -1 });
+    const nextSeq = maxProg && maxProg.sequenceNumber ? maxProg.sequenceNumber + 1 : 1;
+
     const newProgram = await Program.create({
       id: `prog-${Date.now()}`,
+      sequenceNumber: nextSeq,
       name,
       date: finalIsDateFinal ? date : (date || 'TBD'),
       time: time || '8:30 PM',
@@ -633,8 +655,16 @@ app.post('/api/submit', upload.fields([
       return res.status(400).json({ error: 'Payment screenshot is required' });
     }
 
-    const nextSeq = await getNextInquiryNumber();
-    const inquiryId = `CPL-${nextSeq}`;
+    const programSeq = program.sequenceNumber || 1;
+    const programSeqStr = String(programSeq).padStart(2, '0');
+    
+    const counterObj = await Counter.findOneAndUpdate(
+      { name: `inquiryNumber_${programId}` },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    const regSeqStr = String(counterObj.seq).padStart(2, '0');
+    const inquiryId = `EK${programSeqStr}${regSeqStr}`;
 
     // Upload files to Cloudinary
     const couplePhotoBase64 = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
@@ -1035,18 +1065,26 @@ app.post('/api/submissions/bulk-move', requireAuth, async (req, res) => {
     // Collect all original program IDs to update their bookingsCount later
     const sourceProgramIds = [...new Set(submissions.map(s => s.programId).filter(Boolean))];
 
-    // Update submissions in database
-    await Submission.updateMany(
-      { inquiryId: { $in: inquiryIds } },
-      {
-        $set: {
-          programId: targetProgram.id,
-          programName: targetProgram.name,
-          programDate: targetProgram.date,
-          programTime: targetProgram.time || "8:30 PM"
-        }
+    const programSeq = targetProgram.sequenceNumber || 1;
+    const programSeqStr = String(programSeq).padStart(2, '0');
+
+    // Update submissions in database sequentially to regenerate inquiryId
+    for (const sub of submissions) {
+      if (sub.programId !== targetProgramId) {
+        const counterObj = await Counter.findOneAndUpdate(
+          { name: `inquiryNumber_${targetProgramId}` },
+          { $inc: { seq: 1 } },
+          { new: true, upsert: true }
+        );
+        const regSeqStr = String(counterObj.seq).padStart(2, '0');
+        sub.inquiryId = `EK${programSeqStr}${regSeqStr}`;
       }
-    );
+      sub.programId = targetProgram.id;
+      sub.programName = targetProgram.name;
+      sub.programDate = targetProgram.date;
+      sub.programTime = targetProgram.time || "8:30 PM";
+      await sub.save();
+    }
 
     // Update bookings count for all affected source programs and the target program
     for (const pid of sourceProgramIds) {
@@ -1302,7 +1340,7 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
   const { inquiryId } = req.params;
   try {
     const formattedId = (inquiryId || '').trim().toUpperCase();
-    const submission = await Submission.findOne({ inquiryId: formattedId });
+    const submission = await Submission.findOne({ $or: [{ inquiryId: formattedId }, { oldInquiryId: formattedId }] });
     if (!submission) {
       return res.status(404).json({ error: 'Inquiry ID not found.' });
     }
@@ -1397,7 +1435,7 @@ app.post('/api/submissions/:inquiryId/pay', upload.fields([
   const { inquiryId } = req.params;
   try {
     const formattedId = (inquiryId || '').trim().toUpperCase();
-    const submission = await Submission.findOne({ inquiryId: formattedId });
+    const submission = await Submission.findOne({ $or: [{ inquiryId: formattedId }, { oldInquiryId: formattedId }] });
     if (!submission) {
       return res.status(404).json({ error: 'Inquiry not found.' });
     }
@@ -1585,7 +1623,7 @@ app.post('/api/submissions/:inquiryId/change-slot', async (req, res) => {
   const { targetProgramId } = req.body;
   try {
     const formattedId = (inquiryId || '').trim().toUpperCase();
-    const submission = await Submission.findOne({ inquiryId: formattedId });
+    const submission = await Submission.findOne({ $or: [{ inquiryId: formattedId }, { oldInquiryId: formattedId }] });
     if (!submission) {
       return res.status(404).json({ error: 'ઇન્ક્વાયરી મળી નથી.' });
     }
@@ -1613,6 +1651,21 @@ app.post('/api/submissions/:inquiryId/change-slot', async (req, res) => {
     }
 
     // Update submission
+    let newInquiryId = submission.inquiryId;
+    if (oldProgramId !== targetProgramId) {
+      const programSeq = targetProgram.sequenceNumber || 1;
+      const programSeqStr = String(programSeq).padStart(2, '0');
+      
+      const counterObj = await Counter.findOneAndUpdate(
+        { name: `inquiryNumber_${targetProgramId}` },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+      );
+      const regSeqStr = String(counterObj.seq).padStart(2, '0');
+      newInquiryId = `EK${programSeqStr}${regSeqStr}`;
+    }
+
+    submission.inquiryId = newInquiryId;
     submission.programId = targetProgram.id;
     submission.programName = targetProgram.name;
     submission.programDate = targetProgram.date;
@@ -1737,13 +1790,17 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
     let filter = { isDeleted: { $ne: true } };
     if (search) {
       const trimmedSearch = search.trim();
-      const isExactToken = /^cpl-\d+$/i.test(trimmedSearch);
+      const isExactToken = /^(cpl-\d+|ek\d+|ip-\d+)$/i.test(trimmedSearch);
       if (isExactToken) {
-        filter.inquiryId = trimmedSearch.toUpperCase();
+        filter.$or = [
+          { inquiryId: trimmedSearch.toUpperCase() },
+          { oldInquiryId: trimmedSearch.toUpperCase() }
+        ];
       } else {
         const searchRegex = new RegExp(trimmedSearch, 'i');
         filter.$or = [
           { inquiryId: searchRegex },
+          { oldInquiryId: searchRegex },
           { husbandName: searchRegex },
           { wifeName: searchRegex },
           { surname: searchRegex },
@@ -1938,7 +1995,7 @@ app.get('/api/submissions/duplicates', requireAuth, async (req, res) => {
 // Stream couple photo endpoint
 app.get('/api/submissions/:inquiryId/photo', async (req, res) => {
   try {
-    const submission = await Submission.findOne({ inquiryId: req.params.inquiryId }, { couplePhoto: 1 });
+    const submission = await Submission.findOne({ $or: [{ inquiryId: req.params.inquiryId }, { oldInquiryId: req.params.inquiryId }] }, { couplePhoto: 1 });
     if (!submission || !submission.couplePhoto) {
       return res.status(404).send('Photo not found');
     }
@@ -1992,7 +2049,7 @@ app.get('/api/submissions/:inquiryId/photo', async (req, res) => {
 // Stream payment screenshot endpoint
 app.get('/api/submissions/:inquiryId/screenshot', async (req, res) => {
   try {
-    const submission = await Submission.findOne({ inquiryId: req.params.inquiryId }, { paymentScreenshot: 1 });
+    const submission = await Submission.findOne({ $or: [{ inquiryId: req.params.inquiryId }, { oldInquiryId: req.params.inquiryId }] }, { paymentScreenshot: 1 });
     if (!submission || !submission.paymentScreenshot) {
       return res.status(404).send('Screenshot not found');
     }

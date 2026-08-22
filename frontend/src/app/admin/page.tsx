@@ -288,14 +288,14 @@ const matchCplToken = (inquiryId: string, searchToken: string, isBulk: boolean) 
   
   if (id === token) return true;
   
-  // If it's a full CPL ID or IP ID, match exactly
-  if (token.startsWith('CPL-') || token.startsWith('IP-')) {
+  // If it's a full CPL ID, IP ID or EK ID, match exactly
+  if (token.startsWith('CPL-') || token.startsWith('IP-') || token.startsWith('EK')) {
     return id === token;
   }
   
-  // If token is just a number (e.g. "8")
+  // If token is just a number (e.g. "8" or "0101")
   if (/^\d+$/.test(token)) {
-    return id.endsWith(`-${token}`);
+    return id.endsWith(`-${token}`) || id.endsWith(token);
   }
   
   if (isBulk) return false;
@@ -1508,9 +1508,9 @@ export default function AdminDashboard() {
         ctx.lineWidth = 6;
         ctx.lineJoin = 'round';
         ctx.font = 'bold 30px "Oswald", "Impact", "Arial Narrow", sans-serif';
-        ctx.strokeText('CPL-SAMPLE', textX, textY);
+        ctx.strokeText('EK0101-SAMPLE', textX, textY);
         ctx.fillStyle = '#D4AF37';
-        ctx.fillText('CPL-SAMPLE', textX, textY);
+        ctx.fillText('EK0101-SAMPLE', textX, textY);
         ctx.restore();
       };
       coupleImg.onerror = () => {
@@ -1527,9 +1527,9 @@ export default function AdminDashboard() {
         ctx.lineWidth = 6;
         ctx.lineJoin = 'round';
         ctx.font = 'bold 30px "Oswald", "Impact", "Arial Narrow", sans-serif';
-        ctx.strokeText('CPL-SAMPLE', textX, textY);
+        ctx.strokeText('EK0101-SAMPLE', textX, textY);
         ctx.fillStyle = '#D4AF37';
-        ctx.fillText('CPL-SAMPLE', textX, textY);
+        ctx.fillText('EK0101-SAMPLE', textX, textY);
         ctx.restore();
       };
       // Use local sample_couple.png which is guaranteed to load without CORS issues
@@ -3741,7 +3741,7 @@ export default function AdminDashboard() {
                   type="text"
                   value={cplSearchQuery}
                   onChange={(e) => setCplSearchQuery(e.target.value)}
-                  placeholder="e.g. CPL-101, CPL-102, CPL-105"
+                  placeholder="e.g. EK0101, EK0102, EK0105"
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
                 />
               </div>
@@ -4181,7 +4181,7 @@ export default function AdminDashboard() {
                       type="text"
                       value={absentInput}
                       onChange={(e) => setAbsentInput(e.target.value)}
-                      placeholder="e.g. CPL-1302, CPL-1303"
+                      placeholder="e.g. EK0101, EK0102"
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
                     />
                   </div>
