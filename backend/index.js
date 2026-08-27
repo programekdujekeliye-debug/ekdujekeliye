@@ -248,6 +248,7 @@ const SubmissionSchema = new mongoose.Schema({
 SubmissionSchema.index({ createdAt: -1 });
 SubmissionSchema.index({ programId: 1, status: 1, isDeleted: 1 });
 SubmissionSchema.index({ phoneNumber: 1, status: 1 });
+SubmissionSchema.index({ phoneNumber: 1, programId: 1, status: 1 });
 
 const Submission = mongoose.model('Submission', SubmissionSchema);
 
@@ -1194,11 +1195,16 @@ app.post('/api/submit', upload.fields([
       return res.status(400).json({ error: 'કૃપા કરીને સાચો 10-આંકડાનો મોબાઇલ નંબર દાખલ કરો!' });
     }
 
-    // Check if phone number is already registered (excluding rejected ones)
-    const existingRegistration = await Submission.findOne({ phoneNumber, status: { $ne: 'rejected' } });
+    // Check if phone number is already registered for THIS specific program/event (excluding rejected and soft-deleted ones)
+    const existingRegistration = await Submission.findOne({
+      phoneNumber,
+      programId,
+      status: { $ne: 'rejected' },
+      isDeleted: { $ne: true }
+    });
     if (existingRegistration) {
       return res.status(400).json({
-        error: 'આ મોબાઇલ નંબર પરથી રજીસ્ટ્રેશન પહેલેથી જ થઈ ગયું છે!',
+        error: 'આ મોબાઇલ નંબર પરથી આ પ્રોગ્રામ માટે રજીસ્ટ્રેશન પહેલેથી જ થઈ ગયું છે!',
         inquiryId: existingRegistration.inquiryId,
         alreadyRegistered: true
       });
