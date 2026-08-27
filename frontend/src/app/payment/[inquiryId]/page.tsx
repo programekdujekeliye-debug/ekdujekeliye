@@ -280,7 +280,7 @@ export default function PaymentRetryPage() {
               </div>
               <div className="flex justify-between pt-2 border-t border-stone-200">
                 <span className="text-stone-500 font-bold uppercase">Pass Amount:</span>
-                <span className="text-base font-extrabold text-stone-900">₹{statusData.price !== undefined ? statusData.price : 1000}</span>
+                <span className="text-base font-extrabold text-stone-900">₹{statusData.price !== undefined ? statusData.price : (statusData.amount || 1500)}</span>
               </div>
             </div>
 
@@ -307,7 +307,7 @@ export default function PaymentRetryPage() {
               ) : (
                 <>
                   <TicketIcon className="w-4 h-4" />
-                  <span>Pay ₹{statusData.price !== undefined ? statusData.price : 1000} Now</span>
+                  <span>Pay ₹{statusData.price !== undefined ? statusData.price : (statusData.amount || 1500)} Now</span>
                 </>
               )}
             </button>

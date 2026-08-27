@@ -137,7 +137,7 @@ export default function HomePage() {
         venue: "Sardar Patel Smruti Bhavan, Varachha, Surat",
         mapUrl: "https://share.google/y1jtFAZXuKusYTiUD",
         description: "A transformative 4-hour live seminar dedicated exclusively to married couples.",
-        price: 1000,
+        price: 1500,
         status: "upcoming",
         featured: true,
         registrationMode: "internal",
@@ -156,7 +156,7 @@ export default function HomePage() {
         venue: "Sardar Patel Smruti Bhavan, Varachha, Surat",
         mapUrl: "https://share.google/y1jtFAZXuKusYTiUD",
         description: "A transformative 4-hour live seminar dedicated exclusively to married couples.",
-        price: 1000,
+        price: 1500,
         status: "upcoming",
         featured: false,
         registrationMode: "internal",
@@ -401,7 +401,7 @@ export default function HomePage() {
                 const isHousefull = prog.status === 'housefull';
                 const isClosed = prog.status === 'registration_closed';
                 const isTba = prog.status === 'date_tba';
-                const eventPrice = prog.price !== undefined ? prog.price : 1000;
+                const eventPrice = prog.price !== undefined ? prog.price : 1500;
 
                 let statusLabel = 'UPCOMING';
                 let statusClass = 'bg-emerald-50 text-emerald-800 border-emerald-200';
@@ -835,7 +835,9 @@ export default function HomePage() {
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 p-3 bg-white/95 backdrop-blur-xl border-t border-stone-200 flex items-center justify-between gap-3 shadow-2xl">
         <div className="pl-1">
           <span className="text-[10px] text-stone-500 block uppercase font-bold tracking-wider">Couple Admission Pass</span>
-          <span className="text-base font-extrabold text-stone-900">₹1,000 / Couple</span>
+          <span className="text-base font-extrabold text-stone-900">
+            ₹{(programs.length > 0 && programs[0].price !== undefined ? programs[0].price : 1500).toLocaleString('en-IN')} / Couple
+          </span>
         </div>
         <a
           href="#events"

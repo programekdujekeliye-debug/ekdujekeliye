@@ -369,7 +369,7 @@ export default function AdminDashboard() {
   const [newProgramName, setNewProgramName] = useState('');
   const [newProgramDate, setNewProgramDate] = useState('');
   const [newProgramTime, setNewProgramTime] = useState('8:30 PM');
-  const [newProgramPrice, setNewProgramPrice] = useState<number | ''>(1000);
+  const [newProgramPrice, setNewProgramPrice] = useState<number | ''>(1500);
   const [newProgramCity, setNewProgramCity] = useState('Surat');
   const [newProgramVenue, setNewProgramVenue] = useState('Sardar Patel Smruti Bhavan, Varachha, Surat');
   const [newProgramMapUrl, setNewProgramMapUrl] = useState('https://share.google/y1jtFAZXuKusYTiUD');
@@ -404,7 +404,7 @@ export default function AdminDashboard() {
   const [editProgramName, setEditProgramName] = useState('');
   const [editProgramDate, setEditProgramDate] = useState('');
   const [editProgramTime, setEditProgramTime] = useState('8:30 PM');
-  const [editProgramPrice, setEditProgramPrice] = useState<number | ''>(1000);
+  const [editProgramPrice, setEditProgramPrice] = useState<number | ''>(1500);
   const [editProgramCity, setEditProgramCity] = useState('');
   const [editProgramVenue, setEditProgramVenue] = useState('');
   const [editProgramMapUrl, setEditProgramMapUrl] = useState('');
@@ -818,7 +818,7 @@ export default function AdminDashboard() {
           name: newProgramName,
           date: newProgramDate,
           time: newProgramTime,
-          price: newProgramPrice ? Number(newProgramPrice) : 1000,
+          price: newProgramPrice ? Number(newProgramPrice) : 1500,
           city: newProgramCity,
           venue: newProgramVenue,
           mapUrl: newProgramMapUrl,
@@ -845,7 +845,7 @@ export default function AdminDashboard() {
         setNewProgramName('');
         setNewProgramDate('');
         setNewProgramTime('8:30 PM');
-        setNewProgramPrice(1000);
+        setNewProgramPrice(1500);
         setNewProgramCity('Surat');
         setNewProgramVenue('Sardar Patel Smruti Bhavan, Varachha, Surat');
         setNewProgramMapUrl('https://share.google/y1jtFAZXuKusYTiUD');
@@ -902,7 +902,7 @@ export default function AdminDashboard() {
     setEditProgramName(prog.name);
     setEditProgramDate(prog.date);
     setEditProgramTime(prog.time || '8:30 PM');
-    setEditProgramPrice(prog.price !== undefined ? prog.price : 1000);
+    setEditProgramPrice(prog.price !== undefined ? prog.price : 1500);
     setEditProgramCity(prog.city || '');
     setEditProgramVenue(prog.venue || '');
     setEditProgramMapUrl(prog.mapUrl || '');
@@ -944,7 +944,7 @@ export default function AdminDashboard() {
           name: editProgramName,
           date: editProgramDate,
           time: editProgramTime,
-          price: editProgramPrice ? Number(editProgramPrice) : 1000,
+          price: editProgramPrice ? Number(editProgramPrice) : 1500,
           city: editProgramCity,
           venue: editProgramVenue,
           mapUrl: editProgramMapUrl,
@@ -2837,7 +2837,7 @@ export default function AdminDashboard() {
                     required
                     value={editProgramPrice}
                     onChange={(e) => setEditProgramPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="e.g. 1000"
+                    placeholder="e.g. 1500"
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm font-bold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                   />
                 </div>
@@ -3508,7 +3508,7 @@ export default function AdminDashboard() {
                     required
                     value={newProgramPrice}
                     onChange={(e) => setNewProgramPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="e.g. 1000"
+                    placeholder="e.g. 1500"
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm font-bold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                   />
                 </div>
@@ -3744,7 +3744,7 @@ export default function AdminDashboard() {
 
                           {/* Price Badge */}
                           <span className="px-2 py-0.5 text-[10px] bg-rose-50 border border-rose-200 text-rose-800 rounded-full font-extrabold tracking-wider">
-                            ₹ {prog.price ?? 1000}
+                            ₹ {prog.price ?? 1500}
                           </span>
 
                           {/* City & Venue */}
@@ -3917,7 +3917,7 @@ export default function AdminDashboard() {
                   min="0"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  placeholder="e.g. 100"
+                  placeholder="e.g. 1500"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>

@@ -24,7 +24,7 @@ const ProgramSchema = new mongoose.Schema({
   mapUrl: { type: String, default: '' },
   description: { type: String, default: '' },
   heroImage: { type: String, default: '' },
-  price: { type: Number, default: 1000 },
+  price: { type: Number, default: 1500 },
   status: { type: String, default: 'upcoming' },
   featured: { type: Boolean, default: false },
   registrationMode: { type: String, enum: ['internal', 'external'], default: 'internal' },
@@ -66,7 +66,7 @@ async function run() {
         city: 'Surat',
         venue: VENUE_NAME,
         mapUrl: MAP_URL,
-        price: 1000,
+        price: 1500,
         status: 'upcoming',
         isInquiryClosed: false,
         isDateFinal: true,
@@ -76,7 +76,7 @@ async function run() {
     },
     { new: true }
   );
-  console.log('✅ Updated 7 September 2026 event (Price ₹1000):', res7?.slug, 'Price:', res7?.price);
+  console.log('✅ Updated 7 September 2026 event (Price ₹1500):', res7?.slug, 'Price:', res7?.price);
 
   // 2. Update 11 September 2026 Program
   const res11 = await Program.findOneAndUpdate(
@@ -88,7 +88,7 @@ async function run() {
         city: 'Surat',
         venue: VENUE_NAME,
         mapUrl: MAP_URL,
-        price: 1000,
+        price: 1500,
         status: 'upcoming',
         isInquiryClosed: false,
         isDateFinal: true,
@@ -98,7 +98,7 @@ async function run() {
     },
     { new: true }
   );
-  console.log('✅ Updated 11 September 2026 event (Price ₹1000):', res11?.slug, 'Price:', res11?.price);
+  console.log('✅ Updated 11 September 2026 event (Price ₹1500):', res11?.slug, 'Price:', res11?.price);
 
   // 3. Mark all previous test dates / TBD as completed
   await Program.updateMany(

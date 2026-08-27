@@ -170,7 +170,7 @@ const ProgramSchema = new mongoose.Schema({
   mapUrl: { type: String, default: '' },
   description: { type: String, default: '' },
   heroImage: { type: String, default: '' },
-  price: { type: Number, default: 1499 },
+  price: { type: Number, default: 1500 },
   status: {
     type: String,
     enum: ['upcoming', 'few_seats', 'housefull', 'registration_closed', 'completed', 'date_tba'],
@@ -292,7 +292,7 @@ const SettingSchema = new mongoose.Schema({
   upiBookingsCount: { type: Number, default: 0 },
   upiLimit: { type: Number, default: 50 },
   payeeName: { type: String, default: 'Couple Pass' },
-  amount: { type: String, default: '100' }
+  amount: { type: String, default: '1500' }
 }, { collection: 'setting' });
 const Setting = mongoose.model('Setting', SettingSchema);
 
@@ -354,7 +354,7 @@ const initSettings = async () => {
         upiBookingsCount: 0,
         upiLimit: 50,
         payeeName: 'Couple Pass',
-        amount: '100'
+        amount: '1500'
       });
     } else {
       let updated = false;
@@ -559,10 +559,10 @@ app.post('/api/payments/create-order', async (req, res) => {
     }
 
     // Determine price authoritatively from Program or Setting
-    let orderAmount = program.price || 1499;
+    let orderAmount = program.price || 1500;
     if (orderAmount <= 0) {
       const setting = await Setting.findOne({ key: 'main' });
-      orderAmount = setting && setting.amount ? parseFloat(setting.amount) : 1499;
+      orderAmount = setting && setting.amount ? parseFloat(setting.amount) : 1500;
     }
 
     // Create Razorpay order
@@ -771,7 +771,8 @@ app.get('/api/payments/status/:inquiryId', async (req, res) => {
       registrationStatus: submission.status,
       paymentStatus: submission.payment?.status || (submission.status === 'approved' ? 'captured' : 'pending'),
       paymentProvider: submission.payment?.provider || 'razorpay',
-      amount: submission.payment?.amount || 1499,
+      amount: submission.payment?.amount || 1500,
+      price: submission.payment?.amount || 1500,
       paidAt: submission.payment?.paidAt || null,
       passAvailable: submission.status === 'approved',
       coupleName: `${submission.husbandName} & ${submission.wifeName} ${submission.surname}`,
@@ -1071,7 +1072,7 @@ app.post('/api/programs', requireAuth, async (req, res) => {
       mapUrl: mapUrl || '',
       description: description || '',
       heroImage: heroImage || '',
-      price: price ? parseFloat(price) : 1499,
+      price: price ? parseFloat(price) : 1500,
       status: status || 'upcoming',
       featured: featured === true || featured === 'true',
       registrationMode: registrationMode || 'internal',
@@ -1245,7 +1246,7 @@ app.post('/api/submit', upload.fields([
       paymentScreenshotUrl = await uploadToCloudinary(paymentScreenshotBase64, 'paymentScreenshots');
     }
 
-    const programPrice = program.price || 1499;
+    const programPrice = program.price || 1500;
     const paymentProvider = paymentScreenshotFile ? 'legacy_upi' : 'razorpay';
     const initialPaymentStatus = 'pending';
 
@@ -2705,7 +2706,7 @@ app.post('/api/submissions/clear', requireSuperAuth, async (req, res) => {
 app.get('/api/settings', async (req, res) => {
   try {
     const settings = await Setting.findOne({ key: 'main' });
-    res.json(settings || { upiId: 'payee@upi', payeeName: 'Couple Pass', amount: '100' });
+    res.json(settings || { upiId: 'payee@upi', payeeName: 'Couple Pass', amount: '1500' });
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching settings.' });
   }

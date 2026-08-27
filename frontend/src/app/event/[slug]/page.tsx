@@ -364,7 +364,7 @@ export default function EventDetailPage() {
   }
 
   const isClosed = event.status === 'housefull' || event.status === 'registration_closed' || event.isInquiryClosed;
-  const price = event.price !== undefined ? event.price : 1000;
+  const price = event.price !== undefined ? event.price : 1500;
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex flex-col justify-between font-sans">

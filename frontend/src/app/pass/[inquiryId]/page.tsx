@@ -566,7 +566,7 @@ export default function PassDownloadPage() {
                 <>
                   <h2 className="text-2xl font-bold text-slate-100">પ્રોગ્રામની તારીખ નક્કી થઈ ગઈ છે!</h2>
                   <p className="text-slate-300 text-sm max-w-md mx-auto leading-relaxed">
-                    આ પ્રોગ્રામની તારીખ **{submission.programDate}** ({submission.programTime}) નક્કી થયેલ છે. તમારી સીટ કન્ફર્મ કરવા માટે કૃપા કરીને નીચે આપેલા QR કોડ પર ₹{submission.amount || '100'} પેમેન્ટ કરો અને તેનો સ્ક્રીનશોટ અપલોડ કરો.
+                    આ પ્રોગ્રામની તારીખ **{submission.programDate}** ({submission.programTime}) નક્કી થયેલ છે. તમારી સીટ કન્ફર્મ કરવા માટે કૃપા કરીને નીચે આપેલા QR કોડ પર ₹{submission.amount || 1500} પેમેન્ટ કરો અને તેનો સ્ક્રીનશોટ અપલોડ કરો.
                   </p>
                   
                   {/* QR Code and Payee Details */}
