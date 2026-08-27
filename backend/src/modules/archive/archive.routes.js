@@ -21,6 +21,8 @@ export const archiveRouter = Router();
 archiveRouter.get('/health', requireArchiveWorkerAuth, archiveHealth);
 archiveRouter.post('/health', requireArchiveWorkerAuth, archiveHealth);
 archiveRouter.post('/claim-one', requireArchiveWorkerAuth, claimSingleArchiveJob);
+archiveRouter.post('/claim-event-batch', requireArchiveWorkerAuth, claimEventArchiveBatch);
+archiveRouter.get('/claim-event-batch', requireArchiveWorkerAuth, claimEventArchiveBatch);
 archiveRouter.post('/claim-batch', requireArchiveWorkerAuth, claimArchiveBatch);
 archiveRouter.get('/claim-batch', requireArchiveWorkerAuth, claimArchiveBatch);
 archiveRouter.post('/verify-item', requireArchiveWorkerAuth, verifyArchivedItem);

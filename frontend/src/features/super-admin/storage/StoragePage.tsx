@@ -324,19 +324,37 @@ export const StoragePage = () => {
                     </div>
 
                     <div className="text-xs text-slate-500 flex items-center gap-4 flex-wrap">
-                      <span>📸 Couple Photos: <strong>{cand.eligibleCouplePhotos}</strong></span>
+                      <span>📸 Eligible: <strong>{cand.eligibleCouplePhotos}</strong></span>
+                      <span>✓ Verified: <strong className="text-emerald-700">{cand.archivedAssets}</strong></span>
+                      <span>⏳ Queued: <strong className="text-amber-700">{cand.queuedAssets}</strong></span>
                       <span>💾 Est. Size: <strong>{cand.estimatedSizeMB} MB</strong></span>
-                      <span>✓ Verified in Drive: <strong>{cand.archivedAssets}</strong></span>
                     </div>
+
+                    {cand.eligibleCouplePhotos > 0 && (
+                      <div className="w-full max-w-md pt-1">
+                        <div className="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
+                          <span>Archive Progress</span>
+                          <span>
+                            {cand.archivedAssets} / {cand.eligibleCouplePhotos} ({Math.min(100, Math.round((cand.archivedAssets / cand.eligibleCouplePhotos) * 100))}%)
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-600 to-emerald-500 transition-all duration-300"
+                            style={{ width: `${Math.min(100, Math.round((cand.archivedAssets / cand.eligibleCouplePhotos) * 100))}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 self-end md:self-center">
                     <button
                       onClick={() => handleQueueEvent(cand.id)}
-                      disabled={queuingEventId === cand.id || cand.eligibleCouplePhotos === 0}
+                      disabled={queuingEventId === cand.id || cand.eligibleCouplePhotos === 0 || cand.archivedAssets >= cand.eligibleCouplePhotos}
                       className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
                     >
-                      {queuingEventId === cand.id ? 'Queuing Assets...' : 'Queue Archive'}
+                      {queuingEventId === cand.id ? 'Queuing Assets...' : cand.archivedAssets >= cand.eligibleCouplePhotos ? 'Fully Archived' : 'Queue Archive'}
                     </button>
                   </div>
                 </div>

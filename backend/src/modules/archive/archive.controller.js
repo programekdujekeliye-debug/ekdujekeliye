@@ -22,6 +22,7 @@ export const archiveHealth = async (req, res) => {
     capabilities: {
       claimBatch: true,
       claimOne: true,
+      claimEventBatch: true,
       verifyItem: true,
       failItem: true
     }
@@ -72,6 +73,80 @@ export const claimSingleArchiveJob = async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: `Failed to claim single job: ${err.message}` });
+  }
+};
+
+/**
+ * Atomically claims a batch of queued archive jobs STRICTLY for a specific eventId
+ * Prevents any cross-event contamination or claiming of unrelated queued jobs.
+ */
+export const claimEventArchiveBatch = async (req, res) => {
+  try {
+    const eventId = req.body.eventId || req.query.eventId;
+    if (!eventId) {
+      return res.status(400).json({ error: 'eventId is required to claim event-scoped archive batch.' });
+    }
+
+    const limit = Math.min(Math.max(1, parseInt(req.body.limit || req.query.limit || '15', 10)), 50);
+    const workerId = req.body.workerId || req.query.workerId || 'gas-event-worker';
+    const now = new Date();
+    const staleThreshold = new Date(Date.now() - 15 * 60 * 1000); // 15 mins stale timeout
+
+    // Find and atomically transition jobs strictly for eventId from QUEUED (or uncompleted stale COPYING) -> COPYING
+    const jobs = await MediaArchive.find({
+      eventId,
+      $or: [
+        { status: 'QUEUED' },
+        {
+          status: 'COPYING',
+          claimedAt: { $lt: staleThreshold },
+          driveFileId: { $in: [null, ''] },
+          verifiedAt: { $in: [null, ''] }
+        }
+      ]
+    })
+      .sort({ queuedAt: 1 })
+      .limit(limit)
+      .lean();
+
+    if (jobs.length === 0) {
+      return res.json({ success: true, count: 0, eventId, jobs: [] });
+    }
+
+    const jobIds = jobs.map(j => j._id);
+
+    await MediaArchive.updateMany(
+      { _id: { $in: jobIds } },
+      {
+        $set: {
+          status: 'COPYING',
+          workerId,
+          claimedAt: now
+        },
+        $inc: { attempts: 1 }
+      }
+    );
+
+    // Format lightweight metadata batch for Google Apps Script
+    const formattedJobs = jobs.map(job => ({
+      jobId: job._id.toString(),
+      eventId: job.eventId,
+      registrationId: job.registrationId,
+      mediaType: job.mediaType,
+      sourceUrl: job.sourceUrl,
+      filename: job.filename,
+      mimeType: job.mimeType || 'image/jpeg',
+      folderPath: job.driveFolderPath || `Ek Duje Ke Liye/Events/${job.eventId}/Couple Photos`
+    }));
+
+    res.json({
+      success: true,
+      count: formattedJobs.length,
+      eventId,
+      jobs: formattedJobs
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to claim event archive batch: ${err.message}` });
   }
 };
 
