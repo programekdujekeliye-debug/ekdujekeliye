@@ -44,7 +44,6 @@ const SuperAdminAppContent = () => {
             setPassword(savedPass);
             setRole(res.role);
             setIsAuthenticated(true);
-            refreshPrograms();
           }
         } catch (_) {
           sessionStorage.removeItem('adminPassword');

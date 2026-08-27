@@ -76,7 +76,9 @@ const GALLERY_IMAGES = [
 
 // Helper to format date in Indian English format: 07/09/2026 (07 September 2026)
 function formatIndianDate(dateStr?: string): string {
-  if (!dateStr) return '';
+  if (!dateStr || dateStr.toUpperCase() === 'TBD') {
+    return 'Date to be declared (તારીખ ટૂંક સમયમાં જાહેર થશે)';
+  }
   const parts = dateStr.split('-');
   if (parts.length === 3) {
     const year = parts[0];
@@ -113,12 +115,31 @@ export default function HomePage() {
       }
       if (res.ok) {
         const data = await res.json();
-        const list = Array.isArray(data) ? data : (data.programs || []);
-        const activePrograms = list.filter(
-          (p: Program) => p.status !== 'archived' && p.status !== 'cancelled' && p.status !== 'completed' && p.date !== 'TBD'
+        const list: Program[] = Array.isArray(data) ? data : (data.programs || []);
+        const confirmedUpcoming = list.filter(
+          (p: Program) =>
+            p.status !== 'archived' &&
+            p.status !== 'cancelled' &&
+            p.status !== 'completed' &&
+            p.date !== 'TBD' &&
+            p.status !== 'date_tba'
         );
-        if (activePrograms.length > 0) {
-          setPrograms(activePrograms);
+
+        if (confirmedUpcoming.length > 0) {
+          setPrograms(confirmedUpcoming);
+          return;
+        }
+
+        // If NO confirmed upcoming events exist, activate TBD slot
+        const tbaPrograms = list.filter(
+          (p: Program) =>
+            (p.date === 'TBD' || p.status === 'date_tba') &&
+            p.status !== 'archived' &&
+            p.status !== 'completed'
+        );
+
+        if (tbaPrograms.length > 0) {
+          setPrograms(tbaPrograms);
           return;
         }
       }

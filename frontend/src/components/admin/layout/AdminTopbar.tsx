@@ -17,6 +17,20 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
 }) => {
   const { role, selectedProgramId, setSelectedProgramId, programs } = useAdmin();
 
+  const upcomingPrograms = programs.filter(
+    (p) =>
+      p.status === 'upcoming' ||
+      p.status === 'few_seats' ||
+      p.status === 'housefull' ||
+      p.status === 'date_tba' ||
+      p.date === 'TBD' ||
+      (p.date && p.date >= '2026-09-01')
+  );
+
+  const completedPrograms = programs.filter(
+    (p) => (p.status === 'completed' || p.status === 'archived') && p.date !== 'TBD'
+  );
+
   return (
     <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-200 pb-6">
       <div className="space-y-1">
@@ -53,12 +67,28 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
             onChange={(e) => setSelectedProgramId(e.target.value)}
             className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
           >
+            {upcomingPrograms.length > 0 && (
+              <optgroup label="Upcoming Active Events (Default)">
+                {upcomingPrograms.map((p) => {
+                  const isTbd = p.date === 'TBD' || p.status === 'date_tba' || !p.isDateFinal;
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {isTbd ? '🗓️' : '🌟'} {p.city || 'Gujarat'} — {isTbd ? 'Date TBA (To Be Declared)' : p.date} ({p.name}) [₹{p.price ?? 1500}]
+                    </option>
+                  );
+                })}
+              </optgroup>
+            )}
             <option value="all">All Events (Global View)</option>
-            {programs.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.city || 'Surat'} — {p.date} ({p.name})
-              </option>
-            ))}
+            {completedPrograms.length > 0 && (
+              <optgroup label="Past &amp; Completed Events">
+                {completedPrograms.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    📁 {p.city || 'Surat'} — {p.date} ({p.name}) [₹{p.price ?? 1000}]
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </div>
 
