@@ -708,6 +708,16 @@ export default function PassDownloadPage() {
                 <p className="text-slate-400 text-sm mt-1">Your payment was verified. Use the button below to download the invitation pass.</p>
               </div>
 
+              {/* Prominent Registration Number Badge */}
+              <div className="bg-gradient-to-r from-amber-500/15 via-rose-500/15 to-amber-500/15 border border-amber-500/40 rounded-2xl p-4 my-1 text-center max-w-sm w-full space-y-0.5">
+                <span className="text-[11px] font-bold text-amber-300 uppercase tracking-widest block">
+                  રજીસ્ટ્રેશન નંબર (Registration Pass ID)
+                </span>
+                <span className="text-2xl sm:text-3xl font-extrabold text-amber-400 font-mono tracking-wider block select-all">
+                  {submission.inquiryId}
+                </span>
+              </div>
+
               <div className="overflow-hidden rounded-2xl border border-slate-800 shadow-xl max-w-full my-2 relative" style={{ width: '300px', height: '533px' }}>
                 <canvas
                   ref={setCanvasRef}

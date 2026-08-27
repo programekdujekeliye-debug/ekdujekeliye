@@ -23,6 +23,16 @@ interface Submission {
   photoZoom?: number;
   photoOffsetY?: number;
   attendance?: 'unmarked' | 'present' | 'absent';
+  payment?: {
+    provider?: 'razorpay' | 'manual' | 'legacy_upi' | null;
+    status?: 'not_required' | 'pending' | 'created' | 'authorized' | 'captured' | 'failed' | 'expired' | 'refunded';
+    amount?: number;
+    currency?: string;
+    razorpayOrderId?: string;
+    razorpayPaymentId?: string;
+    paidAt?: string;
+    failedAt?: string;
+  };
 }
 
 interface DuplicateGroup {
@@ -176,8 +186,22 @@ const detectHeartCutout = (base64Image: string): Promise<{ x: number, y: number,
 
 interface Program {
   id: string;
+  sequenceNumber?: number;
   name: string;
+  slug?: string;
+  city?: string;
+  venue?: string;
+  mapUrl?: string;
+  description?: string;
+  heroImage?: string;
+  price?: number;
+  status?: string;
+  featured?: boolean;
+  registrationMode?: string;
+  externalRegistrationUrl?: string;
+  sortOrder?: number;
   date: string;
+  time?: string;
   capacity: number;
   bookingsCount: number;
   isDateFinal?: boolean;
@@ -3046,6 +3070,14 @@ export default function AdminDashboard() {
         </div>
       </aside>
 
+      {/* Mobile Backdrop Overlay */}
+      {mobileSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-30 md:hidden backdrop-blur-sm transition-opacity"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
       {/* Main Content Area */}
       <div className="flex-grow md:pl-64 flex flex-col min-h-screen">
         {/* Mobile Header Bar */}
@@ -4492,7 +4524,24 @@ export default function AdminDashboard() {
                         </div>
                       </td>
                       <td className="py-2.5 px-3">
-                        {sub.paymentScreenshot ? (
+                        {sub.payment?.provider === 'razorpay' ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                              💳 Razorpay
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                              sub.payment?.status === 'captured' ? 'bg-emerald-500/20 text-emerald-400' :
+                              sub.payment?.status === 'failed' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'
+                            }`}>
+                              {sub.payment?.status || 'pending'}
+                            </span>
+                            {sub.payment?.razorpayPaymentId && (
+                              <span className="text-[9px] text-slate-400 max-w-[100px] truncate" title={sub.payment.razorpayPaymentId}>
+                                ID: {sub.payment.razorpayPaymentId}
+                              </span>
+                            )}
+                          </div>
+                        ) : sub.paymentScreenshot ? (
                           <div className="flex flex-col items-center gap-2">
                             <div
                               className="w-12 h-12 rounded-lg overflow-hidden border border-slate-800 cursor-pointer hover:border-amber-500/50 transition-colors"
@@ -4515,7 +4564,7 @@ export default function AdminDashboard() {
                             </div>
                           </div>
                         ) : (
-                          <span className="text-xs text-slate-500">None</span>
+                          <span className="text-xs text-slate-500">{sub.payment?.provider === 'manual' ? 'Manual / Offline' : 'None'}</span>
                         )}
                       </td>
                       <td className="py-2.5 px-3 flex flex-col gap-1 items-start">

@@ -1,9 +1,27 @@
-// Force redeployment and update backend schema
+// Load environment variables from local .env if available
+import fs from 'fs';
+import path from 'path';
+
+try {
+  const envPath = path.resolve(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf-8');
+    envContent.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+        const idx = trimmed.indexOf('=');
+        const key = trimmed.substring(0, idx).trim();
+        const val = trimmed.substring(idx + 1).trim();
+        if (!process.env[key]) process.env[key] = val;
+      }
+    });
+  }
+} catch (e) {}
+
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { Jimp } from 'jimp';
 import jsQR from 'jsqr';
@@ -12,11 +30,19 @@ import mongoose from 'mongoose';
 import { v2 as cloudinary } from 'cloudinary';
 import cron from 'node-cron';
 import { verifyWebhook, handleWebhookEvent } from './services/whatsappWebhook.js';
+import {
+  createRazorpayOrder,
+  verifyCheckoutSignature,
+  verifyWebhookSignature,
+  fetchPayment,
+  fetchOrder,
+  getRazorpayKeyId
+} from './services/razorpay.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configure Cloudinary
+// Configure Cloudinary with safe environment variable references
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'rh3wmfta',
   api_key: process.env.CLOUDINARY_API_KEY || '733288215373621',
@@ -50,10 +76,19 @@ app.use(cors({
     callback(null, true);
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Razorpay-Signature', 'X-Razorpay-Event-Id'],
   credentials: true
 }));
-app.use(express.json({ limit: '20mb' }));
+
+// Capture raw body for Razorpay Webhook signature verification without breaking global JSON parser
+app.use(express.json({
+  limit: '20mb',
+  verify: (req, res, buf) => {
+    if (req.originalUrl && req.originalUrl.startsWith('/api/webhooks/razorpay')) {
+      req.rawBody = buf;
+    }
+  }
+}));
 app.use(express.urlencoded({ limit: '20mb', extended: true }));
 
 // Ensure uploads directory exists
@@ -75,6 +110,15 @@ app.use('/uploads', express.static(uploadsDir, {
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
+// Helper to generate SEO-friendly slug
+const generateEventSlug = (name, city, date) => {
+  const base = `${city || name || 'event'}-${date || ''}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return base || `event-${Date.now()}`;
+};
+
 // MongoDB Connection
 const MONGO_URI = (process.env.MONGO_URI || 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority').trim();
 mongoose.set('autoIndex', false); // Disable auto-indexing to prevent query buffering hangs on startup/restarts
@@ -85,23 +129,29 @@ mongoose.connect(MONGO_URI)
       try {
         await mongoose.model('Submission').ensureIndexes();
         await mongoose.model('Program').ensureIndexes();
+        await mongoose.model('WebhookEvent').ensureIndexes();
         console.log('Database indexes synchronized successfully.');
 
-        // Migration: Assign sequenceNumber to programs that don't have it
+        // Migration: Assign sequenceNumber & slug to programs that don't have it
         const ProgramModel = mongoose.model('Program');
-        const programsWithoutSeq = await ProgramModel.find({ sequenceNumber: { $exists: false } }).sort({ id: 1 });
-        if (programsWithoutSeq.length > 0) {
-          console.log(`Running migration: Found ${programsWithoutSeq.length} programs without sequenceNumber.`);
-          const maxProg = await ProgramModel.findOne({ sequenceNumber: { $exists: true } }).sort({ sequenceNumber: -1 });
-          let nextSeq = maxProg && maxProg.sequenceNumber ? maxProg.sequenceNumber + 1 : 1;
-          for (const prog of programsWithoutSeq) {
-            prog.sequenceNumber = nextSeq;
-            await prog.save();
-            console.log(`Assigned sequenceNumber ${nextSeq} to program: ${prog.name} (${prog.id})`);
-            nextSeq++;
+        const allPrograms = await ProgramModel.find({});
+        for (const prog of allPrograms) {
+          let updated = false;
+          if (!prog.sequenceNumber) {
+            const maxProg = await ProgramModel.findOne({ sequenceNumber: { $exists: true } }).sort({ sequenceNumber: -1 });
+            prog.sequenceNumber = maxProg && maxProg.sequenceNumber ? maxProg.sequenceNumber + 1 : 1;
+            updated = true;
           }
-          console.log('Migration completed successfully.');
+          if (!prog.slug) {
+            prog.slug = generateEventSlug(prog.name, prog.city, prog.date);
+            updated = true;
+          }
+          if (updated) {
+            await prog.save();
+            console.log(`[Migration] Updated program ${prog.name} (Seq: ${prog.sequenceNumber}, Slug: ${prog.slug})`);
+          }
         }
+        console.log('Program metadata synchronization completed.');
       } catch (err) {
         console.error('Error in index sync or program migration:', err);
       }
@@ -114,6 +164,22 @@ const ProgramSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   sequenceNumber: { type: Number },
   name: { type: String, required: true },
+  slug: { type: String, unique: true, sparse: true, index: true },
+  city: { type: String, default: '' },
+  venue: { type: String, default: '' },
+  mapUrl: { type: String, default: '' },
+  description: { type: String, default: '' },
+  heroImage: { type: String, default: '' },
+  price: { type: Number, default: 1499 },
+  status: {
+    type: String,
+    enum: ['upcoming', 'few_seats', 'housefull', 'registration_closed', 'completed', 'date_tba'],
+    default: 'upcoming'
+  },
+  featured: { type: Boolean, default: false },
+  registrationMode: { type: String, enum: ['internal', 'external'], default: 'internal' },
+  externalRegistrationUrl: { type: String, default: '' },
+  sortOrder: { type: Number, default: 0 },
   date: { type: String, required: true },
   time: { type: String, default: "8:30 PM" },
   capacity: { type: Number, required: true },
@@ -152,6 +218,31 @@ const SubmissionSchema = new mongoose.Schema({
   photoZoom: { type: Number, default: 1.0 },
   photoOffsetY: { type: Number, default: 0 },
   oldInquiryId: { type: String },
+  payment: {
+    provider: { type: String, enum: ['razorpay', 'manual', 'legacy_upi', null], default: null },
+    status: {
+      type: String,
+      enum: ['not_required', 'pending', 'created', 'authorized', 'captured', 'failed', 'expired', 'refunded'],
+      default: 'pending'
+    },
+    amount: { type: Number },
+    currency: { type: String, default: 'INR' },
+    razorpayOrderId: { type: String, index: true },
+    razorpayPaymentId: { type: String, index: true },
+    razorpaySignature: { type: String },
+    createdAt: { type: Date, default: Date.now },
+    paidAt: { type: Date },
+    failedAt: { type: Date },
+    refundedAt: { type: Date },
+    attempts: { type: Number, default: 0 }
+  },
+  reservationExpiresAt: { type: Date, index: true },
+  customerToken: { type: String },
+  paymentReminder: {
+    count: { type: Number, default: 0 },
+    lastSentAt: { type: Date, default: null },
+    nextReminderAt: { type: Date, default: null }
+  },
   createdAt: { type: Date, default: Date.now }
 }, { collection: 'submission' });
 SubmissionSchema.index({ createdAt: -1 });
@@ -159,6 +250,17 @@ SubmissionSchema.index({ programId: 1, status: 1, isDeleted: 1 });
 SubmissionSchema.index({ phoneNumber: 1, status: 1 });
 
 const Submission = mongoose.model('Submission', SubmissionSchema);
+
+// Webhook Idempotency Collection
+const WebhookEventSchema = new mongoose.Schema({
+  provider: { type: String, required: true },
+  eventId: { type: String, required: true },
+  eventType: { type: String },
+  processedAt: { type: Date, default: Date.now },
+  payloadSummary: { type: mongoose.Schema.Types.Mixed }
+}, { collection: 'webhook_events' });
+WebhookEventSchema.index({ provider: 1, eventId: 1 }, { unique: true });
+const WebhookEvent = mongoose.model('WebhookEvent', WebhookEventSchema);
 
 async function getProgramBookingsCount(programId) {
   if (!programId) return 0;
@@ -352,15 +454,406 @@ app.get('/api/health', (req, res) => {
 app.get('/api/webhooks/whatsapp', verifyWebhook);
 app.post('/api/webhooks/whatsapp', handleWebhookEvent);
 
+// Public Configuration (Safe non-sensitive client identifiers)
+app.get('/api/config/public', (req, res) => {
+  res.json({
+    razorpayKeyId: getRazorpayKeyId(),
+    environment: process.env.NODE_ENV || 'production'
+  });
+});
+
+// Downstream notification hook invoked when payment is finalized and captured
+async function onRegistrationPaid(submission) {
+  try {
+    console.log(`[Payment Finalizer] Downstream hook executed for inquiry: ${submission.inquiryId} | Phone: ${submission.phoneNumber}`);
+    // Future WhatsApp Cloud API automated pass delivery / webhook integration hook
+  } catch (err) {
+    console.error(`[Payment Finalizer] Error in onRegistrationPaid hook for ${submission?.inquiryId}:`, err);
+  }
+}
+
+// Single Idempotent Payment Finalizer for Razorpay Verification & Webhooks
+async function finalizeCapturedPayment({ inquiryId, paymentId, orderId, provider = 'razorpay', signature = '' }) {
+  if (!inquiryId) {
+    throw new Error('Inquiry ID is required for payment finalization.');
+  }
+
+  // 1. Check existing state
+  const existing = await Submission.findOne({ inquiryId });
+  if (!existing) {
+    throw new Error(`Submission not found for Inquiry ID: ${inquiryId}`);
+  }
+
+  if (existing.payment && existing.payment.status === 'captured') {
+    return { success: true, alreadyFinalized: true, submission: existing };
+  }
+
+  // 2. Atomically update status to approved and payment.status to captured
+  const updated = await Submission.findOneAndUpdate(
+    { inquiryId, 'payment.status': { $ne: 'captured' } },
+    {
+      $set: {
+        status: 'approved',
+        'payment.provider': provider,
+        'payment.status': 'captured',
+        'payment.razorpayPaymentId': paymentId || existing?.payment?.razorpayPaymentId,
+        'payment.razorpayOrderId': orderId || existing?.payment?.razorpayOrderId,
+        'payment.razorpaySignature': signature || existing?.payment?.razorpaySignature,
+        'payment.paidAt': new Date()
+      }
+    },
+    { new: true }
+  );
+
+  if (updated) {
+    await updateProgramBookingsCount(updated.programId);
+    onRegistrationPaid(updated).catch(err => console.error('Error in onRegistrationPaid hook:', err));
+    return { success: true, alreadyFinalized: false, submission: updated };
+  }
+
+  // Fallback if atomic update matched 0 (e.g. concurrent winner)
+  const current = await Submission.findOne({ inquiryId });
+  return { success: true, alreadyFinalized: true, submission: current };
+}
+
+// Create Razorpay Order
+app.post('/api/payments/create-order', async (req, res) => {
+  try {
+    const { inquiryId, customerToken } = req.body;
+
+    if (!inquiryId) {
+      return res.status(400).json({ error: 'Inquiry ID is required.' });
+    }
+
+    const submission = await Submission.findOne({ inquiryId });
+    if (!submission) {
+      return res.status(404).json({ error: 'Registration not found.' });
+    }
+
+    // Verify customer token if provided
+    if (customerToken && submission.customerToken && submission.customerToken !== customerToken) {
+      return res.status(403).json({ error: 'Unauthorized access to registration order.' });
+    }
+
+    if (submission.payment && submission.payment.status === 'captured') {
+      return res.status(400).json({
+        error: 'Payment has already been completed for this registration.',
+        alreadyPaid: true,
+        inquiryId: submission.inquiryId
+      });
+    }
+
+    const program = await Program.findOne({ id: submission.programId });
+    if (!program) {
+      return res.status(404).json({ error: 'Associated event program not found.' });
+    }
+
+    // Recheck capacity
+    if (program.status === 'housefull' || program.status === 'registration_closed') {
+      return res.status(400).json({ error: 'Registration for this event is currently closed or housefull.' });
+    }
+
+    const activeBookings = await getProgramBookingsCount(program.id);
+    if (program.isDateFinal !== false && (activeBookings + 2 > program.capacity) && submission.status !== 'approved') {
+      return res.status(400).json({ error: 'This event slot is now completely sold out.' });
+    }
+
+    // Determine price authoritatively from Program or Setting
+    let orderAmount = program.price || 1499;
+    if (orderAmount <= 0) {
+      const setting = await Setting.findOne({ key: 'main' });
+      orderAmount = setting && setting.amount ? parseFloat(setting.amount) : 1499;
+    }
+
+    // Create Razorpay order
+    const razorpayOrder = await createRazorpayOrder({
+      inquiryId: submission.inquiryId,
+      amount: orderAmount,
+      currency: 'INR',
+      notes: {
+        inquiryId: submission.inquiryId,
+        programId: program.id,
+        city: program.city || ''
+      }
+    });
+
+    // Update submission payment status
+    submission.payment.provider = 'razorpay';
+    submission.payment.status = 'created';
+    submission.payment.amount = orderAmount;
+    submission.payment.razorpayOrderId = razorpayOrder.id;
+    submission.payment.attempts = (submission.payment.attempts || 0) + 1;
+    await submission.save();
+
+    res.json({
+      success: true,
+      keyId: getRazorpayKeyId(),
+      orderId: razorpayOrder.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      inquiryId: submission.inquiryId,
+      programName: program.name,
+      customerName: `${submission.husbandName} & ${submission.wifeName} ${submission.surname}`,
+      phoneNumber: submission.phoneNumber
+    });
+  } catch (err) {
+    console.error('[Razorpay Order Creation Error]:', err);
+    res.status(500).json({ error: err.message || 'Failed to initialize payment order.' });
+  }
+});
+
+// Verify Checkout Signature
+app.post('/api/payments/verify', async (req, res) => {
+  try {
+    const { inquiryId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+    if (!inquiryId || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ error: 'Missing required payment verification parameters.' });
+    }
+
+    const submission = await Submission.findOne({ inquiryId });
+    if (!submission) {
+      return res.status(404).json({ error: 'Registration not found.' });
+    }
+
+    // Validate stored order ID against received order ID
+    if (submission.payment?.razorpayOrderId && submission.payment.razorpayOrderId !== razorpay_order_id) {
+      return res.status(400).json({ error: 'Order ID mismatch between registration and payment response.' });
+    }
+
+    // Verify HMAC-SHA256 signature
+    const isValid = verifyCheckoutSignature({
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature
+    });
+
+    if (!isValid) {
+      console.warn(`[Payment Verification Failed] Invalid signature for inquiry: ${inquiryId}`);
+      if (submission.payment) {
+        submission.payment.status = 'failed';
+        submission.payment.failedAt = new Date();
+        await submission.save();
+      }
+      return res.status(400).json({ error: 'Payment signature verification failed.' });
+    }
+
+    // Idempotent finalization
+    const finalizeResult = await finalizeCapturedPayment({
+      inquiryId,
+      paymentId: razorpay_payment_id,
+      orderId: razorpay_order_id,
+      provider: 'razorpay',
+      signature: razorpay_signature
+    });
+
+    res.json({
+      success: true,
+      inquiryId,
+      status: 'approved',
+      paymentStatus: 'captured',
+      passUrl: `/pass/${inquiryId}`
+    });
+  } catch (err) {
+    console.error('[Payment Verification Error]:', err);
+    res.status(500).json({ error: 'Server error verifying payment.' });
+  }
+});
+
+// Authoritative Razorpay Webhook Handler
+app.post('/api/webhooks/razorpay', async (req, res) => {
+  try {
+    const signature = req.headers['x-razorpay-signature'];
+    if (!signature) {
+      return res.status(400).send('Missing webhook signature');
+    }
+
+    const isValid = verifyWebhookSignature({
+      rawBody: req.rawBody,
+      signature
+    });
+
+    if (!isValid) {
+      console.warn('[Razorpay Webhook] Invalid webhook signature received.');
+      return res.status(400).send('Invalid signature');
+    }
+
+    const event = req.body;
+    const eventId = req.headers['x-razorpay-event-id'] || event.event_id || `${event.event}_${Date.now()}`;
+    const eventType = event.event;
+
+    // Idempotency check: store eventId
+    try {
+      await WebhookEvent.create({
+        provider: 'razorpay',
+        eventId,
+        eventType,
+        processedAt: new Date(),
+        payloadSummary: {
+          event: eventType,
+          paymentId: event.payload?.payment?.entity?.id,
+          orderId: event.payload?.payment?.entity?.order_id
+        }
+      });
+    } catch (dupErr) {
+      if (dupErr.code === 11000) {
+        console.log(`[Razorpay Webhook] Duplicate event ignored: ${eventId}`);
+        return res.status(200).json({ status: 'duplicate_ignored' });
+      }
+      console.error('[Razorpay Webhook] Error recording webhook event:', dupErr);
+    }
+
+    // Handle payment events
+    if (eventType === 'payment.captured' || eventType === 'order.paid') {
+      const paymentEntity = event.payload?.payment?.entity || {};
+      const inquiryId = paymentEntity.notes?.inquiryId || paymentEntity.receipt;
+      const paymentId = paymentEntity.id;
+      const orderId = paymentEntity.order_id;
+
+      if (inquiryId) {
+        await finalizeCapturedPayment({
+          inquiryId,
+          paymentId,
+          orderId,
+          provider: 'razorpay'
+        });
+        console.log(`[Razorpay Webhook] Payment captured & approved for ${inquiryId} (Payment ID: ${paymentId})`);
+      }
+    } else if (eventType === 'payment.failed') {
+      const paymentEntity = event.payload?.payment?.entity || {};
+      const inquiryId = paymentEntity.notes?.inquiryId || paymentEntity.receipt;
+      if (inquiryId) {
+        await Submission.updateOne(
+          { inquiryId, 'payment.status': { $ne: 'captured' } },
+          {
+            $set: {
+              'payment.status': 'failed',
+              'payment.failedAt': new Date(),
+              'payment.razorpayPaymentId': paymentEntity.id
+            }
+          }
+        );
+        console.log(`[Razorpay Webhook] Payment failed recorded for ${inquiryId}`);
+      }
+    }
+
+    res.status(200).json({ status: 'ok' });
+  } catch (err) {
+    console.error('[Razorpay Webhook Error]:', err);
+    res.status(500).json({ error: 'Webhook processing error' });
+  }
+});
+
+// Safe Public Payment & Registration Status Endpoint
+app.get('/api/payments/status/:inquiryId', async (req, res) => {
+  try {
+    const { inquiryId } = req.params;
+    const submission = await Submission.findOne({ inquiryId }, {
+      inquiryId: 1,
+      status: 1,
+      husbandName: 1,
+      wifeName: 1,
+      surname: 1,
+      programId: 1,
+      programName: 1,
+      programDate: 1,
+      programTime: 1,
+      payment: 1,
+      createdAt: 1
+    });
+
+    if (!submission) {
+      return res.status(404).json({ error: 'Registration not found.' });
+    }
+
+    res.json({
+      inquiryId: submission.inquiryId,
+      registrationStatus: submission.status,
+      paymentStatus: submission.payment?.status || (submission.status === 'approved' ? 'captured' : 'pending'),
+      paymentProvider: submission.payment?.provider || 'razorpay',
+      amount: submission.payment?.amount || 1499,
+      paidAt: submission.payment?.paidAt || null,
+      passAvailable: submission.status === 'approved',
+      coupleName: `${submission.husbandName} & ${submission.wifeName} ${submission.surname}`,
+      programName: submission.programName,
+      programDate: submission.programDate
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retrieve payment status.' });
+  }
+});
+
+// Get program by SEO slug
+app.get('/api/programs/slug/:slug', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const program = await Program.findOne({ slug: slug.toLowerCase() });
+    if (!program) {
+      return res.status(404).json({ error: 'Event not found.' });
+    }
+
+    const host = req.get('host');
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const obj = program.toObject();
+    obj.cardTemplate = program.cardTemplate ? `${protocol}://${host}/api/programs/${program.id}/template` : null;
+    
+    // Dynamic available seats calculation
+    const activeBookings = await getProgramBookingsCount(program.id);
+    obj.activeBookings = activeBookings;
+    obj.availableSeats = Math.max(0, program.capacity - activeBookings);
+
+    res.json(obj);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error fetching event details.' });
+  }
+});
+
+// Payment Reminders Worker Endpoint (Protected by CRON_SECRET)
+app.post('/api/jobs/payment-reminders', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const expectedSecret = process.env.CRON_SECRET || 'EkDujeCron_Secret_2026';
+    if (authHeader !== expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
+      return res.status(401).json({ error: 'Unauthorized cron request.' });
+    }
+
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+    const pendingSubmissions = await Submission.find({
+      status: 'pending',
+      'payment.status': { $in: ['pending', 'created', 'failed'] },
+      createdAt: { $lte: thirtyMinutesAgo },
+      'paymentReminder.count': { $lt: 2 }
+    }).limit(20);
+
+    let processedCount = 0;
+    for (const sub of pendingSubmissions) {
+      // Re-verify payment is still pending immediately before acting
+      const current = await Submission.findOne({ inquiryId: sub.inquiryId });
+      if (current && current.payment?.status === 'captured') continue;
+
+      sub.paymentReminder.count = (sub.paymentReminder.count || 0) + 1;
+      sub.paymentReminder.lastSentAt = new Date();
+      await sub.save();
+      processedCount++;
+    }
+
+    res.json({ success: true, processedCount, message: `Processed ${processedCount} pending payment reminders.` });
+  } catch (err) {
+    res.status(500).json({ error: 'Error running payment reminders job.' });
+  }
+});
+
 // Get all programs (optimized to exclude heavy cardTemplate by default to speed up slot selection)
 app.get('/api/programs', async (req, res) => {
   try {
     const programs = await Program.find({}, {
-      id: 1, name: 1, date: 1, time: 1, capacity: 1, bookingsCount: 1, isDateFinal: 1,
+      id: 1, sequenceNumber: 1, name: 1, slug: 1, city: 1, venue: 1, mapUrl: 1, description: 1,
+      heroImage: 1, price: 1, status: 1, featured: 1, registrationMode: 1, externalRegistrationUrl: 1, sortOrder: 1,
+      date: 1, time: 1, capacity: 1, bookingsCount: 1, isDateFinal: 1,
       heartX: 1, heartY: 1, heartWidth: 1, heartHeight: 1, photoZoom: 1, photoOffsetY: 1,
       photoLink: 1, isInquiryClosed: 1,
       hasTemplate: { $cond: [ { $eq: [ { $type: "$cardTemplate" }, "string" ] }, true, false ] }
-    });
+    }).sort({ sortOrder: 1, sequenceNumber: 1, createdAt: 1 });
     
     // Map programs to include absolute URL path for cardTemplate instead of base64
     const host = req.get('host');
@@ -369,6 +862,11 @@ app.get('/api/programs', async (req, res) => {
       const obj = p.toObject();
       const hasTemplate = p.get('hasTemplate') || false;
       obj.cardTemplate = hasTemplate ? `${protocol}://${host}/api/programs/${p.id}/template` : null;
+      // Dynamic available seats
+      const activeBookings = await getProgramBookingsCount(p.id);
+      obj.activeBookings = activeBookings;
+      obj.availableSeats = Math.max(0, p.capacity - activeBookings);
+
       // Fetch count of inquiries and pending reviews
       obj.inquiryCount = await Submission.countDocuments({ programId: p.id, status: 'inquiry' });
       obj.pendingCount = await Submission.countDocuments({ programId: p.id, status: 'pending' });
@@ -520,7 +1018,12 @@ app.get('/api/programs/:id/template', async (req, res) => {
 
 // Create a new program (Admin protected)
 app.post('/api/programs', requireAuth, async (req, res) => {
-  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY, isDateFinal, photoLink, isInquiryClosed } = req.body;
+  const {
+    name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight,
+    photoZoom, photoOffsetY, isDateFinal, photoLink, isInquiryClosed,
+    slug, city, venue, mapUrl, description, heroImage, price, status, featured,
+    registrationMode, externalRegistrationUrl, sortOrder
+  } = req.body;
   const finalIsDateFinal = isDateFinal !== undefined ? isDateFinal : true;
   if (!name || !capacity || (finalIsDateFinal && !date)) {
     return res.status(400).json({ error: 'Name, date, and capacity are required.' });
@@ -528,11 +1031,24 @@ app.post('/api/programs', requireAuth, async (req, res) => {
   try {
     const maxProg = await Program.findOne().sort({ sequenceNumber: -1 });
     const nextSeq = maxProg && maxProg.sequenceNumber ? maxProg.sequenceNumber + 1 : 1;
+    const finalSlug = (slug || generateEventSlug(name, city, date)).toLowerCase().trim();
 
     const newProgram = await Program.create({
       id: `prog-${Date.now()}`,
       sequenceNumber: nextSeq,
       name,
+      slug: finalSlug,
+      city: city || '',
+      venue: venue || '',
+      mapUrl: mapUrl || '',
+      description: description || '',
+      heroImage: heroImage || '',
+      price: price ? parseFloat(price) : 1499,
+      status: status || 'upcoming',
+      featured: featured === true || featured === 'true',
+      registrationMode: registrationMode || 'internal',
+      externalRegistrationUrl: externalRegistrationUrl || '',
+      sortOrder: sortOrder ? parseInt(sortOrder, 10) : 0,
       date: finalIsDateFinal ? date : (date || 'TBD'),
       time: time || '8:30 PM',
       capacity: parseInt(capacity, 10),
@@ -550,6 +1066,7 @@ app.post('/api/programs', requireAuth, async (req, res) => {
     });
     res.status(201).json(newProgram);
   } catch (err) {
+    console.error('Error creating program:', err);
     res.status(500).json({ error: 'Server error creating program.' });
   }
 });
@@ -573,7 +1090,12 @@ app.delete('/api/programs/:id', requireAuth, async (req, res) => {
 // Update a program (Admin protected)
 app.put('/api/programs/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
-  const { name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight, photoZoom, photoOffsetY, isDateFinal, photoLink, isInquiryClosed } = req.body;
+  const {
+    name, date, time, capacity, cardTemplate, heartX, heartY, heartWidth, heartHeight,
+    photoZoom, photoOffsetY, isDateFinal, photoLink, isInquiryClosed,
+    slug, city, venue, mapUrl, description, heroImage, price, status, featured,
+    registrationMode, externalRegistrationUrl, sortOrder
+  } = req.body;
   try {
     const program = await Program.findOne({ id });
     if (!program) {
@@ -587,6 +1109,18 @@ app.put('/api/programs/:id', requireAuth, async (req, res) => {
     } else if (program.isDateFinal === false) {
       program.date = 'TBD';
     }
+    if (slug) program.slug = slug.toLowerCase().trim();
+    if (city !== undefined) program.city = city;
+    if (venue !== undefined) program.venue = venue;
+    if (mapUrl !== undefined) program.mapUrl = mapUrl;
+    if (description !== undefined) program.description = description;
+    if (heroImage !== undefined) program.heroImage = heroImage;
+    if (price !== undefined) program.price = parseFloat(price);
+    if (status !== undefined) program.status = status;
+    if (featured !== undefined) program.featured = featured === true || featured === 'true';
+    if (registrationMode !== undefined) program.registrationMode = registrationMode;
+    if (externalRegistrationUrl !== undefined) program.externalRegistrationUrl = externalRegistrationUrl;
+    if (sortOrder !== undefined) program.sortOrder = parseInt(sortOrder, 10);
     if (time !== undefined) program.time = time;
     if (capacity) program.capacity = parseInt(capacity, 10);
     if (cardTemplate !== undefined) {
@@ -610,11 +1144,12 @@ app.put('/api/programs/:id', requireAuth, async (req, res) => {
     templateCache.delete(id);
     res.json({ success: true, message: 'Program updated successfully.', data: program });
   } catch (err) {
+    console.error('Error updating program:', err);
     res.status(500).json({ error: 'Server error updating program.' });
   }
 });
 
-// Submit Form
+// Submit Form (Razorpay first with legacy screenshot fallback support)
 app.post('/api/submit', upload.fields([
   { name: 'couplePhoto', maxCount: 1 },
   { name: 'paymentScreenshot', maxCount: 1 }
@@ -633,7 +1168,11 @@ app.post('/api/submit', upload.fields([
     // Check if phone number is already registered (excluding rejected ones)
     const existingRegistration = await Submission.findOne({ phoneNumber, status: { $ne: 'rejected' } });
     if (existingRegistration) {
-      return res.status(400).json({ error: 'આ મોબાઇલ નંબર પરથી રજીસ્ટ્રેશન પહેલેથી જ થઈ ગયું છે!' });
+      return res.status(400).json({
+        error: 'આ મોબાઇલ નંબર પરથી રજીસ્ટ્રેશન પહેલેથી જ થઈ ગયું છે!',
+        inquiryId: existingRegistration.inquiryId,
+        alreadyRegistered: true
+      });
     }
 
     // Find selected program and check capacity
@@ -656,10 +1195,6 @@ app.post('/api/submit', upload.fields([
       return res.status(400).json({ error: 'Couple photo is required' });
     }
 
-    if (isDateFinal && !paymentScreenshotFile) {
-      return res.status(400).json({ error: 'Payment screenshot is required' });
-    }
-
     const programSeq = program.sequenceNumber || 1;
     const programSeqStr = String(programSeq).padStart(2, '0');
     
@@ -670,6 +1205,7 @@ app.post('/api/submit', upload.fields([
     );
     const regSeqStr = String(counterObj.seq).padStart(2, '0');
     const inquiryId = `EK${programSeqStr}-${regSeqStr}`;
+    const customerToken = crypto.randomBytes(16).toString('hex');
 
     // Upload files to Cloudinary
     const couplePhotoBase64 = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
@@ -681,44 +1217,13 @@ app.post('/api/submit', upload.fields([
       paymentScreenshotUrl = await uploadToCloudinary(paymentScreenshotBase64, 'paymentScreenshots');
     }
 
-    if (isDateFinal) {
-      // Increment UPI bookings count
-      try {
-        const settings = await Setting.findOne({ key: 'main' });
-        if (settings) {
-          settings.upiBookingsCount = (settings.upiBookingsCount || 0) + 1;
-          if (settings.upiBookingsCount >= settings.upiLimit) {
-            if (settings.upiIds && settings.upiIds.length > 1) {
-              const oldUpi = settings.upiId;
-              const nextIndex = (settings.activeUpiIndex + 1) % settings.upiIds.length;
-              settings.activeUpiIndex = nextIndex;
-              settings.upiId = settings.upiIds[nextIndex];
-              settings.upiBookingsCount = 0; // reset counter
-
-              await Notification.create({
-                title: 'UPI Auto-Rotated',
-                message: `૫૦ સબમિશન પૂર્ણ થવાના કારણે UPI ID આપોઆપ બદલાઈ ગયું છે. જૂનું UPI: ${oldUpi}, નવું એક્ટિવ UPI: ${settings.upiId}`,
-                type: 'info'
-              });
-            } else {
-              // Only 1 UPI ID exists, cannot rotate
-              settings.upiBookingsCount = settings.upiLimit; // keep at limit
-              await Notification.create({
-                title: 'UPI Limit Reached!',
-                message: `ચાલુ UPI ID (${settings.upiId}) પર ૫૦ સબમિશન પૂર્ણ થઈ ગયા છે. કૃપા કરીને એડમિન પેનલમાંથી નવું UPI ID સેટ કરો.`,
-                type: 'error'
-              });
-            }
-          }
-          await settings.save();
-        }
-      } catch (err) {
-        console.error('Error in UPI auto-rotation tracking:', err);
-      }
-    }
+    const programPrice = program.price || 1499;
+    const paymentProvider = paymentScreenshotFile ? 'legacy_upi' : 'razorpay';
+    const initialPaymentStatus = 'pending';
 
     const newSubmission = await Submission.create({
       inquiryId,
+      customerToken,
       husbandName,
       wifeName,
       surname,
@@ -729,8 +1234,16 @@ app.post('/api/submit', upload.fields([
       programTime: program.time || "8:30 PM",
       couplePhoto: couplePhotoUrl,
       paymentScreenshot: paymentScreenshotUrl,
-      payeeNameFromReceipt: paymentScreenshotFile ? 'Processing...' : 'No payment file',
-      status: isDateFinal ? 'pending' : 'inquiry', // inquiry if date not finalized
+      payeeNameFromReceipt: paymentScreenshotFile ? 'Processing...' : 'Razorpay Online',
+      status: 'pending',
+      payment: {
+        provider: paymentProvider,
+        status: initialPaymentStatus,
+        amount: programPrice,
+        currency: 'INR',
+        createdAt: new Date()
+      },
+      reservationExpiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour reservation
       createdAt: new Date()
     });
 
@@ -740,10 +1253,12 @@ app.post('/api/submit', upload.fields([
     // Send instant response to client
     res.status(201).json({
       success: true,
+      inquiryId: newSubmission.inquiryId,
+      customerToken: newSubmission.customerToken,
       data: newSubmission
     });
 
-    // Run heavy QR scan and Tesseract OCR text recognition asynchronously in the background
+    // Run heavy QR scan and Tesseract OCR text recognition asynchronously in the background (legacy/offline payments)
     if (paymentScreenshotFile) {
       setImmediate(async () => {
         try {
@@ -1821,6 +2336,12 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
     if (status) {
       filter.status = status;
     }
+    if (req.query.paymentStatus) {
+      filter['payment.status'] = req.query.paymentStatus;
+    }
+    if (req.query.paymentProvider) {
+      filter['payment.provider'] = req.query.paymentProvider;
+    }
     if (programId) {
       filter.programId = programId;
     }
@@ -1851,6 +2372,8 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
       programTime: 1,
       payeeNameFromReceipt: 1,
       status: 1,
+      payment: 1,
+      reservationExpiresAt: 1,
       rejectionReason: 1,
       refundReason: 1,
       createdAt: 1,

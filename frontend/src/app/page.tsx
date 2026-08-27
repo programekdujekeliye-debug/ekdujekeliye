@@ -1,921 +1,721 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { API_BASE_URL } from '../config';
-
-interface SubmissionData {
-  inquiryId: string;
-  husbandName: string;
-  wifeName: string;
-  surname: string;
-  phoneNumber: string;
-  couplePhoto: string;
-}
 
 interface Program {
   id: string;
+  sequenceNumber?: number;
   name: string;
+  slug?: string;
+  city?: string;
+  venue?: string;
+  mapUrl?: string;
+  description?: string;
+  heroImage?: string;
+  price?: number;
+  status?: string;
+  featured?: boolean;
+  registrationMode?: string;
+  externalRegistrationUrl?: string;
+  sortOrder?: number;
   date: string;
+  time: string;
   capacity: number;
   bookingsCount: number;
+  activeBookings?: number;
+  availableSeats?: number;
   isDateFinal?: boolean;
-  cardTemplate?: string;
-  heartX?: number;
-  heartY?: number;
-  heartWidth?: number;
-  heartHeight?: number;
   isInquiryClosed?: boolean;
 }
 
-const ADMIN_WHATSAPP_NUMBER = '919213532835'; // Configure Admin WhatsApp number here
-
-const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.7): Promise<File> => {
-  return new Promise((resolve) => {
-    // 3-second safety timeout: if compression hangs or fails, return the original file
-    const timeoutId = setTimeout(() => {
-      console.warn('Image compression timed out, using original file');
-      resolve(file);
-    }, 3000);
-
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > maxWidth) {
-              height = Math.round((height * maxWidth) / width);
-              width = maxWidth;
-            }
-          } else {
-            if (height > maxHeight) {
-              width = Math.round((width * maxHeight) / height);
-              height = maxHeight;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            clearTimeout(timeoutId);
-            resolve(file);
-            return;
-          }
-
-          ctx.drawImage(img, 0, 0, width, height);
-          canvas.toBlob(
-            (blob) => {
-              clearTimeout(timeoutId);
-              if (blob) {
-                const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
-                  type: 'image/jpeg',
-                  lastModified: Date.now(),
-                });
-                resolve(compressedFile);
-              } else {
-                resolve(file);
-              }
-            },
-            'image/jpeg',
-            quality
-          );
-        } catch (e) {
-          console.error('Error in img.onload:', e);
-          clearTimeout(timeoutId);
-          resolve(file);
-        }
-      };
-      img.onerror = (err) => {
-        console.error('img.onerror:', err);
-        clearTimeout(timeoutId);
-        resolve(file);
-      };
-    };
-    reader.onerror = (err) => {
-      console.error('reader.onerror:', err);
-      clearTimeout(timeoutId);
-      resolve(file);
-    };
-  });
+export const formatIndianDate = (dateStr?: string): string => {
+  if (!dateStr || dateStr.toLowerCase() === 'tbd') return 'તારીખ ટૂંક સમયમાં (TBD)';
+  const ymdMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (ymdMatch) {
+    const year = ymdMatch[1];
+    const month = ymdMatch[2].padStart(2, '0');
+    const day = ymdMatch[3].padStart(2, '0');
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const monthName = months[parseInt(month, 10) - 1] || month;
+    return `${day}/${month}/${year} (${day} ${monthName} ${year})`;
+  }
+  return dateStr;
 };
 
-export default function Home() {
-  const [step, setStep] = useState(1);
-  const [husbandName, setHusbandName] = useState('');
-  const [wifeName, setWifeName] = useState('');
-  const [surname, setSurname] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [couplePhoto, setCouplePhoto] = useState<File | null>(null);
-  const [couplePhotoPreview, setCouplePhotoPreview] = useState<string>('');
-  const [paymentScreenshot, setPaymentScreenshot] = useState<File | null>(null);
-  const [paymentPreview, setPaymentPreview] = useState<string>('');
-  
-  const [inquiryId, setInquiryId] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
+const GALLERY_IMAGES = [
+  '/images/042A3829.JPG',
+  '/images/042A4114.JPG',
+  '/images/042A4417.JPG',
+  '/images/042A4734.JPG',
+  '/images/042A8596.JPG',
+  '/images/042A8803.JPG',
+  '/images/042A9259.JPG',
+  '/images/DSC00892.JPG'
+];
 
+const FAQ_ITEMS = [
+  {
+    question: 'આ પ્રોગ્રામમાં કોણ ભાગ લઈ શકે છે? (Who can attend?)',
+    answer: 'આ સેમિનાર ફક્ત પરિણીત દંપતીઓ (Married Couples) માટે જ છે. એક પાસ પર ફક્ત પતિ અને પત્ની (૨ વ્યક્તિ) ને જ પ્રવેશ મળશે.'
+  },
+  {
+    question: 'શું બાળકોને સાથે લાવી શકાય? (Are children allowed?)',
+    answer: 'ના, કાર્યક્રમની ગંભીરતા અને શાંત વાતાવરણ જાળવવા બાળકોને પ્રવેશ આપવામાં આવતો નથી.'
+  },
+  {
+    question: 'પેમેન્ટ કર્યા પછી પાસ કેવી રીતે મળશે? (How will I receive the pass?)',
+    answer: 'Razorpay દ્વારા પેમેન્ટ પૂર્ણ થતાં જ સ્ક્રીન પર તરત તમારો ફોટોવાળો ડિજિટલ પાસ ડાઉનલોડ કરવા માટે મળી જશે અને તમારા WhatsApp નંબર પર પણ લિંક મોકલવામાં આવશે.'
+  },
+  {
+    question: 'જો પેમેન્ટ અટકી જાય તો શું કરવું? (What if payment gets interrupted?)',
+    answer: 'તમારું રજીસ્ટ્રેશન અમારા ડેટાબેઝમાં સુરક્ષિત રહે છે. તમે વેબસાઇટ પરથી સીધા "Complete Payment" લિંક પર ક્લિક કરી પેમેન્ટ ફરીથી પૂર્ણ કરી શકો છો.'
+  },
+  {
+    question: 'પાસ કેન્સલ અથવા ટ્રાન્સફર થઈ શકે? (Is pass refundable or transferable?)',
+    answer: 'એકવાર પાસ જનરેટ થયા પછી પાસ નોન-રિફંડેબલ અને નોન-ટ્રાન્સફરેબલ છે.'
+  }
+];
+
+export default function LandingPage() {
   const [programs, setPrograms] = useState<Program[]>([]);
-  const [loadingPrograms, setLoadingPrograms] = useState(true);
-  const [selectedProgramId, setSelectedProgramId] = useState('');
-  const [searchInquiryId, setSearchInquiryId] = useState('');
-  const [showStatusCheck, setShowStatusCheck] = useState(false);
-  const [upiSettings, setUpiSettings] = useState({
-    upiId: 'payee@upi',
-    payeeName: 'Couple Pass',
-    amount: '100'
-  });
-  const [paymentRequestMsgTemplate, setPaymentRequestMsgTemplate] = useState('Hello! I have registered for the {programName}. My Inquiry ID is {inquiryId}. My phone number is {phoneNumber}. Please verify my payment screenshot.');
-
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [hearts, setHearts] = useState<{ id: number; left: number; size: number; delay: number; duration: number }[]>([]);
-  const [clickHearts, setClickHearts] = useState<{ id: number; x: number; y: number; tx: number; ty: number; size: number }[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    const generated = Array.from({ length: 25 }).map((_, i) => ({
-      id: i,
-      left: Math.random() * 100,
-      size: Math.random() * 20 + 12,
-      delay: Math.random() * 8,
-      duration: Math.random() * 6 + 6
-    }));
-    setHearts(generated);
-  }, []);
-
-  const handleGlobalClick = (e: React.MouseEvent) => {
-    const newHearts = Array.from({ length: 6 }).map((_, i) => {
-      const angle = (i * 60 * Math.PI) / 180 + (Math.random() * 0.2 - 0.1);
-      const distance = Math.random() * 80 + 40;
-      return {
-        id: Date.now() + i + Math.random(),
-        x: e.clientX,
-        y: e.clientY,
-        tx: Math.cos(angle) * distance,
-        ty: Math.sin(angle) * distance,
-        size: Math.random() * 12 + 10
-      };
-    });
-    setClickHearts(prev => [...prev, ...newHearts]);
-    setTimeout(() => {
-      setClickHearts(prev => prev.filter(h => !newHearts.some(nh => nh.id === h.id)));
-    }, 800);
-  };
-
-  useEffect(() => {
-    const fetchPrograms = async () => {
-      try {
-        setLoadingPrograms(true);
-        const res = await fetch(`${API_BASE_URL}/api/programs`);
-        if (res.ok) {
-          const data = await res.json();
-          setPrograms(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch programs:', err);
-      } finally {
-        setLoadingPrograms(false);
-      }
-    };
-    const fetchSettings = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/settings`);
-        if (res.ok) {
-          const data = await res.json();
-          setUpiSettings(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch settings:', err);
-      }
-    };
-    const fetchPaymentRequestTemplate = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/whatsapp-templates/active?type=payment_request`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.text) {
-            setPaymentRequestMsgTemplate(data.text);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch payment request WhatsApp template:', err);
-      }
-    };
     fetchPrograms();
-    fetchSettings();
-    fetchPaymentRequestTemplate();
   }, []);
 
-  // Setup preview URLs
-  useEffect(() => {
-    if (!couplePhoto) {
-      setCouplePhotoPreview('');
-      return;
-    }
-    const objectUrl = URL.createObjectURL(couplePhoto);
-    setCouplePhotoPreview(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [couplePhoto]);
-
-  useEffect(() => {
-    if (!paymentScreenshot) {
-      setPaymentPreview('');
-      return;
-    }
-    const objectUrl = URL.createObjectURL(paymentScreenshot);
-    setPaymentPreview(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [paymentScreenshot]);
-
-  // Heart mask drawing function
-  const drawHeartMask = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
-    ctx.beginPath();
-    ctx.moveTo(x + w / 2, y + h * 0.24); // Center top cleavage
-    // Top left lobe
-    ctx.bezierCurveTo(x + w * 0.28, y - h * 0.06, x - w * 0.06, y + h * 0.22, x + w * 0.01, y + h * 0.56);
-    // Bottom left to tip
-    ctx.bezierCurveTo(x + w * 0.06, y + h * 0.78, x + w * 0.32, y + h * 0.94, x + w / 2, y + h * 1.02);
-    // Bottom right to tip
-    ctx.bezierCurveTo(x + w * 0.68, y + h * 0.94, x + w * 0.94, y + h * 0.78, x + w * 0.99, y + h * 0.56);
-    // Top right lobe
-    ctx.bezierCurveTo(x + w * 1.06, y + h * 0.22, x + w * 0.72, y - h * 0.06, x + w / 2, y + h * 0.24);
-    ctx.closePath();
-  };
-
-  // Draw the entire ticket card
-  const drawCard = (inqNum: string) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Set high-res dimensions matching template
-    canvas.width = 576;
-    canvas.height = 1024;
-
-    const selectedProgram = programs.find(p => p.id === selectedProgramId);
-    const templatePath = selectedProgram?.cardTemplate || '/card_template.png';
-    const templateImgSrc = (templatePath.startsWith('data:') || templatePath.startsWith('http://') || templatePath.startsWith('https://') || templatePath === '/card_template.png')
-      ? templatePath
-      : `${API_BASE_URL}${templatePath}`;
-
-    let finalTemplateImgSrc = templateImgSrc;
-    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && finalTemplateImgSrc.startsWith('http://')) {
-      finalTemplateImgSrc = finalTemplateImgSrc.replace('http://', 'https://');
-    }
-
-    const hX = selectedProgram?.heartX ?? 144;
-    const hY = selectedProgram?.heartY ?? 112;
-    const hW = selectedProgram?.heartWidth ?? 288;
-    const hH = selectedProgram?.heartHeight ?? 260;
-
-    const templateImg = new Image();
-    templateImg.crossOrigin = 'anonymous';
-    templateImg.onload = () => {
-      // Create a temporary canvas to process template transparency
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = canvas.width;
-      tempCanvas.height = canvas.height;
-      const tempCtx = tempCanvas.getContext('2d');
-      if (!tempCtx) return;
-
-      // Draw template background on temp canvas
-      tempCtx.drawImage(templateImg, 0, 0, canvas.width, canvas.height);
-
-      // Retrieve pixels around the heart area to key out white pixels
-      try {
-        const imgData = tempCtx.getImageData(hX, hY, hW, hH);
-        const data = imgData.data;
-
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          // If the pixel is white/near-white, make it transparent
-          if (r > 220 && g > 220 && b > 220) {
-            data[i + 3] = 0; // alpha = 0
-          }
-        }
-        tempCtx.putImageData(imgData, hX, hY);
-      } catch (e) {
-        console.error("Error doing transparency scan: ", e);
-      }
-
-      // Now render on the main canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      if (couplePhotoPreview) {
-        const coupleImg = new Image();
-        coupleImg.onload = () => {
-          const imgAspect = coupleImg.width / coupleImg.height;
-          const heartAspect = hW / hH;
-          let drawW = hW;
-          let drawH = hH;
-          let offsetX = 0;
-          let offsetY = 0;
-
-          if (imgAspect > heartAspect) {
-            drawW = hH * imgAspect;
-            offsetX = -(drawW - hW) / 2;
-          } else {
-            drawH = hW / imgAspect;
-            offsetY = -(drawH - hH) / 2;
-          }
-
-          // Apply 10% zoom to ensure full coverage
-          const zoom = 1.1;
-          const finalW = drawW * zoom;
-          const finalH = drawH * zoom;
-          const finalOffsetX = offsetX - (finalW - drawW) / 2;
-          const finalOffsetY = offsetY - (finalH - drawH) / 2;
-
-          // 1. Draw couple photo first
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(hX, hY, hW, hH);
-          ctx.clip();
-          ctx.drawImage(coupleImg, hX + finalOffsetX, hY + finalOffsetY, finalW, finalH);
-          ctx.restore();
-
-          // 2. Overlay the processed template (with transparent heart window) on top
-          ctx.drawImage(tempCanvas, 0, 0);
-
-          // 3. Draw text details
-          drawTextDetails(ctx, inqNum, hX, hY, hW, hH);
-        };
-        coupleImg.src = couplePhotoPreview;
-      } else {
-        // Fallback: draw template as-is and overlay details
-        ctx.drawImage(templateImg, 0, 0);
-        drawTextDetails(ctx, inqNum, hX, hY, hW, hH);
-      }
-    };
-    templateImg.src = finalTemplateImgSrc;
-  };
-
-  const drawTextDetails = (ctx: CanvasRenderingContext2D, inqNum: string, hX: number, hY: number, hW: number, hH: number) => {
-    ctx.save();
-    
-    // Position text dynamically centered relative to the couple photo coordinates
-    const textX = hX + hW / 2;
-    const textY = hY - 20;
-
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    // Draw a dark outline for high contrast readability
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 6;
-    ctx.lineJoin = 'round';
-    
-    // Use condensed/narrow bold font matching the date font in template
-    ctx.font = 'bold 30px "Oswald", "Impact", "Arial Narrow", sans-serif';
-    ctx.strokeText(inqNum || 'EK01-01', textX, textY);
-    
-    // Draw the CPL text in gold
-    ctx.fillStyle = '#D4AF37';
-    ctx.fillText(inqNum || 'EK01-01', textX, textY);
-    ctx.restore();
-  };
-
-  // Redraw whenever inputs change
-  useEffect(() => {
-    if (step === 3) {
-      drawCard(inquiryId);
-    }
-  }, [step, husbandName, wifeName, surname, couplePhotoPreview, inquiryId]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!husbandName || !wifeName || !surname || !phoneNumber || !couplePhoto || !selectedProgramId) {
-      setError('Please fill in all details, select a program slot, and upload your photo.');
-      return;
-    }
-    if (!/^[6-9]\d{9}$/.test(phoneNumber)) {
-      setError('કૃપા કરીને સાચો 10-આંકડાનો મોબાઇલ નંબર દાખલ કરો!');
-      return;
-    }
-    const selectedProgram = programs.find(p => p.id === selectedProgramId);
-    if (!selectedProgram) {
-      setError('પ્રોગ્રામ મળ્યો નથી!');
-      return;
-    }
-
-    const isDateFinal = selectedProgram.isDateFinal !== false;
-    if (isDateFinal) {
-      if (selectedProgram.bookingsCount + 2 > selectedProgram.capacity) {
-        setError('The selected program slot is sold out (not enough seats left for a couple). Please select another slot.');
-        return;
-      }
-      setError('');
-      setStep(2); // Go to payment step
-    } else {
-      // Direct submit for inquiry
-      setError('');
-      setSubmitting(true);
-      try {
-        let compressedPhoto = couplePhoto!;
-        try {
-          compressedPhoto = await compressImage(couplePhoto!);
-        } catch (e) {
-          console.error('Error compressing couple photo:', e);
-        }
-
-        const formData = new FormData();
-        formData.append('husbandName', husbandName);
-        formData.append('wifeName', wifeName);
-        formData.append('surname', surname);
-        formData.append('phoneNumber', phoneNumber);
-        formData.append('couplePhoto', compressedPhoto);
-        formData.append('programId', selectedProgramId);
-
-        const response = await fetch(`${API_BASE_URL}/api/submit`, {
-          method: 'POST',
-          body: formData,
-        });
-
-        const result = await response.json();
-        if (response.ok && result.success) {
-          setInquiryId(result.data.inquiryId);
-          setStep(3); // Go to confirmation step
-        } else {
-          setError(result.error || 'Something went wrong. Please try again.');
-        }
-      } catch (err) {
-        setError('Connection failed. Make sure backend server is running on port 5001.');
-      } finally {
-        setSubmitting(false);
-      }
-    }
-  };
-
-  const handlePaymentSubmit = async () => {
-    if (!paymentScreenshot) {
-      setError('Please upload the payment screenshot to proceed.');
-      return;
-    }
-    setError('');
-    setSubmitting(true);
-
+  const fetchPrograms = async () => {
     try {
-      let compressedPhoto = couplePhoto!;
-      let compressedScreenshot = paymentScreenshot!;
-
-      try {
-        compressedPhoto = await compressImage(couplePhoto!);
-      } catch (e) {
-        console.error('Error compressing couple photo:', e);
-      }
-
-      try {
-        compressedScreenshot = await compressImage(paymentScreenshot!);
-      } catch (e) {
-        console.error('Error compressing payment screenshot:', e);
-      }
-
-      const formData = new FormData();
-      formData.append('husbandName', husbandName);
-      formData.append('wifeName', wifeName);
-      formData.append('surname', surname);
-      formData.append('phoneNumber', phoneNumber);
-      formData.append('couplePhoto', compressedPhoto);
-      formData.append('paymentScreenshot', compressedScreenshot);
-      formData.append('programId', selectedProgramId);
-
-      const response = await fetch(`${API_BASE_URL}/api/submit`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-      if (response.ok && result.success) {
-        setInquiryId(result.data.inquiryId);
-        setStep(3); // Go to generated card step
-      } else {
-        setError(result.error || 'Something went wrong. Please try again.');
+      setLoadingEvents(true);
+      const res = await fetch(`${API_BASE_URL}/api/programs`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          // Robust filter to display only open upcoming events
+          const activeUpcoming = data.filter((p: Program) => {
+            if (p.isInquiryClosed === true || p.isDateFinal === false || p.date === 'TBD') {
+              return false;
+            }
+            if (p.status === 'completed' || p.status === 'housefull' || p.status === 'registration_closed') {
+              return false;
+            }
+            if (p.capacity > 0 && p.bookingsCount >= p.capacity) {
+              return false;
+            }
+            return true;
+          });
+          setPrograms(activeUpcoming);
+        }
       }
     } catch (err) {
-      setError('Connection failed. Make sure backend server is running on port 5001.');
+      console.error('Error fetching programs from database API:', err);
     } finally {
-      setSubmitting(false);
+      setLoadingEvents(false);
     }
   };
 
-  const downloadCard = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const link = document.createElement('a');
-    link.download = `${surname}_${husbandName}_Invitation_Pass.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+  const toggleFaq = (index: number) => {
+    setOpenFaqIndex(openFaqIndex === index ? null : index);
   };
 
-  const selectedProgram = programs.find(p => p.id === selectedProgramId);
-  const selectedProgramName = selectedProgram?.name || 'Couple Pass';
-  const isSelectedProgramDateFinal = selectedProgram ? selectedProgram.isDateFinal !== false : true;
-
   return (
-    <div 
-      onClick={handleGlobalClick}
-      className="min-h-screen bg-gradient-to-br from-[#1a050d] via-[#0c0306] to-[#080205] text-slate-100 flex flex-col justify-between font-sans relative overflow-hidden"
-    >
-      {/* Floating Hearts Background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        {hearts.map((h) => (
-          <span
-            key={h.id}
-            className="absolute bottom-[-50px] text-rose-500/15 animate-float-heart"
-            style={{
-              left: `${h.left}%`,
-              fontSize: `${h.size}px`,
-              animationDelay: `${h.delay}s`,
-              animationDuration: `${h.duration}s`,
-            }}
-          >
-            ❤️
-          </span>
-        ))}
+    <div className="min-h-screen bg-[#080205] text-slate-100 font-sans selection:bg-rose-500 selection:text-white relative overflow-x-hidden">
+
+      {/* Background Ambient Glows */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-rose-600/10 rounded-full blur-[140px]" />
+        <div className="absolute top-[30%] right-[-10%] w-[600px] h-[600px] bg-amber-600/10 rounded-full blur-[160px]" />
+        <div className="absolute bottom-[10%] left-[-10%] w-[600px] h-[600px] bg-rose-700/10 rounded-full blur-[160px]" />
       </div>
 
-      {/* Click Burst Hearts */}
-      {clickHearts.map((h) => (
-        <span
-          key={h.id}
-          className="fixed pointer-events-none text-rose-500 z-50 animate-burst-heart"
-          style={{
-            left: h.x,
-            top: h.y,
-            fontSize: `${h.size}px`,
-            '--tx': `${h.tx}px`,
-            '--ty': `${h.ty}px`,
-          } as React.CSSProperties}
-        >
-          ❤️
-        </span>
-      ))}
+      {/* Navbar */}
+      <nav className="sticky top-0 z-50 bg-[#0c0306]/85 backdrop-blur-xl border-b border-rose-950/40 px-6 lg:px-12 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-3 group">
+            <img
+              src="/logo.png"
+              alt="Ek Duje Ke Liye Logo"
+              className="h-10 md:h-12 w-auto object-contain transition-transform group-hover:scale-105"
+            />
+            <div>
+              <span className="text-lg md:text-xl font-extrabold tracking-wider text-slate-100 uppercase block leading-tight">
+                Ek Duje Ke Liye
+              </span>
+              <span className="text-[10px] tracking-widest text-rose-400 font-semibold uppercase block">
+                by Manish Vaghasiya
+              </span>
+            </div>
+          </Link>
 
-      {/* Header */}
-      <header className="py-6 px-8 border-b border-rose-950/40 bg-slate-950/40 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Ek Duje Ke Liye Logo" className="h-10 w-auto object-contain" />
-            <span className="text-xl font-bold tracking-wider text-slate-100 uppercase">Ek Duje Ke Liye</span>
+          {/* Desktop Nav Links */}
+          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-300">
+            <a href="#events" className="hover:text-rose-400 transition-colors">Upcoming Events</a>
+            <a href="#experience" className="hover:text-rose-400 transition-colors">The Experience</a>
+            <a href="#about" className="hover:text-rose-400 transition-colors">About Host</a>
+            <a href="#gallery" className="hover:text-rose-400 transition-colors">Gallery</a>
+            <a href="#faq" className="hover:text-rose-400 transition-colors">FAQ</a>
           </div>
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <span className={step >= 1 ? 'text-rose-400 font-semibold' : ''}>1. Info</span>
-            <span>&bull;</span>
-            <span className={step >= 2 ? 'text-rose-400 font-semibold' : ''}>2. Payment</span>
-            <span>&bull;</span>
-            <span className={step >= 3 ? 'text-rose-400 font-semibold' : ''}>3. Card</span>
+
+          {/* Header Action */}
+          <div className="hidden md:flex items-center gap-4">
+            <a
+              href="#events"
+              className="px-5 py-2.5 bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-600 hover:to-amber-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-rose-500/20 hover:scale-105"
+            >
+              🎟️ Book Tickets
+            </a>
+          </div>
+
+          {/* Mobile Menu Trigger */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle Navigation Menu"
+            className="md:hidden p-2 text-slate-300 hover:text-white"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {mobileMenuOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
+        </div>
+
+        {/* Mobile Menu Drawer */}
+        {mobileMenuOpen && (
+          <div className="md:hidden pt-4 pb-6 px-4 border-t border-rose-950/40 flex flex-col gap-4 text-sm font-medium animate-fade-in">
+            <a
+              href="#events"
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-slate-200 hover:text-rose-400 py-1"
+            >
+              Upcoming Events
+            </a>
+            <a
+              href="#experience"
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-slate-200 hover:text-rose-400 py-1"
+            >
+              The Experience
+            </a>
+            <a
+              href="#about"
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-slate-200 hover:text-rose-400 py-1"
+            >
+              About Manish Vaghasiya
+            </a>
+            <a
+              href="#gallery"
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-slate-200 hover:text-rose-400 py-1"
+            >
+              Photo Gallery
+            </a>
+            <a
+              href="#faq"
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-slate-200 hover:text-rose-400 py-1"
+            >
+              FAQ
+            </a>
+            <a
+              href="#events"
+              onClick={() => setMobileMenuOpen(false)}
+              className="w-full py-3 bg-rose-500 text-white font-bold text-center rounded-xl text-xs uppercase tracking-wider mt-2"
+            >
+              Book Couple Pass
+            </a>
+          </div>
+        )}
+      </nav>
+
+      {/* Hero Section */}
+      <section className="relative z-10 pt-12 pb-20 md:pt-20 md:pb-32 px-6 lg:px-12 max-w-7xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+
+          <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs font-semibold uppercase tracking-widest mx-auto lg:mx-0">
+              <span>❤️</span>
+              <span>A Life-Transforming Couple Experience</span>
+            </div>
+
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-slate-100 tracking-tight leading-[1.15]">
+              એક દૂજે કે લિયે <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 via-amber-300 to-rose-400">
+                પ્રેમ અને સમજણનો સેમિનાર
+              </span>
+            </h1>
+
+            <p className="text-slate-300 text-base md:text-lg leading-relaxed max-w-2xl mx-auto lg:mx-0">
+              પતિ-પત્ની વચ્ચે ઊંડો પ્રેમ, અખૂટ વિશ્વાસ, મધુર સંવાદ અને અતૂટ સંબંધ બાંધવા માટેનો સ્પેશિયલ કપલ સેમિનાર by <strong>Manish Vaghasiya</strong>.
+            </p>
+
+            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4 pt-2">
+              <a
+                href="#events"
+                className="px-8 py-4 bg-gradient-to-r from-rose-500 via-rose-600 to-amber-500 hover:from-rose-600 hover:to-amber-600 text-slate-950 font-extrabold rounded-2xl transition-all shadow-xl shadow-rose-500/25 text-sm uppercase tracking-wider transform hover:scale-105 active:scale-95"
+              >
+                🎟️ View Upcoming Events
+              </a>
+              <a
+                href="#experience"
+                className="px-8 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-bold rounded-2xl transition-all text-sm"
+              >
+                Learn More ↓
+              </a>
+            </div>
+
+            {/* Badges */}
+            <div className="pt-6 border-t border-slate-800/80 flex flex-wrap items-center justify-center lg:justify-start gap-6 text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                <span className="text-rose-400">✓</span> For Married Couples Only
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-rose-400">✓</span> Instant Pass on Razorpay
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-rose-400">✓</span> WhatsApp Delivery
+              </div>
+            </div>
+          </div>
+
+          {/* Hero Visual Card */}
+          <div className="lg:col-span-5 relative flex justify-center">
+            <div className="relative w-full max-w-md aspect-[4/5] rounded-3xl overflow-hidden border border-rose-950/60 shadow-2xl shadow-rose-950/50 bg-gradient-to-b from-rose-950/20 to-black">
+              <img
+                src="/images/1 (2).png"
+                alt="Manish Vaghasiya - Ek Duje Ke Liye"
+                className="w-full h-full object-cover object-top filter contrast-[1.05]"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#080205] via-transparent to-transparent opacity-90" />
+
+              <div className="absolute bottom-6 left-6 right-6 p-4 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 text-left">
+                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">Keynote Host</span>
+                <span className="text-lg font-extrabold text-white block">Manish Vaghasiya</span>
+                <span className="text-xs text-slate-300 block">Life &amp; Relationship Facilitator</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* Upcoming Events Section */}
+      <section id="events" className="relative z-10 py-20 px-6 lg:px-12 bg-white/[0.02] border-y border-white/5">
+        <div className="max-w-7xl mx-auto space-y-12">
+
+          <div className="text-center space-y-3 max-w-2xl mx-auto">
+            <span className="text-xs font-bold text-rose-400 uppercase tracking-widest block">Reserve Your Seats</span>
+            <h2 className="text-3xl md:text-4xl font-extrabold text-slate-100">
+              Upcoming Events &amp; Cities
+            </h2>
+            <p className="text-slate-400 text-sm">
+              Choose your preferred city and book your couple admission pass securely.
+            </p>
+          </div>
+
+          {/* Event Cards Grid */}
+          {loadingEvents ? (
+            <div className="flex justify-center py-12">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-10 h-10 border-3 border-rose-500/20 border-t-rose-500 rounded-full animate-spin" />
+                <p className="text-xs text-rose-300 font-semibold">Loading upcoming events...</p>
+              </div>
+            </div>
+          ) : programs.length === 0 ? (
+            <div className="bg-white/5 border border-white/10 rounded-3xl p-12 text-center max-w-lg mx-auto space-y-3">
+              <span className="text-3xl block">🎟️</span>
+              <h3 className="text-xl font-bold text-slate-100">New Events Coming Soon</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                New seminar dates will be announced soon. Follow our official Instagram for instant updates.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
+              {programs.map((prog) => {
+                const isExternal = prog.registrationMode === 'external';
+                const isHousefull = prog.status === 'housefull';
+                const isClosed = prog.status === 'registration_closed';
+                const isTba = prog.status === 'date_tba';
+                const eventPrice = prog.price !== undefined ? prog.price : 1000;
+
+                let statusLabel = 'UPCOMING';
+                let statusClass = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+                if (prog.status === 'few_seats') {
+                  statusLabel = 'FEW SEATS LEFT';
+                  statusClass = 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+                } else if (isHousefull) {
+                  statusLabel = 'HOUSEFULL';
+                  statusClass = 'bg-rose-500/15 text-rose-400 border-rose-500/30';
+                } else if (isClosed) {
+                  statusLabel = 'REGISTRATION CLOSED';
+                  statusClass = 'bg-slate-500/15 text-slate-400 border-slate-500/30';
+                } else if (isTba) {
+                  statusLabel = 'DATE TBA';
+                  statusClass = 'bg-blue-500/15 text-blue-400 border-blue-500/30';
+                }
+
+                return (
+                  <div
+                    key={prog.id}
+                    className="bg-white/5 border border-white/10 hover:border-rose-500/40 rounded-3xl p-6 md:p-8 backdrop-blur-xl transition-all duration-300 hover:shadow-2xl hover:shadow-rose-950/40 flex flex-col justify-between space-y-6 group"
+                  >
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="px-3 py-1 bg-rose-500/20 text-rose-300 font-bold text-xs rounded-lg uppercase tracking-wider">
+                          📍 {prog.city || 'Surat'}
+                        </span>
+                        <span className={`px-3 py-1 font-bold text-[11px] rounded-lg border uppercase tracking-wider ${statusClass}`}>
+                          {statusLabel}
+                        </span>
+                      </div>
+
+                      <h3 className="text-2xl font-extrabold text-slate-100 group-hover:text-rose-300 transition-colors">
+                        {prog.name}
+                      </h3>
+
+                      <div className="space-y-2 text-sm text-slate-300">
+                        <div className="flex items-center gap-3">
+                          <span className="text-base">📅</span>
+                          <span>{formatIndianDate(prog.date)}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-base">⏰</span>
+                          <span>{prog.time}</span>
+                        </div>
+                        <div className="flex items-start gap-3">
+                          <span className="text-base">📍</span>
+                          <span className="text-xs text-slate-400 leading-tight">
+                            {prog.venue || 'Sardar Patel Smruti Bhavan, Varachha, Surat'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between gap-4">
+                      <div>
+                        <span className="text-[11px] text-slate-400 block uppercase">Couple Pass</span>
+                        <span className="text-xl font-extrabold text-amber-400">₹{eventPrice}</span>
+                      </div>
+
+                      {isHousefull || isClosed ? (
+                        <button
+                          disabled
+                          className="px-6 py-3 bg-slate-800 text-slate-500 font-bold text-xs uppercase rounded-xl cursor-not-allowed"
+                        >
+                          {isHousefull ? 'Housefull' : 'Closed'}
+                        </button>
+                      ) : isExternal ? (
+                        <a
+                          href={prog.externalRegistrationUrl || 'https://linktr.ee/ekdujekeliye'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-6 py-3 bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-amber-500/20 text-center"
+                        >
+                          Register on Portal ↗
+                        </a>
+                      ) : (
+                        <Link
+                          href={`/event/${prog.slug || prog.id}`}
+                          className="px-6 py-3 bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-600 hover:to-amber-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-rose-500/20 text-center"
+                        >
+                          Book Pass →
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+        </div>
+      </section>
+
+      {/* The Experience / 4 Pillars Section */}
+      <section id="experience" className="relative z-10 py-20 px-6 lg:px-12 max-w-7xl mx-auto space-y-16">
+        <div className="text-center space-y-3 max-w-2xl mx-auto">
+          <span className="text-xs font-bold text-rose-400 uppercase tracking-widest block">Why Attend</span>
+          <h2 className="text-3xl md:text-4xl font-extrabold text-slate-100">
+            તમારા સંબંધ માટે એક અવિસ્મરણીય સાંજ
+          </h2>
+          <p className="text-slate-400 text-sm">
+            Discover the keys to a joyful, resilient, and romantic marital journey.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/15 text-rose-400 flex items-center justify-center text-2xl font-bold">
+              💬
+            </div>
+            <h3 className="text-lg font-bold text-slate-100">હૃદયસ્પર્શી સંવાદ</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              રોજિંદા જીવનમાં અટવાઈ ગયેલી વાતોને મુક્ત મને વ્યક્ત કરવાની અને એકબીજાની લાગણીઓને સાંભળવાની કળા.
+            </p>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-400 flex items-center justify-center text-2xl font-bold">
+              💖
+            </div>
+            <h3 className="text-lg font-bold text-slate-100">નવો સ્નેહ &amp; રોમાન્સ</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              લગ્નના શરૂઆતી દિવસો જેવો પ્રેમ અને ઉત્સાહ ફરીથી તાજો કરવાનો સુંદર અવસર.
+            </p>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/15 text-rose-400 flex items-center justify-center text-2xl font-bold">
+              🤝
+            </div>
+            <h3 className="text-lg font-bold text-slate-100">મતભેદોનું નિવારણ</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              નાની-મોટી તકરારોને શાંતિથી, સમજણપૂર્વક અને હાસ્ય સાથે ઉકેલવાની સરળ વ્યવહારુ રીતો.
+            </p>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-400 flex items-center justify-center text-2xl font-bold">
+              ✨
+            </div>
+            <h3 className="text-lg font-bold text-slate-100">આજીવન મિત્રતા</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              માત્ર પતિ-પત્ની નહીં પરંતુ જીવનભર એકબીજાના સૌથી સારા મિત્ર અને સાથીદાર બનવાની સફર.
+            </p>
           </div>
         </div>
-      </header>
+      </section>
 
-      {/* Main Content */}
-      <main className="flex-grow flex items-center justify-center p-6 md:p-12 z-10">
-        <div className="w-full max-w-xl bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] relative overflow-hidden">
-          {/* Ambient Glows */}
-          <div className="absolute -top-40 -right-40 w-96 h-96 bg-rose-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-red-500/10 rounded-full blur-3xl pointer-events-none" />
+      {/* How Registration Works (5 Simple Steps) */}
+      <section className="relative z-10 py-16 px-6 lg:px-12 bg-white/[0.02] border-y border-white/5">
+        <div className="max-w-7xl mx-auto space-y-12">
 
-          {error && (
-            <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-              {error}
+          <div className="text-center space-y-2 max-w-xl mx-auto">
+            <span className="text-xs font-bold text-rose-400 uppercase tracking-widest block">Seamless Experience</span>
+            <h2 className="text-3xl font-extrabold text-slate-100">સરળ ૫-સ્ટેપ રજીસ્ટ્રેશન</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-center">
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-2">
+              <span className="text-2xl font-extrabold text-rose-400 block">01</span>
+              <h4 className="text-sm font-bold text-slate-200">શહેર પસંદ કરો</h4>
+              <p className="text-[11px] text-slate-400">તમારા અનુકૂળ શહેર અને તારીખ પર ક્લિક કરો.</p>
             </div>
-          )}
 
-          {/* STEP 1: Capture Details */}
-          {step === 1 && showStatusCheck && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-100 tracking-tight">Check Pass Status</h2>
-                  <p className="text-slate-400 text-sm mt-1">Enter your Inquiry ID to download your card.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowStatusCheck(false)}
-                  className="text-xs text-rose-400 hover:underline font-semibold border border-rose-500/30 hover:bg-rose-500/10 px-3 py-1.5 rounded-xl transition-all"
-                >
-                  Back to Register
-                </button>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Inquiry ID</label>
-                <input
-                  type="text"
-                  required
-                  value={searchInquiryId}
-                  onChange={(e) => setSearchInquiryId(e.target.value)}
-                  placeholder="Enter EK01-01"
-                  className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors uppercase font-mono tracking-wider"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (searchInquiryId) {
-                    window.location.href = `/pass/${searchInquiryId.toUpperCase()}`;
-                  }
-                }}
-                className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-bold rounded-2xl transition-all shadow-lg shadow-rose-500/20 animate-heartbeat"
-              >
-                Check Status & Download
-              </button>
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-2">
+              <span className="text-2xl font-extrabold text-amber-400 block">02</span>
+              <h4 className="text-sm font-bold text-slate-200">વિગતો ભરો</h4>
+              <p className="text-[11px] text-slate-400">પતિ-પત્નીનું નામ અને મોબાઈલ નંબર લખો.</p>
             </div>
-          )}
 
-          {step === 1 && !showStatusCheck && (
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-100 tracking-tight">Couple Registration</h2>
-                <p className="text-slate-400 text-sm mt-1">Please fill in your details to generate your token card.</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Husband Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={husbandName}
-                    onChange={(e) => setHusbandName(e.target.value)}
-                    placeholder="Enter Husband's Name"
-                    className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Wife Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={wifeName}
-                    onChange={(e) => setWifeName(e.target.value)}
-                    placeholder="Enter Wife's Name"
-                    className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Surname</label>
-                <input
-                  type="text"
-                  required
-                  value={surname}
-                  onChange={(e) => setSurname(e.target.value)}
-                  placeholder="Enter Surname"
-                  className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Phone Number</label>
-                <input
-                  type="tel"
-                  required
-                  maxLength={10}
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                  placeholder="Enter 10-digit Phone Number"
-                  className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Select Program Slot</label>
-                <select
-                  required
-                  value={selectedProgramId}
-                  onChange={(e) => setSelectedProgramId(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-900 border border-rose-950/40 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
-                >
-                  {loadingPrograms ? (
-                    <option value="" className="text-slate-500">Loading slots, please wait...</option>
-                  ) : (
-                    <>
-                      <option value="" className="text-slate-500">Choose an available slot</option>
-                      {programs
-                        .filter((prog) => {
-                          if (prog.isDateFinal === false && prog.isInquiryClosed) {
-                            return false;
-                          }
-                          return prog.isDateFinal === false || (prog.capacity - prog.bookingsCount) >= 2;
-                        })
-                        .map((prog) => {
-                          const remainingSeats = prog.capacity - prog.bookingsCount;
-                          const dateStr = prog.isDateFinal !== false ? prog.date : 'Date TBD (તારીખ નક્કી થવાની બાકી)';
-                          const coupleStr = prog.isDateFinal !== false ? `(${Math.floor(remainingSeats / 2)} couples left)` : '(Inquiry Only / ફક્ત ઇન્ક્વાયરી)';
-                          return (
-                            <option 
-                              key={prog.id} 
-                              value={prog.id} 
-                              className="text-slate-100"
-                            >
-                              {prog.name} - {dateStr} {coupleStr}
-                            </option>
-                          );
-                        })}
-                    </>
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Couple Photo</label>
-                <div className="border-2 border-dashed border-rose-950/40 hover:border-rose-500/50 rounded-2xl p-6 text-center cursor-pointer transition-colors relative">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    required
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        setCouplePhoto(e.target.files[0]);
-                      }
-                    }}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                  {couplePhotoPreview ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <img src={couplePhotoPreview} alt="Couple Preview" className="w-24 h-24 object-cover rounded-xl border border-slate-700" />
-                      <span className="text-xs text-slate-400 font-medium">{couplePhoto?.name}</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <div className="text-3xl text-slate-500">&uarr;</div>
-                      <p className="text-sm font-medium text-slate-300">Upload Couple Photo</p>
-                      <p className="text-xs text-slate-500">Supports JPG, PNG, WEBP</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-bold rounded-2xl transition-all shadow-lg shadow-rose-500/20 animate-heartbeat disabled:opacity-50"
-              >
-                {submitting ? 'Submitting...' : (isSelectedProgramDateFinal ? 'Proceed to Payment' : 'Submit Inquiry / ઇન્ક્વાયરી રજીસ્ટર કરો')}
-              </button>
-            </form>
-          )}
-
-          {/* STEP 2: UPI Payment QR Code */}
-          {step === 2 && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-100 tracking-tight">Complete Payment</h2>
-                <p className="text-slate-400 text-sm mt-1">Scan the UPI QR code below and upload a screenshot to verify.</p>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs space-y-1">
-                <p className="font-bold">⚠️ Important Note / મહત્વની નોંધ:</p>
-                <p>• This ticket is non-refundable and non-transferable.</p>
-                <p>• આ ટિકિટ રિફંડપાત્ર કે ટ્રાન્સફરેબલ નથી.</p>
-              </div>
-
-              {/* Simulated UPI QR Code */}
-              <div className="flex flex-col items-center justify-center p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
-                <div className="w-48 h-48 bg-white p-2 rounded-xl flex items-center justify-center shadow-lg">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`upi://pay?pa=${upiSettings.upiId}&pn=${upiSettings.payeeName}&am=${upiSettings.amount}&cu=INR`)}`}
-                    alt="UPI Payment QR Code"
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-                <div className="text-center">
-                  <p className="text-rose-400 font-bold text-lg">Amount: ₹{Number(upiSettings.amount).toFixed(2)}</p>
-                  <p className="text-xs text-slate-500 mt-1">UPI ID: {upiSettings.upiId}</p>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Upload Payment Screenshot</label>
-                <div className="border-2 border-dashed border-rose-950/40 hover:border-rose-500/50 rounded-2xl p-6 text-center cursor-pointer transition-colors relative">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    required
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        setPaymentScreenshot(e.target.files[0]);
-                      }
-                    }}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                  {paymentPreview ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <img src={paymentPreview} alt="Payment Preview" className="w-24 h-24 object-cover rounded-xl border border-slate-700" />
-                      <span className="text-xs text-slate-400 font-medium">{paymentScreenshot?.name}</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <div className="text-3xl text-slate-500">&uarr;</div>
-                      <p className="text-sm font-medium text-slate-300">Upload Payment Screenshot</p>
-                      <p className="text-xs text-slate-500">Supports JPG, PNG, WEBP</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setStep(1)}
-                  className="flex-1 py-4 border border-slate-800 hover:bg-slate-900 active:scale-[0.99] text-slate-300 font-bold rounded-2xl transition-all"
-                >
-                  Back
-                </button>
-                <button
-                  onClick={handlePaymentSubmit}
-                  disabled={submitting}
-                  className="flex-1 py-4 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 active:scale-[0.99] text-white font-bold rounded-2xl transition-all shadow-lg shadow-rose-500/20 animate-heartbeat"
-                >
-                  {submitting ? 'Verifying...' : 'Submit & Generate'}
-                </button>
-              </div>
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-2">
+              <span className="text-2xl font-extrabold text-rose-400 block">03</span>
+              <h4 className="text-sm font-bold text-slate-200">કપલ ફોટો અપલોડ</h4>
+              <p className="text-[11px] text-slate-400">પાસ માટે તમારો સુંદર ફોટો પસંદ કરો.</p>
             </div>
-          )}
 
-          {/* STEP 3: Pass Result & Download (Pending/Inquiry Approval View) */}
-          {step === 3 && (
-            <div className="space-y-6 flex flex-col items-center py-4">
-              <div className="w-16 h-16 rounded-full bg-rose-500/15 text-rose-400 flex items-center justify-center text-3xl animate-bounce">
-                {isSelectedProgramDateFinal ? '⏳' : '📝'}
-              </div>
-              
-              <div className="text-center w-full">
-                <h2 className="text-2xl font-bold text-slate-100 tracking-tight">
-                  {isSelectedProgramDateFinal ? 'Details Submitted!' : 'Inquiry Registered!'}
-                </h2>
-                <p className="text-slate-400 text-sm mt-2 leading-relaxed">
-                  {isSelectedProgramDateFinal 
-                    ? 'પાસ મેળવવા માટે પેમેન્ટ વેરિફિકેશન કરવું જરૂરી છે તે માટે નીચે આપેલા બટન પર ક્લિક કરો.' 
-                    : 'આ પ્રોગ્રામની તારીખ હજી નક્કી થઈ નથી. તારીખ નક્કી થતાં જ અમે તમને વૉટ્સએપ/ફોન દ્વારા જાણ કરીશું જેથી તમે પેમેન્ટ કરીને તમારી સીટ કન્ફર્મ કરી શકો.'}
-                </p>
-              </div>
-
-              <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xs text-center my-2">
-                <span className="text-xs text-slate-500 uppercase tracking-wider block">Inquiry ID</span>
-                <span className="text-2xl font-extrabold text-rose-400 tracking-wider font-mono">{inquiryId}</span>
-              </div>
-
-              <div className="w-full space-y-3">
-                <a
-                  href={`https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${encodeURIComponent(
-                    isSelectedProgramDateFinal
-                      ? paymentRequestMsgTemplate
-                          .replace(/{programName}/g, selectedProgramName)
-                          .replace(/{inquiryId}/g, inquiryId)
-                          .replace(/{phoneNumber}/g, phoneNumber)
-                      : `નમસ્તે, મેં ${selectedProgramName} માટે મારી ઇન્ક્વાયરી રજીસ્ટર કરી છે. મારો Inquiry ID: ${inquiryId} છે. જ્યારે આ પ્રોગ્રામની તારીખ નક્કી થાય ત્યારે કૃપા કરીને મને જાણ કરશો. આભાર!`
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold rounded-2xl transition-all shadow-lg shadow-emerald-600/20 text-center"
-                >
-                  {isSelectedProgramDateFinal ? '💬 Send Details to WhatsApp' : '💬 Send Inquiry details to WhatsApp'}
-                </a>
-
-
-
-                <button
-                  onClick={() => {
-                    setStep(1);
-                    setHusbandName('');
-                    setWifeName('');
-                    setSurname('');
-                    setPhoneNumber('');
-                    setCouplePhoto(null);
-                    setPaymentScreenshot(null);
-                    setInquiryId('');
-                    setShowStatusCheck(false);
-                  }}
-                  className="w-full py-3 text-xs text-slate-500 hover:text-slate-400 hover:underline"
-                >
-                  Register Another Pass
-                </button>
-              </div>
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-2">
+              <span className="text-2xl font-extrabold text-amber-400 block">04</span>
+              <h4 className="text-sm font-bold text-slate-200">Razorpay પેમેન્ટ</h4>
+              <p className="text-[11px] text-slate-400">UPI, Card કે NetBanking થી સુરક્ષિત પેમેન્ટ કરો.</p>
             </div>
-          )}
+
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-2">
+              <span className="text-2xl font-extrabold text-emerald-400 block">05</span>
+              <h4 className="text-sm font-bold text-slate-200">ડિજિટલ પાસ</h4>
+              <p className="text-[11px] text-slate-400">તરત જ સ્ક્રીન અને WhatsApp પર પાસ મેળવો.</p>
+            </div>
+          </div>
+
         </div>
-      </main>
+      </section>
+
+      {/* About Manish Vaghasiya */}
+      <section id="about" className="relative z-10 py-20 px-6 lg:px-12 max-w-6xl mx-auto">
+        <div className="bg-white/5 border border-white/10 rounded-3xl p-8 md:p-12 backdrop-blur-xl grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+
+          <div className="md:col-span-5 flex justify-center">
+            <div className="relative w-64 h-80 rounded-2xl overflow-hidden border border-rose-500/30 shadow-xl">
+              <img
+                src="/images/46.png"
+                alt="Manish Vaghasiya"
+                className="w-full h-full object-cover object-top"
+              />
+            </div>
+          </div>
+
+          <div className="md:col-span-7 space-y-4 text-left">
+            <span className="text-xs font-bold text-rose-400 uppercase tracking-widest block">Speaker &amp; Facilitator</span>
+            <h2 className="text-3xl font-extrabold text-slate-100">Manish Vaghasiya</h2>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              ગુજરાતભરમાં સેંકડો પરિવારો અને હજારો દંપતીઓને વૈવાહિક સુખ, આંતરિક જોડાણ અને પારિવારિક શાંતિ તરફ દોરનાર લોકપ્રિય વક્તા અને જીવન માર્ગદર્શક.
+            </p>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              &quot;એક દૂજે કે લિયે&quot; સેમિનાર દ્વારા તેઓ હળવાશ, ઊંડા મનોવૈજ્ઞાનિક દ્રષ્ટિકોણ અને વાસ્તવિક જીવનના ઉદાહરણો સાથે સંબંધોને પુનર્જીવિત કરવાનું કાર્ય કરે છે.
+            </p>
+            <div className="pt-2">
+              <a
+                href="#events"
+                className="inline-block px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs uppercase rounded-xl transition-all"
+              >
+                Join Next Event With Manish Vaghasiya →
+              </a>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* Event Photo Gallery */}
+      <section id="gallery" className="relative z-10 py-20 px-6 lg:px-12 bg-white/[0.02] border-y border-white/5">
+        <div className="max-w-7xl mx-auto space-y-12">
+
+          <div className="text-center space-y-3 max-w-xl mx-auto">
+            <span className="text-xs font-bold text-rose-400 uppercase tracking-widest block">Moments &amp; Atmosphere</span>
+            <h2 className="text-3xl font-extrabold text-slate-100">સેમિનારની અમૂલ્ય ક્ષણો</h2>
+            <p className="text-slate-400 text-xs">Real glimpses from our previous Ek Duje Ke Liye couple seminars.</p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {GALLERY_IMAGES.map((src, idx) => (
+              <div
+                key={idx}
+                className="aspect-square rounded-2xl overflow-hidden border border-white/10 hover:border-rose-500/40 transition-all duration-300 group bg-slate-950"
+              >
+                <img
+                  src={src}
+                  alt={`Event Moment ${idx + 1}`}
+                  loading="lazy"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+              </div>
+            ))}
+          </div>
+
+        </div>
+      </section>
+
+      {/* FAQ Section */}
+      <section id="faq" className="relative z-10 py-20 px-6 lg:px-12 max-w-4xl mx-auto space-y-10">
+        <div className="text-center space-y-2">
+          <span className="text-xs font-bold text-rose-400 uppercase tracking-widest block">Got Questions?</span>
+          <h2 className="text-3xl font-extrabold text-slate-100">વારંવાર પૂછાતા પ્રશ્નો (FAQ)</h2>
+        </div>
+
+        <div className="space-y-4">
+          {FAQ_ITEMS.map((item, idx) => (
+            <div
+              key={idx}
+              className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden transition-all"
+            >
+              <button
+                onClick={() => toggleFaq(idx)}
+                className="w-full p-5 text-left flex justify-between items-center gap-4 text-sm font-bold text-slate-100 hover:text-rose-300"
+              >
+                <span>{item.question}</span>
+                <span className="text-rose-400 text-lg font-extrabold">
+                  {openFaqIndex === idx ? '−' : '+'}
+                </span>
+              </button>
+              {openFaqIndex === idx && (
+                <div className="px-5 pb-5 text-xs text-slate-300 leading-relaxed border-t border-white/5 pt-3 animate-fade-in">
+                  {item.answer}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* Footer */}
-      <footer className="py-6 px-8 border-t border-slate-800/80 bg-slate-950/20 text-center text-xs text-slate-500 space-y-1">
-        <div>&copy; {new Date().getFullYear()} Ek Duje Ke Liye. All rights reserved.</div>
-        <div className="space-x-3">
-          <a href="/privacy-policy" className="text-slate-400 hover:text-rose-400 hover:underline">Privacy Policy</a>
-          <span>&bull;</span>
-          <a href="/terms" className="text-slate-400 hover:text-rose-400 hover:underline">Terms &amp; Conditions</a>
+      <footer className="relative z-10 border-t border-rose-950/60 bg-[#0c0306] py-12 px-6 lg:px-12 text-slate-400 text-xs">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+
+          <div className="space-y-3 md:col-span-2">
+            <div className="flex items-center gap-3">
+              <img src="/logo.png" alt="Ek Duje Ke Liye" className="h-10 w-auto" />
+              <span className="text-lg font-bold text-slate-100 uppercase">Ek Duje Ke Liye</span>
+            </div>
+            <p className="text-slate-400 text-xs max-w-sm leading-relaxed">
+              An emotional and transformational relationship seminar exclusively designed for married couples by Manish Vaghasiya.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <span className="text-sm font-bold text-slate-200 block mb-2">Quick Links</span>
+            <ul className="space-y-1.5">
+              <li><a href="#events" className="hover:text-rose-400">Upcoming Events</a></li>
+              <li><a href="#experience" className="hover:text-rose-400">The Experience</a></li>
+              <li><a href="#about" className="hover:text-rose-400">About Host</a></li>
+              <li><a href="#gallery" className="hover:text-rose-400">Photo Gallery</a></li>
+              <li><Link href="/admin" className="hover:text-rose-400">Admin Portal</Link></li>
+            </ul>
+          </div>
+
+          <div className="space-y-2">
+            <span className="text-sm font-bold text-slate-200 block mb-2">Connect &amp; Social</span>
+            <ul className="space-y-1.5">
+              <li>
+                <a
+                  href="https://linktr.ee/ekdujekeliye"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-rose-400"
+                >
+                  Official Linktree ↗
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://instagram.com/ekdujekeliye01"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-rose-400"
+                >
+                  Instagram @ekdujekeliye01 ↗
+                </a>
+              </li>
+              <li><Link href="/privacy-policy" className="hover:text-rose-400">Privacy Policy</Link></li>
+              <li><Link href="/terms" className="hover:text-rose-400">Terms of Service</Link></li>
+            </ul>
+          </div>
+
+        </div>
+
+        <div className="max-w-7xl mx-auto pt-6 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+          <div>&copy; {new Date().getFullYear()} Ek Duje Ke Liye. All rights reserved.</div>
+          <div className="flex gap-4">
+            <Link href="/privacy-policy" className="hover:underline">Privacy Policy</Link>
+            <span>&bull;</span>
+            <Link href="/terms" className="hover:underline">Terms of Service</Link>
+          </div>
         </div>
       </footer>
+
+      {/* Mobile Sticky Booking Bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 p-3 bg-black/85 backdrop-blur-xl border-t border-rose-950/60 flex items-center justify-between gap-3 shadow-2xl">
+        <div className="pl-1">
+          <span className="text-[10px] text-slate-400 block uppercase font-bold tracking-wider">Couple Admission Pass</span>
+          <span className="text-base font-extrabold text-amber-400">₹1,000 / Couple</span>
+        </div>
+        <a
+          href="#events"
+          className="px-5 py-2.5 bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-600 hover:to-amber-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-rose-500/25 text-center flex items-center gap-1.5"
+        >
+          <span>🎟️ Book Now</span>
+        </a>
+      </div>
+
     </div>
   );
 }
