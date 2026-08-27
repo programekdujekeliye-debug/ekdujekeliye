@@ -484,12 +484,12 @@ export const getArchiveCandidates = async (req, res) => {
       events.map(async (ev) => {
         const totalRegistrations = await Registration.countDocuments({
           programId: ev.id,
-          isDeleted: false
+          isDeleted: { $ne: true }
         });
 
         const couplePhotosCount = await Registration.countDocuments({
           programId: ev.id,
-          isDeleted: false,
+          isDeleted: { $ne: true },
           couplePhoto: { $exists: true, $ne: null, $ne: '', $ne: '/sample_couple.png' }
         });
 

@@ -367,7 +367,7 @@ export const StoragePage = () => {
               candidates.map((cand) => {
                 const isArchiving = cand.archiveStatus === 'ARCHIVING';
                 const isPaused = cand.archiveStatus === 'PAUSED';
-                const isCompletedArchive = cand.archiveStatus === 'COMPLETED' || (cand.archivedAssets >= cand.eligibleCouplePhotos && cand.eligibleCouplePhotos > 0);
+                const isCompletedArchive = cand.archiveStatus === 'COMPLETED' || (cand.archivedAssets >= cand.eligibleCouplePhotos && cand.eligibleCouplePhotos > 0 && (cand.queuedAssets || 0) === 0 && (cand.copyingAssets || 0) === 0);
                 const isPartial = cand.archiveStatus === 'PARTIAL' || (Boolean(cand.failedAssets) && cand.failedAssets! > 0);
 
                 return (
