@@ -1,0 +1,19 @@
+import cors from 'cors';
+import { env } from './env.js';
+
+export const corsMiddleware = cors({
+  origin: (origin, callback) => {
+    // If no origin (e.g. mobile app, curl, server-to-server) or allowed origins contains '*', allow
+    if (!origin || env.ALLOWED_ORIGINS.includes('*') || env.ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    // Dynamic matching for development/preview URLs
+    if (origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('vercel.app') || origin.includes('ekdujekeliye.in')) {
+      return callback(null, true);
+    }
+    callback(null, true);
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Razorpay-Signature', 'X-Razorpay-Event-Id'],
+  credentials: true
+});

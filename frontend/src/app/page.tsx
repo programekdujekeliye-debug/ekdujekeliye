@@ -94,6 +94,7 @@ function formatIndianDate(dateStr?: string): string {
 
 export default function HomePage() {
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [selectedCity, setSelectedCity] = useState('All');
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -106,7 +107,7 @@ export default function HomePage() {
   const fetchActiveEvents = async () => {
     try {
       setLoadingEvents(true);
-      let res = await fetch(`${API_BASE_URL}/api/programs/public`);
+      let res = await fetch(`${API_BASE_URL}/api/public/home`);
       if (!res.ok) {
         res = await fetch(`${API_BASE_URL}/api/programs`);
       }
@@ -378,6 +379,25 @@ export default function HomePage() {
             </p>
           </div>
 
+          {/* Dynamic City Filter */}
+          {!loadingEvents && programs.length > 0 && (
+            <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl mx-auto">
+              {['All', ...Array.from(new Set(programs.map(p => p.city).filter((c): c is string => Boolean(c))))].map((city) => (
+                <button
+                  key={city}
+                  onClick={() => setSelectedCity(city)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    selectedCity === city
+                      ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20 scale-105'
+                      : 'bg-white text-stone-700 hover:bg-stone-200 border border-stone-200'
+                  }`}
+                >
+                  {city === 'All' ? 'All Cities' : city}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Event Cards Grid */}
           {loadingEvents ? (
             <div className="flex justify-center py-12">
@@ -396,7 +416,7 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
-              {programs.map((prog) => {
+              {(selectedCity === 'All' ? programs : programs.filter(p => p.city === selectedCity)).map((prog) => {
                 const isExternal = prog.registrationMode === 'external';
                 const isHousefull = prog.status === 'housefull';
                 const isClosed = prog.status === 'registration_closed';

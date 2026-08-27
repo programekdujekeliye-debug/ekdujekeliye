@@ -1,0 +1,86 @@
+export type AdminRole = 'superadmin' | 'admin' | 'guest';
+
+export type AdminSection = 
+  | 'dashboard'
+  | 'programs'
+  | 'registrations'
+  | 'finance'
+  | 'whatsapp'
+  | 'settings'
+  | 'resources'
+  | 'integrations'
+  | 'storage';
+
+export interface DatabaseStats {
+  dataSizeMB: number;
+  storageSizeMB: number;
+  totalLimitMB: number;
+}
+
+export interface AdminNotification {
+  _id: string;
+  type: 'info' | 'warning' | 'error';
+  title?: string;
+  message: string;
+  createdAt?: string;
+}
+
+export interface SiteSettings {
+  upiId: string;
+  payeeName: string;
+  amount: number;
+  upiIds?: string;
+  upiLimit?: number;
+}
+
+export interface ArchiveCandidate {
+  id: string;
+  name: string;
+  date: string;
+  city: string;
+  status: string;
+  isCompleted: boolean;
+  archiveStatus: string;
+  totalRegistrations: number;
+  eligibleCouplePhotos: number;
+  archivedAssets: number;
+  queuedAssets: number;
+  estimatedSizeMB: number;
+}
+
+export interface MediaArchiveJob {
+  _id: string;
+  eventId: string;
+  registrationId?: string;
+  mediaType: string;
+  sourceProvider: string;
+  sourcePublicId: string;
+  sourceUrl: string;
+  destinationProvider: string;
+  driveFileId?: string;
+  filename: string;
+  mimeType: string;
+  originalSize: number;
+  status: 'ACTIVE' | 'QUEUED' | 'COPYING' | 'COPIED' | 'VERIFIED' | 'DELETE_PENDING' | 'ARCHIVED' | 'FAILED';
+  attempts: number;
+  lastError?: string;
+  queuedAt?: string;
+  verifiedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BackupRecordItem {
+  _id: string;
+  backupId: string;
+  type: 'daily' | 'weekly' | 'monthly' | 'manual' | 'event_final';
+  eventId?: string;
+  status: 'pending' | 'created' | 'verified' | 'failed';
+  size: number;
+  checksum: string;
+  driveFileId?: string;
+  manifest?: any;
+  startedAt: string;
+  completedAt?: string;
+  lastError?: string;
+}

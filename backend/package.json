@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon --ignore 'backups/*' --ignore 'submissions.json' --ignore 'backup_submissions.json' index.js",
+    "dev": "nodemon --config nodemon.json index.js",
     "test": "node tests/test_razorpay.js && node tests/test_webhook.js",
     "test:razorpay": "node tests/test_razorpay.js",
     "test:webhook": "node tests/test_webhook.js",
