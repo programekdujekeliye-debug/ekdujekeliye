@@ -1691,10 +1691,10 @@ export default function AdminDashboard() {
         </tr>
       `).join('');
 
-      printWindow.document.write(\`
+      printWindow.document.write(`
         <html>
           <head>
-            <title>Submissions Report - \${programName}</title>
+            <title>Submissions Report - ${programName}</title>
             <style>
               body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 20px; color: #333; }
               h1 { font-size: 20px; margin-bottom: 5px; color: #111; }
@@ -1713,11 +1713,11 @@ export default function AdminDashboard() {
               <div>
                 <h1>Ek Duje Ke Liye - Submissions Report</h1>
                 <div class="meta-info">
-                  <strong>Program:</strong> \${programName} | 
-                  <strong>Status:</strong> \${statusLabel} | 
-                  <strong>Type:</strong> \${typeLabel} | 
-                  <strong>Total Records:</strong> \${list.length}<br/>
-                  <strong>Generated On:</strong> \${new Date().toLocaleString()}
+                  <strong>Program:</strong> ${programName} | 
+                  <strong>Status:</strong> ${statusLabel} | 
+                  <strong>Type:</strong> ${typeLabel} | 
+                  <strong>Total Records:</strong> ${list.length}<br/>
+                  <strong>Generated On:</strong> ${new Date().toLocaleString()}
                 </div>
               </div>
               <button onclick="window.print()" style="padding: 8px 16px; background-color: #059669; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">
@@ -1737,7 +1737,7 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                \${htmlRows}
+                ${htmlRows}
               </tbody>
             </table>
             <script>
@@ -1748,7 +1748,7 @@ export default function AdminDashboard() {
             </script>
           </body>
         </html>
-      \`);
+      `);
       printWindow.document.close();
     } catch (err) {
       console.error('PDF export error:', err);
