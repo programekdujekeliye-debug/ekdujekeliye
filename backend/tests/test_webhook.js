@@ -1,4 +1,4 @@
-import { verifyWebhook, handleWebhookEvent } from './services/whatsappWebhook.js';
+import { verifyWebhook, handleWebhookEvent } from '../services/whatsappWebhook.js';
 
 // Mock helper
 function createMockRes() {

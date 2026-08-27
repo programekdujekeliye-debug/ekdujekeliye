@@ -1,4 +1,4 @@
-import { createRazorpayOrder, getRazorpayKeyId } from './services/razorpay.js';
+import { createRazorpayOrder, getRazorpayKeyId } from '../services/razorpay.js';
 
 console.log('Testing Razorpay Order Creation...');
 console.log('Razorpay Key ID loaded:', getRazorpayKeyId());

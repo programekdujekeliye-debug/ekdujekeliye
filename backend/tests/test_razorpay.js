@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import {
   verifyCheckoutSignature,
   verifyWebhookSignature
-} from './services/razorpay.js';
+} from '../services/razorpay.js';
 
 console.log('--- Starting Razorpay & Webhook Unit Tests ---');
 
@@ -55,7 +55,7 @@ const testPayload = JSON.stringify({
       entity: {
         id: 'pay_998877',
         order_id: 'order_998877',
-        amount: 149900,
+        amount: 150000,
         status: 'captured',
         notes: {
           inquiryId: 'EK01-01'

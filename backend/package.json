@@ -6,7 +6,12 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon --ignore 'backups/*' --ignore 'submissions.json' --ignore 'backup_submissions.json' index.js"
+    "dev": "nodemon --ignore 'backups/*' --ignore 'submissions.json' --ignore 'backup_submissions.json' index.js",
+    "test": "node tests/test_razorpay.js && node tests/test_webhook.js",
+    "test:razorpay": "node tests/test_razorpay.js",
+    "test:webhook": "node tests/test_webhook.js",
+    "test:order": "node tests/test_order_creation.js",
+    "seed:programs": "node scripts/seed_september_programs.js"
   },
   "dependencies": {
     "cloudinary": "^2.10.0",
