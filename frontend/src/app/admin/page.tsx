@@ -1679,60 +1679,79 @@ export default function AdminDashboard() {
       const statusLabel = exportStatus ? exportStatus.toUpperCase() : 'ALL';
       const typeLabel = exportType ? exportType.toUpperCase() : 'ALL';
 
-      // Chunk the list into groups of 20
-      const chunks: Submission[][] = [];
-      const chunkSize = 20;
-      for (let i = 0; i < list.length; i += chunkSize) {
-        chunks.push(list.slice(i, i + chunkSize));
-      }
+      // Group submissions by Inquiry ID number range (1-50, 51-100, 101-150, etc.)
+      const groups: Record<number, Submission[]> = {};
+      list.forEach(sub => {
+        const match = sub.inquiryId.match(/^(?:.*-)?(\d+)$/);
+        const num = match ? parseInt(match[1], 10) : null;
+        const groupIdx = num ? Math.floor((num - 1) / 50) : 0;
+        
+        if (!groups[groupIdx]) {
+          groups[groupIdx] = [];
+        }
+        groups[groupIdx].push(sub);
+      });
 
-      const printHtmlBlocks = chunks.map((chunk, chunkIdx) => {
+      const sortedGroupKeys = Object.keys(groups)
+        .map(Number)
+        .sort((a, b) => a - b);
+
+      const printHtmlBlocks = sortedGroupKeys.map((groupIdx, pageIdx) => {
+        const chunk = groups[groupIdx];
+        // Sort chunk by inquiryId number ascending
+        chunk.sort((a, b) => {
+          const numA = parseInt((a.inquiryId.match(/^(?:.*-)?(\d+)$/) || [0, 0])[1], 10) || 0;
+          const numB = parseInt((b.inquiryId.match(/^(?:.*-)?(\d+)$/) || [0, 0])[1], 10) || 0;
+          return numA - numB;
+        });
+
         const rows = chunk.map((sub, idx) => {
-          const globalIdx = chunkIdx * chunkSize + idx + 1;
           return `
-            <tr style="border-bottom: 1px solid #ddd; height: 26px;">
-              <td style="padding: 4px; text-align: center; border: 1px solid #ddd;">${globalIdx}</td>
-              <td style="padding: 4px; font-weight: bold; border: 1px solid #ddd;">${sub.inquiryId}</td>
-              <td style="padding: 4px; border: 1px solid #ddd;">${sub.husbandName} & ${sub.wifeName} ${sub.surname}</td>
-              <td style="padding: 4px; text-align: center; border: 1px solid #ddd;">${sub.phoneNumber}</td>
-              <td style="padding: 4px; text-align: center; border: 1px solid #ddd;">${sub.status?.toUpperCase() || ''}</td>
-              <td style="padding: 4px; border: 1px solid #ddd;">${sub.programName || sub.programId || ''}</td>
-              <td style="padding: 4px; text-align: center; border: 1px solid #ddd;">${sub.createdAt ? new Date(sub.createdAt).toLocaleDateString() : ''}</td>
+            <tr style="border-bottom: 1px solid #ddd; height: 18px;">
+              <td style="padding: 2.5px; text-align: center; border: 1px solid #ddd;">${idx + 1}</td>
+              <td style="padding: 2.5px; font-weight: bold; border: 1px solid #ddd;">${sub.inquiryId}</td>
+              <td style="padding: 2.5px; border: 1px solid #ddd;">${sub.husbandName} & ${sub.wifeName} ${sub.surname}</td>
+              <td style="padding: 2.5px; text-align: center; border: 1px solid #ddd;">${sub.phoneNumber}</td>
+              <td style="padding: 2.5px; text-align: center; border: 1px solid #ddd;">${sub.status?.toUpperCase() || ''}</td>
+              <td style="padding: 2.5px; border: 1px solid #ddd;">${sub.programName || sub.programId || ''}</td>
+              <td style="padding: 2.5px; text-align: center; border: 1px solid #ddd;">${sub.createdAt ? new Date(sub.createdAt).toLocaleDateString() : ''}</td>
             </tr>
           `;
         }).join('');
 
-        const pageBreakStyle = chunkIdx > 0 ? 'style="page-break-before: always;"' : '';
+        const pageBreakStyle = pageIdx > 0 ? 'style="page-break-before: always;"' : '';
+        const rangeLabel = `${groupIdx * 50 + 1} - ${(groupIdx + 1) * 50}`;
 
         return `
           <div ${pageBreakStyle} style="page-break-inside: avoid; margin-bottom: 15px;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
               <div>
-                <h1 style="font-size: 14px; margin: 0; color: #111; font-weight: bold;">Ek Duje Ke Liye - Submissions Report</h1>
-                <div style="font-size: 9.5px; color: #555; margin-top: 1px; line-height: 1.3;">
+                <h1 style="font-size: 13px; margin: 0; color: #111; font-weight: bold;">Ek Duje Ke Liye - Submissions Report</h1>
+                <div style="font-size: 9px; color: #555; margin-top: 1px; line-height: 1.2;">
                   <strong>Program:</strong> ${programName} | 
                   <strong>Status:</strong> ${statusLabel} | 
                   <strong>Type:</strong> ${typeLabel} | 
-                  <strong>Page:</strong> ${chunkIdx + 1} of ${chunks.length} |
-                  <strong>Total:</strong> ${list.length}
+                  <strong>ID Range:</strong> ${rangeLabel} |
+                  <strong>Page:</strong> ${pageIdx + 1} of ${sortedGroupKeys.length} |
+                  <strong>Total Records in Range:</strong> ${chunk.length}
                 </div>
               </div>
-              ${chunkIdx === 0 ? `
-                <button onclick="window.print()" style="padding: 4px 8px; background-color: #059669; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 9.5px;">
+              ${pageIdx === 0 ? `
+                <button onclick="window.print()" style="padding: 3px 6px; background-color: #059669; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 9px;">
                   Print / Save to PDF
                 </button>
               ` : ''}
             </div>
-            <table style="width: 100%; border-collapse: collapse; font-size: 10px; border: 1px solid #ddd;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 9px; border: 1px solid #ddd;">
               <thead>
                 <tr>
-                  <th style="width: 5%; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; padding: 4.5px; font-weight: bold;">#</th>
-                  <th style="width: 13%; background-color: #f5f5f5; border: 1px solid #ddd; padding: 4.5px; font-weight: bold;">Inquiry ID</th>
-                  <th style="width: 37%; background-color: #f5f5f5; border: 1px solid #ddd; padding: 4.5px; font-weight: bold;">Names</th>
-                  <th style="width: 13%; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; padding: 4.5px; font-weight: bold;">Phone</th>
-                  <th style="width: 9%; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; padding: 4.5px; font-weight: bold;">Status</th>
-                  <th style="width: 15%; background-color: #f5f5f5; border: 1px solid #ddd; padding: 4.5px; font-weight: bold;">Program</th>
-                  <th style="width: 8%; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; padding: 4.5px; font-weight: bold;">Date</th>
+                  <th style="width: 5%; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; padding: 3px; font-weight: bold;">#</th>
+                  <th style="width: 13%; background-color: #f5f5f5; border: 1px solid #ddd; padding: 3px; font-weight: bold;">Inquiry ID</th>
+                  <th style="width: 37%; background-color: #f5f5f5; border: 1px solid #ddd; padding: 3px; font-weight: bold;">Names</th>
+                  <th style="width: 13%; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; padding: 3px; font-weight: bold;">Phone</th>
+                  <th style="width: 9%; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; padding: 3px; font-weight: bold;">Status</th>
+                  <th style="width: 15%; background-color: #f5f5f5; border: 1px solid #ddd; padding: 3px; font-weight: bold;">Program</th>
+                  <th style="width: 8%; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; padding: 3px; font-weight: bold;">Date</th>
                 </tr>
               </thead>
               <tbody>
