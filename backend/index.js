@@ -1699,10 +1699,15 @@ app.get('/api/submissions/export', async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized. Invalid password.' });
     }
 
-    const { programId, status } = req.query;
+    const { programId, status, type } = req.query;
     const query = {};
     if (programId) query.programId = programId;
     if (status) query.status = status;
+    if (type === 'ip') {
+      query.inquiryId = /^IP-/i;
+    } else if (type === 'cpl') {
+      query.inquiryId = /^(CPL-|EK)/i;
+    }
 
     const submissions = await Submission.find(query).sort({ createdAt: -1 });
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
@@ -1816,6 +1821,12 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
     }
     if (attendance) {
       filter.attendance = attendance;
+    }
+    const type = req.query.type || '';
+    if (type === 'ip') {
+      filter.inquiryId = /^IP-/i;
+    } else if (type === 'cpl') {
+      filter.inquiryId = /^(CPL-|EK)/i;
     }
 
     console.log('--- API query:', req.query, 'Mongo filter:', JSON.stringify(filter));

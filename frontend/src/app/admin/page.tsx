@@ -1575,7 +1575,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleExportCSV = async (exportProgramId: string, exportStatus: string) => {
+  const handleExportCSV = async (exportProgramId: string, exportStatus: string, exportType: string) => {
     const activePassword = password || sessionStorage.getItem('adminPassword') || '';
     setIsExporting(true);
     try {
@@ -1585,6 +1585,9 @@ export default function AdminDashboard() {
       }
       if (exportStatus) {
         urlParams.append('status', exportStatus);
+      }
+      if (exportType) {
+        urlParams.append('type', exportType);
       }
       const queryStr = urlParams.toString();
       const fetchUrl = `${API_BASE_URL}/api/submissions/export${queryStr ? `?${queryStr}` : ''}`;
@@ -1609,13 +1612,11 @@ export default function AdminDashboard() {
       }
       
       let statusPart = exportStatus ? exportStatus : '';
+      let typePart = exportType ? exportType : '';
       
-      if (programPart && statusPart) {
-        filename = `submissions_${programPart}_${statusPart}_export_${new Date().toISOString().split('T')[0]}.csv`;
-      } else if (programPart) {
-        filename = `submissions_${programPart}_export_${new Date().toISOString().split('T')[0]}.csv`;
-      } else if (statusPart) {
-        filename = `submissions_${statusPart}_export_${new Date().toISOString().split('T')[0]}.csv`;
+      const parts = [programPart, statusPart, typePart].filter(Boolean);
+      if (parts.length > 0) {
+        filename = `submissions_${parts.join('_')}_export_${new Date().toISOString().split('T')[0]}.csv`;
       }
       
       a.download = filename;
@@ -1626,6 +1627,132 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error('Export error:', err);
       alert('Error exporting CSV: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportPDF = async (exportProgramId: string, exportStatus: string, exportType: string) => {
+    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    setIsExporting(true);
+    try {
+      const urlParams = new URLSearchParams();
+      urlParams.append('page', '1');
+      urlParams.append('limit', '5000'); // Fetch a large number of records to get the full list
+      if (exportProgramId) {
+        urlParams.append('programId', exportProgramId);
+      }
+      if (exportStatus) {
+        urlParams.append('status', exportStatus);
+      }
+      if (exportType) {
+        urlParams.append('type', exportType);
+      }
+      const queryStr = urlParams.toString();
+      const fetchUrl = `${API_BASE_URL}/api/submissions?${queryStr}`;
+
+      const res = await fetch(fetchUrl, {
+        method: 'GET',
+        headers: { 'Authorization': activePassword }
+      });
+      if (!res.ok) {
+        throw new Error('Failed to fetch submissions for PDF export.');
+      }
+      const data = await res.json();
+      const list: Submission[] = data.submissions || [];
+      if (list.length === 0) {
+        alert('No records found for the selected filters.');
+        return;
+      }
+
+      // Generate a print-friendly HTML and open it in a new window for printing
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Pop-up blocked. Please allow pop-ups for this site.');
+        return;
+      }
+
+      const programName = exportProgramId 
+        ? (programs.find(p => p.id === exportProgramId)?.name || exportProgramId)
+        : 'All Programs';
+      
+      const statusLabel = exportStatus ? exportStatus.toUpperCase() : 'ALL';
+      const typeLabel = exportType ? exportType.toUpperCase() : 'ALL';
+
+      const htmlRows = list.map((sub, idx) => `
+        <tr style="border-bottom: 1px solid #ddd;">
+          <td style="padding: 8px; text-align: center;">${idx + 1}</td>
+          <td style="padding: 8px; font-weight: bold;">${sub.inquiryId}</td>
+          <td style="padding: 8px;">${sub.husbandName} & ${sub.wifeName} ${sub.surname}</td>
+          <td style="padding: 8px; text-align: center;">${sub.phoneNumber}</td>
+          <td style="padding: 8px; text-align: center;">${sub.status?.toUpperCase() || ''}</td>
+          <td style="padding: 8px;">${sub.programName || sub.programId || ''}</td>
+          <td style="padding: 8px; text-align: center;">${sub.createdAt ? new Date(sub.createdAt).toLocaleDateString() : ''}</td>
+        </tr>
+      `).join('');
+
+      printWindow.document.write(\`
+        <html>
+          <head>
+            <title>Submissions Report - \${programName}</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 20px; color: #333; }
+              h1 { font-size: 20px; margin-bottom: 5px; color: #111; }
+              .meta-info { font-size: 12px; color: #666; margin-bottom: 20px; line-height: 1.6; }
+              table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+              th { background-color: #f5f5f5; border: 1px solid #ddd; padding: 10px; text-align: left; font-weight: bold; }
+              td { border: 1px solid #ddd; padding: 8px; }
+              @media print {
+                body { margin: 0; }
+                button { display: none; }
+              }
+            </style>
+          </head>
+          <body>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+              <div>
+                <h1>Ek Duje Ke Liye - Submissions Report</h1>
+                <div class="meta-info">
+                  <strong>Program:</strong> \${programName} | 
+                  <strong>Status:</strong> \${statusLabel} | 
+                  <strong>Type:</strong> \${typeLabel} | 
+                  <strong>Total Records:</strong> \${list.length}<br/>
+                  <strong>Generated On:</strong> \${new Date().toLocaleString()}
+                </div>
+              </div>
+              <button onclick="window.print()" style="padding: 8px 16px; background-color: #059669; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">
+                Print / Save to PDF
+              </button>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 5%; text-align: center;">#</th>
+                  <th style="width: 15%;">Inquiry ID</th>
+                  <th style="width: 35%;">Names</th>
+                  <th style="width: 15%; text-align: center;">Phone</th>
+                  <th style="width: 10%; text-align: center;">Status</th>
+                  <th style="width: 15%;">Program</th>
+                  <th style="width: 10%; text-align: center;">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                \${htmlRows}
+              </tbody>
+            </table>
+            <script>
+              // Automatically trigger print dialog
+              window.onload = function() {
+                window.print();
+              }
+            </script>
+          </body>
+        </html>
+      \`);
+      printWindow.document.close();
+    } catch (err) {
+      console.error('PDF export error:', err);
+      alert('Error exporting PDF: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setIsExporting(false);
     }
@@ -2229,7 +2356,7 @@ export default function AdminDashboard() {
           <div className="bg-slate-950 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-6">
             <div>
               <h3 className="text-lg font-bold text-slate-100">Export Submissions</h3>
-              <p className="text-xs text-slate-400 mt-1">Select which program slot data you want to export as a CSV sheet.</p>
+              <p className="text-xs text-slate-400 mt-1">Select filters to export submissions to a CSV sheet or PDF report.</p>
             </div>
             
             <div className="space-y-2">
@@ -2248,22 +2375,67 @@ export default function AdminDashboard() {
               </select>
             </div>
 
-            <div className="flex gap-4">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-300">Status</label>
+              <select
+                id="exportStatusSelect"
+                defaultValue=""
+                className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+              >
+                <option value="">All Statuses (બધા જ સ્ટેટસ)</option>
+                <option value="approved">Approved (મંજૂર થયેલ)</option>
+                <option value="pending">Pending (પેન્ડિંગ)</option>
+                <option value="rejected">Rejected (નામંજૂર થયેલ)</option>
+                <option value="refunded">Refunded (રિફંડ કરેલ)</option>
+                <option value="inquiry">Inquiries (ઇન્ક્વાયરી)</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-300">Registration Type (રજીસ્ટ્રેશન પ્રકાર)</label>
+              <select
+                id="exportTypeSelect"
+                defaultValue=""
+                className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+              >
+                <option value="">All Types (બધા જ પ્રકાર)</option>
+                <option value="cpl">CPL Only (માત્ર CPL)</option>
+                <option value="ip">IP Only (માત્ર IP)</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    const selectEl = document.getElementById('exportProgramSelect') as HTMLSelectElement | null;
+                    const statusEl = document.getElementById('exportStatusSelect') as HTMLSelectElement | null;
+                    const typeEl = document.getElementById('exportTypeSelect') as HTMLSelectElement | null;
+                    handleExportCSV(selectEl?.value || '', statusEl?.value || '', typeEl?.value || '');
+                    setShowExportModal(false);
+                  }}
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20"
+                >
+                  Export CSV (એક્સેલ)
+                </button>
+                <button
+                  onClick={() => {
+                    const selectEl = document.getElementById('exportProgramSelect') as HTMLSelectElement | null;
+                    const statusEl = document.getElementById('exportStatusSelect') as HTMLSelectElement | null;
+                    const typeEl = document.getElementById('exportTypeSelect') as HTMLSelectElement | null;
+                    handleExportPDF(selectEl?.value || '', statusEl?.value || '', typeEl?.value || '');
+                    setShowExportModal(false);
+                  }}
+                  className="flex-1 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-sky-500/20"
+                >
+                  Export PDF (પીડીએફ)
+                </button>
+              </div>
               <button
                 onClick={() => setShowExportModal(false)}
-                className="flex-1 py-2.5 border border-slate-800 hover:bg-slate-900 text-slate-300 font-bold rounded-xl text-xs transition-all"
+                className="w-full py-2 border border-slate-800 hover:bg-slate-900 text-slate-400 font-medium rounded-xl text-xs transition-all mt-2"
               >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  const selectEl = document.getElementById('exportProgramSelect') as HTMLSelectElement | null;
-                  handleExportCSV(selectEl?.value || '', '');
-                  setShowExportModal(false);
-                }}
-                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20"
-              >
-                Export CSV
+                Cancel (રદ કરો)
               </button>
             </div>
           </div>
