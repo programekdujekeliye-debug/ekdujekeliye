@@ -135,6 +135,7 @@ app.use('/api/admin', adminRouter);
 
 // 6. Super Admin & Worker Protected Storage, Archive & Backup Routes
 app.use('/api/internal/archive', archiveRouter);
+app.use('/api/internal/backups', backupRouter);
 app.use('/api/super-admin/archive', archiveRouter);
 app.use('/api/super-admin/backups', backupRouter);
 app.use('/api/super-admin/finance', financeRouter);

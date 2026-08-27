@@ -79,6 +79,9 @@ export interface BackupRecordItem {
   size: number;
   checksum: string;
   driveFileId?: string;
+  driveManifestFileId?: string;
+  driveFolderId?: string;
+  driveVerifiedAt?: string;
   manifest?: any;
   startedAt: string;
   completedAt?: string;

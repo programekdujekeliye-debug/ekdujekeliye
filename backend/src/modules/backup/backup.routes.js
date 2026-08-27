@@ -2,6 +2,8 @@ import { Router } from 'express';
 import {
   getBackupsList,
   runBackupNow,
+  getBackupFile,
+  getBackupManifest,
   recordBackupDriveSync
 } from './backup.controller.js';
 import { requireSuperAuth, requireBackupWorkerAuth } from '../../middleware/auth.js';
@@ -12,5 +14,8 @@ export const backupRouter = Router();
 backupRouter.get('/', requireSuperAuth, getBackupsList);
 backupRouter.post('/run', requireSuperAuth, runBackupNow);
 
-// Worker Sync Endpoints
+// Worker Sync & Download Endpoints (Protected by BACKUP_WORKER_SECRET)
+backupRouter.get('/:backupId/file', requireBackupWorkerAuth, getBackupFile);
+backupRouter.get('/:backupId/manifest', requireBackupWorkerAuth, getBackupManifest);
 backupRouter.post('/sync-drive', requireBackupWorkerAuth, recordBackupDriveSync);
+backupRouter.post('/verify-sync', requireBackupWorkerAuth, recordBackupDriveSync);

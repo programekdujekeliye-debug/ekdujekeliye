@@ -70,7 +70,8 @@ export const requireBackupWorkerAuth = (req, res, next) => {
 
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 
-  if (token && (token === env.BACKUP_WORKER_SECRET || token === env.ARCHIVE_WORKER_SECRET || token === env.SUPER_ADMIN_PASSWORD)) {
+  // Strictly dedicated to BACKUP_WORKER_SECRET (or Super Admin manual trigger)
+  if (token && (token === env.BACKUP_WORKER_SECRET || token === env.SUPER_ADMIN_PASSWORD)) {
     req.worker = { type: 'BACKUP_WORKER', authenticated: true };
     return next();
   }

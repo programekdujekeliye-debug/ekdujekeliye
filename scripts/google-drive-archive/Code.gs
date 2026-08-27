@@ -58,6 +58,7 @@ function validateArchiveConfiguration() {
   Logger.log('ROOT_FOLDER_NAME: ' + (props.ROOT_FOLDER_NAME ? 'CONFIGURED (' + props.ROOT_FOLDER_NAME + ')' : 'DEFAULT (Ek Duje Ke Liye)'));
   Logger.log('ROOT_FOLDER_ID: ' + (props.ROOT_FOLDER_ID ? 'CONFIGURED' : 'NOT SET (Will be auto-cached on first run)'));
   Logger.log('TARGET_TEST_JOB_ID: ' + (props.TARGET_TEST_JOB_ID ? 'CONFIGURED' : 'MISSING / PASS VIA PARAM ⚠️'));
+  Logger.log('TARGET_BACKUP_ID: ' + (props.TARGET_BACKUP_ID ? 'CONFIGURED' : 'OPTIONAL / PASS VIA PARAM ⚠️'));
   
   Logger.log('====================================================');
 }
@@ -602,16 +603,172 @@ function runMediaArchiveWorker() {
 
 /**
  * ============================================================================
+ * SINGLE DATABASE BACKUP SYNC TO GOOGLE DRIVE
+ * ============================================================================
+ * Streams exactly ONE database backup snapshot (.json.gz) and its manifest (.json)
+ * directly from Render into authorized Google Drive folders.
+ * 
+ * Usage:
+ * 1. Set TARGET_BACKUP_ID in Script Properties (or pass backupId).
+ * 2. Run runSingleBackupSync() in Apps Script Editor.
+ */
+function runSingleBackupSync(targetBackupId) {
+  var userEmail = Session.getEffectiveUser().getEmail() || 'Unknown';
+  Logger.log('👤 [Apps Script Identity] Active Google Account: ' + userEmail);
+  
+  var props = PropertiesService.getScriptProperties().getProperties();
+  var backendUrl = props.BACKEND_URL;
+  var backupSecret = props.BACKUP_WORKER_SECRET;
+  var backupId = targetBackupId || props.TARGET_BACKUP_ID;
+  
+  if (!backendUrl || !backupSecret) {
+    Logger.log('❌ MISSING CONFIGURATION: BACKEND_URL and BACKUP_WORKER_SECRET must be configured.');
+    return;
+  }
+  
+  if (!backupId) {
+    Logger.log('❌ MISSING BACKUP ID: Please pass backupId as argument or set TARGET_BACKUP_ID in Script Properties.');
+    return;
+  }
+  
+  Logger.log('🚀 [Backup Sync] Starting authentic Google Drive sync for Backup ID: ' + backupId);
+  
+  try {
+    // 1. Fetch Backup Manifest from backend
+    var manifestUrl = backendUrl + '/api/internal/backups/' + encodeURIComponent(backupId) + '/manifest';
+    Logger.log('[Backup Sync] Fetching manifest from: ' + manifestUrl);
+    
+    var manifestRes = UrlFetchApp.fetch(manifestUrl, {
+      method: 'get',
+      headers: {
+        'Authorization': 'Bearer ' + backupSecret,
+        'Content-Type': 'application/json'
+      },
+      muteHttpExceptions: true
+    });
+    
+    if (manifestRes.getResponseCode() !== 200) {
+      Logger.log('❌ [Backup Sync] Failed to fetch manifest (HTTP ' + manifestRes.getResponseCode() + '): ' + manifestRes.getContentText());
+      return;
+    }
+    
+    var manifestData = JSON.parse(manifestRes.getContentText());
+    var backupType = manifestData.type || 'manual';
+    var checksum = manifestData.checksum || 'N/A';
+    Logger.log('✅ [Backup Sync] Manifest loaded. Type: ' + backupType + ' | Checksum: ' + checksum);
+    
+    // 2. Download gzip database snapshot binary
+    var fileUrl = backendUrl + '/api/internal/backups/' + encodeURIComponent(backupId) + '/file';
+    Logger.log('[Backup Sync] Downloading database snapshot binary (.json.gz)...');
+    
+    var fileRes = UrlFetchApp.fetch(fileUrl, {
+      method: 'get',
+      headers: {
+        'Authorization': 'Bearer ' + backupSecret,
+        'User-Agent': 'EkDujeKeLiye-BackupWorker/2.0'
+      },
+      muteHttpExceptions: true
+    });
+    
+    if (fileRes.getResponseCode() !== 200) {
+      Logger.log('❌ [Backup Sync] Failed to download backup snapshot (HTTP ' + fileRes.getResponseCode() + '): ' + fileRes.getContentText());
+      return;
+    }
+    
+    var gzipBlob = fileRes.getBlob();
+    var gzFilename = backupId + '.json.gz';
+    gzipBlob.setName(gzFilename);
+    gzipBlob.setContentType('application/gzip');
+    
+    // 3. Resolve destination Google Drive folder (e.g. Database Backups/Manual)
+    var rootFolder = getArchiveRootFolder();
+    var backupsFolder = getOrCreateFolder(rootFolder, 'Database Backups');
+    var subfolderName = backupType.charAt(0).toUpperCase() + backupType.slice(1);
+    var targetFolder = getOrCreateFolder(backupsFolder, subfolderName);
+    
+    // 4. Save authentic .json.gz file into Google Drive
+    Logger.log('[Backup Sync] Saving .json.gz file to Drive folder: Database Backups/' + subfolderName);
+    var driveGzipFile = targetFolder.createFile(gzipBlob);
+    var gzipFileId = driveGzipFile.getId();
+    
+    // 5. Save manifest .json file into Google Drive
+    var manifestFilename = 'manifest_' + backupId + '.json';
+    var manifestJsonStr = JSON.stringify(manifestData.manifest || manifestData, null, 2);
+    var manifestBlob = Utilities.newBlob(manifestJsonStr, 'application/json', manifestFilename);
+    Logger.log('[Backup Sync] Saving manifest JSON to Drive folder: Database Backups/' + subfolderName);
+    var driveManifestFile = targetFolder.createFile(manifestBlob);
+    var manifestFileId = driveManifestFile.getId();
+    
+    // 6. Physical Re-Open Verification immediately after upload
+    Logger.log('[Backup Sync] Re-opening files from Google Drive by ID to verify physical existence...');
+    var verifiedGzip = DriveApp.getFileById(gzipFileId);
+    var verifiedManifest = DriveApp.getFileById(manifestFileId);
+    
+    if (!verifiedGzip || verifiedGzip.isTrashed()) {
+      throw new Error('Physical verification failed: Gzip backup file not retrieved from Drive.');
+    }
+    if (!verifiedManifest || verifiedManifest.isTrashed()) {
+      throw new Error('Physical verification failed: Manifest JSON file not retrieved from Drive.');
+    }
+    
+    var gzipSize = verifiedGzip.getSize();
+    var manifestSize = verifiedManifest.getSize();
+    
+    if (gzipSize <= 0) throw new Error('Physical verification failed: Gzip backup file size is 0 bytes.');
+    if (manifestSize <= 0) throw new Error('Physical verification failed: Manifest file size is 0 bytes.');
+    
+    Logger.log('✅ [Backup Sync] Authentic Google Drive files verified physically:');
+    Logger.log('- Real Gzip File ID: ' + gzipFileId);
+    Logger.log('- Real Gzip File Name: ' + verifiedGzip.getName());
+    Logger.log('- Real Gzip File Size: ' + gzipSize + ' bytes (~' + (gzipSize / 1024).toFixed(1) + ' KB)');
+    Logger.log('- Real Manifest File ID: ' + manifestFileId);
+    Logger.log('- Real Manifest File Name: ' + verifiedManifest.getName());
+    Logger.log('- Real Manifest Size: ' + manifestSize + ' bytes');
+    Logger.log('- Real Folder ID: ' + targetFolder.getId());
+    Logger.log('- Direct Gzip File URL: https://drive.google.com/file/d/' + gzipFileId + '/view');
+    Logger.log('- Direct Manifest File URL: https://drive.google.com/file/d/' + manifestFileId + '/view');
+    Logger.log('- Folder URL: https://drive.google.com/drive/folders/' + targetFolder.getId());
+    
+    // 7. Report verification to backend
+    var verifyUrl = backendUrl + '/api/internal/backups/verify-sync';
+    var verifyRes = UrlFetchApp.fetch(verifyUrl, {
+      method: 'post',
+      headers: {
+        'Authorization': 'Bearer ' + backupSecret,
+        'Content-Type': 'application/json'
+      },
+      payload: JSON.stringify({
+        backupId: backupId,
+        driveFileId: gzipFileId,
+        driveManifestFileId: manifestFileId,
+        driveFolderId: targetFolder.getId(),
+        fileSize: gzipSize
+      }),
+      muteHttpExceptions: true
+    });
+    
+    if (verifyRes.getResponseCode() === 200) {
+      Logger.log('🎉 [Backup Sync] SUCCESS! Backend marked BackupRecord as verified and pruned local temp file.');
+    } else {
+      Logger.log('⚠️ [Backup Sync] Backend verify returned HTTP ' + verifyRes.getResponseCode() + ': ' + verifyRes.getContentText());
+    }
+  } catch (err) {
+    Logger.log('❌ [Backup Sync] Error processing backup transfer: ' + err.toString());
+  }
+}
+
+/**
+ * ============================================================================
  * DAILY BACKUP SYNC
  * ============================================================================
  */
 function runDailyBackupSync() {
   var props = PropertiesService.getScriptProperties().getProperties();
   var backendUrl = props.BACKEND_URL;
-  var workerSecret = props.BACKUP_WORKER_SECRET || props.ARCHIVE_WORKER_SECRET;
+  var workerSecret = props.BACKUP_WORKER_SECRET;
   
   if (!backendUrl || !workerSecret) {
-    Logger.log('ERROR: BACKEND_URL and worker secret not configured.');
+    Logger.log('ERROR: BACKEND_URL and BACKUP_WORKER_SECRET not configured.');
     return;
   }
   

@@ -132,12 +132,16 @@ export const StoragePage = () => {
     }
   };
 
+  const [backupNotice, setBackupNotice] = useState<string | null>(null);
+
   const handleRunBackup = async () => {
+    if (runningBackup) return;
     if (!confirm('Generate an immediate compressed database snapshot with SHA-256 integrity verification?')) return;
     try {
       setRunningBackup(true);
+      setBackupNotice(null);
       const res = await backupsApi.runBackupNow('manual');
-      alert(res.message);
+      setBackupNotice('Created — waiting for Drive sync');
       fetchBackups();
     } catch (err: any) {
       alert(err.message || 'Backup failed.');
@@ -158,6 +162,11 @@ export const StoragePage = () => {
           <p className="text-xs text-slate-500 mt-1 font-medium">
             Zero-cost event media archiving directly to Google Drive (5TB) and cryptographic database snapshots.
           </p>
+          {backupNotice && (
+            <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-xs font-bold">
+              <span>⏳ {backupNotice}</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -166,7 +175,7 @@ export const StoragePage = () => {
             className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2 cursor-pointer transition-all"
           >
             <ShieldCheckIcon className="w-4 h-4" />
-            <span>{runningBackup ? 'Generating Snapshot...' : 'Run Backup Now'}</span>
+            <span>{runningBackup ? 'Generating...' : 'Run Backup Now'}</span>
           </button>
         </div>
       </div>
@@ -499,37 +508,80 @@ export const StoragePage = () => {
                     <td colSpan={6} className="px-4 py-12 text-center text-slate-400">No backup records found.</td>
                   </tr>
                 ) : (
-                  backups.map((b) => (
-                    <tr key={b._id} className="hover:bg-slate-50/60">
-                      <td className="px-4 py-3">
-                        <span className="font-bold text-slate-900 block font-mono text-[11px]">{b.backupId}</span>
-                        <span className="text-[10px] text-slate-400">{new Date(b.startedAt).toLocaleString()}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md bg-purple-50 text-purple-800 border border-purple-200">
-                          {b.type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
-                          {b.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {b.size ? `${(b.size / 1024).toFixed(1)} KB` : '...'}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-[10px] text-slate-500">
-                        {b.checksum ? `${b.checksum.slice(0, 14)}...` : 'N/A'}
-                      </td>
-                      <td className="px-4 py-3">
-                        {b.driveFileId ? (
-                          <span className="text-[10px] font-bold text-emerald-700">✓ In Drive</span>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 font-medium">Render disk / Drive sync pending</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                  backups.map((b) => {
+                    const isVerified = b.status === 'verified' && Boolean(b.driveFileId);
+                    const isSyncing = b.status === 'pending';
+                    const isFailed = b.status === 'failed';
+                    const isLocalOnly = !isVerified && !isSyncing && !isFailed;
+
+                    return (
+                      <tr key={b._id} className="hover:bg-slate-50/60">
+                        <td className="px-4 py-3">
+                          <span className="font-bold text-slate-900 block font-mono text-[11px]">{b.backupId}</span>
+                          <span className="text-[10px] text-slate-400">{new Date(b.startedAt).toLocaleString()}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md bg-purple-50 text-purple-800 border border-purple-200">
+                            {b.type}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md border ${
+                              isVerified
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : isSyncing
+                                ? 'bg-sky-50 text-sky-800 border-sky-200 animate-pulse'
+                                : isFailed
+                                ? 'bg-red-50 text-red-800 border-red-200'
+                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                            }`}
+                          >
+                            {isVerified
+                              ? 'DRIVE VERIFIED'
+                              : isSyncing
+                              ? 'SYNCING'
+                              : isFailed
+                              ? 'SYNC FAILED'
+                              : 'LOCAL ONLY'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600">
+                          {b.size ? `${(b.size / 1024).toFixed(1)} KB` : '...'}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-[10px] text-slate-500">
+                          {b.checksum ? `${b.checksum.slice(0, 14)}...` : 'N/A'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {isVerified ? (
+                              <>
+                                <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">
+                                  ✓ Google Drive Verified
+                                </span>
+                                {b.driveFolderId && (
+                                  <a
+                                    href={`https://drive.google.com/drive/folders/${b.driveFolderId}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-[10px] font-bold text-purple-700 hover:text-purple-900 underline"
+                                  >
+                                    Open Drive Folder ↗
+                                  </a>
+                                )}
+                              </>
+                            ) : isSyncing ? (
+                              <span className="text-[10px] text-sky-600 font-medium">Syncing snapshot to Drive...</span>
+                            ) : isFailed ? (
+                              <span className="text-[10px] text-red-600 font-medium">Drive sync failed ({b.lastError || 'Error'})</span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 font-medium">Drive sync pending</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

@@ -19,6 +19,8 @@ const BackupRecordSchema = new mongoose.Schema({
   checksum: { type: String, default: '' },
   driveFileId: { type: String, default: null },
   driveManifestFileId: { type: String, default: null },
+  driveFolderId: { type: String, default: null },
+  driveVerifiedAt: { type: Date, default: null },
   manifest: { type: mongoose.Schema.Types.Mixed, default: {} },
   startedAt: { type: Date, default: Date.now },
   completedAt: { type: Date, default: null },
