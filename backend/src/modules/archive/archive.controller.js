@@ -11,6 +11,71 @@ import { env } from '../../config/env.js';
  */
 
 /**
+ * Non-mutating health check endpoint for Google Apps Script Worker
+ * Validates ARCHIVE_WORKER_SECRET without touching any database jobs, queues, or registrations.
+ */
+export const archiveHealth = async (req, res) => {
+  res.json({
+    success: true,
+    authenticated: true,
+    archiveWorker: 'ready',
+    capabilities: {
+      claimBatch: true,
+      claimOne: true,
+      verifyItem: true,
+      failItem: true
+    }
+  });
+};
+
+/**
+ * Atomically claims exactly ONE specified archive job by jobId (for targeted single-photo tests)
+ * Strictly guarantees that no other queued jobs from any event are touched.
+ */
+export const claimSingleArchiveJob = async (req, res) => {
+  try {
+    const { jobId } = req.body;
+    const workerId = req.body.workerId || 'gas-single-worker';
+    if (!jobId) {
+      return res.status(400).json({ error: 'jobId is required.' });
+    }
+
+    const job = await MediaArchive.findOne({
+      _id: jobId,
+      status: 'QUEUED'
+    });
+
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found or not in QUEUED status.' });
+    }
+
+    job.status = 'COPYING';
+    job.workerId = workerId;
+    job.claimedAt = new Date();
+    job.attempts = (job.attempts || 0) + 1;
+    await job.save();
+
+    const formattedJob = {
+      jobId: job._id.toString(),
+      eventId: job.eventId,
+      registrationId: job.registrationId,
+      mediaType: job.mediaType,
+      sourceUrl: job.sourceUrl,
+      filename: job.filename,
+      mimeType: job.mimeType || 'image/jpeg',
+      folderPath: job.driveFolderPath || `Ek Duje Ke Liye/Events/${job.eventId}/Couple Photos`
+    };
+
+    res.json({
+      success: true,
+      job: formattedJob
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to claim single job: ${err.message}` });
+  }
+};
+
+/**
  * Atomically claims a batch of queued archive jobs for Google Apps Script
  */
 export const claimArchiveBatch = async (req, res) => {
@@ -18,13 +83,18 @@ export const claimArchiveBatch = async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit || req.body.limit || '15', 10), 50);
     const workerId = req.body.workerId || req.query.workerId || 'gas-worker-1';
     const now = new Date();
-    const staleThreshold = new Date(Date.now() - 30 * 60 * 1000); // 30 mins stale lock
+    const staleThreshold = new Date(Date.now() - 15 * 60 * 1000); // 15 mins stale timeout
 
-    // Find and atomically transition jobs from QUEUED -> COPYING
+    // Find and atomically transition jobs from QUEUED (or uncompleted stale COPYING) -> COPYING
     const jobs = await MediaArchive.find({
       $or: [
         { status: 'QUEUED' },
-        { status: 'COPYING', claimedAt: { $lt: staleThreshold } }
+        {
+          status: 'COPYING',
+          claimedAt: { $lt: staleThreshold },
+          driveFileId: { $in: [null, ''] },
+          verifiedAt: { $in: [null, ''] }
+        }
       ]
     })
       .sort({ queuedAt: 1 })
@@ -82,6 +152,23 @@ export const verifyArchivedItem = async (req, res) => {
       return res.status(400).json({ error: 'jobId and driveFileId are required for verification.' });
     }
 
+    // Guard against mock / test verification payloads
+    if (!env.ALLOW_MOCK_ARCHIVE_VERIFICATION) {
+      const lower = String(driveFileId).toLowerCase();
+      if (
+        lower.startsWith('mock') ||
+        lower.startsWith('test') ||
+        lower.startsWith('fake') ||
+        lower.startsWith('drive_mock') ||
+        lower.includes('placeholder') ||
+        lower.startsWith('1abcdefgh')
+      ) {
+        return res.status(400).json({
+          error: 'Mock Drive verification IDs are rejected in production. Real Google Apps Script Drive File ID required.'
+        });
+      }
+    }
+
     const job = await MediaArchive.findById(jobId);
     if (!job) {
       return res.status(404).json({ error: 'Archive job not found.' });
@@ -98,7 +185,9 @@ export const verifyArchivedItem = async (req, res) => {
     if (fileSize) job.originalSize = fileSize;
     if (mimeType) job.mimeType = mimeType;
     job.verifiedAt = new Date();
-    // Schedule safe Cloudinary deletion after 24-hour verification window
+    job.driveVerifiedAt = new Date();
+    job.driveVerificationSource = 'google_apps_script';
+    // Schedule safe Cloudinary retention window (deletion remains disabled in production)
     job.deleteAfter = new Date(Date.now() + 24 * 60 * 60 * 1000);
     job.lastError = null;
 
@@ -215,6 +304,89 @@ export const getArchiveCandidates = async (req, res) => {
 };
 
 /**
+ * Super Admin queues exactly ONE single couple photo registration for Google Drive archiving
+ * Validates registration, event ownership, Cloudinary asset, and idempotency.
+ * Does NOT queue the rest of the event.
+ */
+export const queueSingleAsset = async (req, res) => {
+  try {
+    const { registrationId, eventId } = req.body;
+    if (!registrationId || !eventId) {
+      return res.status(400).json({ error: 'registrationId and eventId are required.' });
+    }
+
+    const event = await Event.findOne({ id: eventId });
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found.' });
+    }
+
+    const sub = await Registration.findOne({
+      inquiryId: registrationId,
+      programId: eventId,
+      isDeleted: { $ne: true }
+    });
+
+    if (!sub) {
+      return res.status(404).json({ error: `Registration ${registrationId} not found in event ${eventId}.` });
+    }
+
+    const photoUrl = sub.couplePhoto;
+    if (!photoUrl || photoUrl === '/sample_couple.png' || !photoUrl.includes('cloudinary')) {
+      return res.status(400).json({ error: 'Registration does not contain an eligible Cloudinary couple photo.' });
+    }
+
+    const publicIdMatch = photoUrl.match(/\/([^/]+)\.(jpg|jpeg|png|webp)/i);
+    const publicId = publicIdMatch ? publicIdMatch[1] : `sub_${sub.inquiryId}_photo`;
+    const filename = `${sub.inquiryId}_${sub.husbandName}_${sub.wifeName}_${sub.surname}.jpg`.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const eventSlug = event.slug || event.id;
+
+    let archive = await MediaArchive.findOne({ sourcePublicId: publicId });
+    if (archive) {
+      return res.json({
+        success: true,
+        message: 'Media archive record already exists for this registration.',
+        jobId: archive._id.toString(),
+        registrationId: sub.inquiryId,
+        eventId,
+        status: archive.status,
+        filename: archive.filename,
+        sourceUrl: archive.sourceUrl,
+        folderPath: archive.driveFolderPath
+      });
+    }
+
+    archive = await MediaArchive.create({
+      eventId,
+      registrationId: sub.inquiryId,
+      mediaType: 'couple_photo',
+      sourceProvider: 'cloudinary',
+      sourcePublicId: publicId,
+      sourceUrl: photoUrl,
+      destinationProvider: 'google_drive',
+      driveFolderPath: `Ek Duje Ke Liye/Events/${eventSlug}/Couple Photos`,
+      filename,
+      mimeType: 'image/jpeg',
+      status: 'QUEUED',
+      retainOperationalCopy: true
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully queued single asset for registration ${registrationId}.`,
+      jobId: archive._id.toString(),
+      registrationId: sub.inquiryId,
+      eventId,
+      status: archive.status,
+      filename: archive.filename,
+      sourceUrl: archive.sourceUrl,
+      folderPath: archive.driveFolderPath
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to queue single asset: ${err.message}` });
+  }
+};
+
+/**
  * Super Admin queues a completed event for Google Drive archiving
  */
 export const queueEventArchive = async (req, res) => {
@@ -232,7 +404,7 @@ export const queueEventArchive = async (req, res) => {
     // Find all valid couple photos for this event
     const submissions = await Registration.find({
       programId: eventId,
-      isDeleted: false,
+      isDeleted: { $ne: true },
       couplePhoto: { $exists: true, $ne: null, $ne: '', $ne: '/sample_couple.png' }
     }).lean();
 

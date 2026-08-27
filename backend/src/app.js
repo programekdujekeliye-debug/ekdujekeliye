@@ -16,6 +16,7 @@ import { financeRouter } from './modules/finance/finance.routes.js';
 import { adminRouter } from './modules/admin/admin.routes.js';
 import { archiveRouter } from './modules/archive/archive.routes.js';
 import { backupRouter } from './modules/backup/backup.routes.js';
+import { mediaRouter } from './modules/media/media.routes.js';
 
 // Controller direct mappings for total legacy URL compatibility
 import { getPublicEvents, getEventBySlug } from './modules/events/event.controller.js';
@@ -139,6 +140,8 @@ app.use('/api/super-admin/backups', backupRouter);
 app.use('/api/super-admin/finance', financeRouter);
 app.use('/api/super-admin/system', adminRouter);
 app.use('/api/finance', financeRouter);
+app.use('/api/admin/media', mediaRouter);
+app.use('/api/media', mediaRouter);
 
 // 7. Background Jobs Trigger Endpoint
 app.post('/api/jobs/payment-reminders', requireCronAuth, async (req, res) => {

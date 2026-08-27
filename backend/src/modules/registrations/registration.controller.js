@@ -284,8 +284,37 @@ export const getSubmissionsList = async (req, res) => {
       Registration.countDocuments(query)
     ]);
 
+    // Batch resolve media storage status for fast Admin UI rendering
+    const inquiryIds = submissions.map(s => s.inquiryId);
+    const { MediaArchive } = await import('../../models/MediaArchive.js');
+    const archives = await MediaArchive.find({
+      registrationId: { $in: inquiryIds },
+      status: { $in: ['VERIFIED', 'ARCHIVED', 'QUEUED', 'COPYING'] }
+    }).select('registrationId status driveFileId filename').lean();
+
+    const archiveMap = new Map();
+    archives.forEach(a => archiveMap.set(a.registrationId, a));
+
+    const enrichedSubmissions = submissions.map(sub => {
+      const archive = archiveMap.get(sub.inquiryId);
+      const isArchived = archive && (archive.status === 'VERIFIED' || archive.status === 'ARCHIVED');
+      const isQueued = archive && (archive.status === 'QUEUED' || archive.status === 'COPYING');
+      const rawPhoto = sub.couplePhoto || '';
+      const photoThumbnailUrl = (rawPhoto.includes('cloudinary.com') && rawPhoto.includes('/upload/'))
+        ? rawPhoto.replace('/upload/', '/upload/c_limit,w_400,q_auto,f_auto/')
+        : rawPhoto;
+
+      return {
+        ...sub,
+        photoThumbnailUrl,
+        photoStorageStatus: isArchived ? 'ARCHIVED' : (isQueued ? 'QUEUED' : 'ACTIVE'),
+        hasArchivedOriginal: Boolean(isArchived && archive.driveFileId),
+        archiveStatus: archive ? archive.status : null
+      };
+    });
+
     res.json({
-      submissions,
+      submissions: enrichedSubmissions,
       totalSubmissions: total,
       total,
       currentPage: safePage,

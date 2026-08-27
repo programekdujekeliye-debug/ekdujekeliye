@@ -7,6 +7,10 @@ export interface Submission {
   surname: string;
   phoneNumber: string;
   couplePhoto: string;
+  photoThumbnailUrl?: string;
+  photoStorageStatus?: 'ACTIVE' | 'QUEUED' | 'ARCHIVED';
+  hasArchivedOriginal?: boolean;
+  archiveStatus?: string;
   paymentScreenshot?: string;
   status: 'pending' | 'approved' | 'rejected';
   rejectionReason?: string;

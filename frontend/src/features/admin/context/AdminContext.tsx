@@ -23,6 +23,83 @@ interface AdminContextType {
 
 const AdminContext = createContext<AdminContextType | null>(null);
 
+/**
+ * Computes India Standard Time date in YYYY-MM-DD format
+ */
+export const getIndiaTodayString = (): string => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+};
+
+/**
+ * Computes the primary default upcoming event based on strict business hierarchy:
+ * 1. Nearest future dated event (date >= today in Asia/Kolkata, sorted date ASC, time ASC)
+ * 2. Date TBA active operational event
+ * 3. Most recent non-archived event
+ * 4. Fallback: first event or null
+ */
+export const computeDefaultUpcomingEvent = (
+  programs: Program[],
+  allowedEventIds?: string[]
+): Program | null => {
+  let eligible = programs.filter(
+    (p) => p.status !== 'archived' && p.status !== 'cancelled'
+  );
+
+  // Normal Admin assigned events constraint
+  if (allowedEventIds && allowedEventIds.length > 0) {
+    eligible = eligible.filter((p) => allowedEventIds.includes(p.id));
+  }
+
+  if (eligible.length === 0) return null;
+
+  const todayStr = getIndiaTodayString();
+  const operationalStatuses = new Set(['upcoming', 'few_seats', 'housefull', 'registration_open', 'published']);
+
+  // 1. Future dated operational events
+  const futureDated = eligible
+    .filter(
+      (p) =>
+        Boolean(p.status && operationalStatuses.has(p.status)) &&
+        p.date &&
+        p.date !== 'TBD' &&
+        p.status !== 'date_tba' &&
+        p.isDateFinal !== false &&
+        p.date >= todayStr
+    )
+    .sort((a, b) => {
+      const dateCmp = (a.date || '').localeCompare(b.date || '');
+      if (dateCmp !== 0) return dateCmp;
+      return (a.time || '').localeCompare(b.time || '');
+    });
+
+  if (futureDated.length > 0) {
+    return futureDated[0];
+  }
+
+  // 2. Date TBA operational event
+  const tbaEvent = eligible.find(
+    (p) =>
+      Boolean(p.status && operationalStatuses.has(p.status)) &&
+      (p.date === 'TBD' || p.status === 'date_tba' || p.isDateFinal === false)
+  );
+
+  if (tbaEvent) {
+    return tbaEvent;
+  }
+
+  // 3. Most recent non-archived event
+  const sortedRecent = [...eligible].sort((a, b) => {
+    return (b.date || '').localeCompare(a.date || '');
+  });
+
+  return sortedRecent[0] || null;
+};
+
 export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [password, setPassword] = useState<string>('');
@@ -42,18 +119,13 @@ export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
       const list = data || [];
       setPrograms(list);
 
-      // Default to the first confirmed active upcoming event (e.g. 7 September 2026 Surat)
-      const confirmedUpcoming = list.filter(
-        (p) =>
-          (p.status === 'upcoming' || p.status === 'few_seats' || p.status === 'housefull') &&
-          p.date !== 'TBD' &&
-          Boolean(p.date && p.date >= '2026-09-01')
-      );
+      // Automatically default to the nearest upcoming event
+      const defaultEvent = computeDefaultUpcomingEvent(list);
 
-      const firstConfirmed = confirmedUpcoming[0] || list.find((p) => p.status === 'upcoming');
-
-      if (firstConfirmed) {
-        setSelectedProgramId((prev) => (prev === 'all' || !list.some((p) => p.id === prev) ? firstConfirmed.id : prev));
+      if (defaultEvent) {
+        setSelectedProgramId((prev) =>
+          prev === 'all' || !list.some((p) => p.id === prev) ? defaultEvent.id : prev
+        );
       } else if (list.length > 0 && selectedProgramId === 'all') {
         setSelectedProgramId(list[0].id);
       }

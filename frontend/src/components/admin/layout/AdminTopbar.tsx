@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useAdmin } from '../../../features/admin/context/AdminContext';
+import { useAdmin, getIndiaTodayString, computeDefaultUpcomingEvent } from '../../../features/admin/context/AdminContext';
 import { DownloadIcon } from '../../Icons';
 
 interface AdminTopbarProps {
@@ -17,6 +17,9 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
 }) => {
   const { role, selectedProgramId, setSelectedProgramId, programs } = useAdmin();
 
+  const todayStr = getIndiaTodayString();
+  const defaultUpcoming = computeDefaultUpcomingEvent(programs);
+
   const upcomingPrograms = programs.filter(
     (p) =>
       p.status === 'upcoming' ||
@@ -24,11 +27,11 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
       p.status === 'housefull' ||
       p.status === 'date_tba' ||
       p.date === 'TBD' ||
-      (p.date && p.date >= '2026-09-01')
+      (p.date && p.date >= todayStr)
   );
 
   const completedPrograms = programs.filter(
-    (p) => (p.status === 'completed' || p.status === 'archived') && p.date !== 'TBD'
+    (p) => p.status === 'completed' || p.status === 'archived' || (p.date && p.date < todayStr && p.date !== 'TBD')
   );
 
   return (
@@ -68,12 +71,15 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
             className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
           >
             {upcomingPrograms.length > 0 && (
-              <optgroup label="Upcoming Active Events (Default)">
+              <optgroup label="Upcoming Active Events">
                 {upcomingPrograms.map((p) => {
                   const isTbd = p.date === 'TBD' || p.status === 'date_tba' || !p.isDateFinal;
+                  const isNext = p.id === defaultUpcoming?.id && !isTbd;
                   return (
                     <option key={p.id} value={p.id}>
-                      {isTbd ? '🗓️' : '🌟'} {p.city || 'Gujarat'} — {isTbd ? 'Date TBA (To Be Declared)' : p.date} ({p.name}) [₹{p.price ?? 1500}]
+                      {isNext ? '⚡ NEXT: ' : isTbd ? '🗓️ ' : '🌟 '}
+                      {p.city || 'Gujarat'} — {isTbd ? 'Date TBA' : p.date} ({p.name}) [₹{p.price ?? 1500}]
+                      {isNext ? ' [UPCOMING]' : ''}
                     </option>
                   );
                 })}

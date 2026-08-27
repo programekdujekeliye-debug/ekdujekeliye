@@ -1,8 +1,7 @@
-'use client';
-
 import React, { useState, useEffect } from 'react';
 import { useAdmin } from '../context/AdminContext';
 import { registrationsApi } from '../../../services/admin/registrationsApi';
+import { mediaApi } from '../../../services/admin/mediaApi';
 import { Submission } from '../../../types';
 import { API_BASE_URL } from '../../../config';
 import { DuplicateSubmissionsView } from './DuplicateSubmissionsView';
@@ -23,6 +22,59 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
   const [totalSubmissions, setTotalSubmissions] = useState(0);
   const [pageSize, setPageSize] = useState(50);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  // Archived Original Google Drive Viewer State
+  const [archivedViewer, setArchivedViewer] = useState<{
+    isOpen: boolean;
+    loading: boolean;
+    viewerUrl: string;
+    filename: string;
+    registrationId: string;
+    error: string | null;
+  }>({
+    isOpen: false,
+    loading: false,
+    viewerUrl: '',
+    filename: '',
+    registrationId: '',
+    error: null
+  });
+
+  const handleOpenArchivedOriginal = async (registrationId: string) => {
+    setArchivedViewer({
+      isOpen: true,
+      loading: true,
+      viewerUrl: '',
+      filename: '',
+      registrationId,
+      error: null
+    });
+
+    try {
+      const res = await mediaApi.getViewToken(registrationId);
+      if (res.viewerUrl) {
+        setArchivedViewer({
+          isOpen: true,
+          loading: false,
+          viewerUrl: res.viewerUrl,
+          filename: res.filename || 'Couple Photo',
+          registrationId,
+          error: null
+        });
+      } else {
+        throw new Error('Viewer URL not returned by server.');
+      }
+    } catch (err: any) {
+      setArchivedViewer({
+        isOpen: true,
+        loading: false,
+        viewerUrl: '',
+        filename: '',
+        registrationId,
+        error: err.message || 'Archived original unavailable in Google Drive.'
+      });
+    }
+  };
 
   // Bulk Selection
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -369,24 +421,44 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                             </select>
                           </td>
                           <td className="px-4 py-3.5">
-                            <div className="flex gap-1.5">
-                              {sub.couplePhoto && (
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedImage(sub.couplePhoto)}
-                                  className="w-7 h-7 rounded-md overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform"
-                                  title="View Couple Photo"
-                                >
-                                  <img
-                                    src={
-                                      sub.couplePhoto.startsWith('http') || sub.couplePhoto.startsWith('data:')
-                                        ? sub.couplePhoto
-                                        : `${API_BASE_URL}${sub.couplePhoto}`
-                                    }
-                                    alt="Photo"
-                                    className="w-full h-full object-cover"
-                                  />
-                                </button>
+                            <div className="flex flex-col gap-1.5 items-start">
+                              <div className="flex items-center gap-1.5">
+                                {sub.couplePhoto && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedImage(sub.photoThumbnailUrl || sub.couplePhoto)}
+                                    className="w-8 h-8 rounded-md overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform"
+                                    title="View Thumbnail"
+                                  >
+                                    <img
+                                      src={
+                                        (sub.photoThumbnailUrl || sub.couplePhoto).startsWith('http') ||
+                                        (sub.photoThumbnailUrl || sub.couplePhoto).startsWith('data:')
+                                          ? (sub.photoThumbnailUrl || sub.couplePhoto)
+                                          : `${API_BASE_URL}${sub.photoThumbnailUrl || sub.couplePhoto}`
+                                      }
+                                      alt="Photo"
+                                      className="w-full h-full object-cover"
+                                      loading="lazy"
+                                    />
+                                  </button>
+                                )}
+                                {sub.hasArchivedOriginal && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenArchivedOriginal(sub.inquiryId)}
+                                    className="px-2 py-0.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-md text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                    title="View Original Google Drive Photo"
+                                  >
+                                    <span>Drive</span>
+                                    <span>↗</span>
+                                  </button>
+                                )}
+                              </div>
+                              {sub.photoStorageStatus === 'ARCHIVED' && (
+                                <span className="text-[9px] font-bold text-sky-600 uppercase tracking-tight">
+                                  Archived Original
+                                </span>
                               )}
                             </div>
                           </td>
@@ -467,6 +539,53 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
               alt="Enlarged view"
               className="max-h-[80vh] w-auto object-contain rounded-xl"
             />
+          </div>
+        </div>
+      )}
+
+      {/* Archived Google Drive Original Photo Modal */}
+      {archivedViewer.isOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800 bg-slate-950">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-sky-500 animate-pulse"></span>
+                <span className="font-bold text-sm text-white">
+                  Archived Original — {archivedViewer.registrationId}
+                </span>
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-800">
+                  Google Drive Private Archive
+                </span>
+              </div>
+              <button
+                onClick={() => setArchivedViewer((prev) => ({ ...prev, isOpen: false }))}
+                className="text-slate-400 hover:text-white px-2.5 py-1 text-sm font-bold rounded-lg hover:bg-slate-800 cursor-pointer"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-[500px] flex items-center justify-center p-2 bg-slate-950/50">
+              {archivedViewer.loading ? (
+                <div className="flex flex-col items-center gap-2 text-slate-400 text-xs">
+                  <div className="w-8 h-8 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span>Generating secure signed session token...</span>
+                </div>
+              ) : archivedViewer.error ? (
+                <div className="text-center p-6 bg-red-950/40 border border-red-800/60 rounded-xl text-red-300 max-w-md">
+                  <div className="text-2xl mb-2">⚠️</div>
+                  <h4 className="font-bold text-sm text-red-200 mb-1">Archived Original Unavailable</h4>
+                  <p className="text-xs text-red-400">{archivedViewer.error}</p>
+                </div>
+              ) : (
+                <iframe
+                  src={archivedViewer.viewerUrl}
+                  title={`Archived Photo ${archivedViewer.registrationId}`}
+                  className="w-full h-[650px] border-0 rounded-xl bg-transparent"
+                  sandbox="allow-scripts allow-same-origin allow-popups"
+                />
+              )}
+            </div>
           </div>
         </div>
       )}
