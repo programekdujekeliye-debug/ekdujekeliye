@@ -1706,14 +1706,11 @@ export default function AdminDashboard() {
 
         const rows = chunk.map((sub, idx) => {
           return `
-            <tr style="border-bottom: 1px solid #ddd; height: 18px;">
-              <td style="padding: 2.5px; text-align: center; border: 1px solid #ddd;">${idx + 1}</td>
-              <td style="padding: 2.5px; font-weight: bold; border: 1px solid #ddd;">${sub.inquiryId}</td>
-              <td style="padding: 2.5px; border: 1px solid #ddd;">${sub.husbandName} & ${sub.wifeName} ${sub.surname}</td>
-              <td style="padding: 2.5px; text-align: center; border: 1px solid #ddd;">${sub.phoneNumber}</td>
-              <td style="padding: 2.5px; text-align: center; border: 1px solid #ddd;">${sub.status?.toUpperCase() || ''}</td>
-              <td style="padding: 2.5px; border: 1px solid #ddd;">${sub.programName || sub.programId || ''}</td>
-              <td style="padding: 2.5px; text-align: center; border: 1px solid #ddd;">${sub.createdAt ? new Date(sub.createdAt).toLocaleDateString() : ''}</td>
+            <tr style="border-bottom: 1px solid #ddd; height: 13.5px;">
+              <td style="padding: 1.5px; text-align: center; border: 1px solid #ddd;">${idx + 1}</td>
+              <td style="padding: 1.5px; font-weight: bold; border: 1px solid #ddd;">${sub.inquiryId}</td>
+              <td style="padding: 1.5px; border: 1px solid #ddd;">${sub.husbandName} & ${sub.wifeName} ${sub.surname}</td>
+              <td style="padding: 1.5px; text-align: center; border: 1px solid #ddd;">${sub.phoneNumber}</td>
             </tr>
           `;
         }).join('');
@@ -1741,16 +1738,13 @@ export default function AdminDashboard() {
                 </button>
               ` : ''}
             </div>
-            <table style="width: 100%; border-collapse: collapse; font-size: 9px; border: 1px solid #ddd;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 8.5px; border: 1px solid #ddd;">
               <thead>
                 <tr>
-                  <th style="width: 5%; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; padding: 3px; font-weight: bold;">#</th>
-                  <th style="width: 13%; background-color: #f5f5f5; border: 1px solid #ddd; padding: 3px; font-weight: bold;">Inquiry ID</th>
-                  <th style="width: 37%; background-color: #f5f5f5; border: 1px solid #ddd; padding: 3px; font-weight: bold;">Names</th>
-                  <th style="width: 13%; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; padding: 3px; font-weight: bold;">Phone</th>
-                  <th style="width: 9%; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; padding: 3px; font-weight: bold;">Status</th>
-                  <th style="width: 15%; background-color: #f5f5f5; border: 1px solid #ddd; padding: 3px; font-weight: bold;">Program</th>
-                  <th style="width: 8%; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; padding: 3px; font-weight: bold;">Date</th>
+                  <th style="width: 6%; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; padding: 2px; font-weight: bold;">#</th>
+                  <th style="width: 24%; background-color: #f5f5f5; border: 1px solid #ddd; padding: 2px; font-weight: bold;">Inquiry ID</th>
+                  <th style="width: 48%; background-color: #f5f5f5; border: 1px solid #ddd; padding: 2px; font-weight: bold;">Names</th>
+                  <th style="width: 22%; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; padding: 2px; font-weight: bold;">Phone</th>
                 </tr>
               </thead>
               <tbody>
