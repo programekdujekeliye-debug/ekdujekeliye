@@ -29,7 +29,7 @@ export default function PrivacyPolicyPage() {
       {/* Main Content */}
       <main className="flex-grow max-w-4xl mx-auto px-6 py-12 w-full z-10">
         <div className="bg-white/5 border border-white/10 rounded-3xl p-8 md:p-12 backdrop-blur-xl shadow-2xl space-y-8">
-          
+
           <div>
             <span className="text-xs font-bold text-rose-400 uppercase tracking-widest block mb-2">Legal Information</span>
             <h1 className="text-3xl md:text-4xl font-extrabold text-slate-100 tracking-tight">Privacy Policy</h1>
@@ -37,7 +37,7 @@ export default function PrivacyPolicyPage() {
           </div>
 
           <div className="space-y-6 text-sm text-slate-300 leading-relaxed">
-            
+
             {/* Section 1 */}
             <section className="space-y-3">
               <h2 className="text-lg font-bold text-rose-300">1. Introduction</h2>

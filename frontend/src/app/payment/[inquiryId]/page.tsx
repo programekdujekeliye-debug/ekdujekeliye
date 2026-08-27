@@ -5,6 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { API_BASE_URL } from '../../../config';
 import { openRazorpayModal } from '../../../components/RazorpayModal';
+import {
+  TicketIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  CalendarIcon,
+  MapPinIcon
+} from '../../../components/Icons';
 
 interface PaymentStatusResponse {
   inquiryId: string;
@@ -12,6 +19,7 @@ interface PaymentStatusResponse {
   paymentStatus: string;
   paymentProvider: string;
   amount: number;
+  price?: number;
   paidAt: string | null;
   passAvailable: boolean;
   coupleName: string;
@@ -137,10 +145,10 @@ export default function PaymentRetryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#1a050d] via-[#0c0306] to-[#080205] text-slate-100 flex items-center justify-center">
+      <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-rose-500/20 border-t-rose-500 rounded-full animate-spin" />
-          <p className="text-sm font-semibold tracking-wide text-rose-300">Checking Payment Status...</p>
+          <div className="w-12 h-12 border-4 border-rose-600/20 border-t-rose-600 rounded-full animate-spin" />
+          <p className="text-sm font-semibold tracking-wide text-rose-700">Checking Payment Status...</p>
         </div>
       </div>
     );
@@ -148,18 +156,18 @@ export default function PaymentRetryPage() {
 
   if (error || !statusData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#1a050d] via-[#0c0306] to-[#080205] text-slate-100 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl text-center space-y-6">
-          <div className="w-16 h-16 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto text-2xl font-bold">
+      <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white border border-stone-200 rounded-3xl p-8 shadow-xl text-center space-y-6">
+          <div className="w-16 h-16 rounded-full bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto text-2xl font-bold">
             !
           </div>
-          <h2 className="text-2xl font-extrabold text-slate-100">Record Not Found</h2>
-          <p className="text-sm text-slate-400 leading-relaxed">
+          <h2 className="text-2xl font-extrabold text-stone-900">Record Not Found</h2>
+          <p className="text-sm text-stone-600 leading-relaxed font-medium">
             {error || 'We could not find this registration inquiry.'}
           </p>
           <Link
             href="/"
-            className="inline-block w-full py-3.5 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-2xl transition-all"
+            className="inline-block w-full py-3.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold rounded-2xl transition-all shadow-md shadow-rose-600/25"
           >
             ← Return to Home
           </Link>
@@ -169,17 +177,17 @@ export default function PaymentRetryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1a050d] via-[#0c0306] to-[#080205] text-slate-100 flex flex-col justify-between font-sans">
+    <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex flex-col justify-between font-sans">
       {/* Header */}
-      <header className="py-5 px-6 md:px-12 border-b border-rose-950/40 bg-slate-950/60 backdrop-blur-md sticky top-0 z-50">
+      <header className="py-4 px-6 md:px-12 border-b border-stone-200 bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-xs">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <Link href="/" className="flex items-center gap-3">
             <img src="/logo.png" alt="Ek Duje Ke Liye Logo" className="h-10 w-auto object-contain" />
-            <span className="text-lg font-bold tracking-wider text-slate-100 uppercase hidden sm:inline">Ek Duje Ke Liye</span>
+            <span className="text-lg font-extrabold tracking-wider text-stone-900 uppercase hidden sm:inline">Ek Duje Ke Liye</span>
           </Link>
           <Link
             href="/"
-            className="text-xs text-rose-400 hover:text-rose-300 font-semibold border border-rose-500/30 hover:bg-rose-500/10 px-4 py-2 rounded-xl transition-all"
+            className="text-xs text-rose-700 hover:text-rose-800 font-bold border border-rose-300 hover:bg-rose-50 px-4 py-2 rounded-xl transition-all"
           >
             ← Home
           </Link>
@@ -191,124 +199,116 @@ export default function PaymentRetryPage() {
         
         {paySuccess || statusData.passAvailable ? (
           /* Payment Completed View */
-          <div className="bg-white/5 border border-emerald-500/30 rounded-3xl p-8 md:p-10 backdrop-blur-xl shadow-2xl text-center space-y-6">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto text-3xl font-bold">
-              ✓
+          <div className="bg-white border border-emerald-200 rounded-3xl p-8 md:p-10 shadow-2xl text-center space-y-6">
+            <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto">
+              <CheckCircleIcon className="w-8 h-8 text-emerald-600" />
             </div>
             <div>
-              <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest block mb-1">Payment Completed</span>
-              <h1 className="text-2xl md:text-3xl font-extrabold text-slate-100">Pass Confirmed!</h1>
-              <p className="text-slate-300 text-sm mt-2">
+              <span className="text-xs font-bold text-emerald-700 uppercase tracking-widest block mb-1">Payment Completed</span>
+              <h1 className="text-2xl md:text-3xl font-extrabold text-stone-900">Pass Confirmed!</h1>
+              <p className="text-stone-600 text-sm mt-2 font-medium">
                 Your payment for <strong>{statusData.programName}</strong> has been successfully captured.
               </p>
             </div>
 
             {/* Prominent Registration Number Badge */}
-            <div className="bg-gradient-to-r from-amber-500/15 via-rose-500/15 to-amber-500/15 border border-amber-500/40 rounded-2xl p-4 text-center space-y-1">
-              <span className="text-[11px] font-bold text-amber-300 uppercase tracking-widest block">
+            <div className="bg-gradient-to-r from-amber-50 via-rose-50 to-amber-50 border border-amber-300 rounded-2xl p-4 text-center space-y-1 shadow-inner">
+              <span className="text-[11px] font-bold text-amber-900 uppercase tracking-widest block">
                 રજીસ્ટ્રેશન નંબર (Registration Pass ID)
               </span>
-              <span className="text-2xl sm:text-3xl font-extrabold text-amber-400 font-mono tracking-wider block select-all">
+              <span className="text-2xl sm:text-3xl font-extrabold text-amber-700 font-mono tracking-wider block select-all">
                 {statusData.inquiryId}
               </span>
-              <span className="text-[10px] text-slate-400 block">Save this ID for reference &amp; venue check-in</span>
+              <span className="text-[10px] text-stone-600 block font-medium">Save this ID for reference &amp; venue check-in</span>
             </div>
 
-            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 text-left text-xs space-y-2">
+            <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 text-left text-xs space-y-2">
               <div className="flex justify-between">
-                <span className="text-slate-400">Couple:</span>
-                <span className="font-semibold text-slate-200">{statusData.coupleName}</span>
+                <span className="text-stone-500 font-medium">Couple:</span>
+                <span className="font-semibold text-stone-900">{statusData.coupleName}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Event Date:</span>
-                <span className="font-semibold text-slate-200">{formatIndianDate(statusData.programDate)}</span>
+                <span className="text-stone-500 font-medium">Event Date:</span>
+                <span className="font-semibold text-stone-900">{formatIndianDate(statusData.programDate)}</span>
               </div>
             </div>
 
             <Link
               href={`/pass/${statusData.inquiryId}`}
-              className="inline-block w-full py-4 bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-slate-950 font-bold rounded-2xl transition-all shadow-xl shadow-rose-500/25 text-center"
+              className="inline-flex items-center justify-center gap-2 w-full py-4 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold rounded-2xl transition-all shadow-xl shadow-rose-600/25 text-center cursor-pointer"
             >
-              🎟️ View &amp; Download Pass
+              <TicketIcon className="w-4 h-4" />
+              <span>View &amp; Download Pass</span>
             </Link>
           </div>
         ) : (
           /* Payment Pending View */
-          <div className="bg-white/5 border border-amber-500/30 rounded-3xl p-8 md:p-10 backdrop-blur-xl shadow-2xl space-y-6">
+          <div className="bg-white border border-amber-300 rounded-3xl p-8 md:p-10 shadow-2xl space-y-6">
             <div className="text-center space-y-2">
-              <div className="w-14 h-14 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto text-2xl font-bold">
-                💳
+              <div className="w-14 h-14 rounded-full bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center mx-auto">
+                <ClockIcon className="w-7 h-7 text-amber-600" />
               </div>
-              <span className="text-xs font-bold text-amber-400 uppercase tracking-widest block">Complete Your Booking</span>
-              <h1 className="text-2xl font-extrabold text-slate-100">Payment Pending</h1>
-              <p className="text-slate-300 text-xs leading-relaxed">
-                Complete your online payment via Razorpay to instantly receive your couple entry pass.
+              <span className="text-xs font-bold text-amber-800 uppercase tracking-widest block">Complete Your Booking</span>
+              <h1 className="text-2xl font-extrabold text-stone-900">Payment Pending</h1>
+              <p className="text-xs text-stone-600 font-medium">
+                Please complete your payment to generate and receive your official couple admission pass.
               </p>
             </div>
 
-            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 text-left text-xs space-y-2">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Inquiry ID:</span>
-                <span className="font-bold text-amber-400">{statusData.inquiryId}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Couple:</span>
-                <span className="font-semibold text-slate-200">{statusData.coupleName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Event:</span>
-                <span className="font-semibold text-slate-200">{statusData.programName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Date:</span>
-                <span className="font-semibold text-slate-200">{statusData.programDate}</span>
-              </div>
-              <div className="flex justify-between pt-2 border-t border-slate-800 text-sm">
-                <span className="text-slate-300 font-semibold">Total Amount:</span>
-                <span className="font-extrabold text-amber-400 text-base">₹{statusData.amount || 1499}</span>
-              </div>
-            </div>
-
             {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs">
+              <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-xl text-center">
                 {error}
               </div>
             )}
 
+            <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 text-xs space-y-2 text-stone-700">
+              <div className="flex justify-between">
+                <span className="text-stone-500 font-medium">Inquiry ID:</span>
+                <span className="font-bold text-stone-900">{statusData.inquiryId}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500 font-medium">Event:</span>
+                <span className="font-semibold text-stone-900">{statusData.programName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500 font-medium">Date:</span>
+                <span className="font-semibold text-stone-900">{formatIndianDate(statusData.programDate)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500 font-medium">Couple:</span>
+                <span className="font-semibold text-stone-900">{statusData.coupleName}</span>
+              </div>
+              <div className="flex justify-between pt-2 border-t border-stone-200">
+                <span className="text-stone-500 font-bold uppercase">Pass Amount:</span>
+                <span className="text-base font-extrabold text-stone-900">₹{statusData.price !== undefined ? statusData.price : 1000}</span>
+              </div>
+            </div>
+
             <button
               onClick={handlePayNow}
               disabled={paying}
-              className="w-full py-4 bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-600 hover:to-amber-600 disabled:opacity-50 text-slate-950 font-extrabold rounded-2xl transition-all shadow-xl shadow-rose-500/25 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+              className="w-full py-4 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 disabled:opacity-50 text-white font-extrabold rounded-2xl transition-all shadow-xl shadow-rose-600/25 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
             >
               {paying ? (
                 <>
-                  <div className="w-5 h-5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                  <span>Opening Gateway...</span>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Opening Razorpay Gateway...</span>
                 </>
               ) : (
                 <>
-                  <span>Pay ₹{statusData.amount || 1499} via Razorpay</span>
-                  <span>💳</span>
+                  <TicketIcon className="w-4 h-4" />
+                  <span>Pay ₹{statusData.price !== undefined ? statusData.price : 1000} Now</span>
                 </>
               )}
             </button>
-
-            <p className="text-center text-[11px] text-slate-500">
-              🔒 Safe &amp; Secure 256-Bit SSL Encrypted Payment
-            </p>
           </div>
         )}
 
       </main>
 
       {/* Footer */}
-      <footer className="py-6 px-8 border-t border-slate-800/80 bg-slate-950/40 text-center text-xs text-slate-500 space-y-1">
+      <footer className="py-6 px-8 border-t border-stone-200 bg-white text-center text-xs text-stone-500 space-y-1">
         <div>&copy; {new Date().getFullYear()} Ek Duje Ke Liye. All rights reserved.</div>
-        <div className="space-x-3">
-          <Link href="/privacy-policy" className="text-slate-400 hover:text-rose-400 hover:underline">Privacy Policy</Link>
-          <span>&bull;</span>
-          <Link href="/terms" className="text-slate-400 hover:text-rose-400 hover:underline">Terms &amp; Conditions</Link>
-        </div>
       </footer>
     </div>
   );

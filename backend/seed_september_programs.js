@@ -100,6 +100,13 @@ async function run() {
   );
   console.log('✅ Updated 11 September 2026 event (Price ₹1000):', res11?.slug, 'Price:', res11?.price);
 
+  // 3. Mark all previous test dates / TBD as completed
+  await Program.updateMany(
+    { date: { $nin: ['2026-09-07', '2026-09-11'] } },
+    { $set: { status: 'completed' } }
+  );
+  console.log('✅ Previous test/August events marked as completed.');
+
   await mongoose.disconnect();
   console.log('Database updated successfully!');
 }

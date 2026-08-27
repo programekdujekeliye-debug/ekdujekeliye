@@ -3,6 +3,18 @@
 import React, { useEffect, useState, useRef } from 'react';
 import JSZip from 'jszip';
 import { API_BASE_URL } from '../../config';
+import {
+  LayoutDashboardIcon,
+  TicketIcon,
+  UsersIcon,
+  SettingsIcon,
+  LogOutIcon,
+  SearchIcon,
+  DownloadIcon,
+  RefreshCwIcon,
+  CheckCircleIcon,
+  ShieldCheckIcon
+} from '../../components/Icons';
 
 interface Submission {
   inquiryId: string;
@@ -356,6 +368,15 @@ export default function AdminDashboard() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [newProgramName, setNewProgramName] = useState('');
   const [newProgramDate, setNewProgramDate] = useState('');
+  const [newProgramTime, setNewProgramTime] = useState('8:30 PM');
+  const [newProgramPrice, setNewProgramPrice] = useState<number | ''>(1000);
+  const [newProgramCity, setNewProgramCity] = useState('Surat');
+  const [newProgramVenue, setNewProgramVenue] = useState('Sardar Patel Smruti Bhavan, Varachha, Surat');
+  const [newProgramMapUrl, setNewProgramMapUrl] = useState('https://share.google/y1jtFAZXuKusYTiUD');
+  const [newProgramStatus, setNewProgramStatus] = useState('upcoming');
+  const [newProgramSlug, setNewProgramSlug] = useState('');
+  const [newProgramRegistrationMode, setNewProgramRegistrationMode] = useState<'internal' | 'external'>('internal');
+  const [newProgramExternalUrl, setNewProgramExternalUrl] = useState('');
   const [newProgramCapacity, setNewProgramCapacity] = useState<number | ''>('');
   const [newProgramIsDateFinal, setNewProgramIsDateFinal] = useState<boolean>(true);
   const [newProgramIsInquiryClosed, setNewProgramIsInquiryClosed] = useState<boolean>(false);
@@ -382,6 +403,15 @@ export default function AdminDashboard() {
   const [editingProgram, setEditingProgram] = useState<Program | null>(null);
   const [editProgramName, setEditProgramName] = useState('');
   const [editProgramDate, setEditProgramDate] = useState('');
+  const [editProgramTime, setEditProgramTime] = useState('8:30 PM');
+  const [editProgramPrice, setEditProgramPrice] = useState<number | ''>(1000);
+  const [editProgramCity, setEditProgramCity] = useState('');
+  const [editProgramVenue, setEditProgramVenue] = useState('');
+  const [editProgramMapUrl, setEditProgramMapUrl] = useState('');
+  const [editProgramStatus, setEditProgramStatus] = useState('upcoming');
+  const [editProgramSlug, setEditProgramSlug] = useState('');
+  const [editProgramRegistrationMode, setEditProgramRegistrationMode] = useState<'internal' | 'external'>('internal');
+  const [editProgramExternalUrl, setEditProgramExternalUrl] = useState('');
   const [editProgramCapacity, setEditProgramCapacity] = useState<number | ''>('');
   const [editProgramIsDateFinal, setEditProgramIsDateFinal] = useState<boolean>(true);
   const [editProgramIsInquiryClosed, setEditProgramIsInquiryClosed] = useState<boolean>(false);
@@ -442,10 +472,21 @@ export default function AdminDashboard() {
     }));
   };
 
+  useEffect(() => {
+    const savedPassword = typeof window !== 'undefined' ? sessionStorage.getItem('adminPassword') : null;
+    if (savedPassword) {
+      setPassword(savedPassword);
+      setIsAuthenticated(true);
+      fetchSubmissions({ password: savedPassword, page: 1, fetchMetadata: true, showSpinner: false });
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
   const [dbStats, setDbStats] = useState<{ dataSizeMB: number, storageSizeMB: number, totalLimitMB: number } | null>(null);
 
   const fetchDbStats = async (passVal?: string) => {
-    const activePassword = passVal || password || sessionStorage.getItem('adminPassword') || '';
+    const activePassword = passVal || password || (typeof window !== 'undefined' ? sessionStorage.getItem('adminPassword') : '') || '';
     if (!activePassword) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/db-status`, {
@@ -453,7 +494,9 @@ export default function AdminDashboard() {
       });
       if (res.ok) {
         const data = await res.json();
-        setDbStats(data);
+        if (data && typeof data.storageSizeMB === 'number') {
+          setDbStats(data);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch database statistics:', err);
@@ -510,7 +553,8 @@ export default function AdminDashboard() {
       const res = await fetch(`${API_BASE_URL}/api/programs`);
       if (res.ok) {
         const data = await res.json();
-        setPrograms(data);
+        const list = Array.isArray(data) ? data : (data.programs || []);
+        setPrograms(list);
       }
     } catch (err) {
       console.error('Failed to fetch programs:', err);
@@ -652,6 +696,7 @@ export default function AdminDashboard() {
     password?: string;
     showSpinner?: boolean;
     limit?: number;
+    fetchMetadata?: boolean;
   }) => {
     const activePage = options?.page !== undefined ? options.page : currentPage;
     const activeSearch = options?.search !== undefined ? options.search : searchQuery;
@@ -691,25 +736,29 @@ export default function AdminDashboard() {
         setIsAuthenticated(true);
         sessionStorage.setItem('adminPassword', activePassword);
         setError('');
-        fetchPrograms();
-        fetchSettings();
-        fetchDbStats(activePassword);
-        fetchActiveWhatsappTemplate();
-        fetchWhatsappTemplates();
-        fetchNotifications();
 
-        // Fetch user role
-        try {
-          const roleRes = await fetch(`${API_BASE_URL}/api/auth/verify`, {
-            headers: { 'Authorization': activePassword }
-          });
-          if (roleRes.ok) {
-            const roleData = await roleRes.json();
-            setRole(roleData.role);
-            sessionStorage.setItem('adminRole', roleData.role);
+        fetchPrograms();
+        fetchDbStats(activePassword);
+
+        if (options?.fetchMetadata) {
+          fetchSettings();
+          fetchActiveWhatsappTemplate();
+          fetchWhatsappTemplates();
+          fetchNotifications();
+
+          // Fetch user role
+          try {
+            const roleRes = await fetch(`${API_BASE_URL}/api/auth/verify`, {
+              headers: { 'Authorization': activePassword }
+            });
+            if (roleRes.ok) {
+              const roleData = await roleRes.json();
+              setRole(roleData.role);
+              sessionStorage.setItem('adminRole', roleData.role);
+            }
+          } catch (roleErr) {
+            console.error('Error fetching role:', roleErr);
           }
-        } catch (roleErr) {
-          console.error('Error fetching role:', roleErr);
         }
         return data.submissions;
       } else if (res.status === 401) {
@@ -753,9 +802,9 @@ export default function AdminDashboard() {
 
   const handleCreateProgram = async (e: React.FormEvent) => {
     e.preventDefault();
-    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    const activePassword = password || (typeof window !== 'undefined' ? sessionStorage.getItem('adminPassword') : '') || '';
     if (!newProgramName || (newProgramIsDateFinal && !newProgramDate) || !newProgramCapacity) {
-      setProgramError('Please fill in all program fields.');
+      setProgramError('Please fill in all required program fields.');
       return;
     }
     try {
@@ -768,6 +817,15 @@ export default function AdminDashboard() {
         body: JSON.stringify({
           name: newProgramName,
           date: newProgramDate,
+          time: newProgramTime,
+          price: newProgramPrice ? Number(newProgramPrice) : 1000,
+          city: newProgramCity,
+          venue: newProgramVenue,
+          mapUrl: newProgramMapUrl,
+          status: newProgramStatus,
+          slug: newProgramSlug,
+          registrationMode: newProgramRegistrationMode,
+          externalRegistrationUrl: newProgramExternalUrl,
           capacity: Number(newProgramCapacity),
           isDateFinal: newProgramIsDateFinal,
           cardTemplate: newProgramCardTemplate,
@@ -786,6 +844,15 @@ export default function AdminDashboard() {
         setProgramError('');
         setNewProgramName('');
         setNewProgramDate('');
+        setNewProgramTime('8:30 PM');
+        setNewProgramPrice(1000);
+        setNewProgramCity('Surat');
+        setNewProgramVenue('Sardar Patel Smruti Bhavan, Varachha, Surat');
+        setNewProgramMapUrl('https://share.google/y1jtFAZXuKusYTiUD');
+        setNewProgramStatus('upcoming');
+        setNewProgramSlug('');
+        setNewProgramRegistrationMode('internal');
+        setNewProgramExternalUrl('');
         setNewProgramCapacity('');
         setNewProgramIsDateFinal(true);
         setNewProgramIsInquiryClosed(false);
@@ -797,7 +864,6 @@ export default function AdminDashboard() {
         setNewProgramPhotoZoom(1.0);
         setNewProgramPhotoOffsetY(0);
         setNewProgramPhotoLink('');
-        // Reset the file input field
         const fileInput = document.getElementById('programCardTemplateInput') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
         fetchPrograms();
@@ -811,7 +877,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteProgram = async (id: string) => {
-    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    const activePassword = password || (typeof window !== 'undefined' ? sessionStorage.getItem('adminPassword') : '') || '';
     if (!confirm('Are you sure you want to delete this program?')) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/programs/${id}`, {
@@ -835,6 +901,15 @@ export default function AdminDashboard() {
     setEditingProgram(prog);
     setEditProgramName(prog.name);
     setEditProgramDate(prog.date);
+    setEditProgramTime(prog.time || '8:30 PM');
+    setEditProgramPrice(prog.price !== undefined ? prog.price : 1000);
+    setEditProgramCity(prog.city || '');
+    setEditProgramVenue(prog.venue || '');
+    setEditProgramMapUrl(prog.mapUrl || '');
+    setEditProgramStatus(prog.status || 'upcoming');
+    setEditProgramSlug(prog.slug || '');
+    setEditProgramRegistrationMode((prog.registrationMode as any) || 'internal');
+    setEditProgramExternalUrl(prog.externalRegistrationUrl || '');
     setEditProgramCapacity(prog.capacity);
     setEditProgramIsDateFinal(prog.isDateFinal !== false);
     setEditProgramCardTemplate(prog.cardTemplate || null);
@@ -853,9 +928,9 @@ export default function AdminDashboard() {
   const handleUpdateProgram = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProgram) return;
-    const activePassword = password || sessionStorage.getItem('adminPassword') || '';
+    const activePassword = password || (typeof window !== 'undefined' ? sessionStorage.getItem('adminPassword') : '') || '';
     if (!editProgramName || (editProgramIsDateFinal && !editProgramDate) || !editProgramCapacity) {
-      setEditProgramError('Please fill in all program fields.');
+      setEditProgramError('Please fill in all required program fields.');
       return;
     }
     try {
@@ -868,6 +943,15 @@ export default function AdminDashboard() {
         body: JSON.stringify({
           name: editProgramName,
           date: editProgramDate,
+          time: editProgramTime,
+          price: editProgramPrice ? Number(editProgramPrice) : 1000,
+          city: editProgramCity,
+          venue: editProgramVenue,
+          mapUrl: editProgramMapUrl,
+          status: editProgramStatus,
+          slug: editProgramSlug,
+          registrationMode: editProgramRegistrationMode,
+          externalRegistrationUrl: editProgramExternalUrl,
           capacity: Number(editProgramCapacity),
           isDateFinal: editProgramIsDateFinal,
           cardTemplate: editProgramCardTemplate,
@@ -1574,7 +1658,7 @@ export default function AdminDashboard() {
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!password) return;
-    fetchSubmissions({ password });
+    fetchSubmissions({ password, fetchMetadata: true, showSpinner: true });
     fetchDuplicates({ password });
   };
 
@@ -2315,44 +2399,44 @@ export default function AdminDashboard() {
   // Login view if not authenticated
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-between font-sans relative overflow-hidden">
-        {/* Glows */}
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col justify-between font-sans relative overflow-hidden">
+        {/* Ambient Warm Light Glows */}
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-amber-200/35 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-rose-200/35 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex-grow flex items-center justify-center p-6">
-          <div className="w-full max-w-md bg-slate-950/70 border border-slate-800/80 rounded-3xl p-8 backdrop-blur-xl shadow-2xl">
-            <div className="text-center mb-8">
-              <div className="w-12 h-12 rounded-full bg-amber-500/15 text-amber-500 flex items-center justify-center mx-auto mb-4 font-bold text-xl">
-                🔒
+          <div className="w-full max-w-md bg-white border border-slate-200/90 rounded-3xl p-8 md:p-10 shadow-2xl space-y-6">
+            <div className="text-center space-y-2">
+              <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto mb-3 shadow-inner">
+                <ShieldCheckIcon className="w-7 h-7 text-rose-600" />
               </div>
-              <h2 className="text-2xl font-bold tracking-tight text-slate-100">Admin Authentication</h2>
-              <p className="text-slate-400 text-sm mt-1">Please enter the security password to access the panel.</p>
+              <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Admin Authentication</h2>
+              <p className="text-slate-500 text-xs leading-relaxed font-medium">Enter your master security key to access the management portal.</p>
             </div>
 
             {error && (
-              <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
+              <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs text-center font-bold">
                 {error}
               </div>
             )}
 
-            <form onSubmit={handleLoginSubmit} className="space-y-6">
+            <form onSubmit={handleLoginSubmit} className="space-y-5">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Password</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">Security Key</label>
                 <input
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 transition-colors text-center text-lg tracking-widest"
+                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-300 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none transition-all text-center text-lg tracking-widest font-mono"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-4 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-bold rounded-2xl transition-all shadow-lg shadow-amber-500/20"
+                className="w-full py-4 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 active:scale-[0.99] text-white font-extrabold rounded-xl transition-all shadow-xl shadow-rose-600/20 text-sm uppercase tracking-wider cursor-pointer"
               >
                 {loading ? 'Authenticating...' : 'Access Dashboard'}
               </button>
@@ -2360,8 +2444,8 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <footer className="py-6 text-center text-xs text-slate-600">
-          Secure Administrative System.
+        <footer className="py-6 text-center text-xs text-slate-500 font-medium">
+          Ek Duje Ke Liye &bull; Secure Administrative System
         </footer>
       </div>
     );
@@ -2369,33 +2453,33 @@ export default function AdminDashboard() {
 
   // Dashboard view if authenticated
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row relative">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans flex flex-col md:flex-row relative">
       {/* Lightbox / Modal */}
       {selectedImage && (
         <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
           onClick={() => setSelectedImage(null)}
         >
-          <div className="relative max-w-3xl max-h-[85vh] overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 flex flex-col">
+          <div className="relative max-w-3xl max-h-[85vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col">
             <img
               src={selectedImage.startsWith('data:') ? selectedImage : `${API_BASE_URL}${selectedImage}`}
               alt="Preview"
-              className="max-w-full max-h-[70vh] object-contain"
+              className="max-w-full max-h-[70vh] object-contain bg-slate-50"
             />
-            <div className="p-4 bg-slate-950/90 border-t border-slate-800 flex justify-between items-center gap-4">
-              <span className="text-xs text-slate-400 font-mono truncate">{selectedImage.startsWith('data:') ? 'Inline Database Image' : selectedImage}</span>
+            <div className="p-4 bg-white border-t border-slate-200 flex justify-between items-center gap-4">
+              <span className="text-xs text-slate-500 font-mono truncate">{selectedImage.startsWith('data:') ? 'Inline Database Image' : selectedImage}</span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   downloadImage(selectedImage);
                 }}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs transition-all"
+                className="px-4 py-2 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold rounded-xl text-xs transition-all shadow-md"
               >
                 Download File
               </button>
             </div>
             <button
-              className="absolute top-4 right-4 bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-full w-10 h-10 flex items-center justify-center font-bold text-lg"
+              className="absolute top-4 right-4 bg-white/90 hover:bg-white text-slate-700 rounded-full w-9 h-9 flex items-center justify-center font-bold text-lg shadow-md border border-slate-200 cursor-pointer"
               onClick={() => setSelectedImage(null)}
             >
               &times;
@@ -2406,19 +2490,19 @@ export default function AdminDashboard() {
 
       {/* Export Program Selection Modal */}
       {showExportModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-6">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl">
             <div>
-              <h3 className="text-lg font-bold text-slate-100">Export Submissions</h3>
-              <p className="text-xs text-slate-400 mt-1">Select filters to export submissions to a CSV sheet or PDF report.</p>
+              <h3 className="text-lg font-bold text-slate-900">Export Submissions</h3>
+              <p className="text-xs text-slate-500 mt-1">Select filters to export submissions to a CSV sheet or PDF report.</p>
             </div>
             
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-300">Program Slot</label>
+              <label className="text-xs font-bold text-slate-700">Program Slot</label>
               <select
                 id="exportProgramSelect"
                 defaultValue=""
-                className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+                className="w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-xl px-4 py-3 focus:bg-white focus:outline-none focus:border-rose-500 cursor-pointer"
               >
                 <option value="">All Programs (આખો ડેટા)</option>
                 {programs.map((p) => (
@@ -2430,11 +2514,11 @@ export default function AdminDashboard() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-300">Status</label>
+              <label className="text-xs font-bold text-slate-700">Status</label>
               <select
                 id="exportStatusSelect"
                 defaultValue=""
-                className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+                className="w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-xl px-4 py-3 focus:bg-white focus:outline-none focus:border-rose-500 cursor-pointer"
               >
                 <option value="">All Statuses (બધા જ સ્ટેટસ)</option>
                 <option value="approved">Approved (મંજૂર થયેલ)</option>
@@ -2446,11 +2530,11 @@ export default function AdminDashboard() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-300">Registration Type (રજીસ્ટ્રેશન પ્રકાર)</label>
+              <label className="text-xs font-bold text-slate-700">Registration Type (રજીસ્ટ્રેશન પ્રકાર)</label>
               <select
                 id="exportTypeSelect"
                 defaultValue=""
-                className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+                className="w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-xl px-4 py-3 focus:bg-white focus:outline-none focus:border-rose-500 cursor-pointer"
               >
                 <option value="">All Types (બધા જ પ્રકાર)</option>
                 <option value="cpl">CPL Only (માત્ર CPL)</option>
@@ -2468,7 +2552,7 @@ export default function AdminDashboard() {
                     handleExportCSV(selectEl?.value || '', statusEl?.value || '', typeEl?.value || '');
                     setShowExportModal(false);
                   }}
-                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20"
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
                 >
                   Export CSV (એક્સેલ)
                 </button>
@@ -2480,14 +2564,14 @@ export default function AdminDashboard() {
                     handleExportPDF(selectEl?.value || '', statusEl?.value || '', typeEl?.value || '');
                     setShowExportModal(false);
                   }}
-                  className="flex-1 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-sky-500/20"
+                  className="flex-1 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-xs transition-all shadow-md shadow-sky-500/20 cursor-pointer"
                 >
                   Export PDF (પીડીએફ)
                 </button>
               </div>
               <button
                 onClick={() => setShowExportModal(false)}
-                className="w-full py-2 border border-slate-800 hover:bg-slate-900 text-slate-400 font-medium rounded-xl text-xs transition-all mt-2"
+                className="w-full py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold rounded-xl text-xs transition-all mt-2 cursor-pointer"
               >
                 Cancel (રદ કરો)
               </button>
@@ -2498,15 +2582,15 @@ export default function AdminDashboard() {
 
       {/* Edit Submission Modal */}
       {editingSubmission && (
-        <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="relative w-full max-w-lg bg-slate-950 border border-slate-800 rounded-3xl p-6 md:p-8 backdrop-blur-xl shadow-2xl space-y-6">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6">
+            <div className="flex justify-between items-center border-b border-slate-200 pb-4">
               <div>
-                <h2 className="text-xl font-bold text-slate-100 tracking-tight">Edit Couple Registration</h2>
-                <p className="text-xs text-slate-400 font-mono mt-1">Inquiry ID: {editingSubmission.inquiryId}</p>
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Edit Couple Registration</h2>
+                <p className="text-xs text-slate-500 font-mono mt-1">Inquiry ID: {editingSubmission.inquiryId}</p>
               </div>
               <button
-                className="bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm"
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm cursor-pointer"
                 onClick={() => setEditingSubmission(null)}
               >
                 &times;
@@ -2514,7 +2598,7 @@ export default function AdminDashboard() {
             </div>
 
             {editError && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl">
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium">
                 {editError}
               </div>
             )}
@@ -2522,60 +2606,60 @@ export default function AdminDashboard() {
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Husband Name</label>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">Husband Name</label>
                   <input
                     type="text"
                     required
                     value={editHusbandName}
                     onChange={(e) => setEditHusbandName(e.target.value)}
                     placeholder="First Name"
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Wife Name</label>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">Wife Name</label>
                   <input
                     type="text"
                     required
                     value={editWifeName}
                     onChange={(e) => setEditWifeName(e.target.value)}
                     placeholder="First Name"
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Surname / Family Name</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">Surname / Family Name</label>
                 <input
                   type="text"
                   required
                   value={editSurname}
                   onChange={(e) => setEditSurname(e.target.value)}
                   placeholder="e.g. Patel"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Phone Number (WhatsApp)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">Phone Number (WhatsApp)</label>
                 <input
                   type="tel"
                   required
                   value={editPhoneNumber}
                   onChange={(e) => setEditPhoneNumber(e.target.value)}
                   placeholder="10-digit number"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Select Program Slot</label>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">Select Program Slot</label>
                   <select
                     value={editProgramId}
                     onChange={(e) => setEditProgramId(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                   >
                     {programs.map((p) => {
                       const isSoldOut = p.bookingsCount + 2 > p.capacity;
@@ -2595,11 +2679,11 @@ export default function AdminDashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Status</label>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">Status</label>
                   <select
                     value={editStatus}
                     onChange={(e) => setEditStatus(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors font-semibold"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 transition-colors font-semibold"
                   >
                     <option value="inquiry">Inquiry (ઇન્ક્વાયરી)</option>
                     <option value="pending">Pending (પેન્ડિંગ)</option>
@@ -2612,66 +2696,66 @@ export default function AdminDashboard() {
 
               {editStatus === 'rejected' && (
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Rejection Reason</label>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">Rejection Reason</label>
                   <input
                     type="text"
                     required
                     value={editRejectionReason}
                     onChange={(e) => setEditRejectionReason(e.target.value)}
                     placeholder="Enter reason for rejection"
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                   />
                 </div>
               )}
 
               {editStatus === 'refunded' && (
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Refund Reason</label>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">Refund Reason</label>
                   <input
                     type="text"
                     required
                     value={editRefundReason}
                     onChange={(e) => setEditRefundReason(e.target.value)}
                     placeholder="Enter reason for refund"
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                   />
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Update Couple Photo</label>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">Update Couple Photo</label>
                   <input
                     type="file"
                     accept="image/*"
                     onChange={(e) => setEditCouplePhoto(e.target.files?.[0] || null)}
-                    className="w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer"
+                    className="w-full text-xs text-slate-600 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 cursor-pointer"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Update Payment Screenshot</label>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">Update Payment Screenshot</label>
                   <input
                     type="file"
                     accept="image/*"
                     onChange={(e) => setEditPaymentScreenshot(e.target.files?.[0] || null)}
-                    className="w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer"
+                    className="w-full text-xs text-slate-600 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 cursor-pointer"
                   />
                 </div>
               </div>
 
-              <div className="pt-4 flex gap-4 border-t border-slate-800">
+              <div className="pt-4 flex gap-4 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setEditingSubmission(null)}
-                  className="flex-1 py-2.5 border border-slate-800 hover:bg-slate-900 text-slate-350 font-bold rounded-xl text-xs transition-all"
+                  className="flex-1 py-2.5 border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={updating}
-                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20"
+                  className="flex-1 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
                 >
                   {updating ? 'Saving...' : 'Save Changes'}
                 </button>
@@ -2682,14 +2766,14 @@ export default function AdminDashboard() {
       )}
 
       {editingProgram && (
-        <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="relative w-full max-w-md bg-slate-950 border border-slate-800 rounded-3xl p-6 md:p-8 backdrop-blur-xl shadow-2xl space-y-6">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="relative w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6">
+            <div className="flex justify-between items-center border-b border-slate-200 pb-4">
               <div>
-                <h2 className="text-xl font-bold text-slate-100 tracking-tight">Edit Program Slot</h2>
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Edit Program Slot</h2>
               </div>
               <button
-                className="bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm"
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm cursor-pointer"
                 onClick={() => setEditingProgram(null)}
               >
                 &times;
@@ -2697,70 +2781,183 @@ export default function AdminDashboard() {
             </div>
 
             {editProgramError && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl">
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium">
                 {editProgramError}
               </div>
             )}
             {editProgramSuccess && (
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-xl">
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-xl font-medium">
                 {editProgramSuccess}
               </div>
             )}
 
-            <form onSubmit={handleUpdateProgram} className="space-y-4">
+            <form onSubmit={handleUpdateProgram} className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Program Name</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Program Name</label>
                 <input
                   type="text"
                   required
                   value={editProgramName}
                   onChange={(e) => setEditProgramName(e.target.value)}
-                  placeholder="e.g. Couples Gala Dinner"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  placeholder="e.g. Ek Duje Ke Liye - Sardar Patel Smruti Bhavan"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Program Date</label>
+                  <input
+                    type="date"
+                    required={editProgramIsDateFinal}
+                    value={editProgramDate}
+                    onChange={(e) => setEditProgramDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Event Time</label>
+                  <input
+                    type="text"
+                    value={editProgramTime}
+                    onChange={(e) => setEditProgramTime(e.target.value)}
+                    placeholder="e.g. 8:30 PM"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Couple Pass Price (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    required
+                    value={editProgramPrice}
+                    onChange={(e) => setEditProgramPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="e.g. 1000"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm font-bold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">City</label>
+                  <input
+                    type="text"
+                    value={editProgramCity}
+                    onChange={(e) => setEditProgramCity(e.target.value)}
+                    placeholder="e.g. Surat"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Venue & Address</label>
+                <input
+                  type="text"
+                  value={editProgramVenue}
+                  onChange={(e) => setEditProgramVenue(e.target.value)}
+                  placeholder="e.g. Sardar Patel Smruti Bhavan, Varachha, Surat"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Program Status</label>
+                  <select
+                    value={editProgramStatus}
+                    onChange={(e) => setEditProgramStatus(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm font-semibold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                  >
+                    <option value="upcoming">Upcoming (Active)</option>
+                    <option value="few_seats">Few Seats Left</option>
+                    <option value="housefull">Housefull / Sold Out</option>
+                    <option value="registration_closed">Registration Closed</option>
+                    <option value="completed">Completed / Past</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Registration Mode</label>
+                  <select
+                    value={editProgramRegistrationMode}
+                    onChange={(e) => setEditProgramRegistrationMode(e.target.value as 'internal' | 'external')}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm font-semibold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                  >
+                    <option value="internal">Internal (Website & Razorpay)</option>
+                    <option value="external">External Link</option>
+                  </select>
+                </div>
+              </div>
+
+              {editProgramRegistrationMode === 'external' && (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">External Registration URL</label>
+                  <input
+                    type="url"
+                    value={editProgramExternalUrl}
+                    onChange={(e) => setEditProgramExternalUrl(e.target.value)}
+                    placeholder="https://allevents.in/..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Google Maps Link</label>
+                <input
+                  type="url"
+                  value={editProgramMapUrl}
+                  onChange={(e) => setEditProgramMapUrl(e.target.value)}
+                  placeholder="https://maps.google.com/..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Program Date</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Custom Event URL Slug (Optional)</label>
                 <input
-                  type="date"
-                  required={editProgramIsDateFinal}
-                  value={editProgramDate}
-                  onChange={(e) => setEditProgramDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  type="text"
+                  value={editProgramSlug}
+                  onChange={(e) => setEditProgramSlug(e.target.value)}
+                  placeholder="e.g. surat-7-september-2026"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
-              <div className="flex items-center gap-2 py-2">
+              <div className="flex items-center gap-2 py-1">
                 <input
                   type="checkbox"
                   id="editProgramIsDateFinal"
                   checked={editProgramIsDateFinal}
                   onChange={(e) => setEditProgramIsDateFinal(e.target.checked)}
-                  className="rounded bg-slate-900 border-slate-800 text-amber-500 focus:ring-amber-500 h-4 w-4"
+                  className="rounded bg-slate-50 border-slate-300 text-rose-600 focus:ring-rose-500 h-4 w-4"
                 />
-                <label htmlFor="editProgramIsDateFinal" className="text-xs font-semibold text-slate-300 cursor-pointer">
+                <label htmlFor="editProgramIsDateFinal" className="text-xs font-bold text-slate-700 cursor-pointer">
                   Date is Final? / Collect Payment (તારીખ નક્કી છે / પેમેન્ટ લેવું)
                 </label>
               </div>
 
               {!editProgramIsDateFinal && (
-                <div className="flex items-center gap-2 py-2">
+                <div className="flex items-center gap-2 py-1">
                   <input
                     type="checkbox"
                     id="editProgramIsInquiryClosed"
                     checked={editProgramIsInquiryClosed}
                     onChange={(e) => setEditProgramIsInquiryClosed(e.target.checked)}
-                    className="rounded bg-slate-900 border-slate-800 text-amber-500 focus:ring-amber-500 h-4 w-4"
+                    className="rounded bg-slate-50 border-slate-300 text-rose-600 focus:ring-rose-500 h-4 w-4"
                   />
-                  <label htmlFor="editProgramIsInquiryClosed" className="text-xs font-semibold text-slate-300 cursor-pointer">
+                  <label htmlFor="editProgramIsInquiryClosed" className="text-xs font-bold text-slate-700 cursor-pointer">
                     Close Inquiry Registration? (ઇન્ક્વાયરી લેવાનું બંધ કરવું)
                   </label>
                 </div>
               )}
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Hall Capacity (Seats, e.g. 600 for 300 Couples)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Hall Capacity (Seats, e.g. 600 for 300 Couples)</label>
                 <input
                   type="number"
                   required
@@ -2768,66 +2965,66 @@ export default function AdminDashboard() {
                   value={editProgramCapacity}
                   onChange={(e) => setEditProgramCapacity(e.target.value === '' ? '' : Number(e.target.value))}
                   placeholder="e.g. 600"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
               {editProgramIsDateFinal && (
-                <div className="p-4 bg-slate-900/50 border border-slate-850 rounded-2xl space-y-4">
-                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider block">Pass Layout Configuration</span>
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
+                  <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider block">Pass Layout Configuration</span>
                   
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Heart X Offset ({editProgramHeartX}px)</label>
+                      <label className="block text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1">Heart X Offset ({editProgramHeartX}px)</label>
                       <input
                         type="range"
                         min="0"
                         max="800"
                         value={editProgramHeartX}
                         onChange={(e) => setEditProgramHeartX(Number(e.target.value))}
-                        className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Heart Y Offset ({editProgramHeartY}px)</label>
+                      <label className="block text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1">Heart Y Offset ({editProgramHeartY}px)</label>
                       <input
                         type="range"
                         min="0"
                         max="800"
                         value={editProgramHeartY}
                         onChange={(e) => setEditProgramHeartY(Number(e.target.value))}
-                        className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Heart Width ({editProgramHeartWidth}px)</label>
+                    <label className="block text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1">Heart Width ({editProgramHeartWidth}px)</label>
                     <input
                       type="range"
                       min="50"
                       max="500"
                       value={editProgramHeartWidth}
                       onChange={(e) => setEditProgramHeartWidth(Number(e.target.value))}
-                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Heart Height ({editProgramHeartHeight}px)</label>
+                    <label className="block text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1">Heart Height ({editProgramHeartHeight}px)</label>
                     <input
                       type="range"
                       min="50"
                       max="500"
                       value={editProgramHeartHeight}
                       onChange={(e) => setEditProgramHeartHeight(Number(e.target.value))}
-                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Photo Zoom ({editProgramPhotoZoom}x)</label>
+                    <label className="block text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1">Photo Zoom ({editProgramPhotoZoom}x)</label>
                     <input
                       type="range"
                       min="0.5"
@@ -2835,19 +3032,19 @@ export default function AdminDashboard() {
                       step="0.05"
                       value={editProgramPhotoZoom}
                       onChange={(e) => setEditProgramPhotoZoom(Number(e.target.value))}
-                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Photo Vertical Shift ({editProgramPhotoOffsetY}px)</label>
+                    <label className="block text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1">Photo Vertical Shift ({editProgramPhotoOffsetY}px)</label>
                     <input
                       type="range"
                       min="-300"
                       max="300"
                       value={editProgramPhotoOffsetY}
                       onChange={(e) => setEditProgramPhotoOffsetY(Number(e.target.value))}
-                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
                     />
                   </div>
 
@@ -2862,7 +3059,7 @@ export default function AdminDashboard() {
                         setEditProgramPhotoZoom(1.0);
                         setEditProgramPhotoOffsetY(0);
                       }}
-                      className="w-full py-2 bg-slate-800 hover:bg-slate-750 text-slate-350 hover:text-white rounded-lg text-xs font-bold transition-all border border-slate-700"
+                      className="w-full py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-bold transition-all border border-slate-300 cursor-pointer"
                     >
                       Reset to Default Layout
                     </button>
@@ -2871,7 +3068,7 @@ export default function AdminDashboard() {
               )}
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Entry Pass Template Image (Optional)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Entry Pass Template Image (Optional)</label>
                 <input
                   type="file"
                   accept="image/*"
@@ -2893,32 +3090,32 @@ export default function AdminDashboard() {
                       reader.readAsDataURL(file);
                     }
                   }}
-                  className="w-full text-slate-400 text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 file:cursor-pointer cursor-pointer bg-slate-900 border border-slate-800 rounded-xl px-3 py-2"
+                  className="w-full text-slate-600 text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 file:cursor-pointer cursor-pointer bg-slate-50 border border-slate-300 rounded-xl px-3 py-2"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Photo Gallery Link (ફોટો ગેલેરી લિંક)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Photo Gallery Link (ફોટો ગેલેરી લિંક)</label>
                 <input
                   type="url"
                   value={editProgramPhotoLink}
                   onChange={(e) => setEditProgramPhotoLink(e.target.value)}
                   placeholder="e.g. https://photos.google.com/..."
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
-              <div className="pt-4 flex gap-4 border-t border-slate-800">
+              <div className="pt-4 flex gap-4 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setEditingProgram(null)}
-                  className="flex-1 py-2.5 border border-slate-800 hover:bg-slate-900 text-slate-350 font-bold rounded-xl text-xs transition-all"
+                  className="flex-1 py-2.5 border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20"
+                  className="flex-1 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
                 >
                   Save Changes
                 </button>
@@ -2929,15 +3126,15 @@ export default function AdminDashboard() {
       )}
 
       {reviewingProgramForFrames && (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-          <div className="relative w-full max-w-4xl h-[90vh] bg-slate-950 border border-slate-800 rounded-3xl p-6 md:p-8 backdrop-blur-xl shadow-2xl flex flex-col space-y-6">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="relative w-full max-w-4xl h-[90vh] bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col space-y-6">
+            <div className="flex justify-between items-center border-b border-slate-200 pb-4">
               <div>
-                <h2 className="text-xl font-bold text-slate-100 tracking-tight">Review & Adjust Framed Photos</h2>
-                <p className="text-xs text-slate-400 mt-1">Program: {reviewingProgramForFrames.name} ({reviewingProgramForFrames.date})</p>
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Review &amp; Adjust Framed Photos</h2>
+                <p className="text-xs text-slate-500 mt-1">Program: {reviewingProgramForFrames.name} ({reviewingProgramForFrames.date})</p>
               </div>
               <button 
-                className="bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm"
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm cursor-pointer"
                 onClick={() => setReviewingProgramForFrames(null)}
               >
                 &times;
@@ -2946,22 +3143,22 @@ export default function AdminDashboard() {
 
             <div className="flex-1 overflow-y-auto pr-2 space-y-4">
               {approvedSubmissionsForFrames.filter(sub => selectedFrameInquiryIds.includes(sub.inquiryId)).map((sub) => (
-                  <div key={sub.inquiryId} className="flex flex-col sm:flex-row items-center gap-6 bg-slate-900/40 border border-slate-850 rounded-2xl p-4 shadow-sm">
-                    <div className="w-[120px] h-[160px] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center flex-shrink-0">
+                  <div key={sub.inquiryId} className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-sm">
+                    <div className="w-[120px] h-[160px] overflow-hidden rounded-xl border border-slate-200 bg-white flex items-center justify-center flex-shrink-0">
                       <LivePreviewCanvas sub={sub} frameImg={globalFrameImg} />
                     </div>
 
                     <div className="flex-1 w-full space-y-4">
                       <div className="flex justify-between items-start">
                         <div>
-                          <p className="font-bold text-slate-100 text-sm">{sub.husbandName} & {sub.wifeName} {sub.surname}</p>
-                          <p className="text-[10px] text-amber-500 font-mono font-bold mt-0.5">{sub.inquiryId}</p>
+                          <p className="font-bold text-slate-900 text-sm">{sub.husbandName} &amp; {sub.wifeName} {sub.surname}</p>
+                          <p className="text-[10px] text-rose-700 font-mono font-bold mt-0.5">{sub.inquiryId}</p>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Zoom ({sub.photoZoom || 1.0}x)</label>
+                          <label className="block text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1">Zoom ({sub.photoZoom || 1.0}x)</label>
                           <input
                             type="range"
                             min="0.5"
@@ -2969,18 +3166,18 @@ export default function AdminDashboard() {
                             step="0.05"
                             value={sub.photoZoom || 1.0}
                             onChange={(e) => updateSubmissionCoordInState(sub.inquiryId, 'photoZoom', Number(e.target.value))}
-                            className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
                           />
                         </div>
                         <div>
-                          <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Vertical Shift ({sub.photoOffsetY || 0}px)</label>
+                          <label className="block text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1">Vertical Shift ({sub.photoOffsetY || 0}px)</label>
                           <input
                             type="range"
                             min="-300"
                             max="300"
                             value={sub.photoOffsetY || 0}
                             onChange={(e) => updateSubmissionCoordInState(sub.inquiryId, 'photoOffsetY', Number(e.target.value))}
-                            className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
                           />
                         </div>
                       </div>
@@ -2990,17 +3187,17 @@ export default function AdminDashboard() {
               }
             </div>
 
-            <div className="pt-4 border-t border-slate-800 flex justify-end gap-3">
+            <div className="pt-4 border-t border-slate-200 flex justify-end gap-3">
               <button
                 onClick={() => setReviewingProgramForFrames(null)}
-                className="px-4 py-2 border border-slate-855 hover:bg-slate-900 text-slate-355 font-bold rounded-xl text-xs transition-all"
+                className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
               >
                 Close
               </button>
               <button
                 onClick={() => handleDownloadFramedZip(reviewingProgramForFrames)}
                 disabled={zipping || selectedFrameInquiryIds.length === 0}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-md shadow-amber-500/10"
+                className="px-4 py-2 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
               >
                 {zipping ? `Processing (${zipProgress})` : 'Save Alignments & Download ZIP'}
               </button>
@@ -3010,14 +3207,14 @@ export default function AdminDashboard() {
       )}
 
       {/* Sidebar Navigation */}
-      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between transform transition-transform duration-300 md:translate-x-0 ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-slate-200 shadow-sm flex flex-col justify-between transform transition-transform duration-300 md:translate-x-0 ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 space-y-8 flex-grow flex flex-col">
           {/* Logo / Title */}
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Logo" className="h-9 w-auto object-contain" />
             <div>
-              <h2 className="font-extrabold text-slate-100 text-sm tracking-tight">Ek Duje Ke Liye</h2>
-              <span className="text-[10px] text-slate-500 font-bold tracking-wider uppercase">Admin Panel</span>
+              <h2 className="font-extrabold text-slate-900 text-sm tracking-tight">Ek Duje Ke Liye</h2>
+              <span className="text-[10px] text-rose-700 font-bold tracking-wider uppercase">Admin Portal</span>
             </div>
           </div>
 
@@ -3025,47 +3222,56 @@ export default function AdminDashboard() {
           <nav className="space-y-1.5 flex-grow">
             <button
               onClick={() => { setActiveSection('dashboard'); setMobileSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeSection === 'dashboard' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeSection === 'dashboard' ? 'bg-rose-50 border border-rose-200 text-rose-800 shadow-xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
             >
-              <span className="text-sm">📊</span> Dashboard (ડેશબોર્ડ)
+              <LayoutDashboardIcon className="w-4 h-4 flex-shrink-0 text-rose-600" />
+              <span>Dashboard</span>
+              <span className="text-[10px] opacity-75 font-normal ml-auto">(ડેશબોર્ડ)</span>
             </button>
             <button
               onClick={() => { setActiveSection('programs'); setMobileSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeSection === 'programs' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeSection === 'programs' ? 'bg-rose-50 border border-rose-200 text-rose-800 shadow-xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
             >
-              <span className="text-sm">🎟️</span> Program Slots (પ્રોગ્રામ સ્લોટ)
+              <TicketIcon className="w-4 h-4 flex-shrink-0 text-rose-600" />
+              <span>Program Slots</span>
+              <span className="text-[10px] opacity-75 font-normal ml-auto">(સ્લોટ)</span>
             </button>
             <button
               onClick={() => { setActiveSection('registrations'); setMobileSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeSection === 'registrations' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeSection === 'registrations' ? 'bg-rose-50 border border-rose-200 text-rose-800 shadow-xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
             >
-              <span className="text-sm">📋</span> Registrations (રજીસ્ટ્રેશન)
+              <UsersIcon className="w-4 h-4 flex-shrink-0 text-rose-600" />
+              <span>Registrations</span>
+              <span className="text-[10px] opacity-75 font-normal ml-auto">(રજીસ્ટ્રેશન)</span>
             </button>
             <button
               onClick={() => { setActiveSection('settings'); setMobileSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeSection === 'settings' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeSection === 'settings' ? 'bg-rose-50 border border-rose-200 text-rose-800 shadow-xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
             >
-              <span className="text-sm">⚙️</span> Settings (સેટિંગ્સ)
+              <SettingsIcon className="w-4 h-4 flex-shrink-0 text-rose-600" />
+              <span>Settings</span>
+              <span className="text-[10px] opacity-75 font-normal ml-auto">(સેટિંગ્સ)</span>
             </button>
           </nav>
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-6 border-t border-slate-800 space-y-4">
+        <div className="p-6 border-t border-slate-200 space-y-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-slate-850 border border-slate-700 flex items-center justify-center font-bold text-xs text-amber-500">
+            <div className="w-8 h-8 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center font-bold text-xs text-rose-700">
               {role === 'superadmin' ? 'SA' : 'A'}
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-200 capitalize">{role}</p>
-              <span className="text-[9px] text-slate-500">Active Session</span>
+              <p className="text-xs font-bold text-slate-800 capitalize">{role}</p>
+              <span className="text-[9px] text-slate-500 font-medium">Active Session</span>
             </div>
           </div>
           <button
             onClick={handleLogout}
-            className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold rounded-xl text-xs transition-all border border-red-500/20 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-2.5 bg-red-50 hover:bg-red-100 text-red-700 font-bold rounded-xl text-xs transition-all border border-red-200 flex items-center justify-center gap-2 cursor-pointer"
           >
-            🚪 Log Out
+            <LogOutIcon className="w-3.5 h-3.5" />
+            <span>Log Out</span>
           </button>
         </div>
       </aside>
@@ -3073,46 +3279,52 @@ export default function AdminDashboard() {
       {/* Mobile Backdrop Overlay */}
       {mobileSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-30 md:hidden backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-slate-900/50 z-30 md:hidden backdrop-blur-xs transition-opacity"
           onClick={() => setMobileSidebarOpen(false)}
         />
       )}
 
       {/* Main Content Area */}
-      <div className="flex-grow md:pl-64 flex flex-col min-h-screen">
+      <div className="flex-grow md:pl-64 flex flex-col min-h-screen bg-[#F8FAFC]">
         {/* Mobile Header Bar */}
-        <header className="md:hidden bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center z-30 sticky top-0">
+        <header className="md:hidden bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center z-30 sticky top-0 shadow-xs">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Logo" className="h-8 w-auto object-contain" />
-            <span className="font-extrabold text-slate-100 text-sm tracking-tight">EKDJK Admin</span>
+            <span className="font-extrabold text-slate-900 text-sm tracking-tight">EKDJK Admin</span>
           </div>
           <button
             onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-            className="p-2 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-xl transition-all cursor-pointer"
+            className="p-2 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer"
           >
-            {mobileSidebarOpen ? '✖️' : '☰'}
+            {mobileSidebarOpen ? (
+              <span className="text-xs font-bold px-1">✕</span>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
           </button>
         </header>
 
         {/* Content Container */}
         <main className="p-6 md:p-8 space-y-8 flex-grow overflow-y-auto max-w-[1600px] mx-auto w-full">
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-200 pb-6">
           <div>
-            <h1 className="text-3xl font-extrabold text-slate-100 tracking-tight flex items-center gap-3">
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
               <img src="/logo.png" alt="Ek Duje Ke Liye Logo" className="h-9 w-auto object-contain" />
               Admin Dashboard
             </h1>
-            <p className="text-slate-400 text-sm mt-1">
+            <p className="text-slate-500 text-sm mt-1 font-medium">
               Manage, verify, and view all couple card registration entries.
-              {role === 'superadmin' && <span className="ml-2 px-2 py-0.5 bg-purple-500/10 border border-purple-500/25 text-purple-400 text-xs font-bold rounded-md">SUPER ADMIN</span>}
+              {role === 'superadmin' && <span className="ml-2 px-2 py-0.5 bg-purple-50 border border-purple-200 text-purple-700 text-xs font-bold rounded-md">SUPER ADMIN</span>}
             </p>
           </div>
-          <div className="flex items-center gap-4 w-full md:w-auto">
+          <div className="flex items-center gap-3 w-full md:w-auto">
             {role === 'superadmin' && (
               <button
                 onClick={handleClearData}
-                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-red-600/20"
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-red-600/20 cursor-pointer"
               >
                 Clear All Data
               </button>
@@ -3120,7 +3332,7 @@ export default function AdminDashboard() {
             <button
               onClick={() => setShowExportModal(true)}
               disabled={isExporting}
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-2"
+              className="flex-1 sm:flex-initial px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800 disabled:opacity-50 text-white font-bold rounded-xl text-xs sm:text-sm transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer"
             >
               {isExporting ? (
                 <>
@@ -3128,23 +3340,28 @@ export default function AdminDashboard() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Exporting...
+                  <span>Exporting...</span>
                 </>
               ) : (
-                'Export to Sheet'
+                <>
+                  <DownloadIcon className="w-4 h-4" />
+                  <span>Export Sheet</span>
+                </>
               )}
             </button>
             <button
               onClick={() => fetchSubmissions()}
-              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold rounded-xl text-sm transition-all border border-slate-700"
+              className="flex-1 sm:flex-initial px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs sm:text-sm transition-all border border-slate-300 shadow-xs flex items-center justify-center gap-2 cursor-pointer"
             >
-              Refresh Data
+              <RefreshCwIcon className="w-4 h-4" />
+              <span>Refresh</span>
             </button>
             <button
               onClick={handleLogout}
-              className="px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold rounded-xl text-sm transition-all border border-red-500/20"
+              className="flex-1 sm:flex-initial px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 font-bold rounded-xl text-xs sm:text-sm transition-all border border-red-200 flex items-center justify-center gap-2 cursor-pointer"
             >
-              Log Out
+              <LogOutIcon className="w-3.5 h-3.5" />
+              <span>Log Out</span>
             </button>
         </div>
       </div>
@@ -3155,38 +3372,27 @@ export default function AdminDashboard() {
             {notifications.map((notif) => (
               <div 
                 key={notif._id}
-                className={`p-4 rounded-2xl border flex justify-between items-start gap-4 transition-all shadow-lg ${
+                className={`p-4 rounded-2xl border flex justify-between items-start gap-4 transition-all shadow-sm ${
                   notif.type === 'error' 
-                    ? 'bg-red-500/10 border-red-500/30 text-red-200' 
-                    : 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                    ? 'bg-red-50 border-red-200 text-red-800' 
+                    : 'bg-amber-50 border-amber-200 text-amber-900'
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <span className="text-xl mt-0.5">{notif.type === 'error' ? '🚨' : '🔔'}</span>
+                  <span className="text-lg mt-0.5">{notif.type === 'error' ? '⚠️' : 'ℹ️'}</span>
                   <div>
-                    <h4 className="font-bold text-sm">{notif.title}</h4>
-                    <p className="text-xs text-slate-350 mt-1">{notif.message}</p>
-                    <span className="text-[10px] text-slate-500 mt-2 block">
-                      {new Date(notif.createdAt).toLocaleString()}
-                    </span>
+                    <h4 className="text-xs font-bold">{notif.title || 'System Notification'}</h4>
+                    <p className="text-xs mt-0.5 opacity-90">{notif.message}</p>
                   </div>
                 </div>
                 <button
                   onClick={() => dismissNotification(notif._id)}
-                  className="px-2.5 py-1 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 text-[10px] font-semibold text-slate-300 rounded-lg cursor-pointer transition-all active:scale-[0.98]"
+                  className="text-xs font-bold hover:opacity-75"
                 >
-                  Dismiss
+                  ✕
                 </button>
               </div>
             ))}
-            <div className="flex justify-end">
-              <button
-                onClick={() => dismissNotification()}
-                className="text-xs text-slate-400 hover:text-slate-200 font-medium underline cursor-pointer"
-              >
-                Clear All Notifications
-              </button>
-            </div>
           </div>
         )}
 
@@ -3194,122 +3400,235 @@ export default function AdminDashboard() {
             <>
               {/* Stats Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-2xl backdrop-blur-md">
-            <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Total Inquiries</span>
-            <span className="text-4xl font-extrabold text-slate-100 mt-2 block">{totalSubmissions}</span>
-          </div>
-          <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-2xl backdrop-blur-md">
-            <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Latest Token ID</span>
-            <span className="text-4xl font-extrabold text-amber-500 mt-2 block">{latestTokenId}</span>
-          </div>
-          <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-2xl backdrop-blur-md">
-            <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Database Storage</span>
-            <span className="text-2xl font-extrabold text-slate-100 mt-2 block">
-              {dbStats ? `${dbStats.storageSizeMB.toFixed(1)} MB / ${dbStats.totalLimitMB} MB` : 'Loading...'}
-            </span>
-            {dbStats && (
-              <div className="mt-3 space-y-1.5">
-                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                  <div 
-                    className={`h-1.5 rounded-full transition-all duration-500 ${
-                      (dbStats.storageSizeMB / dbStats.totalLimitMB) > 0.8 ? 'bg-red-500' : 
-                      (dbStats.storageSizeMB / dbStats.totalLimitMB) > 0.5 ? 'bg-amber-500' : 'bg-emerald-500'
-                    }`}
-                    style={{ width: `${Math.min(100, (dbStats.storageSizeMB / dbStats.totalLimitMB) * 100)}%` }}
-                  />
+                <div className="p-6 bg-white border border-slate-200/90 rounded-2xl shadow-sm">
+                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block">Total Inquiries</span>
+                  <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 mt-2 block">{totalSubmissions}</span>
                 </div>
-                <div className="flex justify-between text-[9px] text-slate-500 font-bold">
-                  <span>{((dbStats.storageSizeMB / dbStats.totalLimitMB) * 100).toFixed(2)}% Used</span>
-                  <span>{(dbStats.totalLimitMB - dbStats.storageSizeMB).toFixed(1)} MB Free</span>
+                <div className="p-6 bg-white border border-slate-200/90 rounded-2xl shadow-sm">
+                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block">Latest Token ID</span>
+                  <span className="text-3xl sm:text-4xl font-extrabold text-rose-700 mt-2 block">{latestTokenId}</span>
+                </div>
+                <div className="p-6 bg-white border border-slate-200/90 rounded-2xl shadow-sm">
+                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block">Database Storage</span>
+                  <span className="text-2xl font-extrabold text-slate-900 mt-2 block">
+                    {dbStats ? `${dbStats.storageSizeMB.toFixed(1)} MB / ${dbStats.totalLimitMB} MB` : 'Loading...'}
+                  </span>
+                  {dbStats && (
+                    <div className="mt-3 space-y-1.5">
+                      <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                        <div 
+                          className={`h-1.5 rounded-full transition-all duration-500 ${
+                            (dbStats.storageSizeMB / dbStats.totalLimitMB) > 0.8 ? 'bg-red-500' : 
+                            (dbStats.storageSizeMB / dbStats.totalLimitMB) > 0.5 ? 'bg-amber-500' : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${Math.min(100, (dbStats.storageSizeMB / dbStats.totalLimitMB) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[9px] text-slate-500 font-bold">
+                        <span>{((dbStats.storageSizeMB / dbStats.totalLimitMB) * 100).toFixed(2)}% Used</span>
+                        <span>{(dbStats.totalLimitMB - dbStats.storageSizeMB).toFixed(1)} MB Free</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="p-6 bg-white border border-slate-200/90 rounded-2xl shadow-sm">
+                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block">System Status</span>
+                  <span className="text-3xl sm:text-4xl font-extrabold text-emerald-600 mt-2 block">Secure</span>
                 </div>
               </div>
-            )}
-          </div>
-          <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-2xl backdrop-blur-md">
-            <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">System Status</span>
-            <span className="text-4xl font-extrabold text-emerald-500 mt-2 block">Secure</span>
-          </div>
-        </div>
-      </>
-      )}
+            </>
+          )}
 
       {activeSection === 'programs' && (
         /* Program Slots Section */
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Create Program Form */}
-          <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-6">
+          <div className="bg-white border border-slate-200/90 shadow-sm rounded-2xl p-6 space-y-6">
             <div>
-              <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                 Add Program Slot
               </h2>
-              <p className="text-slate-400 text-xs mt-1">Schedule a program with a specific date and seat capacity.</p>
+              <p className="text-slate-500 text-xs mt-1">Schedule a program with a specific date and seat capacity.</p>
             </div>
 
             {programError && (
-              <div className="p-3 text-xs bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg">
+              <div className="p-3 text-xs bg-red-50 border border-red-200 text-red-700 rounded-xl font-medium">
                 {programError}
               </div>
             )}
             {programSuccess && (
-              <div className="p-3 text-xs bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg">
+              <div className="p-3 text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl font-medium">
                 {programSuccess}
               </div>
             )}
 
             <form onSubmit={handleCreateProgram} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Program Name</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Program Name</label>
                 <input
                   type="text"
                   required
                   value={newProgramName}
                   onChange={(e) => setNewProgramName(e.target.value)}
-                  placeholder="e.g. Couples Gala Dinner"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  placeholder="e.g. Ek Duje Ke Liye - Sardar Patel Smruti Bhavan"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Program Date</label>
+                  <input
+                    type="date"
+                    required={newProgramIsDateFinal}
+                    value={newProgramDate}
+                    onChange={(e) => setNewProgramDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Event Time</label>
+                  <input
+                    type="text"
+                    value={newProgramTime}
+                    onChange={(e) => setNewProgramTime(e.target.value)}
+                    placeholder="e.g. 8:30 PM"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Couple Pass Price (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    required
+                    value={newProgramPrice}
+                    onChange={(e) => setNewProgramPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="e.g. 1000"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm font-bold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">City</label>
+                  <input
+                    type="text"
+                    value={newProgramCity}
+                    onChange={(e) => setNewProgramCity(e.target.value)}
+                    placeholder="e.g. Surat"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Venue & Address</label>
+                <input
+                  type="text"
+                  value={newProgramVenue}
+                  onChange={(e) => setNewProgramVenue(e.target.value)}
+                  placeholder="e.g. Sardar Patel Smruti Bhavan, Varachha, Surat"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Program Status</label>
+                  <select
+                    value={newProgramStatus}
+                    onChange={(e) => setNewProgramStatus(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm font-semibold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                  >
+                    <option value="upcoming">Upcoming (Active)</option>
+                    <option value="few_seats">Few Seats Left</option>
+                    <option value="housefull">Housefull / Sold Out</option>
+                    <option value="registration_closed">Registration Closed</option>
+                    <option value="completed">Completed / Past</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Registration Mode</label>
+                  <select
+                    value={newProgramRegistrationMode}
+                    onChange={(e) => setNewProgramRegistrationMode(e.target.value as 'internal' | 'external')}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm font-semibold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                  >
+                    <option value="internal">Internal (Website & Razorpay)</option>
+                    <option value="external">External Link</option>
+                  </select>
+                </div>
+              </div>
+
+              {newProgramRegistrationMode === 'external' && (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">External Registration URL</label>
+                  <input
+                    type="url"
+                    value={newProgramExternalUrl}
+                    onChange={(e) => setNewProgramExternalUrl(e.target.value)}
+                    placeholder="https://allevents.in/..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Google Maps Link</label>
+                <input
+                  type="url"
+                  value={newProgramMapUrl}
+                  onChange={(e) => setNewProgramMapUrl(e.target.value)}
+                  placeholder="https://maps.google.com/..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Program Date</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Custom Event URL Slug (Optional)</label>
                 <input
-                  type="date"
-                  required={newProgramIsDateFinal}
-                  value={newProgramDate}
-                  onChange={(e) => setNewProgramDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  type="text"
+                  value={newProgramSlug}
+                  onChange={(e) => setNewProgramSlug(e.target.value)}
+                  placeholder="e.g. surat-7-september-2026"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
-              <div className="flex items-center gap-2 py-2">
+              <div className="flex items-center gap-2 py-1">
                 <input
                   type="checkbox"
                   id="newProgramIsDateFinal"
                   checked={newProgramIsDateFinal}
                   onChange={(e) => setNewProgramIsDateFinal(e.target.checked)}
-                  className="rounded bg-slate-900 border-slate-800 text-amber-500 focus:ring-amber-500 h-4 w-4"
+                  className="rounded bg-slate-50 border-slate-300 text-rose-600 focus:ring-rose-500 h-4 w-4"
                 />
-                <label htmlFor="newProgramIsDateFinal" className="text-xs font-semibold text-slate-300 cursor-pointer">
+                <label htmlFor="newProgramIsDateFinal" className="text-xs font-bold text-slate-700 cursor-pointer">
                   Date is Final? / Collect Payment (તારીખ નક્કી છે / પેમેન્ટ લેવું)
                 </label>
               </div>
 
               {!newProgramIsDateFinal && (
-                <div className="flex items-center gap-2 py-2">
+                <div className="flex items-center gap-2 py-1">
                   <input
                     type="checkbox"
                     id="newProgramIsInquiryClosed"
                     checked={newProgramIsInquiryClosed}
                     onChange={(e) => setNewProgramIsInquiryClosed(e.target.checked)}
-                    className="rounded bg-slate-900 border-slate-800 text-amber-500 focus:ring-amber-500 h-4 w-4"
+                    className="rounded bg-slate-50 border-slate-300 text-rose-600 focus:ring-rose-500 h-4 w-4"
                   />
-                  <label htmlFor="newProgramIsInquiryClosed" className="text-xs font-semibold text-slate-300 cursor-pointer">
+                  <label htmlFor="newProgramIsInquiryClosed" className="text-xs font-bold text-slate-700 cursor-pointer">
                     Close Inquiry Registration? (ઇન્ક્વાયરી લેવાનું બંધ કરવું)
                   </label>
                 </div>
               )}
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Hall Capacity (Seats, e.g. 600 for 300 Couples)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Hall Capacity (Seats, e.g. 600 for 300 Couples)</label>
                 <input
                   type="number"
                   required
@@ -3317,12 +3636,12 @@ export default function AdminDashboard() {
                   value={newProgramCapacity}
                   onChange={(e) => setNewProgramCapacity(e.target.value === '' ? '' : Number(e.target.value))}
                   placeholder="e.g. 600"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Entry Pass Template Image (Optional)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Entry Pass Template Image (Optional)</label>
                 <input
                   id="programCardTemplateInput"
                   type="file"
@@ -3347,10 +3666,10 @@ export default function AdminDashboard() {
                       setNewProgramCardTemplate(null);
                     }
                   }}
-                  className="w-full text-slate-400 text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 file:cursor-pointer cursor-pointer bg-slate-900 border border-slate-800 rounded-xl px-3 py-2"
+                  className="w-full text-slate-600 text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 file:cursor-pointer cursor-pointer bg-slate-50 border border-slate-300 rounded-xl px-3 py-2"
                 />
                 {newProgramCardTemplate && (
-                  <div className="mt-2 text-[10px] text-emerald-400 flex items-center gap-1.5">
+                  <div className="mt-2 text-[10px] text-emerald-700 flex items-center gap-1.5 font-bold">
                     <span>✓ Template loaded</span>
                     <button
                       type="button"
@@ -3359,7 +3678,7 @@ export default function AdminDashboard() {
                         const fileInput = document.getElementById('programCardTemplateInput') as HTMLInputElement;
                         if (fileInput) fileInput.value = '';
                       }}
-                      className="text-red-400 hover:text-red-300 font-bold underline"
+                      className="text-red-600 hover:text-red-700 font-bold underline"
                     >
                       Clear
                     </button>
@@ -3368,19 +3687,19 @@ export default function AdminDashboard() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Photo Gallery Link (ફોટો ગેલેરી લિંક)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Photo Gallery Link (ફોટો ગેલેરી લિંક)</label>
                 <input
                   type="url"
                   value={newProgramPhotoLink}
                   onChange={(e) => setNewProgramPhotoLink(e.target.value)}
                   placeholder="e.g. https://photos.google.com/..."
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-bold rounded-xl text-sm transition-all"
+                className="w-full py-3 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 active:scale-[0.99] text-white font-bold rounded-xl text-sm transition-all shadow-md cursor-pointer"
               >
                 Add Program Slot
               </button>
@@ -3388,67 +3707,101 @@ export default function AdminDashboard() {
           </div>
 
           {/* Programs List */}
-          <div className="lg:col-span-2 bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 flex flex-col">
+          <div className="lg:col-span-2 bg-white border border-slate-200/90 shadow-sm rounded-2xl p-6 flex flex-col">
             <div>
-              <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                 <span>🎟️</span> Scheduled Slots
               </h2>
-              <p className="text-slate-400 text-xs mt-1">Active program sessions, capacities, and booking status.</p>
+              <p className="text-slate-500 text-xs mt-1">Active program sessions, capacities, and booking status.</p>
             </div>
 
             <div className="mt-4 flex-grow overflow-y-auto max-h-[320px] space-y-3 pr-2">
               {programs.length === 0 ? (
-                <div className="text-center py-10 text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl">
+                <div className="text-center py-10 text-xs text-slate-500 border border-dashed border-slate-300 rounded-xl">
                   No programs scheduled yet.
                 </div>
               ) : (
                 programs.map((prog) => {
                   const isSoldOut = prog.bookingsCount + 2 > prog.capacity;
                   return (
-                    <div key={prog.id} className="flex justify-between items-center p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl hover:border-slate-700 transition-colors">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-200 text-sm">{prog.name}</span>
-                          {isSoldOut ? (
-                            <span className="px-2 py-0.5 text-[10px] bg-red-500/10 border border-red-500/20 text-red-400 rounded-full font-bold uppercase tracking-wider">Sold Out</span>
+                    <div key={prog.id} className="flex justify-between items-center p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-colors">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-slate-900 text-sm">{prog.name}</span>
+                          
+                          {/* Status Badge */}
+                          {prog.status === 'completed' ? (
+                            <span className="px-2 py-0.5 text-[10px] bg-slate-200 text-slate-700 rounded-full font-bold uppercase tracking-wider">Completed</span>
+                          ) : prog.status === 'archived' ? (
+                            <span className="px-2 py-0.5 text-[10px] bg-slate-200 text-slate-500 rounded-full font-bold uppercase tracking-wider">Archived</span>
+                          ) : prog.status === 'housefull' || isSoldOut ? (
+                            <span className="px-2 py-0.5 text-[10px] bg-red-50 border border-red-200 text-red-700 rounded-full font-bold uppercase tracking-wider">Sold Out</span>
+                          ) : prog.status === 'few_seats' ? (
+                            <span className="px-2 py-0.5 text-[10px] bg-amber-50 border border-amber-200 text-amber-800 rounded-full font-bold uppercase tracking-wider">Few Seats</span>
                           ) : (
-                            <span className="px-2 py-0.5 text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full font-bold uppercase tracking-wider">Active</span>
+                            <span className="px-2 py-0.5 text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full font-bold uppercase tracking-wider">Active</span>
                           )}
+
+                          {/* Price Badge */}
+                          <span className="px-2 py-0.5 text-[10px] bg-rose-50 border border-rose-200 text-rose-800 rounded-full font-extrabold tracking-wider">
+                            ₹ {prog.price ?? 1000}
+                          </span>
+
+                          {/* City & Venue */}
+                          {prog.city && (
+                            <span className="px-2 py-0.5 text-[10px] bg-blue-50 border border-blue-200 text-blue-800 rounded-full font-semibold">
+                              📍 {prog.city}
+                            </span>
+                          )}
+
+                          {prog.time && (
+                            <span className="px-2 py-0.5 text-[10px] bg-stone-100 border border-stone-300 text-stone-700 rounded-full font-medium">
+                              🕒 {prog.time}
+                            </span>
+                          )}
+
                           {prog.isDateFinal === false && prog.isInquiryClosed && (
-                            <span className="px-2 py-0.5 text-[10px] bg-amber-500/15 border border-amber-500/30 text-amber-400 rounded-full font-bold uppercase tracking-wider">Inquiry Closed</span>
+                            <span className="px-2 py-0.5 text-[10px] bg-amber-50 border border-amber-200 text-amber-800 rounded-full font-bold uppercase tracking-wider">Inquiry Closed</span>
                           )}
                         </div>
-                        <div className="text-xs text-slate-400 flex items-center gap-4 flex-wrap">
-                          <span>{prog.date}</span>
-                          <span>👥 Booked: <strong className={isSoldOut ? "text-red-400" : "text-amber-500"}>{Math.floor(prog.bookingsCount / 2)}</strong> / {Math.floor(prog.capacity / 2)}</span>
+
+                        {prog.venue && (
+                          <div className="text-[11px] text-slate-500 font-medium truncate max-w-xl">
+                            🏛️ {prog.venue}
+                          </div>
+                        )}
+
+                        <div className="text-xs text-slate-600 flex items-center gap-3 flex-wrap pt-0.5">
+                          <span className="font-bold text-slate-800">{prog.date}</span>
+                          <span>👥 Booked: <strong className={isSoldOut ? "text-red-600" : "text-rose-700"}>{Math.floor(prog.bookingsCount / 2)}</strong> / {Math.floor(prog.capacity / 2)} couples</span>
                           {prog.inquiryCount !== undefined && prog.inquiryCount > 0 && (
-                            <span className="flex items-center gap-1 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 text-blue-300">
+                            <span className="flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200 text-blue-700 font-semibold">
                               📝 Inquiries: <strong>{prog.inquiryCount}</strong>
                             </span>
                           )}
                           {prog.pendingCount !== undefined && prog.pendingCount > 0 && (
-                            <span className="flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 text-amber-300">
+                            <span className="flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 text-amber-800 font-semibold">
                               ⏳ Pending: <strong>{prog.pendingCount}</strong>
                             </span>
                           )}
                           {prog.approvedCount !== undefined && prog.approvedCount > 0 && (
-                            <span className="flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 text-emerald-300">
+                            <span className="flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 text-emerald-800 font-semibold">
                               ✓ Approved: <strong>{prog.approvedCount}</strong>
                             </span>
                           )}
                           {prog.rejectedCount !== undefined && prog.rejectedCount > 0 && (
-                            <span className="flex items-center gap-1 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20 text-red-300">
+                            <span className="flex items-center gap-1 bg-red-50 px-2 py-0.5 rounded-full border border-red-200 text-red-700 font-semibold">
                               ✗ Rejected: <strong>{prog.rejectedCount}</strong>
                             </span>
                           )}
-                          <span className="flex items-center gap-1 bg-pink-500/10 px-2 py-0.5 rounded-full border border-pink-500/20 text-pink-300">
+                          <span className="flex items-center gap-1 bg-pink-50 px-2 py-0.5 rounded-full border border-pink-200 text-pink-800 font-semibold">
                             💑 CPL: <strong>{prog.cplApproved || 0}</strong> Appr / <strong>{(prog.cplApproved || 0) + (prog.cplPending || 0) + (prog.cplInquiry || 0)}</strong> Total
                           </span>
-                          <span className="flex items-center gap-1 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20 text-purple-300">
+                          <span className="flex items-center gap-1 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200 text-purple-800 font-semibold">
                             👤 IP: <strong>{prog.ipApproved || 0}</strong> Appr / <strong>{(prog.ipApproved || 0) + (prog.ipPending || 0) + (prog.ipInquiry || 0)}</strong> Total
                           </span>
                           {prog.cardTemplate && (
-                            <span className="text-[10px] text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                            <span className="text-[10px] text-emerald-800 flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-semibold">
                               🖼️ Custom Pass
                             </span>
                           )}
@@ -3457,13 +3810,13 @@ export default function AdminDashboard() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleEditProgramClick(prog)}
-                          className="p-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg text-xs font-semibold transition-all border border-amber-500/20"
+                          className="p-2 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-bold transition-all border border-amber-200 cursor-pointer"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDeleteProgram(prog.id)}
-                          className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs font-semibold transition-all border border-red-500/20"
+                          className="p-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-xs font-bold transition-all border border-red-200 cursor-pointer"
                         >
                           Delete
                         </button>
@@ -3480,21 +3833,21 @@ export default function AdminDashboard() {
       {activeSection === 'settings' && (
         <>
           {/* Payment Settings Section */}
-          <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-6">
+          <div className="bg-white border border-slate-200/90 shadow-sm rounded-2xl p-6 space-y-6">
           <div>
-            <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
               <span>💳</span> Payment Settings (UPI QR Code)
             </h2>
-            <p className="text-slate-400 text-xs mt-1">Configure the active UPI account details and amount for ticket payments.</p>
+            <p className="text-slate-500 text-xs mt-1">Configure the active UPI account details and amount for ticket payments.</p>
           </div>
 
           {settingsError && (
-            <div className="p-3 text-xs bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg">
+            <div className="p-3 text-xs bg-red-50 border border-red-200 text-red-700 rounded-xl font-medium">
               {settingsError}
             </div>
           )}
           {settingsSuccess && (
-            <div className="p-3 text-xs bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg">
+            <div className="p-3 text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl font-medium">
               {settingsSuccess}
             </div>
           )}
@@ -3502,7 +3855,7 @@ export default function AdminDashboard() {
           <form onSubmit={handleUpdateSettings} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">UPI ID List (Comma separated for Auto-Rotation)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">UPI ID List (Comma separated for Auto-Rotation)</label>
                 <input
                   type="text"
                   required
@@ -3513,24 +3866,24 @@ export default function AdminDashboard() {
                     if (first) setUpiId(first);
                   }}
                   placeholder="e.g. upi1@okaxis, upi2@okicici"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Currently Active UPI ID</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Currently Active UPI ID</label>
                 <input
                   type="text"
                   required
                   value={upiId}
                   onChange={(e) => setUpiId(e.target.value)}
                   placeholder="e.g. payee@upi"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Rotation Limit (Submissions per UPI)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Rotation Limit (Submissions per UPI)</label>
                 <input
                   type="number"
                   required
@@ -3538,26 +3891,26 @@ export default function AdminDashboard() {
                   value={upiLimit}
                   onChange={(e) => setUpiLimit(Number(e.target.value))}
                   placeholder="e.g. 50"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Payee Name</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Payee Name</label>
                 <input
                   type="text"
                   required
                   value={payeeName}
                   onChange={(e) => setPayeeName(e.target.value)}
                   placeholder="e.g. Couple Pass Org"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Ticket Price (INR)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Ticket Price (INR)</label>
                 <input
                   type="number"
                   required
@@ -3565,18 +3918,18 @@ export default function AdminDashboard() {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="e.g. 100"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
-              <div className="flex justify-between items-center bg-slate-900/60 border border-slate-800/80 rounded-xl px-4 py-2 text-xs">
+              <div className="flex justify-between items-center bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs">
                 <div>
-                  <span className="text-slate-400">Current UPI Usage:</span>
-                  <div className="font-bold text-amber-500 text-sm">{upiBookingsCount} / {upiLimit} registrations</div>
+                  <span className="text-slate-500 font-medium">Current UPI Usage:</span>
+                  <div className="font-bold text-rose-700 text-sm">{upiBookingsCount} / {upiLimit} registrations</div>
                 </div>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-bold rounded-xl text-sm transition-all h-[38px]"
+                  className="px-6 py-2 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 active:scale-[0.99] text-white font-bold rounded-xl text-sm transition-all shadow-md cursor-pointer h-[38px]"
                 >
                   Save Settings
                 </button>
@@ -3586,33 +3939,33 @@ export default function AdminDashboard() {
         </div>
 
         {/* Manual Invitee Registration Section */}
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-6">
+        <div className="bg-white border border-slate-200/90 shadow-sm rounded-2xl p-6 space-y-6">
           <div>
-            <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
               <span>✍️</span> Manual Invitee Registration (મેન્યુઅલ એન્ટ્રી)
             </h2>
-            <p className="text-slate-400 text-xs mt-1">Directly register invited couples, generating an instant approved pass with prefix IP-.</p>
+            <p className="text-slate-500 text-xs mt-1">Directly register invited couples, generating an instant approved pass with prefix IP-.</p>
           </div>
 
           {manualError && (
-            <div className="p-3 text-xs bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg">
+            <div className="p-3 text-xs bg-red-50 border border-red-200 text-red-700 rounded-xl font-medium">
               {manualError}
             </div>
           )}
           {manualSuccess && (
-            <div className="p-3 text-xs bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg space-y-2">
+            <div className="p-3 text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl font-medium space-y-2">
               <div>{manualSuccess}</div>
               {generatedPassUrl && (
-                <div className="mt-3 p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
+                <div className="mt-3 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                    <span className="font-mono text-xs text-amber-500 select-all break-all">{generatedPassUrl}</span>
+                    <span className="font-mono text-xs text-rose-700 font-bold select-all break-all">{generatedPassUrl}</span>
                     <div className="flex gap-2">
                       <button
                         onClick={() => {
                           navigator.clipboard.writeText(generatedPassUrl);
                           alert('Pass link copied to clipboard!');
                         }}
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-100 text-[10px] font-bold rounded-lg transition-all"
+                        className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 text-[10px] font-bold rounded-lg transition-all cursor-pointer"
                       >
                         Copy Link
                       </button>
@@ -3620,7 +3973,7 @@ export default function AdminDashboard() {
                         href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`Hello! Your manual registration pass is ready. You can download it here: ${generatedPassUrl}`)}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg transition-all flex items-center gap-1"
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
                       >
                         Share on WhatsApp
                       </a>
@@ -3634,45 +3987,45 @@ export default function AdminDashboard() {
           <form onSubmit={handleManualEntrySubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Husband Name (પતિનું નામ)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Husband Name (પતિનું નામ)</label>
                 <input
                   type="text"
                   required
                   value={manualHusbandName}
                   onChange={(e) => setManualHusbandName(e.target.value)}
                   placeholder="Enter Husband's Name"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Wife Name (પત્નીનું નામ)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Wife Name (પત્નીનું નામ)</label>
                 <input
                   type="text"
                   required
                   value={manualWifeName}
                   onChange={(e) => setManualWifeName(e.target.value)}
                   placeholder="Enter Wife's Name"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Surname (અટક)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Surname (અટક)</label>
                 <input
                   type="text"
                   required
                   value={manualSurname}
                   onChange={(e) => setManualSurname(e.target.value)}
                   placeholder="Enter Surname"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Phone Number (મોબાઇલ નંબર)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Phone Number (મોબાઇલ નંબર)</label>
                 <input
                   type="tel"
                   required
@@ -3680,17 +4033,17 @@ export default function AdminDashboard() {
                   value={manualPhoneNumber}
                   onChange={(e) => setManualPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
                   placeholder="Enter 10-digit number"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Select Program Slot</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Select Program Slot</label>
                 <select
                   required
                   value={manualProgramId}
                   onChange={(e) => setManualProgramId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors cursor-pointer"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors cursor-pointer"
                 >
                   <option value="">Choose a slot</option>
                   {programs.map((prog) => {
@@ -3706,7 +4059,7 @@ export default function AdminDashboard() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Couple Photo (Optional / મરજીયાત)</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Couple Photo (Optional / મરજીયાત)</label>
                 <input
                   type="file"
                   accept="image/*"
@@ -3715,7 +4068,7 @@ export default function AdminDashboard() {
                       setManualCouplePhoto(e.target.files[0]);
                     }
                   }}
-                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-slate-450 text-xs focus:outline-none focus:border-amber-500 file:mr-4 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-amber-500/10 file:text-amber-400 hover:file:bg-amber-500/20 cursor-pointer"
+                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-600 text-xs focus:bg-white focus:outline-none focus:border-rose-500 file:mr-4 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 cursor-pointer"
                 />
               </div>
             </div>
@@ -3724,7 +4077,7 @@ export default function AdminDashboard() {
               <button
                 type="submit"
                 disabled={manualLoading}
-                className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] disabled:opacity-50 text-slate-950 font-bold rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20"
+                className="px-6 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 active:scale-[0.99] disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-md cursor-pointer"
               >
                 {manualLoading ? 'Registering...' : 'Register Invited Guest'}
               </button>
@@ -3733,37 +4086,37 @@ export default function AdminDashboard() {
         </div>
 
         {/* WhatsApp Message Templates Section */}
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-6">
+        <div className="bg-white border border-slate-200/90 shadow-sm rounded-2xl p-6 space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                 <span>💬</span> WhatsApp Message Templates
               </h2>
-              <p className="text-slate-400 text-xs mt-1">
+              <p className="text-slate-500 text-xs mt-1">
                 Manage templates for sending passes to users, and messages sent by users after registration.
               </p>
             </div>
             
             {/* Tab switcher */}
-            <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800 self-stretch sm:self-auto">
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 self-stretch sm:self-auto">
               <button
                 type="button"
                 onClick={() => setWhatsappTemplateTab('pass_delivery')}
-                className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${whatsappTemplateTab === 'pass_delivery' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${whatsappTemplateTab === 'pass_delivery' ? 'bg-white text-rose-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
               >
                 Pass Delivery (Admin to User)
               </button>
               <button
                 type="button"
                 onClick={() => setWhatsappTemplateTab('payment_request')}
-                className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${whatsappTemplateTab === 'payment_request' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${whatsappTemplateTab === 'payment_request' ? 'bg-white text-rose-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
               >
                 Payment Request (User to Admin)
               </button>
               <button
                 type="button"
                 onClick={() => setWhatsappTemplateTab('photo_delivery')}
-                className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${whatsappTemplateTab === 'photo_delivery' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${whatsappTemplateTab === 'photo_delivery' ? 'bg-white text-rose-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
               >
                 Photo Delivery (Admin to User)
               </button>
@@ -3771,28 +4124,28 @@ export default function AdminDashboard() {
           </div>
 
           {/* Add Template Form */}
-          <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 space-y-4">
-            <h3 className="text-sm font-bold text-slate-200">
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4">
+            <h3 className="text-sm font-bold text-slate-800">
               Create New {whatsappTemplateTab === 'pass_delivery' ? 'Pass Delivery' : whatsappTemplateTab === 'payment_request' ? 'Payment Request' : 'Photo Delivery'} Template
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div className="md:col-span-1">
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Template Name</label>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Template Name</label>
                 <input
                   type="text"
                   id="newTemplateName"
                   placeholder={whatsappTemplateTab === 'pass_delivery' ? "e.g. Gujarati Pass Msg" : whatsappTemplateTab === 'payment_request' ? "e.g. Payment Done Request" : "e.g. Gujarati Photo Msg"}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-slate-900 text-sm focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
               <div className="md:col-span-2 flex gap-4">
                 <div className="flex-grow">
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Message Text</label>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Message Text</label>
                   <input
                     type="text"
                     id="newTemplateText"
                     placeholder={whatsappTemplateTab === 'pass_delivery' ? "Hello! Download your pass here: {passUrl}" : whatsappTemplateTab === 'payment_request' ? "Hello! Verified. Inquiry ID: {inquiryId}" : "નમસ્તે {husbandName} & {wifeName}, તમારા ફોટાઓ જોવા માટે લિંક: {photoLink}"}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-slate-900 text-sm focus:outline-none focus:border-rose-500 transition-colors"
                   />
                 </div>
                 <button
@@ -3827,14 +4180,14 @@ export default function AdminDashboard() {
                       alert('Network error.');
                     }
                   }}
-                  className="px-5 py-2 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-bold rounded-xl text-xs transition-all h-[38px] self-end"
+                  className="px-5 py-2 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 active:scale-[0.99] text-white font-bold rounded-xl text-xs transition-all shadow-md h-[38px] self-end cursor-pointer"
                 >
                   Create
                 </button>
               </div>
             </div>
             <div className="text-[10px] text-slate-500 flex flex-wrap gap-x-4">
-              <span>Supported Variables:</span>
+              <span className="font-semibold text-slate-600">Supported Variables:</span>
               {whatsappTemplateTab === 'pass_delivery' ? (
                 <>
                   <span><code>{`{husbandName}`}</code></span>
@@ -3863,7 +4216,7 @@ export default function AdminDashboard() {
 
           {/* Templates List */}
           <div className="space-y-3">
-            <h3 className="text-sm font-bold text-slate-200">
+            <h3 className="text-sm font-bold text-slate-800">
               Available {whatsappTemplateTab === 'pass_delivery' ? 'Pass Delivery' : whatsappTemplateTab === 'payment_request' ? 'Payment Request' : 'Photo Delivery'} Templates
             </h3>
             {whatsappTemplates.filter(t => t.type === whatsappTemplateTab).length === 0 ? (
@@ -3871,15 +4224,15 @@ export default function AdminDashboard() {
             ) : (
               <div className="grid grid-cols-1 gap-3">
                 {whatsappTemplates.filter(t => t.type === whatsappTemplateTab).map((t) => (
-                  <div key={t._id} className={`flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-slate-900 border rounded-xl gap-4 ${t.isActive ? 'border-amber-500/50 bg-amber-500/[0.02]' : 'border-slate-800'}`}>
+                  <div key={t._id} className={`flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-slate-50 border rounded-xl gap-4 ${t.isActive ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200'}`}>
                     <div className="space-y-1 flex-grow">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-200 text-sm">{t.name}</span>
+                        <span className="font-bold text-slate-900 text-sm">{t.name}</span>
                         {t.isActive && (
-                          <span className="px-2 py-0.5 text-[9px] bg-amber-500/10 border border-amber-500/25 text-amber-500 rounded-full font-bold uppercase">Active</span>
+                          <span className="px-2 py-0.5 text-[9px] bg-rose-100 border border-rose-200 text-rose-800 rounded-full font-bold uppercase">Active</span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-400 font-mono break-all bg-slate-950/40 p-2 rounded-lg border border-slate-850 mt-1.5">{t.text}</p>
+                      <p className="text-xs text-slate-600 font-mono break-all bg-white p-2 rounded-lg border border-slate-200 mt-1.5">{t.text}</p>
                     </div>
                     <div className="flex gap-2 flex-shrink-0 mt-2 sm:mt-0">
                       {!t.isActive && (
@@ -3900,7 +4253,7 @@ export default function AdminDashboard() {
                               alert('Network error.');
                             }
                           }}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition-all border border-slate-700"
+                          className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-bold transition-all border border-slate-300 cursor-pointer"
                         >
                           Use
                         </button>
@@ -3926,7 +4279,7 @@ export default function AdminDashboard() {
                               alert('Network error.');
                             }
                           }}
-                          className="px-3 py-1.5 bg-red-950/20 hover:bg-red-900/30 text-red-400 rounded-lg text-xs font-semibold transition-all border border-red-900/30"
+                          className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-xs font-bold transition-all border border-red-200 cursor-pointer"
                         >
                           Delete
                         </button>
@@ -3940,21 +4293,21 @@ export default function AdminDashboard() {
         </div>
 
         {/* Frame Download Option Section */}
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-6">
+        <div className="bg-white border border-slate-200/90 shadow-sm rounded-2xl p-6 space-y-6">
           <div>
-            <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
               <span>🖼️</span> Frame Download Option
             </h2>
-            <p className="text-slate-400 text-xs mt-1">Select a program, filter/search multiple CPL IDs, select/deselect them, and download/adjust frames for only the selected couples.</p>
+            <p className="text-slate-500 text-xs mt-1">Select a program, filter/search multiple CPL IDs, select/deselect them, and download/adjust frames for only the selected couples.</p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
             <div className="w-full sm:w-72">
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Select Program Session</label>
+              <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Select Program Session</label>
               <select
                 value={selectedProgramIdForFrames}
                 onChange={(e) => setSelectedProgramIdForFrames(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors cursor-pointer"
               >
                 <option value="">-- Choose Program Slot --</option>
                 {programs.map((p) => (
@@ -3965,10 +4318,10 @@ export default function AdminDashboard() {
           </div>
 
           {selectedProgramIdForFrames && (
-            <div className="space-y-4 border-t border-slate-800/60 pt-4">
+            <div className="space-y-4 border-t border-slate-200 pt-4">
               {/* Search CPL IDs Input */}
               <div className="w-full">
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Search Multiple CPL IDs (Comma or space separated)
                 </label>
                 <input
@@ -3976,17 +4329,16 @@ export default function AdminDashboard() {
                   value={cplSearchQuery}
                   onChange={(e) => setCplSearchQuery(e.target.value)}
                   placeholder="e.g. EK01-01, EK01-02, EK01-05"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                 />
               </div>
 
               {/* Selection Controls */}
               <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
                     onClick={() => {
-                      // Select all matched/filtered ones
                       const matchedIds = approvedSubmissionsForFrames
                         .filter(sub => {
                           if (!cplSearchQuery.trim()) return true;
@@ -4004,14 +4356,13 @@ export default function AdminDashboard() {
                         return Array.from(newSelection);
                       });
                     }}
-                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg font-medium transition-all"
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 rounded-lg font-bold transition-all cursor-pointer"
                   >
                     Select All Filtered
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      // Deselect all matched/filtered ones
                       const matchedIds = approvedSubmissionsForFrames
                         .filter(sub => {
                           if (!cplSearchQuery.trim()) return true;
@@ -4026,7 +4377,7 @@ export default function AdminDashboard() {
                       
                       setSelectedFrameInquiryIds(prev => prev.filter(id => !matchedIds.includes(id)));
                     }}
-                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg font-medium transition-all"
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 rounded-lg font-bold transition-all cursor-pointer"
                   >
                     Deselect All Filtered
                   </button>
@@ -4035,7 +4386,7 @@ export default function AdminDashboard() {
                     onClick={() => {
                       setSelectedFrameInquiryIds(approvedSubmissionsForFrames.map(sub => sub.inquiryId));
                     }}
-                    className="px-3 py-1.5 bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-900/40 text-emerald-400 rounded-lg font-medium transition-all"
+                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-lg font-bold transition-all cursor-pointer"
                   >
                     Select All (બધા સિલેક્ટ કરો)
                   </button>
@@ -4044,18 +4395,18 @@ export default function AdminDashboard() {
                     onClick={() => {
                       setSelectedFrameInquiryIds([]);
                     }}
-                    className="px-3 py-1.5 bg-red-950/30 hover:bg-red-900/40 border border-red-900/40 text-red-400 rounded-lg font-medium transition-all"
+                    className="px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 rounded-lg font-bold transition-all cursor-pointer"
                   >
                     Clear Selection (બધા અન-સિલેક્ટ કરો)
                   </button>
                 </div>
-                <div className="text-slate-400 font-semibold">
-                  Selected: <span className="text-amber-500">{selectedFrameInquiryIds.length}</span> / {approvedSubmissionsForFrames.length}
+                <div className="text-slate-600 font-bold">
+                  Selected: <span className="text-rose-700">{selectedFrameInquiryIds.length}</span> / {approvedSubmissionsForFrames.length}
                 </div>
               </div>
 
               {/* List of Couples */}
-              <div className="max-h-48 overflow-y-auto border border-slate-800/80 rounded-xl bg-slate-900/20 p-3 space-y-2">
+              <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl bg-slate-50 p-3 space-y-2">
                 {approvedSubmissionsForFrames
                   .filter(sub => {
                     if (!cplSearchQuery.trim()) return true;
@@ -4069,7 +4420,7 @@ export default function AdminDashboard() {
                   .map(sub => {
                     const isChecked = selectedFrameInquiryIds.includes(sub.inquiryId);
                     return (
-                      <label key={sub.inquiryId} className="flex items-center gap-3 p-2 hover:bg-slate-900/60 rounded-lg cursor-pointer transition-colors">
+                      <label key={sub.inquiryId} className="flex items-center gap-3 p-2 hover:bg-white rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-200">
                         <input
                           type="checkbox"
                           checked={isChecked}
@@ -4080,10 +4431,10 @@ export default function AdminDashboard() {
                               setSelectedFrameInquiryIds(prev => [...prev, sub.inquiryId]);
                             }
                           }}
-                          className="rounded border-slate-800 bg-slate-950 text-amber-500 focus:ring-amber-500/50 w-4 h-4 cursor-pointer"
+                          className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 w-4 h-4 cursor-pointer"
                         />
-                        <span className="font-mono text-xs font-bold text-amber-500 w-20">{sub.inquiryId}</span>
-                        <span className="text-xs text-slate-200">{sub.husbandName} & {sub.wifeName} {sub.surname}</span>
+                        <span className="font-mono text-xs font-bold text-rose-700 w-20">{sub.inquiryId}</span>
+                        <span className="text-xs text-slate-800 font-medium">{sub.husbandName} &amp; {sub.wifeName} {sub.surname}</span>
                       </label>
                     );
                   })}
@@ -4096,15 +4447,15 @@ export default function AdminDashboard() {
                   const isBulk = searchedCpls.length > 1;
                   return searchedCpls.some(cpl => matchCplToken(sub.inquiryId, cpl, isBulk));
                 }).length === 0 && (
-                  <p className="text-center text-xs text-slate-500 py-4">No matching couples found.</p>
+                  <p className="text-center text-xs text-slate-500 py-4 font-medium">No matching couples found.</p>
                 )}
               </div>
 
               {/* Action and Count */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
                 <div>
-                  <p className="text-sm font-semibold text-slate-200">
-                    Total Selected Couples for Download: <span className="text-amber-500 font-bold">{selectedFrameInquiryIds.length}</span>
+                  <p className="text-sm font-bold text-slate-900">
+                    Total Selected Couples for Download: <span className="text-rose-700 font-extrabold">{selectedFrameInquiryIds.length}</span>
                   </p>
                   <p className="text-xs text-slate-500 mt-1">Review alignments line by line and download the framed photos in a single ZIP file.</p>
                 </div>
@@ -4115,44 +4466,44 @@ export default function AdminDashboard() {
                       if (prog) setReviewingProgramForFrames(prog);
                     }}
                     disabled={zipping || selectedFrameInquiryIds.length === 0}
-                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20 text-center"
+                    className="px-5 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-md text-center cursor-pointer"
                   >
                     {zipping ? `Processing (${zipProgress})` : 'Review & Download ZIP'}
                   </button>
                   <button
                     onClick={() => handleDownloadRawZip()}
                     disabled={zipping || selectedFrameInquiryIds.length === 0}
-                    className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-slate-100 font-bold rounded-xl text-sm transition-all shadow-lg shadow-purple-600/20 text-center"
+                    className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-md text-center cursor-pointer"
                   >
                     {zipping ? `Processing (${zipProgress})` : 'Download Raw Photos ZIP'}
                   </button>
                   <button
                     onClick={() => handleDownloadPassesZip()}
                     disabled={zipping || selectedFrameInquiryIds.length === 0}
-                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-slate-100 font-bold rounded-xl text-sm transition-all shadow-lg shadow-emerald-600/20 text-center"
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-md text-center cursor-pointer"
                   >
                     {zipping ? `Processing (${zipProgress})` : 'Download Entry Passes ZIP'}
                   </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-      </div>
-    </>
-    )}
+          )}
+        </div>
+      </>
+      )}
 
       {activeSection === 'registrations' && (
         <>
           {/* View Mode Tabs */}
-        <div className="flex bg-slate-950/40 p-1.5 rounded-2xl border border-slate-800/80 gap-2 mb-6">
-          <button
-            type="button"
+          <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 gap-2 mb-6">
+            <button
+              type="button"
             onClick={() => {
               setViewMode('all');
               setStatusFilter('');
               fetchSubmissions({ page: 1, status: '' });
             }}
-            className={`flex-1 py-3 text-center rounded-xl text-sm font-bold transition-all ${viewMode === 'all' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-3 text-center rounded-xl text-sm font-bold transition-all cursor-pointer ${viewMode === 'all' ? 'bg-white text-rose-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
           >
             📋 All Registrations (બધા રજીસ્ટ્રેશન)
           </button>
@@ -4163,7 +4514,7 @@ export default function AdminDashboard() {
               setStatusFilter('inquiry');
               fetchSubmissions({ page: 1, status: 'inquiry' });
             }}
-            className={`flex-1 py-3 text-center rounded-xl text-sm font-bold transition-all ${viewMode === 'inquiries' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-3 text-center rounded-xl text-sm font-bold transition-all cursor-pointer ${viewMode === 'inquiries' ? 'bg-white text-rose-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
           >
             📝 Inquiries Only (માત્ર ઇન્ક્વાયરી)
           </button>
@@ -4173,9 +4524,9 @@ export default function AdminDashboard() {
               setViewMode('duplicates');
               fetchDuplicates();
             }}
-            className={`flex-1 py-3 text-center rounded-xl text-sm font-bold transition-all ${viewMode === 'duplicates' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-3 text-center rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${viewMode === 'duplicates' ? 'bg-white text-rose-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
           >
-            ⚠️ Duplicate Inquiries (ડુપ્લિકેટ ઇન્ક્વાયરી)
+            Duplicate Inquiries (ડુપ્લિકેટ)
           </button>
           <button
             type="button"
@@ -4183,187 +4534,207 @@ export default function AdminDashboard() {
               setViewMode('trash');
               fetchTrashSubmissions({ page: 1 });
             }}
-            className={`flex-1 py-3 text-center rounded-xl text-sm font-bold transition-all ${viewMode === 'trash' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-3 text-center rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${viewMode === 'trash' ? 'bg-white text-rose-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
           >
-            🗑️ Trash (કચરાપેટી)
+            Trash (કચરાપેટી)
           </button>
         </div>
 
         {viewMode === 'all' || viewMode === 'inquiries' || viewMode === 'trash' ? (
           <>
-            {/* Filters and Search */}
+            {/* Filters and Search Bar Container */}
             {viewMode !== 'trash' && (
-              <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
-          <div className="flex-1 flex items-center bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 gap-3">
-            <span className="text-slate-500 pl-2">🔍</span>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by token, names, surname, or phone..."
-              className="w-full bg-transparent border-none text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-0 text-sm py-1"
-            />
-          </div>
+              <div className="bg-white border border-slate-200/90 shadow-sm rounded-2xl p-4 md:p-5 space-y-4">
+                {/* Search Bar */}
+                <div className="relative flex items-center bg-slate-50 border border-slate-300 focus-within:bg-white focus-within:border-rose-500 focus-within:ring-2 focus-within:ring-rose-500/20 rounded-xl px-4 py-3 transition-all">
+                  <SearchIcon className="w-4 h-4 text-slate-500 flex-shrink-0 mr-3" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search registrations by token (e.g. EK06-01), name, surname, or phone..."
+                    className="w-full bg-transparent border-none text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-0 text-xs sm:text-sm font-medium pr-8"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors text-xs font-bold cursor-pointer"
+                      title="Clear search"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Status Filter */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 font-semibold">Status:</span>
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setStatusFilter(val);
-                  fetchSubmissions({ page: 1, status: val });
-                }}
-                className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500/50"
-              >
-                <option value="">All Statuses</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-                <option value="refunded">Refunded (રિફંડ કરેલ)</option>
-                <option value="inquiry">Inquiries (ઇન્ક્વાયરી)</option>
-              </select>
-            </div>
+                {/* Filter Controls Responsive Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* Status Filter */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex flex-col gap-1">
+                    <label className="text-[10px] text-slate-600 font-bold uppercase tracking-wider">Status</label>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setStatusFilter(val);
+                        fetchSubmissions({ page: 1, status: val });
+                      }}
+                      className="w-full bg-white border border-slate-300 text-slate-800 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-rose-500 font-medium cursor-pointer"
+                    >
+                      <option value="">All Statuses</option>
+                      <option value="pending">Pending (બાકી)</option>
+                      <option value="approved">Approved (મંજૂર)</option>
+                      <option value="rejected">Rejected (રદ)</option>
+                      <option value="refunded">Refunded (રિફંડ કરેલ)</option>
+                      <option value="inquiry">Inquiries (ઇન્ક્વાયરી)</option>
+                    </select>
+                  </div>
 
-            {/* Program Filter */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 font-semibold">Program:</span>
-              <select
-                value={programFilter}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setProgramFilter(val);
-                  fetchSubmissions({ page: 1, programId: val });
-                }}
-                className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500/50 cursor-pointer"
-              >
-                <option value="">All Programs</option>
-                {programs.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.date})
-                  </option>
-                ))}
-              </select>
-            </div>
+                  {/* Program Filter */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex flex-col gap-1">
+                    <label className="text-[10px] text-slate-600 font-bold uppercase tracking-wider">Program</label>
+                    <select
+                      value={programFilter}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setProgramFilter(val);
+                        fetchSubmissions({ page: 1, programId: val });
+                      }}
+                      className="w-full bg-white border border-slate-300 text-slate-800 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-rose-500 font-medium cursor-pointer"
+                    >
+                      <option value="">All Programs</option>
+                      {programs.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.date})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-            {/* Attendance Filter */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 font-semibold">Attendance:</span>
-              <select
-                value={attendanceFilter}
-                onChange={(e) => {
-                  const val = e.target.value as any;
-                  setAttendanceFilter(val);
-                  fetchSubmissions({ page: 1, attendance: val });
-                }}
-                className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500/50 cursor-pointer"
-              >
-                <option value="all">All</option>
-                <option value="unmarked">Unmarked (હાજરી બાકી)</option>
-                <option value="present">Present (હાજર)</option>
-                <option value="absent">Absent (ગેરહાજર)</option>
-              </select>
-            </div>
+                  {/* Attendance Filter */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex flex-col gap-1">
+                    <label className="text-[10px] text-slate-600 font-bold uppercase tracking-wider">Attendance</label>
+                    <select
+                      value={attendanceFilter}
+                      onChange={(e) => {
+                        const val = e.target.value as any;
+                        setAttendanceFilter(val);
+                        fetchSubmissions({ page: 1, attendance: val });
+                      }}
+                      className="w-full bg-white border border-slate-300 text-slate-800 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-rose-500 font-medium cursor-pointer"
+                    >
+                      <option value="all">All</option>
+                      <option value="unmarked">Unmarked (હાજરી બાકી)</option>
+                      <option value="present">Present (હાજર)</option>
+                      <option value="absent">Absent (ગેરહાજર)</option>
+                    </select>
+                  </div>
 
-            {/* Sort Filter */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 font-semibold">Sort By:</span>
-              <select
-                value={`${sortBy}-${sortOrder}`}
-                onChange={(e) => {
-                  const [field, order] = e.target.value.split('-');
-                  setSortBy(field);
-                  setSortOrder(order);
-                  fetchSubmissions({ page: 1, sortBy: field, sortOrder: order });
-                }}
-                className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500/50 cursor-pointer"
-              >
-                <option value="createdAt-desc">Newest First</option>
-                <option value="createdAt-asc">Oldest First</option>
-                <option value="inquiryId-asc">Token ID (Ascending)</option>
-                <option value="inquiryId-desc">Token ID (Descending)</option>
-              </select>
-            </div>
+                  {/* Sort Order Filter */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex flex-col gap-1">
+                    <label className="text-[10px] text-slate-600 font-bold uppercase tracking-wider">Sort Order</label>
+                    <select
+                      value={`${sortBy}-${sortOrder}`}
+                      onChange={(e) => {
+                        const [field, order] = e.target.value.split('-');
+                        setSortBy(field);
+                        setSortOrder(order);
+                        fetchSubmissions({ page: 1, sortBy: field, sortOrder: order });
+                      }}
+                      className="w-full bg-white border border-slate-300 text-slate-800 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-rose-500 font-medium cursor-pointer"
+                    >
+                      <option value="createdAt-desc">Newest First</option>
+                      <option value="createdAt-asc">Oldest First</option>
+                      <option value="inquiryId-asc">Token ID (Ascending)</option>
+                      <option value="inquiryId-desc">Token ID (Descending)</option>
+                    </select>
+                  </div>
+                </div>
 
-            {/* Select Top N Helper */}
-            <div className="flex items-center gap-1.5 bg-slate-900/60 border border-slate-800 rounded-xl px-2.5 py-1.5">
-              <span className="text-xs text-slate-400 font-semibold">Select Top:</span>
-              <input
-                type="number"
-                min="1"
-                value={selectTopCount}
-                onChange={(e) => setSelectTopCount(e.target.value ? parseInt(e.target.value, 10) : 200)}
-                className="w-14 bg-slate-950 border border-slate-800 text-slate-100 text-xs rounded-lg px-2 py-1 text-center focus:outline-none focus:border-amber-500/50"
-              />
-              <button
-                type="button"
-                onClick={async () => {
-                  if (selectTopCount && selectTopCount > 0) {
-                    if (selectTopCount > pageSize) {
-                      setPageSize(selectTopCount);
-                      const fetched = await fetchSubmissions({ page: 1, limit: selectTopCount });
-                      if (fetched) {
-                        const ids = fetched.slice(0, selectTopCount).map((s: any) => s.inquiryId);
-                        setSelectedAttendanceIds(ids);
-                      }
-                    } else {
-                      const ids = filteredSubmissions.slice(0, selectTopCount).map(s => s.inquiryId);
-                      setSelectedAttendanceIds(ids);
-                    }
-                  }
-                }}
-                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold rounded-lg transition-all active:scale-[0.97] cursor-pointer"
-              >
-                Select (સિલેક્ટ)
-              </button>
-            </div>
-          </div>
-        </div>
-        )}
+                {/* Quick Select Top N Toolbar */}
+                <div className="pt-2 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-600 font-semibold">Select Top:</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={selectTopCount}
+                      onChange={(e) => setSelectTopCount(e.target.value ? parseInt(e.target.value, 10) : 200)}
+                      className="w-16 bg-white border border-slate-300 text-slate-900 text-xs rounded-lg px-2 py-1.5 text-center focus:outline-none focus:border-rose-500 font-bold"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (selectTopCount && selectTopCount > 0) {
+                          if (selectTopCount > pageSize) {
+                            setPageSize(selectTopCount);
+                            const fetched = await fetchSubmissions({ page: 1, limit: selectTopCount });
+                            if (fetched) {
+                              const ids = fetched.slice(0, selectTopCount).map((s: any) => s.inquiryId);
+                              setSelectedAttendanceIds(ids);
+                            }
+                          } else {
+                            const ids = filteredSubmissions.slice(0, selectTopCount).map(s => s.inquiryId);
+                            setSelectedAttendanceIds(ids);
+                          }
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-800 font-bold rounded-lg text-xs transition-colors cursor-pointer"
+                    >
+                      Select Top {selectTopCount}
+                    </button>
+                  </div>
+
+                  {searchQuery && (
+                    <div className="text-rose-700 font-bold text-xs">
+                      Filtered by: &ldquo;{searchQuery}&rdquo; ({totalSubmissions} found)
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
         {/* Table / Grid */}
         {error && (
-          <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
             {error}
           </div>
         )}
 
         {loading ? (
-          <div className="text-center py-20 text-slate-400">Loading registrations...</div>
+          <div className="text-center py-20 text-slate-500 font-medium">Loading registrations...</div>
         ) : filteredSubmissions.length === 0 ? (
-          <div className="text-center py-20 text-slate-400 border border-dashed border-slate-800 rounded-2xl">
+          <div className="text-center py-20 text-slate-500 border border-dashed border-slate-300 rounded-2xl bg-white font-medium">
             No registrations found.
           </div>
         ) : (
           <>
             {selectedAttendanceIds.length > 0 && (
-              <div className="flex items-center justify-between p-4 bg-slate-900 border border-slate-800 rounded-2xl mb-4 gap-4">
-                <div className="text-xs text-slate-300 font-semibold">
+              <div className="flex flex-wrap items-center justify-between p-4 bg-white border border-slate-200 shadow-sm rounded-2xl mb-4 gap-4">
+                <div className="text-xs text-slate-800 font-bold">
                   {selectedAttendanceIds.length} કપલ સિલેક્ટ થયેલ છે.
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={() => handleBulkUpdateAttendance('present')}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all"
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer"
                   >
                     Mark Present (હાજર કરો)
                   </button>
                   <button
                     onClick={() => handleBulkUpdateAttendance('absent')}
-                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-all"
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer"
                   >
                     Mark Absent (ગેરહાજર કરો)
                   </button>
                   <button
                     onClick={() => handleBulkUpdateAttendance('unmarked')}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition-all"
+                    className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl text-xs transition-all cursor-pointer"
                   >
                     Reset (અનમાર્ક કરો)
                   </button>
 
-                  <div className="h-6 w-px bg-slate-800 mx-1 hidden sm:block"></div>
+                  <div className="h-6 w-px bg-slate-300 mx-1 hidden sm:block"></div>
                   <select
                     defaultValue=""
                     onChange={(e) => {
@@ -4373,7 +4744,7 @@ export default function AdminDashboard() {
                         e.target.value = "";
                       }
                     }}
-                    className="bg-slate-950 border border-slate-800 text-slate-250 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-amber-500/50 cursor-pointer font-bold"
+                    className="bg-white border border-slate-300 text-slate-800 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-rose-500 cursor-pointer font-bold"
                   >
                     <option value="" disabled>પ્રોગ્રામ બદલો (Move to...)</option>
                     {programs.map(p => {
@@ -4389,7 +4760,7 @@ export default function AdminDashboard() {
 
                   <button
                     onClick={() => setSelectedAttendanceIds([])}
-                    className="px-2.5 py-1.5 text-xs text-slate-400 hover:text-slate-200"
+                    className="px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -4397,18 +4768,18 @@ export default function AdminDashboard() {
               </div>
             )}
             {viewMode !== 'trash' && programFilter && (
-              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 mb-4 space-y-3">
+              <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 mb-4 space-y-3">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1.5">
-                  <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider">
+                  <h3 className="text-xs font-bold text-rose-700 uppercase tracking-wider">
                     ⚡ Quick Attendance (ઝડપી હાજરી પૂરક)
                   </h3>
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-[10px] text-slate-500">
                     * આ સ્લોટના લિસ્ટમાં લખેલા કપલ ગેરહાજર (Absent) થશે અને બાકીના આપોઆપ હાજર (Present) માર્ક થશે.
                   </span>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3 items-end">
                   <div className="flex-grow w-full">
-                    <label className="block text-[10px] text-slate-450 font-semibold mb-1">
+                    <label className="block text-[10px] text-slate-600 font-bold mb-1">
                       Absent Couple Tokens (ગેરહાજર કપલના આઈડી - અલ્પવિરામ `,` થી અલગ કરો)
                     </label>
                     <input
@@ -4416,23 +4787,23 @@ export default function AdminDashboard() {
                       value={absentInput}
                       onChange={(e) => setAbsentInput(e.target.value)}
                       placeholder="e.g. EK01-01, EK01-02"
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
                     />
                   </div>
                   <button
                     type="button"
                     onClick={handleQuickAttendance}
-                    className="w-full sm:w-auto px-4 py-2 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-bold rounded-xl text-xs transition-all h-[36px]"
+                    className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 active:scale-[0.99] text-white font-bold rounded-xl text-xs transition-all shadow-md h-[36px] cursor-pointer"
                   >
                     Process Attendance (હાજરી પૂરો)
                   </button>
                 </div>
               </div>
             )}
-            <div className="overflow-x-auto no-scrollbar border border-slate-800 rounded-2xl bg-slate-950/40">
+            <div className="overflow-x-auto no-scrollbar border border-slate-200 rounded-2xl bg-white shadow-sm">
             <table className="w-full border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-800 bg-slate-950/80 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <tr className="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-700">
                   <th className="py-4 px-4 w-12 text-center">
                     <input
                       type="checkbox"
@@ -4445,23 +4816,23 @@ export default function AdminDashboard() {
                           setSelectedAttendanceIds([]);
                         }
                       }}
-                      className="rounded bg-slate-900 border-slate-800 text-amber-500 focus:ring-amber-500 h-4 w-4"
+                      className="rounded bg-white border-slate-300 text-rose-600 focus:ring-rose-500 h-4 w-4 cursor-pointer"
                     />
                   </th>
-                  <th className="py-2.5 px-3">Token ID</th>
-                  <th className="py-2.5 px-3">Program Slot</th>
-                  <th className="py-2.5 px-3">Couple Names</th>
-                  <th className="py-2.5 px-3">Surname</th>
-                  <th className="py-2.5 px-3">Phone</th>
-                  <th className="py-2.5 px-3">Couple Photo</th>
-                  <th className="py-2.5 px-3">Payment Proof</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3">Attendance</th>
-                  <th className="py-2.5 px-3">Submitted At</th>
-                  <th className="py-2.5 px-3">Actions</th>
+                  <th className="py-3 px-3">Token ID</th>
+                  <th className="py-3 px-3">Program Slot</th>
+                  <th className="py-3 px-3">Couple Names</th>
+                  <th className="py-3 px-3">Surname</th>
+                  <th className="py-3 px-3">Phone</th>
+                  <th className="py-3 px-3">Couple Photo</th>
+                  <th className="py-3 px-3">Payment Proof</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3">Attendance</th>
+                  <th className="py-3 px-3">Submitted At</th>
+                  <th className="py-3 px-3">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/50">
+              <tbody className="divide-y divide-slate-100 text-slate-800">
                 {filteredSubmissions.map((sub) => {
                   const cleanPhone = sub.phoneNumber.replace(/[^0-9]/g, '');
                   const waPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
@@ -4472,7 +4843,7 @@ export default function AdminDashboard() {
                   const isPending = !isApproved && !isRejected && !isInquiry && !isRefunded;
 
                   return (
-                    <tr key={sub.inquiryId} className="hover:bg-slate-900/30 transition-colors">
+                    <tr key={sub.inquiryId} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-4 px-4 text-center">
                         <input
                           type="checkbox"
@@ -4484,29 +4855,33 @@ export default function AdminDashboard() {
                               setSelectedAttendanceIds(prev => prev.filter(id => id !== sub.inquiryId));
                             }
                           }}
-                          className="rounded bg-slate-900 border-slate-800 text-amber-500 focus:ring-amber-500 h-4 w-4"
+                          className="rounded bg-white border-slate-300 text-rose-600 focus:ring-rose-500 h-4 w-4 cursor-pointer"
                         />
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-amber-500 font-bold">{sub.inquiryId}</td>
-                      <td className="py-2.5 px-3 text-slate-300">
+                      <td className="py-3 px-3">
+                        <span className="font-mono text-xs font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 inline-block">
+                          {sub.inquiryId}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-slate-700">
                         {sub.programName ? (
                           <div>
-                            <div className="font-semibold text-slate-200">{sub.programName}</div>
-                            <div className="text-xs text-slate-500">{sub.programDate}</div>
+                            <div className="font-bold text-slate-900">{sub.programName}</div>
+                            <div className="text-xs text-slate-500 font-medium">{sub.programDate}</div>
                           </div>
                         ) : (
-                          <span className="text-xs text-slate-500">N/A</span>
+                          <span className="text-xs text-slate-400">N/A</span>
                         )}
                       </td>
-                      <td className="py-2.5 px-3 font-semibold text-slate-200">
-                        {sub.husbandName} & {sub.wifeName}
+                      <td className="py-3 px-3 font-bold text-slate-900">
+                        {sub.husbandName} &amp; {sub.wifeName}
                       </td>
-                      <td className="py-2.5 px-3 text-slate-300">{sub.surname}</td>
-                      <td className="py-2.5 px-3 font-mono text-slate-300">{sub.phoneNumber}</td>
-                      <td className="py-2.5 px-3">
-                        <div className="flex flex-col items-center gap-2">
+                      <td className="py-3 px-3 text-slate-700 font-medium">{sub.surname}</td>
+                      <td className="py-3 px-3 font-mono text-slate-700 font-medium">{sub.phoneNumber}</td>
+                      <td className="py-3 px-3">
+                        <div className="flex flex-col items-center gap-1.5">
                           <div
-                            className="w-12 h-12 rounded-lg overflow-hidden border border-slate-800 cursor-pointer hover:border-amber-500/50 transition-colors"
+                            className="w-12 h-12 rounded-lg overflow-hidden border border-slate-200 cursor-pointer hover:border-rose-400 transition-colors bg-slate-50 shadow-2xs"
                             onClick={() => setSelectedImage(sub.couplePhoto)}
                           >
                             <img
@@ -4517,34 +4892,34 @@ export default function AdminDashboard() {
                           </div>
                           <button
                             onClick={() => downloadImage(sub.couplePhoto)}
-                            className="text-[10px] text-amber-500 hover:underline font-semibold"
+                            className="text-[10px] text-rose-700 hover:underline font-bold cursor-pointer"
                           >
                             Download
                           </button>
                         </div>
                       </td>
-                      <td className="py-2.5 px-3">
+                      <td className="py-3 px-3">
                         {sub.payment?.provider === 'razorpay' ? (
                           <div className="flex flex-col items-center gap-1">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
                               💳 Razorpay
                             </span>
                             <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                              sub.payment?.status === 'captured' ? 'bg-emerald-500/20 text-emerald-400' :
-                              sub.payment?.status === 'failed' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'
+                              sub.payment?.status === 'captured' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
+                              sub.payment?.status === 'failed' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-amber-50 text-amber-800 border border-amber-200'
                             }`}>
                               {sub.payment?.status || 'pending'}
                             </span>
                             {sub.payment?.razorpayPaymentId && (
-                              <span className="text-[9px] text-slate-400 max-w-[100px] truncate" title={sub.payment.razorpayPaymentId}>
+                              <span className="text-[9px] text-slate-500 max-w-[100px] truncate font-mono" title={sub.payment.razorpayPaymentId}>
                                 ID: {sub.payment.razorpayPaymentId}
                               </span>
                             )}
                           </div>
                         ) : sub.paymentScreenshot ? (
-                          <div className="flex flex-col items-center gap-2">
+                          <div className="flex flex-col items-center gap-1.5">
                             <div
-                              className="w-12 h-12 rounded-lg overflow-hidden border border-slate-800 cursor-pointer hover:border-amber-500/50 transition-colors"
+                              className="w-12 h-12 rounded-lg overflow-hidden border border-slate-200 cursor-pointer hover:border-rose-400 transition-colors bg-slate-50 shadow-2xs"
                               onClick={() => setSelectedImage(sub.paymentScreenshot)}
                             >
                               <img
@@ -4555,46 +4930,46 @@ export default function AdminDashboard() {
                             </div>
                             <button
                               onClick={() => downloadImage(sub.paymentScreenshot!)}
-                              className="text-[10px] text-amber-500 hover:underline font-semibold"
+                              className="text-[10px] text-rose-700 hover:underline font-bold cursor-pointer"
                             >
                               Download
                             </button>
-                            <div className="text-[9px] text-slate-400 mt-1 max-w-[100px] truncate text-center" title={sub.payeeNameFromReceipt}>
-                              To: <span className="font-semibold text-slate-300">{sub.payeeNameFromReceipt || 'Not detected'}</span>
+                            <div className="text-[9px] text-slate-500 max-w-[100px] truncate text-center" title={sub.payeeNameFromReceipt}>
+                              To: <span className="font-bold text-slate-700">{sub.payeeNameFromReceipt || 'Not detected'}</span>
                             </div>
                           </div>
                         ) : (
-                          <span className="text-xs text-slate-500">{sub.payment?.provider === 'manual' ? 'Manual / Offline' : 'None'}</span>
+                          <span className="text-xs text-slate-400">{sub.payment?.provider === 'manual' ? 'Manual / Offline' : 'None'}</span>
                         )}
                       </td>
-                      <td className="py-2.5 px-3 flex flex-col gap-1 items-start">
-                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase ${isApproved ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400' :
-                          isRejected ? 'bg-red-500/15 border border-red-500/30 text-red-400' :
-                            isRefunded ? 'bg-purple-500/15 border border-purple-500/30 text-purple-400' :
-                              isInquiry ? 'bg-blue-500/15 border border-blue-500/30 text-blue-400' :
-                                'bg-amber-500/15 border border-amber-500/30 text-amber-400'
+                      <td className="py-3 px-3 flex flex-col gap-1 items-start">
+                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase ${isApproved ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' :
+                          isRejected ? 'bg-red-50 border border-red-200 text-red-700' :
+                            isRefunded ? 'bg-purple-50 border border-purple-200 text-purple-800' :
+                              isInquiry ? 'bg-blue-50 border border-blue-200 text-blue-800' :
+                                'bg-amber-50 border border-amber-200 text-amber-800'
                           }`}>
                           {sub.status ? sub.status : 'pending'}
                         </span>
                         {isRefunded && sub.refundReason && (
-                          <span className="text-[10px] text-purple-300 italic max-w-[120px] truncate block" title={sub.refundReason}>
+                          <span className="text-[10px] text-purple-700 italic max-w-[120px] truncate block" title={sub.refundReason}>
                             Reason: {sub.refundReason}
                           </span>
                         )}
                         {isRejected && sub.rejectionReason && (
-                          <span className="text-[10px] text-red-300 italic max-w-[120px] truncate block" title={sub.rejectionReason}>
+                          <span className="text-[10px] text-red-700 italic max-w-[120px] truncate block" title={sub.rejectionReason}>
                             Reason: {sub.rejectionReason}
                           </span>
                         )}
                       </td>
-                      <td className="py-2.5 px-3">
+                      <td className="py-3 px-3">
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => handleUpdateAttendance(sub.inquiryId, 'present')}
-                            className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                            className={`px-2 py-1 rounded text-[10px] font-bold transition-all cursor-pointer ${
                               sub.attendance === 'present'
-                                ? 'bg-emerald-600 text-white shadow-md'
-                                : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'bg-slate-100 border border-slate-300 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
                             }`}
                             title="Mark Present (હાજર)"
                           >
@@ -4602,10 +4977,10 @@ export default function AdminDashboard() {
                           </button>
                           <button
                             onClick={() => handleUpdateAttendance(sub.inquiryId, 'absent')}
-                            className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                            className={`px-2 py-1 rounded text-[10px] font-bold transition-all cursor-pointer ${
                               sub.attendance === 'absent'
-                                ? 'bg-red-600 text-white shadow-md'
-                                : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                                ? 'bg-red-600 text-white shadow-xs'
+                                : 'bg-slate-100 border border-slate-300 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
                             }`}
                             title="Mark Absent (ગેરહાજર)"
                           >
@@ -4613,10 +4988,10 @@ export default function AdminDashboard() {
                           </button>
                           <button
                             onClick={() => handleUpdateAttendance(sub.inquiryId, 'unmarked')}
-                            className={`px-1.5 py-1 rounded text-[9px] font-semibold transition-all ${
+                            className={`px-1.5 py-1 rounded text-[9px] font-semibold transition-all cursor-pointer ${
                               sub.attendance === 'unmarked' || !sub.attendance
-                                ? 'bg-slate-850 text-slate-400'
-                                : 'bg-slate-900/50 text-slate-500 hover:text-slate-350'
+                                ? 'bg-slate-200 text-slate-700 font-bold'
+                                : 'bg-slate-100 text-slate-400 hover:text-slate-700'
                             }`}
                             title="Reset (અનમાર્ક)"
                           >
@@ -4624,21 +4999,21 @@ export default function AdminDashboard() {
                           </button>
                         </div>
                       </td>
-                      <td className="py-2.5 px-3 text-xs text-slate-500 font-mono">
+                      <td className="py-3 px-3 text-xs text-slate-500 font-mono">
                         {new Date(sub.createdAt).toLocaleString()}
                       </td>
-                      <td className="py-2.5 px-3 space-y-2">
+                      <td className="py-3 px-3 space-y-2">
                         {viewMode === 'trash' ? (
                           <div className="flex flex-col gap-2">
                             <button
                               onClick={() => handleRestoreSubmission(sub.inquiryId)}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all text-center"
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all text-center cursor-pointer"
                             >
                               Restore
                             </button>
                             <button
                               onClick={() => handlePermanentDeleteSubmission(sub.inquiryId)}
-                              className="px-3 py-1.5 bg-red-650 hover:bg-red-700 text-white font-bold rounded-lg text-xs transition-all text-center"
+                              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs transition-all text-center cursor-pointer"
                             >
                               Delete Permanently
                             </button>
@@ -4646,38 +5021,38 @@ export default function AdminDashboard() {
                         ) : (
                           <>
                             {isPending && (
-                              <div className="flex flex-col gap-2">
+                              <div className="flex flex-col gap-1.5">
                                 <button
                                   onClick={() => handleApproveSubmission(sub.inquiryId)}
                                   disabled={!!submittingAction[sub.inquiryId]}
-                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-all"
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-all cursor-pointer shadow-2xs"
                                 >
                                   {submittingAction[sub.inquiryId] === 'approve' ? 'Approving...' : 'Approve'}
                                 </button>
                                 <button
                                   onClick={() => handleRejectSubmission(sub.inquiryId)}
                                   disabled={!!submittingAction[sub.inquiryId]}
-                                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-all"
+                                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-all cursor-pointer shadow-2xs"
                                 >
                                   {submittingAction[sub.inquiryId] === 'reject' ? 'Rejecting...' : 'Reject'}
                                 </button>
                               </div>
                             )}
                             {isInquiry && (
-                              <div className="flex flex-col gap-2">
+                              <div className="flex flex-col gap-1.5">
                                 <a
                                   href={`https://wa.me/${waPhone}?text=${encodeURIComponent(
                                     `નમસ્તે ${sub.husbandName} & ${sub.wifeName}, તમે જે પ્રોગ્રામ (${sub.programName}) માટે ઇન્ક્વાયરી રજીસ્ટર કરી હતી તેની તારીખ નક્કી થઈ ગઈ છે.\n\nનક્કી થયેલ તારીખ: ${sub.programDate}\n\nકૃપા કરીને તમારી લિંક પર જઈને પેમેન્ટ કરી તમારી સીટ કન્ફર્મ કરો: ${typeof window !== 'undefined' ? window.location.origin : ''}/pass/${sub.inquiryId}`
                                   )}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs transition-all text-center"
+                                  className="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs transition-all text-center shadow-2xs"
                                 >
                                   💬 Request Pay
                                 </a>
                                 <button
                                   onClick={() => handleRejectSubmission(sub.inquiryId)}
-                                  className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white font-semibold rounded-lg text-xs transition-all"
+                                  className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 font-bold rounded-lg text-xs transition-all border border-red-200 cursor-pointer"
                                 >
                                   Reject
                                 </button>
@@ -4687,7 +5062,7 @@ export default function AdminDashboard() {
                               const isSent = sentPassIds.includes(sub.inquiryId);
                               const isPhotoSent = sentPhotoIds.includes(sub.inquiryId);
                               return (
-                                <div className="flex flex-col gap-2">
+                                <div className="flex flex-col gap-1.5">
                                   <a
                                     href={`https://wa.me/${waPhone}?text=${encodeURIComponent(formatWhatsappMessage(activeWhatsappTemplate, sub))}`}
                                     target="_blank"
@@ -4698,8 +5073,8 @@ export default function AdminDashboard() {
                                       }
                                     }}
                                     className={`inline-block px-3 py-1.5 font-bold rounded-lg text-xs transition-all text-center ${isSent
-                                      ? 'bg-slate-800 hover:bg-slate-750 text-slate-400 border border-slate-700'
-                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                      ? 'bg-slate-100 text-slate-500 border border-slate-300'
+                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
                                       }`}
                                   >
                                     {isSent ? '💬 Sent' : '💬 Send Pass'}
@@ -4714,8 +5089,8 @@ export default function AdminDashboard() {
                                       }
                                     }}
                                     className={`inline-block px-3 py-1.5 font-bold rounded-lg text-xs transition-all text-center ${isPhotoSent
-                                      ? 'bg-slate-800 hover:bg-slate-750 text-slate-400 border border-slate-700'
-                                      : 'bg-amber-600 hover:bg-amber-700 text-white'
+                                      ? 'bg-slate-100 text-slate-500 border border-slate-300'
+                                      : 'bg-amber-600 hover:bg-amber-700 text-white shadow-2xs'
                                       }`}
                                   >
                                     {isPhotoSent ? '📸 Photo Sent' : '📸 Send Photo'}
@@ -4724,34 +5099,34 @@ export default function AdminDashboard() {
                               );
                             })()}
                             {isRejected && (
-                              <div className="flex flex-col gap-2">
-                                <span className="text-xs text-red-500 block max-w-[120px] break-words font-bold">
+                              <div className="flex flex-col gap-1.5">
+                                <span className="text-xs text-red-600 block max-w-[120px] break-words font-bold">
                                   Rejected
                                 </span>
                                 {sub.rejectionReason && (
-                                  <span className="text-[10px] text-red-400/80 block max-w-[120px] break-words bg-red-950/20 border border-red-950/30 p-1.5 rounded-md italic">
+                                  <span className="text-[10px] text-red-700 block max-w-[120px] break-words bg-red-50 border border-red-200 p-1.5 rounded-md italic">
                                     {sub.rejectionReason}
                                   </span>
                                 )}
                                 <button
                                   onClick={() => handleApproveSubmission(sub.inquiryId)}
                                   disabled={!!submittingAction[sub.inquiryId]}
-                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-all text-center"
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-all text-center cursor-pointer"
                                 >
                                   {submittingAction[sub.inquiryId] === 'approve' ? 'Approving...' : 'Approve'}
                                 </button>
                               </div>
                             )}
-                            <div className="pt-2 border-t border-slate-800/40 flex flex-col gap-1.5">
+                            <div className="pt-2 border-t border-slate-200 flex flex-col gap-1.5">
                               <button
                                 onClick={() => startEditing(sub)}
-                                className="w-full px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 font-bold rounded-lg text-[10px] transition-all"
+                                className="w-full px-3 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 font-bold rounded-lg text-[10px] transition-all cursor-pointer"
                               >
                                 ✏️ Edit
                               </button>
                               <button
                                 onClick={() => handleDeleteSubmission(sub.inquiryId)}
-                                className="w-full px-3 py-1 bg-red-950/20 hover:bg-red-900/30 border border-red-900/30 text-red-400 hover:text-red-300 font-bold rounded-lg text-[10px] transition-all"
+                                className="w-full px-3 py-1 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-bold rounded-lg text-[10px] transition-all cursor-pointer"
                               >
                                 🗑️ Delete
                               </button>
@@ -4768,11 +5143,11 @@ export default function AdminDashboard() {
 
           {/* Pagination Controls */}
           {totalSubmissions > 0 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 p-4 bg-slate-950/20 border border-slate-800/80 rounded-2xl">
-              <span className="text-xs text-slate-400 font-medium">
-                Showing <span className="text-amber-500 font-bold">{totalSubmissions === 0 ? 0 : (currentPage - 1) * pageSize + 1}</span> to{' '}
-                <span className="text-amber-500 font-bold">{Math.min(currentPage * pageSize, totalSubmissions)}</span> of{' '}
-                <span className="text-amber-500 font-bold">{totalSubmissions}</span> registrations
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 p-4 bg-white border border-slate-200/90 shadow-sm rounded-2xl">
+              <span className="text-xs text-slate-600 font-medium">
+                Showing <span className="text-rose-700 font-bold">{totalSubmissions === 0 ? 0 : (currentPage - 1) * pageSize + 1}</span> to{' '}
+                <span className="text-rose-700 font-bold">{Math.min(currentPage * pageSize, totalSubmissions)}</span> of{' '}
+                <span className="text-rose-700 font-bold">{totalSubmissions}</span> registrations
               </span>
               {totalPages > 1 && (
                 <div className="flex flex-wrap items-center gap-4">
@@ -4786,11 +5161,11 @@ export default function AdminDashboard() {
                           fetchSubmissions({ page: currentPage - 1 });
                         }
                       }}
-                      className="px-4 py-2 border border-slate-800 hover:border-amber-500/30 hover:bg-slate-900/60 disabled:opacity-40 disabled:hover:border-slate-800 disabled:hover:bg-transparent text-slate-300 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+                      className="px-4 py-2 border border-slate-300 hover:bg-slate-50 disabled:opacity-40 text-slate-700 font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
                     >
                       ◀ Previous
                     </button>
-                    <span className="text-xs text-slate-300 font-semibold px-3 bg-slate-900 border border-slate-800/80 rounded-lg py-1.5 min-w-[80px] text-center">
+                    <span className="text-xs text-slate-800 font-bold px-3 bg-slate-100 border border-slate-200 rounded-lg py-1.5 min-w-[80px] text-center">
                       Page {currentPage} of {totalPages}
                     </span>
                     <button
@@ -4802,14 +5177,14 @@ export default function AdminDashboard() {
                           fetchSubmissions({ page: currentPage + 1 });
                         }
                       }}
-                      className="px-4 py-2 border border-slate-800 hover:border-amber-500/30 hover:bg-slate-900/60 disabled:opacity-40 disabled:hover:border-slate-800 disabled:hover:bg-transparent text-slate-300 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+                      className="px-4 py-2 border border-slate-300 hover:bg-slate-50 disabled:opacity-40 text-slate-700 font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
                     >
                       Next ▶
                     </button>
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-slate-400">Go to:</span>
+                    <span className="text-xs text-slate-500 font-medium">Go to:</span>
                     <input
                       type="number"
                       min="1"
@@ -4828,7 +5203,7 @@ export default function AdminDashboard() {
                           }
                         }
                       }}
-                      className="w-14 px-2 py-1 bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-lg focus:outline-none focus:border-amber-500 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className="w-14 px-2 py-1 bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-lg focus:bg-white focus:outline-none focus:border-rose-500 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none font-bold"
                     />
                     <button
                       onClick={() => {
@@ -4841,7 +5216,7 @@ export default function AdminDashboard() {
                           }
                         }
                       }}
-                      className="px-2.5 py-1 bg-slate-900 border border-slate-800 hover:border-amber-500/30 text-slate-300 font-bold rounded-lg text-xs transition-all active:scale-[0.98]"
+                      className="px-2.5 py-1 bg-slate-100 border border-slate-300 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-xs transition-all active:scale-[0.98] cursor-pointer"
                     >
                       Go
                     </button>
@@ -4857,16 +5232,16 @@ export default function AdminDashboard() {
       /* Render duplicates view */
           <div className="space-y-6">
             {loadingDuplicates ? (
-              <div className="text-center py-20 text-slate-400">Loading duplicate inquiries...</div>
+              <div className="text-center py-20 text-slate-500 font-medium">Loading duplicate inquiries...</div>
             ) : duplicateGroups.length === 0 ? (
-              <div className="text-center py-20 text-slate-400 border border-dashed border-slate-800 rounded-2xl">
+              <div className="text-center py-20 text-slate-500 border border-dashed border-slate-300 rounded-2xl bg-white font-medium">
                 No duplicate inquiries found. (કોઈ ડુપ્લિકેટ ઇન્ક્વાયરી મળી નથી)
               </div>
             ) : (
               <>
                 {/* Global Bulk Action Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-950/40 border border-slate-800/80 rounded-2xl p-4">
-                  <div className="text-xs md:text-sm font-semibold text-slate-350 flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-4 bg-white border border-slate-200/90 shadow-sm rounded-2xl p-4">
+                  <div className="text-xs md:text-sm font-bold text-slate-800 flex items-center gap-2">
                     <span>✅</span>
                     <span>{selectedInquiryIds.length} submissions selected.</span>
                   </div>
@@ -4874,7 +5249,7 @@ export default function AdminDashboard() {
                     {selectedInquiryIds.length > 0 && (
                       <button
                         onClick={handleBulkDeleteSubmissions}
-                        className="px-4 py-2 bg-red-650 hover:bg-red-750 text-white font-bold rounded-xl text-xs transition-all active:scale-[0.98] shadow-lg shadow-red-500/10 cursor-pointer"
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-all active:scale-[0.98] shadow-md cursor-pointer"
                       >
                         🗑️ Delete Selected ({selectedInquiryIds.length})
                       </button>
@@ -4885,7 +5260,7 @@ export default function AdminDashboard() {
                         const isAllSelected = selectedInquiryIds.length === allIds.length;
                         setSelectedInquiryIds(isAllSelected ? [] : allIds);
                       }}
-                      className="px-3 py-2 border border-slate-800 hover:bg-slate-900/60 text-slate-350 font-semibold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
+                      className="px-3 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
                     >
                       {selectedInquiryIds.length === duplicateGroups.flatMap(g => g.submissions.map(s => s.inquiryId)).length ? 'Deselect All' : 'Select All Duplicates'}
                     </button>
@@ -4893,12 +5268,12 @@ export default function AdminDashboard() {
                 </div>
 
                 {duplicateGroups.map((group) => (
-                  <div key={group.id} className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                  <div key={group.id} className="bg-white border border-slate-200/90 shadow-sm rounded-2xl p-6 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
                       <div className="flex items-center gap-2.5">
                         <span className="text-xl">⚠️</span>
                         <div>
-                          <h3 className="font-bold text-slate-200 text-base">{group.label}</h3>
+                          <h3 className="font-bold text-slate-900 text-base">{group.label}</h3>
                           <p className="text-xs text-slate-500 mt-0.5">Found {group.submissions.length} conflicting submissions.</p>
                         </div>
                       </div>
@@ -4916,11 +5291,11 @@ export default function AdminDashboard() {
                               }
                             });
                           }}
-                          className="px-2.5 py-1.5 border border-slate-800 hover:bg-slate-900/60 text-slate-350 font-semibold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
+                          className="px-2.5 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
                         >
                           {group.submissions.map(s => s.inquiryId).every(id => selectedInquiryIds.includes(id)) ? 'Deselect Group' : 'Select Group'}
                         </button>
-                        <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-full text-xs font-bold uppercase tracking-wider">
+                        <span className="px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-full text-xs font-bold uppercase tracking-wider">
                           {group.type === 'both' ? 'Phone & Name Match' : group.type === 'phone' ? 'Phone Match' : 'Name Match'}
                         </span>
                       </div>
@@ -4933,7 +5308,7 @@ export default function AdminDashboard() {
                         const isPending = !isApproved && !isRejected;
                         const isSelected = selectedInquiryIds.includes(sub.inquiryId);
                         return (
-                          <div key={sub.inquiryId} className={`border rounded-xl p-5 flex flex-col justify-between hover:border-slate-700/80 transition-all space-y-4 relative ${isSelected ? 'border-amber-500/40 bg-amber-500/[0.02]' : 'border-slate-800/80 bg-slate-900/40'}`}>
+                          <div key={sub.inquiryId} className={`border rounded-xl p-5 flex flex-col justify-between hover:border-rose-300 transition-all space-y-4 relative ${isSelected ? 'border-rose-400 bg-rose-50/40' : 'border-slate-200 bg-slate-50/60'}`}>
                             {/* Selection Checkbox */}
                             <div className="absolute top-4 right-4 z-10 flex items-center">
                               <input
@@ -4947,46 +5322,46 @@ export default function AdminDashboard() {
                                       : prev.filter(id => id !== sub.inquiryId)
                                   );
                                 }}
-                                className="w-4.5 h-4.5 text-amber-500 bg-slate-950 border-slate-800 rounded focus:ring-amber-500 focus:ring-offset-slate-900 cursor-pointer"
+                                className="w-4.5 h-4.5 text-rose-600 bg-white border-slate-300 rounded focus:ring-rose-500 cursor-pointer"
                               />
                             </div>
 
                           <div className="space-y-3">
                             <div className="flex justify-between items-start gap-2 pr-8">
                               <div>
-                                <span className="font-mono text-[10px] text-slate-500">Token ID</span>
-                                <div className="font-mono text-sm text-amber-500 font-bold">{sub.inquiryId}</div>
+                                <span className="font-mono text-[10px] text-slate-500 font-bold">Token ID</span>
+                                <div className="font-mono text-sm text-rose-700 font-bold">{sub.inquiryId}</div>
                               </div>
-                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${isApproved ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : isRejected ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}`}>
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${isApproved ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : isRejected ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
                                 {sub.status || 'pending'}
                               </span>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3 text-xs border-t border-b border-slate-800/40 py-2.5">
+                            <div className="grid grid-cols-2 gap-3 text-xs border-t border-b border-slate-200 py-2.5">
                               <div>
-                                <span className="text-slate-500 block uppercase text-[9px] tracking-wider font-semibold">Couple Names</span>
-                                <span className="text-slate-200 font-semibold">{sub.husbandName} & {sub.wifeName}</span>
+                                <span className="text-slate-500 block uppercase text-[9px] tracking-wider font-bold">Couple Names</span>
+                                <span className="text-slate-900 font-bold">{sub.husbandName} &amp; {sub.wifeName}</span>
                               </div>
                               <div>
-                                <span className="text-slate-500 block uppercase text-[9px] tracking-wider font-semibold">Surname</span>
-                                <span className="text-slate-200 font-semibold">{sub.surname}</span>
+                                <span className="text-slate-500 block uppercase text-[9px] tracking-wider font-bold">Surname</span>
+                                <span className="text-slate-900 font-bold">{sub.surname}</span>
                               </div>
                               <div>
-                                <span className="text-slate-500 block uppercase text-[9px] tracking-wider font-semibold">Phone</span>
-                                <span className="text-slate-200 font-mono">{sub.phoneNumber}</span>
+                                <span className="text-slate-500 block uppercase text-[9px] tracking-wider font-bold">Phone</span>
+                                <span className="text-slate-900 font-mono font-bold">{sub.phoneNumber}</span>
                               </div>
                               <div>
-                                <span className="text-slate-500 block uppercase text-[9px] tracking-wider font-semibold">Program Slot</span>
-                                <span className="text-slate-200 font-semibold truncate block" title={sub.programName}>{sub.programName || 'N/A'}</span>
-                                <span className="text-[10px] text-slate-500 block">{sub.programDate}</span>
+                                <span className="text-slate-500 block uppercase text-[9px] tracking-wider font-bold">Program Slot</span>
+                                <span className="text-slate-900 font-bold truncate block" title={sub.programName}>{sub.programName || 'N/A'}</span>
+                                <span className="text-[10px] text-slate-500 font-medium block">{sub.programDate}</span>
                               </div>
                             </div>
 
                             <div className="flex gap-4">
                               <div className="flex-1 flex flex-col items-center gap-1.5">
-                                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Couple Photo</span>
+                                <span className="text-[10px] text-slate-600 uppercase tracking-wider font-bold">Couple Photo</span>
                                 <div 
-                                  className="w-full h-24 rounded-lg overflow-hidden border border-slate-800 cursor-pointer hover:border-amber-500/30 transition-all bg-slate-950/60 flex items-center justify-center"
+                                  className="w-full h-24 rounded-lg overflow-hidden border border-slate-200 cursor-pointer hover:border-rose-400 transition-all bg-white flex items-center justify-center shadow-2xs"
                                   onClick={() => setSelectedImage(sub.couplePhoto)}
                                 >
                                   {sub.couplePhoto ? (
@@ -4996,14 +5371,14 @@ export default function AdminDashboard() {
                                       className="w-full h-full object-cover"
                                     />
                                   ) : (
-                                    <span className="text-slate-605 text-xs">No Photo</span>
+                                    <span className="text-slate-400 text-xs">No Photo</span>
                                   )}
                                 </div>
                               </div>
                               <div className="flex-1 flex flex-col items-center gap-1.5">
-                                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Payment Proof</span>
+                                <span className="text-[10px] text-slate-600 uppercase tracking-wider font-bold">Payment Proof</span>
                                 <div 
-                                  className="w-full h-24 rounded-lg overflow-hidden border border-slate-800 cursor-pointer hover:border-amber-500/30 transition-all bg-slate-950/60 flex items-center justify-center relative"
+                                  className="w-full h-24 rounded-lg overflow-hidden border border-slate-200 cursor-pointer hover:border-rose-400 transition-all bg-white flex items-center justify-center relative shadow-2xs"
                                   onClick={() => sub.paymentScreenshot && setSelectedImage(sub.paymentScreenshot)}
                                 >
                                   {sub.paymentScreenshot ? (
@@ -5013,19 +5388,19 @@ export default function AdminDashboard() {
                                       className="w-full h-full object-cover"
                                     />
                                   ) : (
-                                    <span className="text-slate-605 text-xs">No Proof</span>
+                                    <span className="text-slate-400 text-xs">No Proof</span>
                                   )}
                                 </div>
                               </div>
                             </div>
                           </div>
 
-                          <div className="pt-4 border-t border-slate-800/80 flex flex-wrap gap-2">
+                          <div className="pt-4 border-t border-slate-200 flex flex-wrap gap-2">
                             {isPending && (
                               <button
                                 onClick={() => handleApproveSubmission(sub.inquiryId)}
                                 disabled={!!submittingAction[sub.inquiryId]}
-                                className="flex-1 min-w-[70px] px-2.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+                                className="flex-1 min-w-[70px] px-2.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer shadow-2xs"
                               >
                                 {submittingAction[sub.inquiryId] === 'approve' ? 'Approving...' : 'Approve'}
                               </button>
@@ -5034,20 +5409,20 @@ export default function AdminDashboard() {
                               <button
                                 onClick={() => handleRejectSubmission(sub.inquiryId)}
                                 disabled={!!submittingAction[sub.inquiryId]}
-                                className="flex-1 min-w-[70px] px-2.5 py-2 bg-red-950/30 hover:bg-red-900/30 border border-red-900/40 disabled:opacity-50 text-red-400 font-bold rounded-xl text-xs transition-all active:scale-[0.98]"
+                                className="flex-1 min-w-[70px] px-2.5 py-2 bg-red-50 hover:bg-red-100 border border-red-200 disabled:opacity-50 text-red-700 font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
                               >
                                 {submittingAction[sub.inquiryId] === 'reject' ? 'Rejecting...' : 'Reject'}
                               </button>
                             )}
                             <button
                               onClick={() => startEditing(sub)}
-                              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl text-xs transition-all active:scale-[0.98]"
+                              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
                             >
                               ✏️ Edit
                             </button>
                             <button
                               onClick={() => handleDeleteSubmission(sub.inquiryId)}
-                              className="px-3 py-2 bg-red-950/20 hover:bg-red-900/30 border border-red-950 text-red-400 font-semibold rounded-xl text-xs transition-all active:scale-[0.98]"
+                              className="px-3 py-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
                             >
                               🗑️ Delete
                             </button>
@@ -5069,3 +5444,4 @@ export default function AdminDashboard() {
 </div>
   );
 }
+

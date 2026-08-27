@@ -16,7 +16,7 @@ try {
       }
     });
   }
-} catch (e) {}
+} catch (e) { }
 
 import express from 'express';
 import cors from 'cors';
@@ -346,15 +346,15 @@ const initSettings = async () => {
   try {
     const existing = await Setting.findOne({ key: 'main' });
     if (!existing) {
-      await Setting.create({ 
-        key: 'main', 
-        upiId: 'payee@upi', 
+      await Setting.create({
+        key: 'main',
+        upiId: 'payee@upi',
         upiIds: ['payee@upi'],
         activeUpiIndex: 0,
         upiBookingsCount: 0,
         upiLimit: 50,
-        payeeName: 'Couple Pass', 
-        amount: '100' 
+        payeeName: 'Couple Pass',
+        amount: '100'
       });
     } else {
       let updated = false;
@@ -796,7 +796,7 @@ app.get('/api/programs/slug/:slug', async (req, res) => {
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
     const obj = program.toObject();
     obj.cardTemplate = program.cardTemplate ? `${protocol}://${host}/api/programs/${program.id}/template` : null;
-    
+
     // Dynamic available seats calculation
     const activeBookings = await getProgramBookingsCount(program.id);
     obj.activeBookings = activeBookings;
@@ -852,9 +852,9 @@ app.get('/api/programs', async (req, res) => {
       date: 1, time: 1, capacity: 1, bookingsCount: 1, isDateFinal: 1,
       heartX: 1, heartY: 1, heartWidth: 1, heartHeight: 1, photoZoom: 1, photoOffsetY: 1,
       photoLink: 1, isInquiryClosed: 1,
-      hasTemplate: { $cond: [ { $eq: [ { $type: "$cardTemplate" }, "string" ] }, true, false ] }
+      hasTemplate: { $cond: [{ $eq: [{ $type: "$cardTemplate" }, "string"] }, true, false] }
     }).sort({ sortOrder: 1, sequenceNumber: 1, createdAt: 1 });
-    
+
     // Map programs to include absolute URL path for cardTemplate instead of base64
     const host = req.get('host');
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
@@ -872,13 +872,13 @@ app.get('/api/programs', async (req, res) => {
       obj.pendingCount = await Submission.countDocuments({ programId: p.id, status: 'pending' });
       obj.approvedCount = await Submission.countDocuments({ programId: p.id, status: 'approved' });
       obj.rejectedCount = await Submission.countDocuments({ programId: p.id, status: 'rejected' });
-      
+
       // CPL counts
       obj.cplApproved = await Submission.countDocuments({ programId: p.id, status: 'approved', inquiryId: /^(CPL-|EK)/i });
       obj.cplPending = await Submission.countDocuments({ programId: p.id, status: 'pending', inquiryId: /^(CPL-|EK)/i });
       obj.cplInquiry = await Submission.countDocuments({ programId: p.id, status: 'inquiry', inquiryId: /^(CPL-|EK)/i });
       obj.cplRejected = await Submission.countDocuments({ programId: p.id, status: 'rejected', inquiryId: /^(CPL-|EK)/i });
-      
+
       // IP counts
       obj.ipApproved = await Submission.countDocuments({ programId: p.id, status: 'approved', inquiryId: /^IP-/i });
       obj.ipPending = await Submission.countDocuments({ programId: p.id, status: 'pending', inquiryId: /^IP-/i });
@@ -886,12 +886,40 @@ app.get('/api/programs', async (req, res) => {
       obj.ipRejected = await Submission.countDocuments({ programId: p.id, status: 'rejected', inquiryId: /^IP-/i });
       return obj;
     }));
-    
+
     res.json(mapped);
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching programs.' });
   }
 });
+
+// Public programs endpoint for landing page
+app.get('/api/programs/public', async (req, res) => {
+  try {
+    const programs = await Program.find(
+      { status: { $nin: ['completed', 'archived', 'cancelled'] } },
+      {
+        id: 1, sequenceNumber: 1, name: 1, slug: 1, city: 1, venue: 1, mapUrl: 1, description: 1,
+        heroImage: 1, price: 1, status: 1, featured: 1, registrationMode: 1, externalRegistrationUrl: 1, sortOrder: 1,
+        date: 1, time: 1, capacity: 1, bookingsCount: 1, isDateFinal: 1, photoLink: 1, isInquiryClosed: 1
+      }
+    ).sort({ sortOrder: 1, sequenceNumber: 1, createdAt: 1 });
+
+    const mapped = await Promise.all(programs.map(async (p) => {
+      const obj = p.toObject();
+      const activeBookings = await getProgramBookingsCount(p.id);
+      obj.activeBookings = activeBookings;
+      obj.availableSeats = Math.max(0, p.capacity - activeBookings);
+      return obj;
+    }));
+
+    res.json({ programs: mapped, count: mapped.length });
+  } catch (err) {
+    console.error('Error in /api/programs/public:', err);
+    res.status(500).json({ error: 'Server error fetching public programs.' });
+  }
+});
+
 
 // Stream program card template endpoint (In-memory cached to eliminate MongoDB network delay)
 const templateCache = new Map();
@@ -1197,7 +1225,7 @@ app.post('/api/submit', upload.fields([
 
     const programSeq = program.sequenceNumber || 1;
     const programSeqStr = String(programSeq).padStart(2, '0');
-    
+
     const counterObj = await Counter.findOneAndUpdate(
       { name: `inquiryNumber_${programId}` },
       { $inc: { seq: 1 } },
@@ -1526,7 +1554,7 @@ app.post('/api/submissions/bulk-delete', requireAuth, async (req, res) => {
 
     const submissions = await Submission.find({ inquiryId: { $in: inquiryIds } });
     const programIds = [...new Set(submissions.map(s => s.programId).filter(Boolean))];
-    
+
     // Soft delete documents
     await Submission.updateMany(
       { inquiryId: { $in: inquiryIds } },
@@ -1576,8 +1604,8 @@ app.post('/api/submissions/bulk-move', requireAuth, async (req, res) => {
       const activeBookings = await getProgramBookingsCount(targetProgramId);
       const neededCapacity = activeSubmissionsToMoveCount * 2;
       if (activeBookings + neededCapacity > targetProgram.capacity) {
-        return res.status(400).json({ 
-          error: `પસંદ કરેલ પ્રોગ્રામ સ્લોટમાં પૂરતી જગ્યા નથી! (જરૂરી સીટો: ${neededCapacity}, ખાલી સીટો: ${targetProgram.capacity - activeBookings})` 
+        return res.status(400).json({
+          error: `પસંદ કરેલ પ્રોગ્રામ સ્લોટમાં પૂરતી જગ્યા નથી! (જરૂરી સીટો: ${neededCapacity}, ખાલી સીટો: ${targetProgram.capacity - activeBookings})`
         });
       }
     }
@@ -1612,9 +1640,9 @@ app.post('/api/submissions/bulk-move', requireAuth, async (req, res) => {
     }
     await updateProgramBookingsCount(targetProgramId);
 
-    res.json({ 
-      success: true, 
-      message: `${submissions.length} ઇન્ક્વાયરીઝ સફળતાપૂર્વક નવા પ્રોગ્રામમાં ટ્રાન્સફર કરવામાં આવી છે.` 
+    res.json({
+      success: true,
+      message: `${submissions.length} ઇન્ક્વાયરીઝ સફળતાપૂર્વક નવા પ્રોગ્રામમાં ટ્રાન્સફર કરવામાં આવી છે.`
     });
   } catch (error) {
     console.error('Error bulk moving submissions:', error);
@@ -1881,7 +1909,7 @@ app.get('/api/submissions/status/:inquiryId', async (req, res) => {
         { id: submission.programId },
         {
           id: 1, name: 1, date: 1, time: 1, isDateFinal: 1, heartX: 1, heartY: 1, heartWidth: 1, heartHeight: 1, photoZoom: 1, photoOffsetY: 1,
-          hasTemplate: { $cond: [ { $eq: [ { $type: "$cardTemplate" }, "string" ] }, true, false ] }
+          hasTemplate: { $cond: [{ $eq: [{ $type: "$cardTemplate" }, "string"] }, true, false] }
         }
       );
       if (program) {
@@ -2175,7 +2203,7 @@ app.post('/api/submissions/:inquiryId/change-slot', async (req, res) => {
     if (oldProgramId !== targetProgramId) {
       const programSeq = targetProgram.sequenceNumber || 1;
       const programSeqStr = String(programSeq).padStart(2, '0');
-      
+
       const counterObj = await Counter.findOneAndUpdate(
         { name: `inquiryNumber_${targetProgramId}` },
         { $inc: { seq: 1 } },
@@ -2315,23 +2343,40 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
     let filter = { isDeleted: { $ne: true } };
     if (search) {
       const trimmedSearch = search.trim();
-      const isExactToken = /^(cpl-\d+|ek\d+-\d+|ip-\d+)$/i.test(trimmedSearch);
-      if (isExactToken) {
-        filter.$or = [
-          { inquiryId: trimmedSearch.toUpperCase() },
-          { oldInquiryId: trimmedSearch.toUpperCase() }
-        ];
-      } else {
-        const searchRegex = new RegExp(trimmedSearch, 'i');
-        filter.$or = [
-          { inquiryId: searchRegex },
-          { oldInquiryId: searchRegex },
-          { husbandName: searchRegex },
-          { wifeName: searchRegex },
-          { surname: searchRegex },
-          { phoneNumber: searchRegex }
-        ];
+      const digitsOnly = trimmedSearch.replace(/\D/g, '');
+      const escaped = trimmedSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(escaped, 'i');
+
+      const orConditions = [
+        { inquiryId: searchRegex },
+        { oldInquiryId: searchRegex },
+        { husbandName: searchRegex },
+        { wifeName: searchRegex },
+        { surname: searchRegex },
+        { phoneNumber: searchRegex }
+      ];
+
+      // Multi-word name matching (e.g. "Rajesh Patel")
+      const words = trimmedSearch.split(/\s+/).filter(w => w.length > 0);
+      if (words.length > 1) {
+        const wordRegexes = words.map(w => new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+        orConditions.push({
+          $and: wordRegexes.map(r => ({
+            $or: [
+              { husbandName: r },
+              { wifeName: r },
+              { surname: r },
+              { inquiryId: r }
+            ]
+          }))
+        });
       }
+
+      if (digitsOnly.length >= 3) {
+        orConditions.push({ phoneNumber: new RegExp(digitsOnly, 'i') });
+      }
+
+      filter.$or = orConditions;
     }
     if (status) {
       filter.status = status;
@@ -2381,14 +2426,14 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
       paymentScreenshot: 1,
       attendance: 1
     }, { allowDiskUse: true })
-    .sort({ [sortBy]: sortOrder })
-    .skip((page - 1) * limit)
-    .limit(limit);
+      .sort({ [sortBy]: sortOrder })
+      .skip((page - 1) * limit)
+      .limit(limit);
 
     // Map submissions to use proxy endpoints for consistent CORS handling
     const mappedSubmissions = submissions.map(sub => {
       const obj = sub.toObject();
-      
+
       if (sub.couplePhoto) {
         obj.couplePhoto = `/api/submissions/${sub.inquiryId}/photo`;
       } else {
@@ -2416,105 +2461,94 @@ app.get('/api/submissions', requireAuth, async (req, res) => {
   }
 });
 
-// Get duplicate submissions grouped by conflict type (phone or name)
+// Get duplicate submissions grouped by conflict type (phone or name) - High Performance O(N)
 app.get('/api/submissions/duplicates', requireAuth, async (req, res) => {
   try {
-    const allSubmissions = await Submission.find({ isDeleted: { $ne: true } });
-    
+    const allSubmissions = await Submission.find(
+      { isDeleted: { $ne: true } },
+      {
+        inquiryId: 1,
+        oldInquiryId: 1,
+        husbandName: 1,
+        wifeName: 1,
+        surname: 1,
+        phoneNumber: 1,
+        status: 1,
+        programId: 1,
+        programName: 1,
+        programDate: 1,
+        createdAt: 1,
+        attendance: 1,
+        hasCouplePhoto: { $cond: [{ $ifNull: ["$couplePhoto", false] }, true, false] },
+        hasPaymentScreenshot: { $cond: [{ $ifNull: ["$paymentScreenshot", false] }, true, false] }
+      }
+    ).lean();
+
     const norm = (str) => (str || '').toLowerCase().trim();
-    
-    const mapUrls = (sub) => {
-      const obj = sub.toObject ? sub.toObject() : { ...sub };
-      if (obj.couplePhoto) {
-        obj.couplePhoto = `/api/submissions/${obj.inquiryId}/photo`;
-      } else {
-        obj.couplePhoto = null;
+
+    const phoneMap = new Map();
+    const nameMap = new Map();
+
+    for (const sub of allSubmissions) {
+      const phone = (sub.phoneNumber || '').trim();
+      if (phone && phone.length >= 7) {
+        if (!phoneMap.has(phone)) phoneMap.set(phone, []);
+        phoneMap.get(phone).push(sub);
       }
 
-      if (obj.paymentScreenshot) {
-        obj.paymentScreenshot = `/api/submissions/${obj.inquiryId}/screenshot`;
-      } else {
-        obj.paymentScreenshot = null;
+      const hName = norm(sub.husbandName);
+      const wName = norm(sub.wifeName);
+      const sName = norm(sub.surname);
+      if (hName && wName) {
+        const nameKey = `${hName}__${wName}__${sName}`;
+        if (!nameMap.has(nameKey)) nameMap.set(nameKey, []);
+        nameMap.get(nameKey).push(sub);
       }
-      return obj;
-    };
+    }
 
-    const groups = [];
-    const visited = new Set();
-    
-    for (let i = 0; i < allSubmissions.length; i++) {
-      const subA = allSubmissions[i];
-      if (visited.has(subA.inquiryId)) continue;
-      
-      const conflictGroup = [subA];
-      const queue = [subA];
-      visited.add(subA.inquiryId);
-      
-      while (queue.length > 0) {
-        const current = queue.shift();
-        
-        for (let j = 0; j < allSubmissions.length; j++) {
-          const subB = allSubmissions[j];
-          if (visited.has(subB.inquiryId)) continue;
-          
-          const phoneMatch = current.phoneNumber && subB.phoneNumber && (current.phoneNumber.trim() === subB.phoneNumber.trim());
-          const nameMatch = current.husbandName && subB.husbandName &&
-                            current.wifeName && subB.wifeName &&
-                            current.surname && subB.surname &&
-                            (norm(current.husbandName) === norm(subB.husbandName)) &&
-                            (norm(current.wifeName) === norm(subB.wifeName)) &&
-                            (norm(current.surname) === norm(subB.surname));
-                            
-          if (phoneMatch || nameMatch) {
-            conflictGroup.push(subB);
-            queue.push(subB);
-            visited.add(subB.inquiryId);
-          }
-        }
-      }
-      
-      if (conflictGroup.length > 1) {
-        let hasPhoneMatch = false;
-        let hasNameMatch = false;
-        
-        for (let x = 0; x < conflictGroup.length; x++) {
-          for (let y = x + 1; y < conflictGroup.length; y++) {
-            const subX = conflictGroup[x];
-            const subY = conflictGroup[y];
-            
-            if (subX.phoneNumber && subY.phoneNumber && subX.phoneNumber.trim() === subY.phoneNumber.trim()) {
-              hasPhoneMatch = true;
-            }
-            if (norm(subX.husbandName) === norm(subY.husbandName) &&
-                norm(subX.wifeName) === norm(subY.wifeName) &&
-                norm(subX.surname) === norm(subY.surname)) {
-              hasNameMatch = true;
-            }
-          }
-        }
-        
-        let type = 'both';
-        let label = '';
-        if (hasPhoneMatch && hasNameMatch) {
-          type = 'both';
-          label = `Duplicate Phone & Names: ${conflictGroup[0].husbandName} & ${conflictGroup[0].wifeName} ${conflictGroup[0].surname} (${conflictGroup[0].phoneNumber})`;
-        } else if (hasPhoneMatch) {
-          type = 'phone';
-          label = `Duplicate Phone Number: ${conflictGroup[0].phoneNumber}`;
-        } else {
-          type = 'name';
-          label = `Duplicate Names: ${conflictGroup[0].husbandName} & ${conflictGroup[0].wifeName} ${conflictGroup[0].surname}`;
-        }
-        
-        groups.push({
-          id: `conflict-${conflictGroup[0].inquiryId}`,
-          type,
-          conflictValue: conflictGroup[0].phoneNumber,
-          label,
-          submissions: conflictGroup.map(mapUrls)
+    const groupMap = new Map(); // key -> group
+
+    // Add phone duplicates
+    for (const [phone, list] of phoneMap.entries()) {
+      if (list.length > 1) {
+        const groupKey = `phone-${phone}`;
+        groupMap.set(groupKey, {
+          id: groupKey,
+          type: 'phone',
+          conflictValue: phone,
+          label: `Duplicate Phone Number: ${phone} (${list.length} entries)`,
+          submissions: list
         });
       }
     }
+
+    // Add name duplicates
+    for (const [nameKey, list] of nameMap.entries()) {
+      if (list.length > 1) {
+        const first = list[0];
+        const groupKey = `name-${nameKey}`;
+        if (!groupMap.has(groupKey)) {
+          groupMap.set(groupKey, {
+            id: groupKey,
+            type: 'name',
+            conflictValue: `${first.husbandName} & ${first.wifeName} ${first.surname}`,
+            label: `Duplicate Names: ${first.husbandName} & ${first.wifeName} ${first.surname} (${list.length} entries)`,
+            submissions: list
+          });
+        }
+      }
+    }
+
+    const groups = Array.from(groupMap.values()).map(g => {
+      return {
+        ...g,
+        submissions: g.submissions.map(sub => ({
+          ...sub,
+          couplePhoto: sub.hasCouplePhoto ? `/api/submissions/${sub.inquiryId}/photo` : null,
+          paymentScreenshot: sub.hasPaymentScreenshot ? `/api/submissions/${sub.inquiryId}/screenshot` : null
+        }))
+      };
+    });
 
     const sortedGroups = groups.sort((a, b) => {
       const maxA = Math.max(...a.submissions.map(s => new Date(s.createdAt || 0).getTime()));
@@ -2699,7 +2733,7 @@ app.post('/api/settings', requireAuth, async (req, res) => {
     const existing = await Setting.findOne({ key: 'main' });
     let resetCount = false;
     let newIndex = 0;
-    
+
     if (existing) {
       const listChanged = JSON.stringify(existing.upiIds) !== JSON.stringify(processedUpiIds);
       if (listChanged) {
@@ -2866,7 +2900,7 @@ app.get('/api/debug-db', async (req, res) => {
       3: 'disconnecting',
       99: 'uninitialized'
     };
-    
+
     let testResult = 'Not run';
     let queryError = null;
     try {
@@ -2899,7 +2933,7 @@ const runDatabaseBackup = async () => {
     console.log('[Backup] Starting scheduled database backup...');
     const programs = await Program.find({});
     const submissions = await Submission.find({});
-    
+
     const backupData = {
       timestamp: new Date().toISOString(),
       programs,
