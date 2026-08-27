@@ -29,6 +29,34 @@ export const archiveApi = {
     return res.candidates || [];
   },
 
+  async startEventArchive(eventId: string): Promise<any> {
+    return apiClient(`/api/super-admin/archive/events/${eventId}/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  },
+
+  async pauseEventArchive(eventId: string): Promise<any> {
+    return apiClient(`/api/super-admin/archive/events/${eventId}/pause`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  },
+
+  async resumeEventArchive(eventId: string): Promise<any> {
+    return apiClient(`/api/super-admin/archive/events/${eventId}/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  },
+
+  async retryEventFailed(eventId: string): Promise<any> {
+    return apiClient(`/api/super-admin/archive/events/${eventId}/retry-failed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  },
+
   async queueEventArchive(eventId: string): Promise<{ success: boolean; message: string; queuedCount: number }> {
     return apiClient('/api/super-admin/archive/queue-event', {
       method: 'POST',

@@ -100,12 +100,77 @@ export const StoragePage = () => {
   useEffect(() => {
     fetchTelemetry();
     fetchCandidates();
+
+    // Auto-refresh candidate progress every 20 seconds while on this page
+    const interval = setInterval(() => {
+      fetchCandidates();
+      fetchTelemetry();
+    }, 20000);
+
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     if (tab === 'jobs') fetchJobs(1);
     if (tab === 'backups') fetchBackups();
   }, [tab, jobStatusFilter, selectedProgramId]);
+
+  const [operatingEventId, setOperatingEventId] = useState<string | null>(null);
+
+  const handleStartArchive = async (eventId: string) => {
+    if (!confirm('Start automatic Google Drive archive for this completed event? The worker will process batches automatically.')) return;
+    try {
+      setOperatingEventId(eventId);
+      const res = await archiveApi.startEventArchive(eventId);
+      alert(res.message);
+      fetchCandidates();
+      fetchJobs(1);
+    } catch (err: any) {
+      alert(err.message || 'Failed to start archive.');
+    } finally {
+      setOperatingEventId(null);
+    }
+  };
+
+  const handlePauseArchive = async (eventId: string) => {
+    try {
+      setOperatingEventId(eventId);
+      const res = await archiveApi.pauseEventArchive(eventId);
+      alert(res.message);
+      fetchCandidates();
+    } catch (err: any) {
+      alert(err.message || 'Failed to pause archive.');
+    } finally {
+      setOperatingEventId(null);
+    }
+  };
+
+  const handleResumeArchive = async (eventId: string) => {
+    try {
+      setOperatingEventId(eventId);
+      const res = await archiveApi.resumeEventArchive(eventId);
+      alert(res.message);
+      fetchCandidates();
+    } catch (err: any) {
+      alert(err.message || 'Failed to resume archive.');
+    } finally {
+      setOperatingEventId(null);
+    }
+  };
+
+  const handleRetryEventFailed = async (eventId: string) => {
+    try {
+      setOperatingEventId(eventId);
+      const res = await archiveApi.retryEventFailed(eventId);
+      alert(res.message);
+      fetchCandidates();
+      fetchJobs(1);
+    } catch (err: any) {
+      alert(err.message || 'Failed to retry failed jobs.');
+    } finally {
+      setOperatingEventId(null);
+    }
+  };
 
   const handleQueueEvent = async (eventId: string) => {
     if (!confirm('Queue couple photos from this event for direct Cloudinary -> Google Drive archiving?')) return;
@@ -291,7 +356,7 @@ export const StoragePage = () => {
               onClick={fetchCandidates}
               className="p-2 text-slate-500 hover:text-slate-700 bg-slate-100 rounded-xl"
             >
-              <RefreshCwIcon className={`w-4 h-4 ${loadingCandidates ? 'animate-spin' : ''}`} />
+      <RefreshCwIcon className={`w-4 h-4 ${loadingCandidates ? 'animate-spin' : ''}`} />
             </button>
           </div>
 
@@ -299,72 +364,133 @@ export const StoragePage = () => {
             {candidates.length === 0 ? (
               <p className="text-xs text-slate-500 py-8 text-center">No event records found.</p>
             ) : (
-              candidates.map((cand) => (
-                <div
-                  key={cand.id}
-                  className="py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-slate-50/60 p-3 rounded-xl transition-colors"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900 text-sm">{cand.name}</span>
-                      <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-700 font-bold rounded-md uppercase">
-                        {cand.city} &bull; {cand.date}
-                      </span>
-                      <span
-                        className={`text-[10px] px-2 py-0.5 font-extrabold rounded-md uppercase ${
-                          cand.archiveStatus === 'ARCHIVED'
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                            : cand.archiveStatus === 'QUEUED'
-                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {cand.archiveStatus}
-                      </span>
-                    </div>
+              candidates.map((cand) => {
+                const isArchiving = cand.archiveStatus === 'ARCHIVING';
+                const isPaused = cand.archiveStatus === 'PAUSED';
+                const isCompletedArchive = cand.archiveStatus === 'COMPLETED' || (cand.archivedAssets >= cand.eligibleCouplePhotos && cand.eligibleCouplePhotos > 0);
+                const isPartial = cand.archiveStatus === 'PARTIAL' || (Boolean(cand.failedAssets) && cand.failedAssets! > 0);
 
-                    <div className="text-xs text-slate-500 flex items-center gap-4 flex-wrap">
-                      <span>📸 Eligible: <strong>{cand.eligibleCouplePhotos}</strong></span>
-                      <span>✓ Verified: <strong className="text-emerald-700">{cand.archivedAssets}</strong></span>
-                      <span>⏳ Queued: <strong className="text-amber-700">{cand.queuedAssets}</strong></span>
-                      <span>💾 Est. Size: <strong>{cand.estimatedSizeMB} MB</strong></span>
-                    </div>
-
-                    {cand.eligibleCouplePhotos > 0 && (
-                      <div className="w-full max-w-md pt-1">
-                        <div className="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
-                          <span>Archive Progress</span>
-                          <span>
-                            {cand.archivedAssets} / {cand.eligibleCouplePhotos} ({Math.min(100, Math.round((cand.archivedAssets / cand.eligibleCouplePhotos) * 100))}%)
+                return (
+                  <div
+                    key={cand.id}
+                    className={`py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-4 rounded-xl transition-colors border ${
+                      isArchiving
+                        ? 'bg-purple-50/40 border-purple-200'
+                        : isCompletedArchive
+                        ? 'bg-emerald-50/20 border-emerald-100'
+                        : 'hover:bg-slate-50/60 border-slate-100'
+                    }`}
+                  >
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-slate-900 text-sm">{cand.name}</span>
+                        <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-700 font-bold rounded-md uppercase">
+                          {cand.city} &bull; {cand.date}
+                        </span>
+                        {isArchiving && (
+                          <span className="text-[10px] px-2.5 py-0.5 bg-purple-600 text-white font-extrabold rounded-full uppercase tracking-wider animate-pulse">
+                            CURRENT ARCHIVE
                           </span>
-                        </div>
-                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-purple-600 to-emerald-500 transition-all duration-300"
-                            style={{ width: `${Math.min(100, Math.round((cand.archivedAssets / cand.eligibleCouplePhotos) * 100))}%` }}
-                          />
-                        </div>
+                        )}
+                        <span
+                          className={`text-[10px] px-2 py-0.5 font-extrabold rounded-md uppercase ${
+                            isCompletedArchive
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              : isArchiving
+                              ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                              : isPaused
+                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                              : isPartial
+                              ? 'bg-rose-50 text-rose-800 border border-rose-200'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {cand.archiveStatus}
+                        </span>
                       </div>
-                    )}
-                  </div>
 
-                  <div className="flex items-center gap-2 self-end md:self-center">
-                    <button
-                      onClick={() => handleQueueEvent(cand.id)}
-                      disabled={queuingEventId === cand.id || cand.eligibleCouplePhotos === 0 || cand.archivedAssets >= cand.eligibleCouplePhotos}
-                      className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
-                    >
-                      {queuingEventId === cand.id ? 'Queuing Assets...' : cand.archivedAssets >= cand.eligibleCouplePhotos ? 'Fully Archived' : 'Queue Archive'}
-                    </button>
+                      <div className="text-xs text-slate-500 flex items-center gap-4 flex-wrap">
+                        <span>📸 Eligible: <strong>{cand.eligibleCouplePhotos}</strong></span>
+                        <span>✓ Verified: <strong className="text-emerald-700">{cand.archivedAssets}</strong></span>
+                        <span>⏳ Queued: <strong className="text-amber-700">{cand.queuedAssets}</strong></span>
+                        <span>⚙️ Copying: <strong className="text-sky-700">{cand.copyingAssets || 0}</strong></span>
+                        <span>❌ Failed: <strong className="text-rose-700">{cand.failedAssets || 0}</strong></span>
+                        <span>💾 Est. Size: <strong>{cand.estimatedSizeMB} MB</strong></span>
+                      </div>
+
+                      {cand.eligibleCouplePhotos > 0 && (
+                        <div className="w-full max-w-md pt-1">
+                          <div className="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
+                            <span>Archive Progress</span>
+                            <span>
+                              {cand.archivedAssets} / {cand.eligibleCouplePhotos} ({cand.progressPercent || Math.min(100, Math.round((cand.archivedAssets / cand.eligibleCouplePhotos) * 100))}%)
+                            </span>
+                          </div>
+                          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-purple-600 to-emerald-500 transition-all duration-300"
+                              style={{ width: `${cand.progressPercent || Math.min(100, Math.round((cand.archivedAssets / cand.eligibleCouplePhotos) * 100))}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end md:self-center">
+                      {!cand.isCompleted ? (
+                        <span className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-xl text-xs font-bold">
+                          Upcoming Event
+                        </span>
+                      ) : isCompletedArchive ? (
+                        <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-extrabold flex items-center gap-1">
+                          ✓ Drive Archive Complete
+                        </span>
+                      ) : isArchiving ? (
+                        <div className="flex items-center gap-2">
+                          <span className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-xl text-xs font-extrabold animate-pulse">
+                            Archive Running
+                          </span>
+                          <button
+                            onClick={() => handlePauseArchive(cand.id)}
+                            disabled={operatingEventId === cand.id}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
+                          >
+                            Pause
+                          </button>
+                        </div>
+                      ) : isPaused ? (
+                        <button
+                          onClick={() => handleResumeArchive(cand.id)}
+                          disabled={operatingEventId === cand.id}
+                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl cursor-pointer"
+                        >
+                          Resume Archive
+                        </button>
+                      ) : isPartial ? (
+                        <button
+                          onClick={() => handleRetryEventFailed(cand.id)}
+                          disabled={operatingEventId === cand.id}
+                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl cursor-pointer"
+                        >
+                          Retry Failed ({cand.failedAssets || 0})
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleStartArchive(cand.id)}
+                          disabled={operatingEventId === cand.id || cand.eligibleCouplePhotos === 0}
+                          className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                        >
+                          {operatingEventId === cand.id ? 'Starting...' : 'Start Archive'}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
       )}
-
-      {/* Tab 2: Jobs Queue Table */}
       {tab === 'jobs' && (
         <div className="bg-white border border-slate-200 shadow-xs rounded-2xl overflow-hidden space-y-4 p-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">

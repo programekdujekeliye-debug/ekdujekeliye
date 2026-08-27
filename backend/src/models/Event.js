@@ -36,17 +36,23 @@ const EventSchema = new mongoose.Schema({
   isInquiryClosed: { type: Boolean, default: false },
   archiveStatus: {
     type: String,
-    enum: ['NOT_REQUIRED', 'WAITING', 'QUEUED', 'ARCHIVING', 'VERIFYING', 'ARCHIVED', 'PARTIAL', 'FAILED'],
+    enum: ['NOT_REQUIRED', 'WAITING', 'QUEUED', 'ARCHIVING', 'PAUSED', 'VERIFYING', 'COMPLETED', 'ARCHIVED', 'PARTIAL', 'FAILED'],
     default: 'NOT_REQUIRED'
   },
   archiveAfterDays: { type: Number, default: 7 },
   archiveScheduledAt: { type: Date, default: null },
+  archiveRequestedAt: { type: Date, default: null },
+  archiveStartedAt: { type: Date, default: null },
   archiveCompletedAt: { type: Date, default: null },
+  archiveRequestedBy: { type: String, default: null },
   archiveStats: {
     totalAssets: { type: Number, default: 0 },
+    queuedAssets: { type: Number, default: 0 },
+    copyingAssets: { type: Number, default: 0 },
     archivedAssets: { type: Number, default: 0 },
     failedAssets: { type: Number, default: 0 },
-    totalBytes: { type: Number, default: 0 }
+    totalBytes: { type: Number, default: 0 },
+    lastWorkerAt: { type: Date, default: null }
   }
 }, {
   collection: 'program',

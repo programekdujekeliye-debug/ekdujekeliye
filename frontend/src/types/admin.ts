@@ -41,10 +41,14 @@ export interface ArchiveCandidate {
   status: string;
   isCompleted: boolean;
   archiveStatus: string;
+  isCurrentlyActive?: boolean;
   totalRegistrations: number;
   eligibleCouplePhotos: number;
   archivedAssets: number;
   queuedAssets: number;
+  copyingAssets?: number;
+  failedAssets?: number;
+  progressPercent?: number;
   estimatedSizeMB: number;
 }
 

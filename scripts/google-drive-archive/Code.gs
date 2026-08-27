@@ -469,6 +469,182 @@ function runSingleArchiveTest(targetJobId) {
 
 /**
  * ============================================================================
+ * AUTOMATIC EVENT ARCHIVE WORKER (PRODUCTION WORKER)
+ * ============================================================================
+ * Discovers the active ARCHIVING event from MongoDB backend automatically.
+ * No manual Program/Event ID required in Script Properties.
+ * 
+ * Flow:
+ * 1. Calls POST /api/internal/archive/claim-active-event-batch
+ * 2. If count === 0: logs "No active archive work." and exits cleanly (idle).
+ * 3. If jobs exist:
+ *    - Downloads each image from Cloudinary.
+ *    - Saves to Google Drive folder: Ek Duje Ke Liye/Events/<slug>/Couple Photos/
+ *    - Reopens by Drive ID with DriveApp.getFileById() to verify existence, size > 0, MIME.
+ *    - Calls POST /api/internal/archive/verify-item.
+ *    - If single file fails, calls fail-item and continues safely without breaking batch.
+ * 4. Can be installed as a permanent 10-minute trigger in Google Apps Script.
+ */
+function runAutomaticArchiveWorker() {
+  var startTime = new Date().getTime();
+  var props = PropertiesService.getScriptProperties().getProperties();
+  
+  var backendUrl = props.BACKEND_URL;
+  var workerSecret = props.ARCHIVE_WORKER_SECRET;
+  
+  if (!backendUrl || !workerSecret) {
+    Logger.log('❌ ERROR: BACKEND_URL and ARCHIVE_WORKER_SECRET must be configured.');
+    return;
+  }
+  
+  var userEmail = Session.getEffectiveUser().getEmail() || 'Unknown';
+  Logger.log('👤 [Apps Script Identity] Active Google Account: ' + userEmail);
+  Logger.log('🤖 [Automatic Archive Worker] Checking backend for active ARCHIVING event...');
+  
+  // 1. Claim active event batch (12 items max)
+  var claimUrl = backendUrl + '/api/internal/archive/claim-active-event-batch';
+  var claimRes;
+  try {
+    claimRes = UrlFetchApp.fetch(claimUrl, {
+      method: 'post',
+      headers: {
+        'Authorization': 'Bearer ' + workerSecret,
+        'Content-Type': 'application/json'
+      },
+      payload: JSON.stringify({
+        workerId: 'gas-auto-worker-' + userEmail.replace(/[^a-zA-Z0-9]/g, '_'),
+        limit: 12
+      }),
+      muteHttpExceptions: true
+    });
+  } catch (netErr) {
+    Logger.log('❌ [Automatic Worker] Network error connecting to backend: ' + netErr.toString());
+    return;
+  }
+  
+  if (claimRes.getResponseCode() !== 200) {
+    Logger.log('❌ [Automatic Worker] Backend returned HTTP ' + claimRes.getResponseCode() + ': ' + claimRes.getContentText());
+    return;
+  }
+  
+  var batchData = JSON.parse(claimRes.getContentText());
+  var activeEvent = batchData.activeEvent;
+  var jobs = batchData.jobs || [];
+  
+  if (!activeEvent || jobs.length === 0) {
+    Logger.log('ℹ️ [Automatic Worker] No active archive work (Queue idle or no event in ARCHIVING status). Exiting.');
+    return;
+  }
+  
+  Logger.log('📦 [Automatic Worker] Active Event: ' + activeEvent.name + ' (' + activeEvent.id + ')');
+  Logger.log('🚀 [Automatic Worker] Claimed ' + jobs.length + ' job(s). Starting Cloudinary -> Google Drive transfer...');
+  
+  var processed = 0;
+  var succeeded = 0;
+  var failed = 0;
+  
+  for (var i = 0; i < jobs.length; i++) {
+    if (new Date().getTime() - startTime > CONFIG.MAX_EXECUTION_TIME_MS) {
+      Logger.log('⏳ [Automatic Worker] Reached execution time budget. Pausing. Next recurring trigger will continue automatically.');
+      break;
+    }
+    
+    var job = jobs[i];
+    Logger.log('\n--- [' + (i + 1) + '/' + jobs.length + '] Processing: ' + job.registrationId + ' (' + job.filename + ') ---');
+    
+    try {
+      var targetFolder = getOrCreateFolderPath(job.folderPath);
+      
+      // Check for existing file by name to avoid duplicate copies
+      var existingFiles = targetFolder.getFilesByName(job.filename);
+      var driveFile = null;
+      
+      if (existingFiles.hasNext()) {
+        driveFile = existingFiles.next();
+        Logger.log('ℹ️ Existing file found in folder by name. Reusing: ' + driveFile.getId());
+      } else {
+        var mediaRes = UrlFetchApp.fetch(job.sourceUrl, { muteHttpExceptions: true });
+        if (mediaRes.getResponseCode() !== 200) {
+          throw new Error('Cloudinary fetch returned HTTP ' + mediaRes.getResponseCode());
+        }
+        
+        var blob = mediaRes.getBlob();
+        blob.setName(job.filename);
+        driveFile = targetFolder.createFile(blob);
+      }
+      
+      var driveFileId = driveFile.getId();
+      
+      // Physical Re-Open Verification
+      var verifiedFile = DriveApp.getFileById(driveFileId);
+      if (!verifiedFile || verifiedFile.isTrashed()) {
+        throw new Error('Physical verification failed: File not found in Drive by ID');
+      }
+      
+      var fileSize = verifiedFile.getSize();
+      var mimeType = verifiedFile.getMimeType();
+      
+      if (fileSize <= 0) {
+        throw new Error('Physical verification failed: Drive file size is 0 bytes');
+      }
+      if (!mimeType || mimeType.indexOf('image/') !== 0) {
+        throw new Error('Physical verification failed: Invalid MIME type ' + mimeType);
+      }
+      
+      Logger.log('✅ Physical verification passed: ' + driveFileId + ' (' + fileSize + ' bytes)');
+      
+      // Notify backend
+      var verifyUrl = backendUrl + '/api/internal/archive/verify-item';
+      var verifyRes = UrlFetchApp.fetch(verifyUrl, {
+        method: 'post',
+        headers: {
+          'Authorization': 'Bearer ' + workerSecret,
+          'Content-Type': 'application/json'
+        },
+        payload: JSON.stringify({
+          jobId: job.jobId,
+          driveFileId: driveFileId,
+          driveFolderId: targetFolder.getId(),
+          fileSize: fileSize,
+          mimeType: mimeType
+        }),
+        muteHttpExceptions: true
+      });
+      
+      if (verifyRes.getResponseCode() === 200) {
+        succeeded++;
+      } else {
+        Logger.log('⚠️ Backend verify returned HTTP ' + verifyRes.getResponseCode() + ': ' + verifyRes.getContentText());
+      }
+    } catch (itemErr) {
+      failed++;
+      Logger.log('❌ Item failed: ' + itemErr.toString());
+      try {
+        UrlFetchApp.fetch(backendUrl + '/api/internal/archive/fail-item', {
+          method: 'post',
+          headers: {
+            'Authorization': 'Bearer ' + workerSecret,
+            'Content-Type': 'application/json'
+          },
+          payload: JSON.stringify({ jobId: job.jobId, error: itemErr.toString() }),
+          muteHttpExceptions: true
+        });
+      } catch (_) {}
+    }
+    
+    processed++;
+    Utilities.sleep(300);
+  }
+  
+  Logger.log('\n====================================================');
+  Logger.log('🎉 [Automatic Worker Batch Finished]');
+  Logger.log('- Event: ' + activeEvent.name);
+  Logger.log('- Processed: ' + processed + ' | Succeeded: ' + succeeded + ' | Failed: ' + failed);
+  Logger.log('====================================================');
+}
+
+/**
+ * ============================================================================
  * EVENT-SCOPED ARCHIVE WORKER (Controlled Event Archiving)
  * ============================================================================
  * Claims and archives ONLY jobs for a specific eventId (e.g. prog-1785566789678).

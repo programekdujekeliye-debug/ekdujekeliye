@@ -3,10 +3,15 @@ import {
   archiveHealth,
   claimSingleArchiveJob,
   claimEventArchiveBatch,
+  claimActiveEventBatch,
   claimArchiveBatch,
   verifyArchivedItem,
   failArchivedItem,
   getArchiveCandidates,
+  startEventArchive,
+  pauseEventArchive,
+  resumeEventArchive,
+  retryEventFailedJobs,
   queueSingleAsset,
   queueEventArchive,
   getArchiveJobs,
@@ -22,6 +27,8 @@ export const archiveRouter = Router();
 archiveRouter.get('/health', requireArchiveWorkerAuth, archiveHealth);
 archiveRouter.post('/health', requireArchiveWorkerAuth, archiveHealth);
 archiveRouter.post('/claim-one', requireArchiveWorkerAuth, claimSingleArchiveJob);
+archiveRouter.post('/claim-active-event-batch', requireArchiveWorkerAuth, claimActiveEventBatch);
+archiveRouter.get('/claim-active-event-batch', requireArchiveWorkerAuth, claimActiveEventBatch);
 archiveRouter.post('/claim-event-batch', requireArchiveWorkerAuth, claimEventArchiveBatch);
 archiveRouter.get('/claim-event-batch', requireArchiveWorkerAuth, claimEventArchiveBatch);
 archiveRouter.post('/claim-batch', requireArchiveWorkerAuth, claimArchiveBatch);
@@ -33,6 +40,10 @@ archiveRouter.post('/fail-item', requireArchiveWorkerAuth, failArchivedItem);
 // 2. Super Admin Endpoints (Protected by requireSuperAuth)
 // =========================================================
 archiveRouter.get('/candidates', requireSuperAuth, getArchiveCandidates);
+archiveRouter.post('/events/:eventId/start', requireSuperAuth, startEventArchive);
+archiveRouter.post('/events/:eventId/pause', requireSuperAuth, pauseEventArchive);
+archiveRouter.post('/events/:eventId/resume', requireSuperAuth, resumeEventArchive);
+archiveRouter.post('/events/:eventId/retry-failed', requireSuperAuth, retryEventFailedJobs);
 archiveRouter.post('/queue-single', requireSuperAuth, queueSingleAsset);
 archiveRouter.post('/queue-event', requireSuperAuth, queueEventArchive);
 archiveRouter.get('/jobs', requireSuperAuth, getArchiveJobs);
