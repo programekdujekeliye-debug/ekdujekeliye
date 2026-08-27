@@ -337,6 +337,9 @@ export default function HomePage() {
               <div className="flex items-center gap-2">
                 <span className="text-rose-600 font-bold">✓</span> WhatsApp Delivery
               </div>
+              <div className="flex items-center gap-2 text-amber-800 font-bold">
+                <span className="text-amber-600">✓</span> Non-Refundable &amp; Non-Transferable
+              </div>
             </div>
           </div>
 
@@ -454,37 +457,46 @@ export default function HomePage() {
                       </div>
                     </div>
 
-                    <div className="pt-4 border-t border-stone-200 flex items-center justify-between gap-4">
-                      <div>
-                        <span className="text-[10px] text-stone-500 block uppercase font-bold tracking-wider">Couple Pass</span>
-                        <span className="text-2xl font-extrabold text-stone-900">₹{eventPrice}</span>
+                    <div className="space-y-3 pt-3 border-t border-stone-200">
+                      <div className="flex items-center justify-between gap-2 text-[11px] text-stone-500 font-semibold bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5">
+                        <span className="text-amber-800 flex items-center gap-1 font-bold">
+                          <span>⚠️</span> Non-Refundable &amp; Non-Transferable
+                        </span>
+                        <span className="text-stone-400 font-normal">(ફી રિફંડ કે ટ્રાન્સફર થશે નહીં)</span>
                       </div>
 
-                      {isHousefull || isClosed ? (
-                        <button
-                          disabled
-                          className="px-6 py-3 bg-stone-200 text-stone-500 font-bold text-xs uppercase rounded-xl cursor-not-allowed"
-                        >
-                          {isHousefull ? 'Housefull' : 'Closed'}
-                        </button>
-                      ) : isExternal ? (
-                        <a
-                          href={prog.externalRegistrationUrl || 'https://linktr.ee/ekdujekeliye'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-rose-600/20 text-center"
-                        >
-                          <span>Register on Portal</span>
-                        </a>
-                      ) : (
-                        <Link
-                          href={`/event/${prog.slug || prog.id}`}
-                          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-rose-600/20 text-center transform hover:scale-105 active:scale-95"
-                        >
-                          <TicketIcon className="w-4 h-4" />
-                          <span>Book Pass</span>
-                        </Link>
-                      )}
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <span className="text-[10px] text-stone-500 block uppercase font-bold tracking-wider">Couple Pass</span>
+                          <span className="text-2xl font-extrabold text-stone-900">₹{eventPrice}</span>
+                        </div>
+
+                        {isHousefull || isClosed ? (
+                          <button
+                            disabled
+                            className="px-6 py-3 bg-stone-200 text-stone-500 font-bold text-xs uppercase rounded-xl cursor-not-allowed"
+                          >
+                            {isHousefull ? 'Housefull' : 'Closed'}
+                          </button>
+                        ) : isExternal ? (
+                          <a
+                            href={prog.externalRegistrationUrl || 'https://linktr.ee/ekdujekeliye'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-rose-600/20 text-center"
+                          >
+                            <span>Register on Portal</span>
+                          </a>
+                        ) : (
+                          <Link
+                            href={`/event/${prog.slug || prog.id}`}
+                            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-rose-600/20 text-center transform hover:scale-105 active:scale-95"
+                          >
+                            <TicketIcon className="w-4 h-4" />
+                            <span>Book Pass</span>
+                          </Link>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

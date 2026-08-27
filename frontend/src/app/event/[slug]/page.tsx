@@ -551,14 +551,15 @@ export default function EventDetailPage() {
                 </div>
               )}
 
-              <div className="bg-rose-50 border border-rose-200/80 rounded-2xl p-4 text-xs text-rose-900 space-y-1">
+              <div className="bg-rose-50 border border-rose-200/80 rounded-2xl p-4 text-xs text-rose-900 space-y-1.5">
                 <p className="font-bold flex items-center gap-1.5">
                   <SparklesIcon className="w-3.5 h-3.5 text-rose-600" />
                   <span>Important Event Guidelines:</span>
                 </p>
-                <ul className="list-disc pl-4 space-y-0.5 text-stone-700">
+                <ul className="list-disc pl-4 space-y-1 text-stone-700">
                   <li>Only married couples admitted (2 persons per pass).</li>
                   <li>Children are strictly not allowed.</li>
+                  <li><strong className="text-amber-900 font-bold">Non-Refundable &amp; Non-Transferable:</strong> સેમિનાર ફી કોઈપણ સંજોગોમાં રિફંડ કે ટ્રાન્સફર થશે નહીં.</li>
                   <li>Instant pass issued immediately upon Razorpay payment.</li>
                 </ul>
               </div>
@@ -695,8 +696,18 @@ export default function EventDetailPage() {
                     </div>
                   </div>
 
+                  {/* Non-Refundable & Non-Transferable Warning Box */}
+                  <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-center space-y-1">
+                    <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-amber-900">
+                      <span>⚠️</span> <span>Non-Refundable &amp; Non-Transferable Policy</span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                      સેમિનાર રજીસ્ટ્રેશન ફી કોઈપણ સંજોગોમાં રિફંડ થશે નહીં કે અન્ય કોઈ વ્યક્તિના નામે ટ્રાન્સફર થશે નહીં.
+                    </p>
+                  </div>
+
                   {/* Payment CTA */}
-                  <div className="pt-3 space-y-3">
+                  <div className="pt-2 space-y-3">
                     <button
                       type="submit"
                       disabled={submitting}

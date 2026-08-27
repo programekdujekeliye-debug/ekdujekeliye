@@ -284,6 +284,16 @@ export default function PaymentRetryPage() {
               </div>
             </div>
 
+            {/* Non-Refundable Policy */}
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-center space-y-0.5">
+              <span className="text-[11px] font-bold text-amber-900 flex items-center justify-center gap-1">
+                <span>⚠️</span> Non-Refundable &amp; Non-Transferable
+              </span>
+              <p className="text-[10px] text-amber-800 font-medium">
+                પાસ ફી કોઈપણ સંજોગોમાં રિફંડ કે ટ્રાન્સફર થશે નહીં.
+              </p>
+            </div>
+
             <button
               onClick={handlePayNow}
               disabled={paying}

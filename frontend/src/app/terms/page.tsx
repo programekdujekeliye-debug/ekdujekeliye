@@ -3,23 +3,23 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Terms and Conditions | Ek Duje Ke Liye',
-  description: 'Terms and conditions for attending Ek Duje Ke Liye events and using our invitation pass services.',
+  title: 'Terms & Refund Policy | Ek Duje Ke Liye',
+  description: 'Terms and conditions, strict non-refundable and non-transferable pass policy for Ek Duje Ke Liye events by Manish Vaghasiya.',
 };
 
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1a050d] via-[#0c0306] to-[#080205] text-slate-100 flex flex-col justify-between font-sans relative">
+    <div className="min-h-screen bg-stone-50 text-stone-900 flex flex-col justify-between font-sans relative">
       {/* Header */}
-      <header className="py-6 px-8 border-b border-rose-950/40 bg-slate-950/60 backdrop-blur-md sticky top-0 z-50">
+      <header className="py-5 px-6 md:px-8 border-b border-stone-200 bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-xs">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <Link href="/" className="flex items-center gap-3">
-            <img src="/logo.png" alt="Ek Duje Ke Liye Logo" className="h-10 w-auto object-contain" />
-            <span className="text-xl font-bold tracking-wider text-slate-100 uppercase">Ek Duje Ke Liye</span>
+            <img src="/logo.png" alt="Ek Duje Ke Liye Logo" className="h-9 w-auto object-contain" />
+            <span className="text-lg font-bold tracking-tight text-stone-900 uppercase">Ek Duje Ke Liye</span>
           </Link>
           <Link
             href="/"
-            className="text-xs text-rose-400 hover:text-rose-300 font-semibold border border-rose-500/30 hover:bg-rose-500/10 px-4 py-2 rounded-xl transition-all"
+            className="text-xs text-rose-700 hover:text-rose-800 font-bold border border-stone-300 hover:bg-stone-100 px-4 py-2 rounded-xl transition-all shadow-xs"
           >
             ← Back to Home
           </Link>
@@ -28,66 +28,79 @@ export default function TermsPage() {
 
       {/* Main Content */}
       <main className="flex-grow max-w-4xl mx-auto px-6 py-12 w-full z-10">
-        <div className="bg-white/5 border border-white/10 rounded-3xl p-8 md:p-12 backdrop-blur-xl shadow-2xl space-y-8">
-
+        <div className="bg-white border border-stone-200 rounded-3xl p-8 md:p-12 shadow-xl space-y-8">
+          
           <div>
-            <span className="text-xs font-bold text-rose-400 uppercase tracking-widest block mb-2">Legal Information</span>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-slate-100 tracking-tight">Terms and Conditions</h1>
-            <p className="text-xs text-slate-400 mt-2">Last Updated: August 27, 2026</p>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-bold uppercase tracking-wider mb-2">
+              Official Event Terms &amp; Conditions
+            </div>
+            <h1 className="text-3xl md:text-4xl font-extrabold text-stone-900 tracking-tight">Terms of Service &amp; Refund Policy</h1>
+            <p className="text-xs text-stone-500 mt-2">Last Updated: August 27, 2026 &bull; Domain: www.ekdujekeliye.in</p>
           </div>
 
-          <div className="space-y-6 text-sm text-slate-300 leading-relaxed">
-
+          <div className="space-y-6 text-sm text-stone-700 leading-relaxed">
+            
             <section className="space-y-3">
-              <h2 className="text-lg font-bold text-rose-300">1. Acceptance of Terms</h2>
+              <h2 className="text-lg font-bold text-stone-900">1. Acceptance of Terms</h2>
               <p>
-                By registering on the <strong>Ek Duje Ke Liye</strong> website (<strong>ekdujekeliye.in</strong>), generating an invitation pass, or attending our event, you agree to be bound by these Terms and Conditions.
+                By registering on <strong>www.ekdujekeliye.in</strong>, purchasing an entry pass, or attending any couple seminar session conducted by <strong>Manish Vaghasiya</strong>, you agree to be bound by these Terms and Conditions.
               </p>
             </section>
 
-            <section className="space-y-3">
-              <h2 className="text-lg font-bold text-rose-300">2. Registration &amp; Couple Pass Policy</h2>
-              <ul className="list-disc pl-5 space-y-1.5 text-slate-300">
-                <li>Each registration pass admits one married couple (2 individuals).</li>
-                <li>Passes are strictly <strong>non-refundable</strong> and <strong>non-transferable</strong> once approved and issued.</li>
-                <li>Registrations are confirmed only after payment verification by the event administrator.</li>
-                <li>Entry to the venue requires presentation of the digital or printed event pass carrying your unique Inquiry ID.</li>
+            <section className="space-y-3 bg-amber-50/80 border border-amber-200/90 rounded-2xl p-5">
+              <h2 className="text-lg font-bold text-amber-900 flex items-center gap-2">
+                <span>⚠️</span> 2. Strict Non-Refundable &amp; Non-Transferable Policy
+              </h2>
+              <p className="text-stone-800 font-semibold">
+                કોઈપણ સંજોગોમાં સેમિનાર નોંધણી ફી રિફંડ કે બીજા કોઈ વ્યક્તિને ટ્રાન્સફર થશે નહીં.
+              </p>
+              <ul className="list-disc pl-5 space-y-2 text-stone-700 text-xs">
+                <li><strong>No Refunds:</strong> All payments made for couple admission passes are <strong>100% Non-Refundable</strong> under any personal circumstances, absenteeism, or late arrival.</li>
+                <li><strong>No Transfers:</strong> Entry passes are issued exclusively to the registered married couple whose names and photograph are printed on the badge. Passes cannot be transferred, sold, or gifted to other individuals.</li>
+                <li><strong>Limited Seating:</strong> Because hall seats and materials are committed in advance for each couple, cancellations cannot be accommodated.</li>
               </ul>
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-lg font-bold text-rose-300">3. Program Schedule &amp; Venue Rules</h2>
-              <ul className="list-disc pl-5 space-y-1.5 text-slate-300">
-                <li>Attendees must arrive on time according to the allocated program slot and time.</li>
-                <li>The event organizers reserve the right to reschedule or modify program batches due to unforeseen circumstances. Registered attendees will be notified in advance via WhatsApp or phone.</li>
-                <li>Organizers reserve the right to deny admission in the event of disorderly conduct or counterfeit passes.</li>
+              <h2 className="text-lg font-bold text-stone-900">3. Admission &amp; Venue Rules</h2>
+              <ul className="list-disc pl-5 space-y-1.5 text-stone-600">
+                <li>Each pass admits exactly one married couple (2 adults).</li>
+                <li>Children and non-registered persons are strictly not permitted inside the seminar hall.</li>
+                <li>Attendees must present their digital or printed pass with the verified QR code and Inquiry ID at the registration desk.</li>
               </ul>
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-lg font-bold text-rose-300">4. WhatsApp Messaging Consent</h2>
+              <h2 className="text-lg font-bold text-stone-900">4. Rescheduling by Organizers</h2>
               <p>
-                By submitting your phone number, you authorize <strong>Ek Duje Ke Liye</strong> to send event-related updates, pass download links, schedule reminders, and photo gallery links to your WhatsApp account.
+                In the rare event that a session must be rescheduled due to administrative or unforeseen reasons, registered couples will automatically be allotted entry to the rescheduled session date without extra charges.
               </p>
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-lg font-bold text-rose-300">5. Contact Details</h2>
-              <p>For inquiries, support, or complaints, please reach out to:</p>
-              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-xs space-y-1">
-                <p><strong>Organization:</strong> Ek Duje Ke Liye Event Team</p>
-                <p><strong>Email:</strong> privacy.ekdujekeliye@gmail.com</p>
-                <p><strong>Support Phone:</strong> +91 92135 32835</p>
+              <h2 className="text-lg font-bold text-stone-900">5. Communications &amp; WhatsApp Updates</h2>
+              <p>
+                By providing your mobile number, you authorize our team to send booking confirmations, digital pass download links, and seminar updates directly to your WhatsApp account.
+              </p>
+            </section>
+
+            <section className="space-y-3">
+              <h2 className="text-lg font-bold text-stone-900">6. Official Contact &amp; Support</h2>
+              <div className="bg-stone-50 border border-stone-200 rounded-2xl p-5 text-xs space-y-2 text-stone-700">
+                <p><strong>Organizer:</strong> Ek Duje Ke Liye by Manish Vaghasiya</p>
+                <p><strong>Official Email:</strong> privacy.ekdujekeliye@gmail.com</p>
+                <p><strong>Support Helpline:</strong> +91 92135 32835</p>
+                <p><strong>Venue Address:</strong> Sardar Patel Smruti Bhavan, Mini Bazar, Varachha Road, Surat, Gujarat 395006</p>
               </div>
             </section>
 
           </div>
 
-          <div className="pt-6 border-t border-slate-800 flex justify-between items-center text-xs text-slate-400">
-            <Link href="/" className="hover:text-rose-400 transition-colors">
-              ← Return to Event Registration
+          <div className="pt-6 border-t border-stone-200 flex justify-between items-center text-xs text-stone-600">
+            <Link href="/" className="hover:text-rose-700 font-bold transition-colors">
+              ← Return to Home
             </Link>
-            <Link href="/privacy-policy" className="hover:text-rose-400 transition-colors">
+            <Link href="/privacy-policy" className="hover:text-rose-700 font-bold transition-colors">
               Privacy Policy →
             </Link>
           </div>
@@ -96,8 +109,8 @@ export default function TermsPage() {
       </main>
 
       {/* Footer */}
-      <footer className="py-6 px-8 border-t border-slate-800/80 bg-slate-950/40 text-center text-xs text-slate-500">
-        &copy; {new Date().getFullYear()} Ek Duje Ke Liye. All rights reserved. &bull; <Link href="/privacy-policy" className="text-slate-400 hover:underline">Privacy Policy</Link> &bull; <Link href="/terms" className="text-slate-400 hover:underline">Terms of Service</Link>
+      <footer className="py-6 px-8 border-t border-stone-200 bg-white text-center text-xs text-stone-500">
+        &copy; {new Date().getFullYear()} Ek Duje Ke Liye by Manish Vaghasiya. All rights reserved. &bull; <Link href="/privacy-policy" className="text-stone-700 font-medium hover:underline">Privacy Policy</Link> &bull; <Link href="/terms" className="text-stone-700 font-medium hover:underline">Terms of Service</Link>
       </footer>
     </div>
   );
