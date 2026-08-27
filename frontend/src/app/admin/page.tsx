@@ -606,7 +606,7 @@ export default function AdminDashboard() {
   };
 
   const formatWhatsappMessage = (template: string, sub: Submission) => {
-    const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://ekdujekeliye.vercel.app';
+    const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://ekdujekeliye.in';
     const passUrl = `${siteUrl}/pass/${sub.inquiryId}`;
     
     return template
