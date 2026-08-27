@@ -1698,10 +1698,9 @@ export default function AdminDashboard() {
 
       const printHtmlBlocks = sortedGroupKeys.map((groupIdx, pageIdx) => {
         const chunk = groups[groupIdx];
-        // Sort chunk by inquiryId number ascending
         chunk.sort((a, b) => {
-          const numA = parseInt((a.inquiryId.match(/^(?:.*-)?(\d+)$/) || [0, 0])[1], 10) || 0;
-          const numB = parseInt((b.inquiryId.match(/^(?:.*-)?(\d+)$/) || [0, 0])[1], 10) || 0;
+          const numA = parseInt((a.inquiryId.match(/^(?:.*-)?(\d+)$/) || ['0', '0'])[1], 10) || 0;
+          const numB = parseInt((b.inquiryId.match(/^(?:.*-)?(\d+)$/) || ['0', '0'])[1], 10) || 0;
           return numA - numB;
         });
 
