@@ -94,10 +94,51 @@ function formatIndianDate(dateStr?: string): string {
   return dateStr;
 }
 
+const INITIAL_PROGRAMS: Program[] = [
+  {
+    id: "prog-1787844365699-01",
+    name: "Ek Duje Ke Liye - Sardar Patel Smruti Bhavan",
+    slug: "surat-7-september-2026",
+    city: "Surat",
+    venue: "Sardar Patel Smruti Bhavan, Varachha, Surat",
+    mapUrl: "https://share.google/y1jtFAZXuKusYTiUD",
+    description: "A transformative 4-hour live seminar dedicated exclusively to married couples.",
+    price: 1500,
+    status: "upcoming",
+    featured: true,
+    registrationMode: "internal",
+    date: "2026-09-07",
+    time: "8:30 PM",
+    capacity: 1184,
+    bookingsCount: 0,
+    availableSeats: 1184,
+    isDateFinal: true
+  },
+  {
+    id: "prog-1787844388175-02",
+    name: "Ek Duje Ke Liye - Sardar Patel Smruti Bhavan",
+    slug: "surat-11-september-2026",
+    city: "Surat",
+    venue: "Sardar Patel Smruti Bhavan, Varachha, Surat",
+    mapUrl: "https://share.google/y1jtFAZXuKusYTiUD",
+    description: "A transformative 4-hour live seminar dedicated exclusively to married couples.",
+    price: 1500,
+    status: "upcoming",
+    featured: false,
+    registrationMode: "internal",
+    date: "2026-09-11",
+    time: "8:30 PM",
+    capacity: 1184,
+    bookingsCount: 0,
+    availableSeats: 1184,
+    isDateFinal: true
+  }
+];
+
 export default function HomePage() {
-  const [programs, setPrograms] = useState<Program[]>([]);
+  const [programs, setPrograms] = useState<Program[]>(INITIAL_PROGRAMS);
   const [selectedCity, setSelectedCity] = useState('All');
-  const [loadingEvents, setLoadingEvents] = useState(true);
+  const [loadingEvents, setLoadingEvents] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedGalleryIdx, setSelectedGalleryIdx] = useState<number | null>(null);
@@ -108,7 +149,6 @@ export default function HomePage() {
 
   const fetchActiveEvents = async () => {
     try {
-      setLoadingEvents(true);
       let res = await fetch(`${API_BASE_URL}/api/public/home`);
       if (!res.ok) {
         res = await fetch(`${API_BASE_URL}/api/programs`);
@@ -145,51 +185,7 @@ export default function HomePage() {
       }
     } catch (err) {
       console.error('Failed to fetch programs from API, using fallback:', err);
-    } finally {
-      setLoadingEvents(false);
     }
-
-    // Default fallback programs if database hasn't loaded yet
-    setPrograms([
-      {
-        id: "prog-sept-7",
-        name: "Ek Duje Ke Liye - Sardar Patel Smruti Bhavan",
-        slug: "surat-7-september-2026",
-        city: "Surat",
-        venue: "Sardar Patel Smruti Bhavan, Varachha, Surat",
-        mapUrl: "https://share.google/y1jtFAZXuKusYTiUD",
-        description: "A transformative 4-hour live seminar dedicated exclusively to married couples.",
-        price: 1500,
-        status: "upcoming",
-        featured: true,
-        registrationMode: "internal",
-        date: "2026-09-07",
-        time: "8:30 PM",
-        capacity: 1184,
-        bookingsCount: 0,
-        availableSeats: 1184,
-        isDateFinal: true
-      },
-      {
-        id: "prog-sept-11",
-        name: "Ek Duje Ke Liye - Sardar Patel Smruti Bhavan",
-        slug: "surat-11-september-2026",
-        city: "Surat",
-        venue: "Sardar Patel Smruti Bhavan, Varachha, Surat",
-        mapUrl: "https://share.google/y1jtFAZXuKusYTiUD",
-        description: "A transformative 4-hour live seminar dedicated exclusively to married couples.",
-        price: 1500,
-        status: "upcoming",
-        featured: false,
-        registrationMode: "internal",
-        date: "2026-09-11",
-        time: "8:30 PM",
-        capacity: 1184,
-        bookingsCount: 0,
-        availableSeats: 1184,
-        isDateFinal: true
-      }
-    ]);
   };
 
 

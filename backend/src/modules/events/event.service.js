@@ -2,7 +2,7 @@ import { Event } from '../../models/Event.js';
 import { Registration } from '../../models/Registration.js';
 import { generateEventSlug } from '../../utils/slug.js';
 
-// In-Memory Short TTL Cache for Zero-Cost Public Reads
+// In-Memory Short TTL Cache for Zero-Cost Public Reads (5 Minutes)
 let publicEventsCache = null;
 let publicEventsCacheExpiry = 0;
 const slugCache = new Map();
@@ -19,6 +19,7 @@ export class EventService {
 
   /**
    * Get all active & upcoming events for public discovery (Aggregated & Cached)
+   * Blazing fast: single aggregation round-trip with in-memory caching.
    */
   async getPublicEvents() {
     const now = Date.now();
@@ -27,7 +28,7 @@ export class EventService {
     }
 
     const programs = await Event.find(
-      { status: { $ne: 'archived' } },
+      { status: { $nin: ['completed', 'archived'] } },
       {
         id: 1,
         sequenceNumber: 1,
@@ -55,27 +56,51 @@ export class EventService {
       .sort({ sequenceNumber: 1, sortOrder: 1, date: 1 })
       .lean();
 
-    const result = [];
-    for (const prog of programs) {
-      const activeCount = await Registration.countDocuments({
-        programId: prog.id,
-        status: { $in: ['approved', 'pending'] },
-        isDeleted: { $ne: true }
-      });
+    if (programs.length === 0) {
+      // If no upcoming, check if there's any completed/past fallback
+      publicEventsCache = [];
+      publicEventsCacheExpiry = now + 60 * 1000;
+      return [];
+    }
+
+    const programIds = programs.map(p => p.id);
+
+    // Single aggregation query for all event booking counts
+    const activeCounts = await Registration.aggregate([
+      {
+        $match: {
+          programId: { $in: programIds },
+          status: { $in: ['approved', 'pending'] },
+          isDeleted: { $ne: true }
+        }
+      },
+      {
+        $group: {
+          _id: '$programId',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const countMap = new Map();
+    activeCounts.forEach(c => countMap.set(c._id, c.count));
+
+    const result = programs.map(prog => {
+      const activeCount = countMap.get(prog.id) || 0;
       const activeBookings = activeCount * 2;
       const availableSeats = Math.max(0, prog.capacity - activeBookings);
 
-      result.push({
+      return {
         ...prog,
         bookingsCount: activeBookings,
         activeBookings,
         availableSeats,
         isSoldOut: availableSeats <= 0
-      });
-    }
+      };
+    });
 
     publicEventsCache = result;
-    publicEventsCacheExpiry = now + (3 * 60 * 1000); // 3 minutes cache
+    publicEventsCacheExpiry = now + 5 * 60 * 1000; // 5 minutes cache
     return result;
   }
 
@@ -132,60 +157,99 @@ export class EventService {
       isSoldOut: availableSeats <= 0
     };
 
-    slugCache.set(slug, { data, expiry: now + (2 * 60 * 1000) }); // 2 minutes cache
+    slugCache.set(slug, { data, expiry: now + (5 * 60 * 1000) }); // 5 minutes cache
     return data;
   }
 
   /**
-   * Get full admin program list with registration breakdown (Paged / Scoped)
+   * Get full admin program list with registration breakdown
    */
   async getAdminEvents() {
     const programs = await Event.find({}).sort({ sequenceNumber: 1, date: 1 }).lean();
-    const results = [];
+    const programIds = programs.map(p => p.id);
 
-    for (const prog of programs) {
-      const [approvedCount, pendingCount, inquiryCount, rejectedCount] = await Promise.all([
-        Registration.countDocuments({ programId: prog.id, status: 'approved', isDeleted: { $ne: true } }),
-        Registration.countDocuments({ programId: prog.id, status: 'pending', isDeleted: { $ne: true } }),
-        Registration.countDocuments({ programId: prog.id, status: 'inquiry', isDeleted: { $ne: true } }),
-        Registration.countDocuments({ programId: prog.id, status: 'rejected', isDeleted: { $ne: true } })
-      ]);
+    // Fast batch aggregation by programId and status
+    const statusCounts = await Registration.aggregate([
+      {
+        $match: {
+          programId: { $in: programIds },
+          isDeleted: { $ne: true }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            programId: '$programId',
+            status: '$status',
+            isCpl: { $regexMatch: { input: '$inquiryId', regex: /^CPL/i } },
+            isIp: { $regexMatch: { input: '$inquiryId', regex: /^IP/i } }
+          },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
 
-      const [cplApproved, cplPending, cplInquiry, cplRejected] = await Promise.all([
-        Registration.countDocuments({ programId: prog.id, status: 'approved', isDeleted: { $ne: true }, inquiryId: /^CPL/i }),
-        Registration.countDocuments({ programId: prog.id, status: 'pending', isDeleted: { $ne: true }, inquiryId: /^CPL/i }),
-        Registration.countDocuments({ programId: prog.id, status: 'inquiry', isDeleted: { $ne: true }, inquiryId: /^CPL/i }),
-        Registration.countDocuments({ programId: prog.id, status: 'rejected', isDeleted: { $ne: true }, inquiryId: /^CPL/i })
-      ]);
+    const statsMap = new Map();
+    statusCounts.forEach(item => {
+      const pId = item._id.programId;
+      if (!statsMap.has(pId)) {
+        statsMap.set(pId, {
+          approved: 0, pending: 0, inquiry: 0, rejected: 0,
+          cplApproved: 0, cplPending: 0, cplInquiry: 0, cplRejected: 0,
+          ipApproved: 0, ipPending: 0, ipInquiry: 0, ipRejected: 0
+        });
+      }
+      const s = statsMap.get(pId);
+      const st = item._id.status;
+      const cnt = item.count;
 
-      const [ipApproved, ipPending, ipInquiry, ipRejected] = await Promise.all([
-        Registration.countDocuments({ programId: prog.id, status: 'approved', isDeleted: { $ne: true }, inquiryId: /^IP/i }),
-        Registration.countDocuments({ programId: prog.id, status: 'pending', isDeleted: { $ne: true }, inquiryId: /^IP/i }),
-        Registration.countDocuments({ programId: prog.id, status: 'inquiry', isDeleted: { $ne: true }, inquiryId: /^IP/i }),
-        Registration.countDocuments({ programId: prog.id, status: 'rejected', isDeleted: { $ne: true }, inquiryId: /^IP/i })
-      ]);
+      if (st === 'approved') s.approved += cnt;
+      else if (st === 'pending') s.pending += cnt;
+      else if (st === 'inquiry') s.inquiry += cnt;
+      else if (st === 'rejected') s.rejected += cnt;
 
-      const activeBookings = (approvedCount + pendingCount) * 2;
+      if (item._id.isCpl) {
+        if (st === 'approved') s.cplApproved += cnt;
+        else if (st === 'pending') s.cplPending += cnt;
+        else if (st === 'inquiry') s.cplInquiry += cnt;
+        else if (st === 'rejected') s.cplRejected += cnt;
+      }
+      if (item._id.isIp) {
+        if (st === 'approved') s.ipApproved += cnt;
+        else if (st === 'pending') s.ipPending += cnt;
+        else if (st === 'inquiry') s.ipInquiry += cnt;
+        else if (st === 'rejected') s.ipRejected += cnt;
+      }
+    });
+
+    const results = programs.map(prog => {
+      const s = statsMap.get(prog.id) || {
+        approved: 0, pending: 0, inquiry: 0, rejected: 0,
+        cplApproved: 0, cplPending: 0, cplInquiry: 0, cplRejected: 0,
+        ipApproved: 0, ipPending: 0, ipInquiry: 0, ipRejected: 0
+      };
+
+      const activeBookings = (s.approved + s.pending) * 2;
       const availableSeats = Math.max(0, prog.capacity - activeBookings);
 
-      results.push({
+      return {
         ...prog,
         activeBookings,
         availableSeats,
-        approvedCount,
-        pendingCount,
-        inquiryCount,
-        rejectedCount,
-        cplApproved,
-        cplPending,
-        cplInquiry,
-        cplRejected,
-        ipApproved,
-        ipPending,
-        ipInquiry,
-        ipRejected
-      });
-    }
+        approvedCount: s.approved,
+        pendingCount: s.pending,
+        inquiryCount: s.inquiry,
+        rejectedCount: s.rejected,
+        cplApproved: s.cplApproved,
+        cplPending: s.cplPending,
+        cplInquiry: s.cplInquiry,
+        cplRejected: s.cplRejected,
+        ipApproved: s.ipApproved,
+        ipPending: s.ipPending,
+        ipInquiry: s.ipInquiry,
+        ipRejected: s.ipRejected
+      };
+    });
 
     return results;
   }
