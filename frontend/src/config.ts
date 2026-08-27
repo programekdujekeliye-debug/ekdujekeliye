@@ -1,3 +1,3 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ekdujekeliye-r633.onrender.com';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ekdujekeliye-s9fx.onrender.com';
 
 

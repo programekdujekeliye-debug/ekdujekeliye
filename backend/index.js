@@ -11,6 +11,7 @@ import Tesseract from 'tesseract.js';
 import mongoose from 'mongoose';
 import { v2 as cloudinary } from 'cloudinary';
 import cron from 'node-cron';
+import { verifyWebhook, handleWebhookEvent } from './services/whatsappWebhook.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -346,6 +347,10 @@ const requireSuperAuth = (req, res, next) => {
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Backend server is running successfully.' });
 });
+
+// WhatsApp Cloud API Webhook Endpoints
+app.get('/api/webhooks/whatsapp', verifyWebhook);
+app.post('/api/webhooks/whatsapp', handleWebhookEvent);
 
 // Get all programs (optimized to exclude heavy cardTemplate by default to speed up slot selection)
 app.get('/api/programs', async (req, res) => {
