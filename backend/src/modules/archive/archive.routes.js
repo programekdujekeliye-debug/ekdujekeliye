@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   archiveHealth,
   claimSingleArchiveJob,
+  claimEventArchiveBatch,
   claimArchiveBatch,
   verifyArchivedItem,
   failArchivedItem,
