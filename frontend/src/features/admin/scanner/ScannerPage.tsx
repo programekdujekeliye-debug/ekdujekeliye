@@ -16,7 +16,7 @@ import {
   OfflineScan,
   PreparedEventData
 } from '../../../services/scannerDb';
-import { verifyQrTokenOffline } from '../../../services/offlineCrypto';
+import { canUseOfflineEd25519, verifyQrTokenOffline } from '../../../services/offlineCrypto';
 import { playScanFeedback } from '../../../services/scannerFeedback';
 import { LuxurySelect } from '../../../components/LuxurySelect';
 import {
@@ -65,6 +65,8 @@ export const ScannerPage: React.FC = () => {
   const [preparedEvent, setPreparedEvent] = useState<PreparedEventData | null>(null);
   const [isPrepping, setIsPrepping] = useState<boolean>(false);
   const [prepSuccessMessage, setPrepSuccessMessage] = useState<string | null>(null);
+  const [offlineCryptoReady, setOfflineCryptoReady] = useState<boolean>(false);
+  const [offlineCryptoMessage, setOfflineCryptoMessage] = useState<string>('Offline Cryptographic Verification: UNSUPPORTED');
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [syncedCount, setSyncedCount] = useState<number>(0);
   const [conflictCount, setConflictCount] = useState<number>(0);
@@ -135,6 +137,14 @@ export const ScannerPage: React.FC = () => {
     if (!activeEventId) return;
     const prep = await getPreparedEvent(activeEventId);
     setPreparedEvent(prep);
+    if (prep?.publicKey?.publicKeySpkiBase64) {
+      const ready = await canUseOfflineEd25519(prep.publicKey.publicKeySpkiBase64);
+      setOfflineCryptoReady(ready);
+      setOfflineCryptoMessage(`Offline Cryptographic Verification: ${ready ? 'READY' : 'UNSUPPORTED'}`);
+    } else {
+      setOfflineCryptoReady(false);
+      setOfflineCryptoMessage('Offline Cryptographic Verification: UNSUPPORTED');
+    }
 
     const stats = await getLocalScanStats(activeEventId);
     setPendingCount(stats.pending || 0);
@@ -534,7 +544,7 @@ export const ScannerPage: React.FC = () => {
       return;
     }
 
-    const isDup = await isPassScannedOnThisDevice(payload.passId, activeEventId);
+    const isDup = await isPassScannedOnThisDevice(activeEventId, payload.passId);
     if (isDup) {
       playScanFeedback('ALREADY_SCANNED');
       setLatestResult({
@@ -596,6 +606,15 @@ export const ScannerPage: React.FC = () => {
       if (!res.ok) throw new Error('Failed to download offline cryptographic keys.');
 
       const data: PreparedEventData = await res.json();
+      const cryptoReady = await canUseOfflineEd25519(data.publicKey?.publicKeySpkiBase64 || '');
+      setOfflineCryptoReady(cryptoReady);
+      setOfflineCryptoMessage(`Offline Cryptographic Verification: ${cryptoReady ? 'READY' : 'UNSUPPORTED'}`);
+
+      if (!cryptoReady) {
+        setPreparedEvent(null);
+        throw new Error('Offline secure QR verification is not supported on this browser/device. Connect to the internet or use a supported device.');
+      }
+
       await savePreparedEvent(data);
       setPreparedEvent(data);
       setPrepSuccessMessage(`Offline ready for ${data.eventName} (${data.eventDate})`);

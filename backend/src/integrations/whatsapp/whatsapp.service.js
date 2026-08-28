@@ -49,6 +49,27 @@ export function maskPhoneNumber(phone) {
 }
 
 /**
+ * Normalizes a recipient phone number (canonical export)
+ */
+export const normalizeWhatsAppRecipient = normalizePhoneNumber;
+
+/**
+ * Safely get WhatsApp configuration status without exposing raw secrets
+ */
+export function getWhatsAppConfigStatus() {
+  return {
+    wabaIdConfigured: Boolean(env.WHATSAPP_WABA_ID),
+    phoneIdConfigured: Boolean(env.WHATSAPP_PHONE_NUMBER_ID),
+    tokenConfigured: Boolean(env.WHATSAPP_ACCESS_TOKEN),
+    webhookConfigured: Boolean(env.WHATSAPP_WEBHOOK_VERIFY_TOKEN),
+    isReady: Boolean(env.WHATSAPP_ACCESS_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID),
+    sendEnabled: env.WHATSAPP_SEND_ENABLED,
+    mode: env.WHATSAPP_MODE,
+    apiVersion: env.META_GRAPH_API_VERSION
+  };
+}
+
+/**
  * Master WhatsApp Message Dispatcher
  * Strictly validates all Master Send Guards
  */
@@ -65,7 +86,9 @@ export async function sendWhatsAppMessage({
   inquiryId = null,
   customerId = null,
   trigger = 'manual',
-  category = 'UTILITY'
+  category = 'UTILITY',
+  executionSource = 'NORMAL',
+  providerMode = 'META'
 }) {
   // 1. Send Enabled Guard
   if (!env.WHATSAPP_SEND_ENABLED) {
@@ -112,6 +135,8 @@ export async function sendWhatsAppMessage({
             templateLanguage: languageCode || 'en_US',
             templateCategory: category,
             trigger,
+            executionSource: executionSource || 'NORMAL',
+            providerMode: providerMode || 'META',
             status: 'BLOCKED_TEST_MODE',
             lastErrorCode: 'TEST_RECIPIENT_NOT_ALLOWED',
             lastErrorMessage: `Recipient '${maskedPhone}' is not in WHATSAPP_TEST_RECIPIENTS allowlist.`
@@ -230,6 +255,8 @@ export async function sendWhatsAppMessage({
       templateLanguage: resolvedLang,
       templateCategory: templateDef.category,
       trigger,
+      executionSource: executionSource || 'NORMAL',
+      providerMode: providerMode || 'META',
       idempotencyKey: finalIdempotencyKey,
       templateParameters: variables,
       status: 'SENDING',
@@ -347,6 +374,7 @@ export async function sendWhatsAppMessage({
     const providerMessageId = data.messages?.[0]?.id || '';
     messageRecord.status = 'SENT';
     messageRecord.providerMessageId = providerMessageId;
+    messageRecord.providerMode = (providerMessageId && providerMessageId.startsWith('wamid.MOCK_TEST_')) ? 'MOCK' : 'META';
     messageRecord.providerAcceptedAt = new Date();
     messageRecord.sentAt = new Date();
     messageRecord.rawProviderResponse = data;
@@ -387,6 +415,8 @@ export async function sendUtilityTemplate(params) {
 export async function sendMarketingTemplate(params) {
   return sendWhatsAppMessage({ ...params, category: 'MARKETING' });
 }
+
+export const dispatchTemplateMessage = sendWhatsAppMessage;
 
 /**
  * Helper to queue registration pass confirmation message

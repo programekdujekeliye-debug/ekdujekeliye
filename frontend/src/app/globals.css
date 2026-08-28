@@ -176,13 +176,6 @@ select {
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease !important;
 }
 
-/* Prevent iOS Safari Automatic Viewport Zoom on Mobile Focus */
-@media (max-width: 640px) {
-  select, input[type="text"], input[type="tel"], input[type="email"], input[type="search"] {
-    font-size: 16px !important;
-  }
-}
-
 select:hover {
   border-color: #94A3B8 !important;
 }
@@ -204,9 +197,9 @@ select:disabled {
 select option {
   background-color: #FFFFFF;
   color: #0F172A;
-  padding: 10px 14px;
+  padding: 8px 12px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 12px;
 }
 
 select option:checked {

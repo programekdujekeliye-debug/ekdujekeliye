@@ -628,7 +628,7 @@ export const WhatsAppPage = () => {
           </div>
         ) : logs.length === 0 ? (
           <div className="py-8 text-center text-xs text-slate-500">
-            No recent WhatsApp dispatch logs recorded yet.
+            No WhatsApp activity yet.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -644,45 +644,52 @@ export const WhatsAppPage = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                {logs.map((log) => (
-                  <tr key={log._id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-2.5 px-3 whitespace-nowrap text-[11px] text-slate-500">
-                      {new Date(log.createdAt).toLocaleString('en-IN', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </td>
-                    <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
-                      {log.recipientPhone}
-                    </td>
-                    <td className="py-2.5 px-3 font-mono font-extrabold text-rose-700">
-                      {log.inquiryId || '-'}
-                    </td>
-                    <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700">
-                      {log.templateName}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <span
-                        className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase ${
-                          log.status === 'READ'
-                            ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                            : log.status === 'DELIVERED'
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                            : log.status === 'SENT'
-                            ? 'bg-slate-100 text-slate-800 border border-slate-200'
-                            : 'bg-rose-100 text-rose-800 border border-rose-200'
-                        }`}
-                      >
-                        {log.status}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 font-mono text-[10px] text-slate-500 truncate max-w-[140px]" title={log.providerMessageId}>
-                      {log.providerMessageId || '-'}
-                    </td>
-                  </tr>
-                ))}
+                {logs.map((log) => {
+                  const isMock = log.providerMessageId?.startsWith('wamid.MOCK_TEST_');
+                  return (
+                    <tr key={log._id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-2.5 px-3 whitespace-nowrap text-[11px] text-slate-500">
+                        {new Date(log.createdAt).toLocaleString('en-IN', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
+                        {log.recipientPhone}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono font-extrabold text-rose-700">
+                        {log.inquiryId || '-'}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700">
+                        {log.templateName}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase ${
+                            log.status === 'READ'
+                              ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                              : log.status === 'DELIVERED'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : log.status === 'SENT'
+                              ? 'bg-slate-100 text-slate-800 border border-slate-200'
+                              : 'bg-rose-100 text-rose-800 border border-rose-200'
+                          }`}
+                        >
+                          {log.status}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-[10px] text-slate-500 truncate max-w-[140px]" title={log.providerMessageId}>
+                        {isMock ? (
+                          <span className="text-amber-600 font-semibold">[Mock] {log.providerMessageId}</span>
+                        ) : (
+                          log.providerMessageId || '-'
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

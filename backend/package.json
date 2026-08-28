@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon --config nodemon.json index.js",
-    "test": "node tests/test_razorpay.js && node tests/test_webhook.js",
+    "test": "node tests/test_razorpay.js && node tests/test_webhook.js && node tests/test_event_selection.js && node tests/test_phase_a_whatsapp.js && node tests/test_phase_b_qr_signing.js && node tests/test_phase_c_and_e_scanner.js && node tests/test_communication_lifecycle.js && node tests/test_idempotency_verification.js",
     "test:razorpay": "node tests/test_razorpay.js",
     "test:webhook": "node tests/test_webhook.js",
     "test:order": "node tests/test_order_creation.js",

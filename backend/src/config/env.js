@@ -95,6 +95,9 @@ export function maskSecret(secret, visibleStart = 4, visibleEnd = 2) {
 export function normalizePhoneNumber(phone) {
   if (!phone) return '';
   let clean = String(phone).replace(/\D/g, '');
+  if (clean.length === 11 && clean.startsWith('0')) {
+    clean = clean.substring(1);
+  }
   if (clean.length === 10) {
     clean = '91' + clean;
   }

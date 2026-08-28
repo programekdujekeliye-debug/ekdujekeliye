@@ -11,7 +11,7 @@ export class RegistrationService {
   /**
    * Submit a new Couple Registration
    */
-  async createRegistration({ husbandName, wifeName, surname, phoneNumber, programId, couplePhotoFile }) {
+  async createRegistration({ husbandName, wifeName, surname, phoneNumber, programId, couplePhotoFile, whatsappOptIn = true }) {
     // 1. Fetch Program & verify capacity
     const program = await eventService.getEventBySlug(programId) || await Event.findOne({ id: programId }).lean();
     if (!program) {
@@ -83,6 +83,10 @@ export class RegistrationService {
       wifeName,
       surname,
       phoneNumber,
+      whatsappOptIn: Boolean(whatsappOptIn),
+      whatsappOptInAt: whatsappOptIn ? new Date() : null,
+      whatsappConsentSource: whatsappOptIn ? 'registration_form' : '',
+      whatsappMarketingOptIn: false,
       programId: program.id,
       programName: program.name,
       programDate: program.date,

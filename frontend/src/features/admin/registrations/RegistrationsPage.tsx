@@ -559,15 +559,19 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                             </span>
                           </td>
                           <td className="px-4 py-3.5">
-                            <select
-                              value={sub.attendance || 'unmarked'}
-                              onChange={(e) => handleAttendance(sub.inquiryId, e.target.value as any)}
-                              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none"
-                            >
-                              <option value="unmarked">Unmarked</option>
-                              <option value="present">Present</option>
-                              <option value="absent">Absent</option>
-                            </select>
+                            <div className="w-32 min-w-0">
+                              <LuxurySelect
+                                size="sm"
+                                variant="card"
+                                value={sub.attendance || 'unmarked'}
+                                onChange={(val) => handleAttendance(sub.inquiryId, val as any)}
+                                options={[
+                                  { value: 'unmarked', label: 'Unmarked' },
+                                  { value: 'present', label: 'Present', badge: 'IN' },
+                                  { value: 'absent', label: 'Absent' }
+                                ]}
+                              />
+                            </div>
                           </td>
                           <td className="px-4 py-3.5">
                             <div className="flex flex-col gap-1.5 items-start">
@@ -902,20 +906,19 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
 
                       {/* Row 5: Attendance Selector & Actions Strip */}
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-slate-100">
-                        {/* Attendance Dropdown */}
-                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 flex-1 min-w-0">
-                          <span className="text-[10px] font-extrabold uppercase text-slate-500 flex-shrink-0">
-                            Attendance:
-                          </span>
-                          <select
+                        {/* Attendance LuxurySelect Dropdown */}
+                        <div className="flex-1 min-w-0">
+                          <LuxurySelect
+                            size="sm"
+                            variant="card"
                             value={sub.attendance || 'unmarked'}
-                            onChange={(e) => handleAttendance(sub.inquiryId, e.target.value as any)}
-                            className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none w-full cursor-pointer min-h-[28px]"
-                          >
-                            <option value="unmarked">Unmarked</option>
-                            <option value="present">Present (Checked In)</option>
-                            <option value="absent">Absent</option>
-                          </select>
+                            onChange={(val) => handleAttendance(sub.inquiryId, val as any)}
+                            options={[
+                              { value: 'unmarked', label: 'Unmarked Attendance' },
+                              { value: 'present', label: 'Present (Checked In)', badge: 'IN' },
+                              { value: 'absent', label: 'Absent' }
+                            ]}
+                          />
                         </div>
 
                         {/* Action Buttons */}

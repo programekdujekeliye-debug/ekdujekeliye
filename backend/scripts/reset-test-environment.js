@@ -4,7 +4,7 @@ import { env } from '../src/config/env.js';
 async function resetTestEnvironment() {
   console.log('=== SAFE TEST DATABASE RESET UTILITY ===');
   console.log(`Current APP_ENV: ${env.APP_ENV}`);
-  console.log(`Target Database: ${env.DATABASE_NAME}`);
+  console.log(`Database Environment: ${env.DATABASE_ENV}`);
 
   // CRITICAL PRODUCTION SAFETY GUARDS
   if (env.APP_ENV === 'production') {
@@ -19,7 +19,12 @@ async function resetTestEnvironment() {
     throw new Error(`[SAFETY REFUSAL] Target database name '${env.DATABASE_NAME}' is not explicitly marked test/staging.`);
   }
 
-  console.log(`\n✓ Safety checks passed. Connecting to isolated test database: ${env.DATABASE_NAME}...`);
+  const hasConfirmFlag = process.argv.includes('--confirm-test-reset');
+  if (!hasConfirmFlag) {
+    throw new Error('[SAFETY REFUSAL] Explicit confirmation flag required. Run with: node scripts/reset-test-environment.js --confirm-test-reset');
+  }
+
+  console.log(`\n✓ Safety checks passed. Connecting to isolated test database (${env.DATABASE_ENV})...`);
   await mongoose.connect(env.MONGO_URI);
 
   const collections = ['submission', 'program', 'payments', 'passes', 'scan_records', 'whatsapp_messages', 'audit_logs', 'webhook_events'];

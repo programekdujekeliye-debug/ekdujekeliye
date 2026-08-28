@@ -1,5 +1,19 @@
 import mongoose from 'mongoose';
 
+export const WHATSAPP_MESSAGE_STATUSES = {
+  QUEUED: 'QUEUED',
+  BLOCKED_TEMPLATE_PENDING: 'BLOCKED_TEMPLATE_PENDING',
+  BLOCKED_TEMPLATE_REJECTED: 'BLOCKED_TEMPLATE_REJECTED',
+  BLOCKED_TEST_MODE: 'BLOCKED_TEST_MODE',
+  SENDING: 'SENDING',
+  SENT: 'SENT',
+  DELIVERED: 'DELIVERED',
+  READ: 'READ',
+  FAILED: 'FAILED',
+  EXPIRED: 'EXPIRED',
+  CANCELLED: 'CANCELLED'
+};
+
 const WhatsappMessageSchema = new mongoose.Schema({
   messageId: { type: String, unique: true, index: true },
   eventId: { type: String, index: true },
@@ -11,7 +25,6 @@ const WhatsappMessageSchema = new mongoose.Schema({
   recipientMasked: { type: String },
   recipientHash: { type: String, index: true },
   templateName: { type: String, required: true },
-  languageCode: { type: String, default: 'en_US' },
   templateLanguage: { type: String, default: 'en_US' },
   templateCategory: { type: String, enum: ['UTILITY', 'MARKETING', 'AUTHENTICATION'], default: 'UTILITY' },
   messageType: {
@@ -32,23 +45,23 @@ const WhatsappMessageSchema = new mongoose.Schema({
     default: 'payment_confirmation'
   },
   trigger: { type: String, default: 'manual', index: true },
+  executionSource: {
+    type: String,
+    enum: ['NORMAL', 'MANUAL_TEST', 'AUTOMATED_TEST'],
+    default: 'NORMAL',
+    index: true
+  },
+  providerMode: {
+    type: String,
+    enum: ['META', 'MOCK'],
+    default: 'META',
+    index: true
+  },
   idempotencyKey: { type: String, unique: true, required: true, index: true },
   status: {
     type: String,
-    enum: [
-      'QUEUED',
-      'BLOCKED_TEMPLATE_PENDING',
-      'BLOCKED_TEMPLATE_REJECTED',
-      'BLOCKED_TEST_MODE',
-      'SENDING',
-      'SENT',
-      'DELIVERED',
-      'READ',
-      'FAILED',
-      'EXPIRED',
-      'CANCELLED'
-    ],
-    default: 'QUEUED',
+    enum: Object.values(WHATSAPP_MESSAGE_STATUSES),
+    default: WHATSAPP_MESSAGE_STATUSES.QUEUED,
     index: true
   },
   providerMessageId: { type: String, index: true },

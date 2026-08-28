@@ -50,6 +50,24 @@ export interface OfflineVerifyResult {
   message?: string;
 }
 
+export async function canUseOfflineEd25519(publicKeySpkiBase64: string): Promise<boolean> {
+  if (!publicKeySpkiBase64 || !window.crypto?.subtle) return false;
+
+  try {
+    const spkiBytes = base64ToUint8Array(publicKeySpkiBase64);
+    await window.crypto.subtle.importKey(
+      'spki',
+      spkiBytes.buffer as ArrayBuffer,
+      { name: 'Ed25519' },
+      false,
+      ['verify']
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Verify Ed25519 Signed QR Token Offline using cached Public Key
  */
@@ -58,12 +76,16 @@ export async function verifyQrTokenOffline(
   publicKeySpkiBase64: string
 ): Promise<OfflineVerifyResult> {
   if (!qrToken || !qrToken.includes('.')) {
-    return { valid: false, error: 'INVALID_FORMAT', message: 'Malformed QR code format.' };
+    return { valid: false, error: 'INVALID_QR', message: 'Malformed QR code format.' };
+  }
+
+  if (!publicKeySpkiBase64) {
+    return { valid: false, error: 'UNKNOWN_KEY', message: 'Offline public key is missing or not configured for this event.' };
   }
 
   const parts = qrToken.split('.');
   if (parts.length !== 2) {
-    return { valid: false, error: 'MALFORMED_TOKEN', message: 'Invalid token structure.' };
+    return { valid: false, error: 'INVALID_QR', message: 'Invalid token structure.' };
   }
 
   const [encodedPayload, encodedSignature] = parts;
@@ -102,18 +124,20 @@ export async function verifyQrTokenOffline(
 
         return { valid: true, payload };
       } catch (cryptoErr) {
-        // If browser SubtleCrypto Ed25519 algorithm is not implemented on older Android webview,
-        // perform payload structural validation and report offline token parsed
         return {
-          valid: true,
-          payload,
-          message: 'Offline signature verified via structural payload inspection.'
+          valid: false,
+          error: 'CRYPTO_UNAVAILABLE',
+          message: 'Offline secure QR verification is not supported on this browser/device. Connect to the internet or use a supported device.'
         };
       }
     }
 
-    return { valid: true, payload };
+    return {
+      valid: false,
+      error: 'CRYPTO_UNAVAILABLE',
+      message: 'Offline secure QR verification is not supported on this browser/device. Connect to the internet or use a supported device.'
+    };
   } catch (err: any) {
-    return { valid: false, error: 'PARSE_ERROR', message: err.message || 'Error decoding QR payload.' };
+    return { valid: false, error: 'INVALID_QR', message: err.message || 'Error decoding QR payload.' };
   }
 }

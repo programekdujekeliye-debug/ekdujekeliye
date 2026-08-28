@@ -176,6 +176,7 @@ export default function EventDetailPage() {
   const [wifeName, setWifeName] = useState('');
   const [surname, setSurname] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [whatsappOptIn, setWhatsappOptIn] = useState(true);
   const [couplePhoto, setCouplePhoto] = useState<File | null>(null);
   const [couplePhotoPreview, setCouplePhotoPreview] = useState<string | null>(null);
 
@@ -358,6 +359,7 @@ export default function EventDetailPage() {
       formData.append('surname', surname.trim());
       formData.append('phoneNumber', phoneNumber.trim());
       formData.append('programId', event.id);
+      formData.append('whatsappOptIn', whatsappOptIn ? 'true' : 'false');
       formData.append('couplePhoto', couplePhoto);
 
       const res = await fetch(`${API_BASE_URL}/api/submit`, {
@@ -763,6 +765,18 @@ export default function EventDetailPage() {
                       />
                     </div>
                   </div>
+
+                  <label className="flex items-start gap-3 p-3.5 bg-stone-50 border border-stone-200 rounded-2xl text-xs text-stone-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={whatsappOptIn}
+                      onChange={(e) => setWhatsappOptIn(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-stone-300 text-rose-600 focus:ring-rose-500"
+                    />
+                    <span className="leading-relaxed font-medium">
+                      I agree to receive registration, payment, digital pass and event-related updates on WhatsApp.
+                    </span>
+                  </label>
 
                   {/* Non-Refundable & Non-Transferable Warning Box */}
                   <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-center space-y-1">

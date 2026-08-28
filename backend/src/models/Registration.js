@@ -7,6 +7,12 @@ const RegistrationSchema = new mongoose.Schema({
   wifeName: { type: String, required: true },
   surname: { type: String, required: true },
   phoneNumber: { type: String, required: true },
+  whatsappOptIn: { type: Boolean, default: undefined },
+  whatsappOptInAt: { type: Date, default: null },
+  whatsappConsentSource: { type: String, default: '' },
+  whatsappMarketingOptIn: { type: Boolean, default: false },
+  whatsappOptOutAt: { type: Date, default: null },
+  whatsappOptOutReason: { type: String, default: '' },
   programId: { type: String, required: true },
   programName: { type: String },
   programDate: { type: String },
@@ -60,5 +66,26 @@ RegistrationSchema.index({ phoneNumber: 1, programId: 1, status: 1 });
 RegistrationSchema.index({ 'payment.razorpayOrderId': 1 });
 RegistrationSchema.index({ 'payment.razorpayPaymentId': 1 });
 
+// Consent Evaluation Helpers
+export function hasOperationalWhatsappConsent(registration) {
+  if (!registration) return false;
+  // If explicitly opted out via STOP / webhook
+  if (registration.whatsappOptOutAt) return false;
+  // If explicitly opted in
+  if (registration.whatsappOptIn === true) return true;
+  // If explicitly opted out in form
+  if (registration.whatsappOptIn === false) return false;
+  // Legacy historical records (undefined): allow operational messages if not opted out
+  return true;
+}
+
+export function hasMarketingWhatsappConsent(registration) {
+  if (!registration) return false;
+  if (registration.whatsappOptOutAt) return false;
+  // Marketing consent must be strictly explicit true, never inferred or defaulted
+  return registration.whatsappMarketingOptIn === true;
+}
+
 export const Registration = mongoose.models.Submission || mongoose.model('Submission', RegistrationSchema);
 export const Submission = Registration;
+

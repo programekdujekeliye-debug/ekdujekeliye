@@ -98,12 +98,12 @@ export const LuxurySelect: React.FC<LuxurySelectProps> = ({
   const getSizeStyles = () => {
     switch (size) {
       case 'sm':
-        return 'py-1.5 px-2.5 text-xs min-h-[34px] rounded-xl';
+        return 'py-1 px-2.5 text-[11px] min-h-[30px] rounded-lg';
       case 'lg':
-        return 'py-3 px-4 text-sm min-h-[46px] rounded-2xl';
+        return 'py-2 px-3.5 text-xs sm:text-sm min-h-[42px] rounded-xl';
       case 'md':
       default:
-        return 'py-2 px-3 text-xs sm:text-xs min-h-[38px] rounded-xl';
+        return 'py-1.5 px-3 text-xs min-h-[36px] rounded-xl';
     }
   };
 

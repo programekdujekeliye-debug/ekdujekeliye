@@ -8,7 +8,7 @@ import { qrPassService } from '../passes/qrPass.service.js';
 import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
 
 export const submitRegistration = async (req, res) => {
-  const { husbandName, wifeName, surname, phoneNumber, programId } = req.body;
+  const { husbandName, wifeName, surname, phoneNumber, programId, whatsappOptIn } = req.body;
   if (!husbandName || !wifeName || !surname || !phoneNumber || !programId) {
     return res.status(400).json({ error: 'All fields including couple names, phone number, and program slot are required.' });
   }
@@ -22,7 +22,8 @@ export const submitRegistration = async (req, res) => {
       surname,
       phoneNumber,
       programId,
-      couplePhotoFile
+      couplePhotoFile,
+      whatsappOptIn: whatsappOptIn === true || whatsappOptIn === 'true' || whatsappOptIn === 'on'
     });
 
     res.status(200).json({

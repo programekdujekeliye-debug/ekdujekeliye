@@ -9,6 +9,41 @@ let adminEventsCache = null;
 let adminEventsCacheExpiry = 0;
 const slugCache = new Map();
 
+/**
+ * Parse an event's date string (YYYY-MM-DD) and optional time (e.g. "8:30 PM", "10:00 AM", "20:30")
+ * into an exact UTC Date timestamp representing the event start in Asia/Kolkata timezone (+05:30).
+ */
+export function parseEventStartTimestamp(dateStr, timeStr = '00:00') {
+  if (!dateStr || dateStr === 'TBA' || dateStr === 'TBD') return null;
+  try {
+    const cleanDate = String(dateStr).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) return null;
+
+    let hours = 0;
+    let minutes = 0;
+
+    if (timeStr) {
+      const cleanTime = String(timeStr).trim().toUpperCase();
+      const match = cleanTime.match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i);
+      if (match) {
+        hours = parseInt(match[1], 10);
+        minutes = parseInt(match[2], 10);
+        const ampm = match[3];
+        if (ampm === 'PM' && hours < 12) hours += 12;
+        if (ampm === 'AM' && hours === 12) hours = 0;
+      }
+    }
+
+    const hh = String(hours).padStart(2, '0');
+    const mm = String(minutes).padStart(2, '0');
+    const isoString = `${cleanDate}T${hh}:${mm}:00+05:30`;
+    const d = new Date(isoString);
+    return isNaN(d.getTime()) ? null : d;
+  } catch {
+    return null;
+  }
+}
+
 export class EventService {
   /**
    * Invalidate discovery caches on event mutations
@@ -22,53 +57,67 @@ export class EventService {
   }
 
   /**
-   * Simple and Reliable Public Upcoming Events (2 Future Max -> If Zero then TBD)
-   * Rule 1: Real future dated events (date >= today in Asia/Kolkata), max 2.
-   * Rule 2: If future count = 0, return valid Date TBA/TBD event.
-   * Rule 3: If nothing, return empty array (shows "New Events Coming Soon").
+   * Exact Public Upcoming Events Algorithm (Max 2 Future -> If Zero then TBD)
+   * 1. Valid published future dated events whose actual start datetime (Asia/Kolkata) > now.
+   * 2. Sort: eventStartAt ASC.
+   * 3. Limit: max 2.
+   * 4. If future count >= 1: RETURN ONLY those future dated events (NEVER append TBD as filler).
+   * 5. ONLY IF future count === 0: return valid published TBD events (limit max 2).
+   * 6. Past events (eventStartAt <= now) and archived events are excluded.
+   * 7. If neither exists, return empty array [].
    */
   async getPublicUpcomingEvents() {
     const now = new Date();
-    const istDateStr = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(now);
 
     const events = await Event.find(
-      { status: { $ne: 'archived' } },
+      { status: { $nin: ['archived', 'completed'] }, isActive: { $ne: false } },
       {
         id: 1, sequenceNumber: 1, name: 1, shortName: 1, slug: 1, city: 1,
         venue: 1, venueAddress: 1, mapUrl: 1, description: 1, price: 1,
         status: 1, date: 1, time: 1, capacity: 1, bookedSeats: 1, isDateFinal: 1,
         isInquiryClosed: 1, registrationMode: 1, externalRegistrationUrl: 1,
-        heroImage: 1, posterImage: 1
+        heroImage: 1, posterImage: 1, isActive: 1
       }
     ).lean();
 
     if (!events || events.length === 0) return [];
 
-    // 1. Future dated events (sorted chronologically)
-    const futureDatedEvents = events.filter(e => {
-      if (!e.date || e.date === 'TBA' || e.date === 'TBD' || e.isDateFinal === false) return false;
-      if (e.status === 'completed' || e.status === 'archived') return false;
-      return e.date >= istDateStr;
-    }).sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.sequenceNumber || 0) - (b.sequenceNumber || 0));
+    // 1. Calculate start datetime for dated events and filter future events
+    const datedEventsWithTime = events
+      .filter(e => {
+        if (!e.date || e.date === 'TBA' || e.date === 'TBD' || e.isDateFinal === false || e.status === 'date_tba') {
+          return false;
+        }
+        return true;
+      })
+      .map(e => {
+        const startAt = parseEventStartTimestamp(e.date, e.time);
+        return { ...e, eventStartAt: startAt };
+      })
+      .filter(e => e.eventStartAt && e.eventStartAt.getTime() > now.getTime())
+      .sort((a, b) => a.eventStartAt.getTime() - b.eventStartAt.getTime() || (a.sequenceNumber || 0) - (b.sequenceNumber || 0));
 
-    // 2. Active Date TBA / TBD events
-    const tbdEvents = events.filter(e => {
-      if (e.status === 'completed' || e.status === 'archived') return false;
-      return e.date === 'TBA' || e.date === 'TBD' || e.isDateFinal === false || !e.date || e.status === 'date_tba';
-    }).sort((a, b) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0));
+    let selectedEvents = [];
 
-    // Combine future dated events followed by upcoming TBD events
-    const combined = [...futureDatedEvents, ...tbdEvents];
+    if (datedEventsWithTime.length >= 1) {
+      // Step 2 & 4: Return ONLY future dated events, max 2 (DO NOT append TBD)
+      selectedEvents = datedEventsWithTime.slice(0, 2);
+    } else {
+      // Step 5: ONLY when future dated count = 0, query valid published TBD events (max 2)
+      const tbdEvents = events
+        .filter(e => {
+          return e.date === 'TBA' || e.date === 'TBD' || e.isDateFinal === false || !e.date || e.status === 'date_tba';
+        })
+        .sort((a, b) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0))
+        .slice(0, 2);
 
-    if (combined.length === 0) return [];
+      selectedEvents = tbdEvents;
+    }
 
-    return combined.map(prog => {
-      const isTbd = prog.date === 'TBA' || prog.date === 'TBD' || prog.isDateFinal === false || !prog.date;
+    if (selectedEvents.length === 0) return [];
+
+    return selectedEvents.map(prog => {
+      const isTbd = prog.date === 'TBA' || prog.date === 'TBD' || prog.isDateFinal === false || !prog.date || prog.status === 'date_tba';
       const capacity = prog.capacity || 1000;
       const bookedSeats = prog.bookedSeats || 0;
       const availableSeats = isTbd ? capacity : Math.max(0, capacity - bookedSeats);

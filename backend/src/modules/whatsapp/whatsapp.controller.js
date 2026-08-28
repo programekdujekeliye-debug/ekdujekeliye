@@ -126,8 +126,22 @@ export const sendTestMessage = async (req, res) => {
  */
 export const getWhatsappLogs = async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 30;
-    const logs = await WhatsappMessage.find({})
+    const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+    const eventId = req.query.eventId ? String(req.query.eventId).trim() : null;
+    const includeMock = req.query.includeMock === 'true';
+
+    const filter = {};
+    if (eventId && eventId !== 'all') {
+      filter.eventId = eventId;
+    }
+    if (!includeMock) {
+      filter.providerMode = { $ne: 'MOCK' };
+      filter.executionSource = { $ne: 'AUTOMATED_TEST' };
+      filter.providerMessageId = { $not: /^wamid\.MOCK_TEST_/ };
+      filter.recipientPhone = { $ne: '919999999999' };
+    }
+
+    const logs = await WhatsappMessage.find(filter)
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
