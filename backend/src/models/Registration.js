@@ -18,8 +18,9 @@ const RegistrationSchema = new mongoose.Schema({
     enum: ['inquiry', 'pending', 'approved', 'rejected'],
     default: 'pending'
   },
+  isVip: { type: Boolean, default: false },
   payment: {
-    provider: { type: String, enum: ['razorpay', 'legacy_upi', 'cash', 'free'], default: 'razorpay' },
+    provider: { type: String, enum: ['razorpay', 'legacy_upi', 'cash', 'free', 'manual_invite'], default: 'razorpay' },
     status: { type: String, enum: ['created', 'pending', 'captured', 'failed', 'refunded'], default: 'pending' },
     amount: { type: Number, default: 1500 },
     currency: { type: String, default: 'INR' },
@@ -30,8 +31,10 @@ const RegistrationSchema = new mongoose.Schema({
     paidAt: { type: Date },
     createdAt: { type: Date, default: Date.now }
   },
-  attendance: { type: Boolean, default: false },
+  attendance: { type: mongoose.Schema.Types.Mixed, default: 'unmarked' },
+  attendanceAt: { type: Date, default: null },
   attendanceMarkedAt: { type: Date, default: null },
+  attendanceMethod: { type: String, default: null },
   isDeleted: { type: Boolean, default: false },
   deletedAt: { type: Date, default: null },
   rejectionReason: { type: String, default: '' },

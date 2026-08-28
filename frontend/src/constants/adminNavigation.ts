@@ -1,7 +1,9 @@
 export type NormalAdminSection = 
   | 'dashboard'
+  | 'scanner'
   | 'programs'
   | 'registrations'
+  | 'vip_passes'
   | 'whatsapp'
   | 'settings';
 
@@ -19,6 +21,11 @@ export const NORMAL_ADMIN_NAVIGATION: AdminNavItem[] = [
     iconName: 'LayoutDashboardIcon'
   },
   {
+    id: 'scanner',
+    label: 'Gate Scanner',
+    iconName: 'CameraIcon'
+  },
+  {
     id: 'programs',
     label: 'Event Slots',
     iconName: 'TicketIcon'
@@ -27,6 +34,11 @@ export const NORMAL_ADMIN_NAVIGATION: AdminNavItem[] = [
     id: 'registrations',
     label: 'Registrations',
     iconName: 'UsersIcon'
+  },
+  {
+    id: 'vip_passes',
+    label: 'VIP Passes',
+    iconName: 'SparklesIcon'
   },
   {
     id: 'whatsapp',

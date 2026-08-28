@@ -5,6 +5,7 @@ import { eventService } from '../events/event.service.js';
 import { Counter, getNextSequence } from '../../models/Counter.js';
 import { storageService } from '../../services/storage.service.js';
 import { mediaService } from '../media/media.service.js';
+import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
 
 export class RegistrationService {
   /**
@@ -97,6 +98,39 @@ export class RegistrationService {
     });
 
     await newRegistration.save();
+
+    // Dispatch Exactly ONE WhatsApp Message: Registration Received / Payment Pending
+    try {
+      const customerName = `${husbandName || ''} & ${wifeName || ''}`.trim() || 'Valued Couple';
+      const eventName = program.name || 'Ek Duje Ke Liye Seminar';
+      const eventDate = program.date || 'TBD';
+      const eventTime = program.time || '8:30 PM';
+      const venue = program.venue || 'Sardar Smruti Bhavan, Surat';
+      const feeAmount = `₹${amount}`;
+
+      await sendUtilityTemplate({
+        recipientPhone: phoneNumber,
+        templateKey: 'edkl_payment_pending_v1',
+        languageCode: 'en_US',
+        variables: {
+          customerName,
+          eventName,
+          registrationId: inquiryId,
+          eventDate,
+          eventTime,
+          venue,
+          feeAmount,
+          inquiryId
+        },
+        idempotencyKey: `REGISTRATION_PENDING:${newRegistration._id}:${inquiryId}`,
+        registrationId: newRegistration._id,
+        eventId: program.id,
+        inquiryId,
+        trigger: 'registration_created'
+      });
+    } catch (msgErr) {
+      console.warn('[RegistrationService] WhatsApp M1 dispatch notice:', msgErr.message);
+    }
 
     return {
       registration: newRegistration,

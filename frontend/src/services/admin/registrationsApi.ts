@@ -9,6 +9,7 @@ export interface GetSubmissionsParams {
   paymentStatus?: string;
   programId?: string;
   attendance?: string;
+  isVip?: string;
   sortBy?: string;
   sortOrder?: string;
 }
@@ -23,6 +24,7 @@ export const registrationsApi = {
     if (params.paymentStatus && params.paymentStatus !== 'all') query.append('paymentStatus', params.paymentStatus);
     if (params.programId && params.programId !== 'all') query.append('programId', params.programId);
     if (params.attendance && params.attendance !== 'all') query.append('attendance', params.attendance);
+    if (params.isVip) query.append('isVip', params.isVip);
     if (params.sortBy) query.append('sortBy', params.sortBy);
     if (params.sortOrder) query.append('sortOrder', params.sortOrder);
 

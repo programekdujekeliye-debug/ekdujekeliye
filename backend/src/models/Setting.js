@@ -13,18 +13,25 @@ const SettingSchema = new mongoose.Schema({
   
   // Global Brand & Support Contact Defaults
   brandName: { type: String, default: 'Ek Duje Ke Liye' },
-  businessCategory: { type: String, default: 'Education & Training' },
-  businessDescription: { type: String, default: 'Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops' },
+  businessCategory: { type: String, default: 'Events & Programs' },
+  businessDescription: { type: String, default: 'Ek Duje Ke Liye - A Special Program for Couples' },
   supportPhone: { type: String, default: '+91 82003 02328' },
   supportWhatsapp: { type: String, default: '+91 82003 02328' },
   supportEmail: { type: String, default: '' },
   websiteEmail: { type: String, default: '' },
   
   // Social Links
-  instagramUrl: { type: String, default: '' },
-  facebookUrl: { type: String, default: '' },
+  instagramUrl: { type: String, default: 'https://www.instagram.com/ekdujekeliye' },
+  facebookUrl: { type: String, default: 'https://www.facebook.com/ekdujekeliye' },
   youtubeUrl: { type: String, default: '' },
-  linktreeUrl: { type: String, default: '' },
+  linktreeUrl: { type: String, default: 'https://linktr.ee/ekdujekeliye' },
+  
+  // Manish Vaghasiya Personal Social Channels
+  manishYoutubeUrl: { type: String, default: 'https://www.youtube.com/@manishvaghasiya' },
+  manishInstagramUrl: { type: String, default: 'https://www.instagram.com/manishvaghasiya_' },
+  manishFacebookUrl: { type: String, default: 'https://www.facebook.com/manishvaghasiya' },
+  manishLinkedinUrl: { type: String, default: 'https://www.linkedin.com/in/manishvaghasiya' },
+  manishTwitterUrl: { type: String, default: 'https://twitter.com/manishvaghasiya' },
   
   // Defaults
   defaultCity: { type: String, default: 'Surat' },

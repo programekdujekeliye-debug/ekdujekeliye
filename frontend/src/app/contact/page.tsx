@@ -20,8 +20,8 @@ export default function ContactPage() {
     supportWhatsapp: '+91 82003 02328',
     supportEmail: 'privacy.ekdujekeliye@gmail.com',
     defaultCity: 'Surat, Gujarat',
-    businessCategory: 'Education & Training',
-    businessDescription: 'Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops'
+    businessCategory: 'Events & Programs',
+    businessDescription: 'Ek Duje Ke Liye - A Special Program for Couples'
   });
 
   useEffect(() => {
@@ -54,7 +54,7 @@ export default function ContactPage() {
                 {config.brandName || 'Ek Duje Ke Liye'}
               </span>
               <span className="text-[10px] tracking-widest text-rose-700 font-bold uppercase block">
-                Educational Seminars by Manish Vaghasiya
+                A Program for Couples by Manish Vaghasiya
               </span>
             </div>
           </Link>
@@ -92,8 +92,8 @@ export default function ContactPage() {
               <div className="space-y-2 text-xs text-stone-700">
                 <p><strong>Organization:</strong> {config.brandName || 'Ek Duje Ke Liye'}</p>
                 <p><strong>Initiative Lead:</strong> Manish Vaghasiya</p>
-                <p><strong>Business Category:</strong> {config.businessCategory || 'Education & Training'}</p>
-                <p><strong>Description:</strong> {config.businessDescription || 'Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops'}</p>
+                <p><strong>Business Category:</strong> {config.businessCategory || 'Events & Programs'}</p>
+                <p><strong>Description:</strong> {config.businessDescription || 'Ek Duje Ke Liye - A Special Program for Couples'}</p>
                 <p><strong>Official Website:</strong> https://ekdujekeliye.in</p>
               </div>
             </div>
@@ -153,7 +153,7 @@ export default function ContactPage() {
 
           <div className="pt-6 border-t border-stone-200 flex justify-between items-center text-xs text-stone-600">
             <Link href="/" className="hover:text-rose-700 font-bold transition-colors">
-              ← Return to Seminar Home
+              ← Return to Home
             </Link>
             <Link href="/privacy-policy" className="hover:text-rose-700 font-bold transition-colors">
               Privacy Policy →
@@ -166,7 +166,7 @@ export default function ContactPage() {
       {/* Footer */}
       <footer className="py-6 px-8 border-t border-stone-200 bg-white text-center text-xs text-stone-500 space-y-2">
         <div>
-          &copy; {new Date().getFullYear()} Ek Duje Ke Liye &bull; Educational Seminars by Manish Vaghasiya. All rights reserved.
+          &copy; {new Date().getFullYear()} Ek Duje Ke Liye &bull; A Program for Couples by Manish Vaghasiya. All rights reserved.
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3 text-[11px]">
           <Link href="/privacy-policy" className="text-stone-600 hover:underline">Privacy Policy</Link>

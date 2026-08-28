@@ -13,7 +13,8 @@ import {
   MapPinIcon,
   AlertTriangleIcon,
   PhoneIcon,
-  UserIcon
+  UserIcon,
+  ShieldCheckIcon
 } from '../../../components/Icons';
 
 interface PaymentStatusResponse {
@@ -286,7 +287,7 @@ export default function PaymentRetryPage() {
               <span className="text-xs font-bold text-amber-800 uppercase tracking-widest block">Complete Your Booking</span>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-stone-900">Payment Pending</h1>
               <p className="text-xs text-stone-600 font-medium">
-                Please complete your payment to register and receive your official couple educational seminar pass.
+                Please complete your payment to register and receive your official couple entry pass.
               </p>
             </div>
 
@@ -298,8 +299,9 @@ export default function PaymentRetryPage() {
 
             {/* Verification Notice Badge */}
             <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl text-center space-y-1">
-              <span className="text-[11px] font-bold text-amber-900 block">
-                🔍 કૃપા કરીને પેમેન્ટ કરતાં પહેલાં તમારી વિગતો (નામ અને મોબાઈલ નંબર) ચકાસી લો.
+              <span className="text-[11px] font-bold text-amber-900 inline-flex items-center justify-center gap-1.5 flex-wrap">
+                <ShieldCheckIcon className="w-4 h-4 text-amber-700 flex-shrink-0" />
+                <span>કૃપા કરીને પેમેન્ટ કરતાં પહેલાં તમારી વિગતો (નામ અને મોબાઈલ નંબર) ચકાસી લો.</span>
               </span>
               <span className="text-[10px] text-amber-800 font-medium block">
                 Please verify your registered couple name and mobile number below before proceeding.
@@ -403,7 +405,7 @@ export default function PaymentRetryPage() {
       {/* Footer */}
       <footer className="py-6 px-8 border-t border-stone-200 bg-white text-center text-xs text-stone-500 space-y-2">
         <div>
-          &copy; {new Date().getFullYear()} Ek Duje Ke Liye &bull; Educational Seminars by Manish Vaghasiya. All rights reserved.
+          &copy; {new Date().getFullYear()} Ek Duje Ke Liye &bull; A Program for Couples by Manish Vaghasiya. All rights reserved.
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3 text-[11px]">
           <Link href="/privacy-policy" className="text-stone-600 hover:text-rose-600 hover:underline">Privacy Policy</Link>

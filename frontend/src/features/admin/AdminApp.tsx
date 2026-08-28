@@ -5,9 +5,11 @@ import { AdminProvider, useAdmin } from './context/AdminContext';
 import { AdminLogin } from './auth/AdminLogin';
 import { AdminLayout } from '../../components/admin/layout/AdminLayout';
 import { DashboardPage } from './dashboard/DashboardPage';
+import { ScannerPage } from './scanner/ScannerPage';
 import { EventsPage } from './events/EventsPage';
 import { RegistrationsPage } from './registrations/RegistrationsPage';
 import { WhatsAppPage } from './whatsapp/WhatsAppPage';
+import { VipPassesPage } from './vip/VipPassesPage';
 import { SettingsPage } from './settings/SettingsPage';
 import { BatchExportModal } from './reports/BatchExportModal';
 import { apiClient } from '../../services/apiClient';
@@ -52,8 +54,9 @@ const NormalAdminAppContent = () => {
 
   if (checkingAuth) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white text-xs font-bold">
-        Initializing Event Operations...
+      <div className="min-h-screen bg-[#FAF9F6] flex flex-col items-center justify-center gap-3 text-slate-800 text-xs font-bold">
+        <div className="w-8 h-8 border-3 border-rose-600 border-t-transparent rounded-full animate-spin" />
+        <span>Initializing Event Operations...</span>
       </div>
     );
   }
@@ -63,14 +66,13 @@ const NormalAdminAppContent = () => {
   }
 
   return (
-    <AdminLayout
-      isSuperAdmin={false}
-      onExportClick={() => setShowExportModal(true)}
-    >
-      {/* Normal Admin Operational Views Only (Zero Finance, Zero Resources, Zero Integrations) */}
+    <AdminLayout isSuperAdmin={false}>
+      {/* Normal Admin Operational Views Only */}
       {activeSection === 'dashboard' && <DashboardPage />}
+      {activeSection === 'scanner' && <ScannerPage />}
       {activeSection === 'programs' && <EventsPage />}
       {activeSection === 'registrations' && <RegistrationsPage />}
+      {activeSection === 'vip_passes' && <VipPassesPage />}
       {activeSection === 'whatsapp' && <WhatsAppPage />}
       {activeSection === 'settings' && <SettingsPage />}
 

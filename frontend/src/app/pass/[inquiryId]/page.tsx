@@ -2,807 +2,273 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
+import QRCode from 'qrcode';
 import { API_BASE_URL } from '../../../config';
-import { AlertTriangleIcon, CheckCircleIcon, HourglassIcon, XIcon, PartyPopperIcon, FileTextIcon } from '../../../components/Icons';
+import {
+  ShieldCheckIcon,
+  CheckCircleIcon,
+  AlertTriangleIcon,
+  HourglassIcon,
+  PrinterIcon,
+  DownloadIcon,
+  SparklesIcon,
+  MapPinIcon,
+  CalendarIcon,
+  ClockIcon
+} from '../../../components/Icons';
 
-interface Submission {
+interface PassData {
+  passId: string;
+  qrToken: string;
   inquiryId: string;
-  husbandName: string;
-  wifeName: string;
-  surname: string;
-  phoneNumber: string;
-  programId: string;
-  programName: string;
-  programDate: string;
-  programTime?: string;
-  couplePhoto: string;
+  coupleName: string;
+  couplePhoto?: string;
   photoThumbnailUrl?: string;
   status: string;
-  rejectionReason?: string;
-  isDateFinal?: boolean;
-  upiId?: string;
-  payeeName?: string;
-  amount?: string;
-  cardTemplate?: string;
-  heartX?: number;
-  heartY?: number;
-  heartWidth?: number;
-  heartHeight?: number;
-  photoZoom?: number;
-  photoOffsetY?: number;
+  programName: string;
+  programDate: string;
+  programTime: string;
+  venue: string;
+  venueAddress?: string;
+  issuedAt?: string;
 }
 
-const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.7): Promise<File> => {
-  return new Promise((resolve) => {
-    // 3-second safety timeout: if compression hangs or fails, return the original file
-    const timeoutId = setTimeout(() => {
-      console.warn('Image compression timed out, using original file');
-      resolve(file);
-    }, 3000);
-
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > maxWidth) {
-              height = Math.round((height * maxWidth) / width);
-              width = maxWidth;
-            }
-          } else {
-            if (height > maxHeight) {
-              width = Math.round((width * maxHeight) / height);
-              height = maxHeight;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            clearTimeout(timeoutId);
-            resolve(file);
-            return;
-          }
-
-          ctx.drawImage(img, 0, 0, width, height);
-          canvas.toBlob(
-            (blob) => {
-              clearTimeout(timeoutId);
-              if (blob) {
-                const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
-                  type: 'image/jpeg',
-                  lastModified: Date.now(),
-                });
-                resolve(compressedFile);
-              } else {
-                resolve(file);
-              }
-            },
-            'image/jpeg',
-            quality
-          );
-        } catch (e) {
-          console.error('Error in img.onload:', e);
-          clearTimeout(timeoutId);
-          resolve(file);
-        }
-      };
-      img.onerror = (err) => {
-        console.error('img.onerror:', err);
-        clearTimeout(timeoutId);
-        resolve(file);
-      };
-    };
-    reader.onerror = (err) => {
-      console.error('reader.onerror:', err);
-      clearTimeout(timeoutId);
-      resolve(file);
-    };
-  });
-};
-
-export default function PassDownloadPage() {
+export default function DigitalPassPage() {
   const params = useParams();
-  const inquiryId = params.inquiryId as string;
+  const rawInquiryId = (params?.inquiryId as string) || '';
+  const inquiryId = decodeURIComponent(rawInquiryId).toUpperCase();
 
-  const [submission, setSubmission] = useState<Submission | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [cardReady, setCardReady] = useState(false);
-  const [canvasDataUrl, setCanvasDataUrl] = useState<string>('');
-  const [useCanvasDirectly, setUseCanvasDirectly] = useState(false);
-  const [error, setError] = useState('');
-  const [userZoom, setUserZoom] = useState<number>(1.0);
-  const [userOffsetY, setUserOffsetY] = useState<number>(0);
-  const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const setCanvasRef = (node: HTMLCanvasElement | null) => {
-    canvasRef.current = node;
-    setCanvasElement(node);
-  };
-
-  const [paymentScreenshot, setPaymentScreenshot] = useState<File | null>(null);
-  const [paymentPreview, setPaymentPreview] = useState<string>('');
-  const [uploadingPayment, setUploadingPayment] = useState(false);
-  const [uploadError, setUploadError] = useState('');
-
-  const [programs, setPrograms] = useState<any[]>([]);
-  const [loadingPrograms, setLoadingPrograms] = useState(true);
-  const [selectedSlotId, setSelectedSlotId] = useState<string>('');
-  const [updatingSlot, setUpdatingSlot] = useState(false);
-  const [slotError, setSlotError] = useState('');
-
-  useEffect(() => {
-    const fetchPrograms = async () => {
-      try {
-        setLoadingPrograms(true);
-        const res = await fetch(`${API_BASE_URL}/api/programs/public`);
-        if (res.ok) {
-          const data = await res.json();
-          setPrograms(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch programs:', err);
-      } finally {
-        setLoadingPrograms(false);
-      }
-    };
-    fetchPrograms();
-  }, []);
-
-  const handleChangeSlot = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedSlotId) {
-      setSlotError('કૃપા કરીને એક પ્રોગ્રામ સ્લોટ પસંદ કરો.');
-      return;
-    }
-    setSlotError('');
-    setUpdatingSlot(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}/change-slot`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ targetProgramId: selectedSlotId })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        window.location.reload();
-      } else {
-        setSlotError(data.error || 'સ્લોટ બદલવામાં ભૂલ થઈ.');
-      }
-    } catch (err) {
-      setSlotError('નેટવર્ક ભૂલ: સ્લોટ બદલી શકાયો નથી.');
-    } finally {
-      setUpdatingSlot(false);
-    }
-  };
-
-  useEffect(() => {
-    if (paymentScreenshot) {
-      const objectUrl = URL.createObjectURL(paymentScreenshot);
-      setPaymentPreview(objectUrl);
-      return () => URL.revokeObjectURL(objectUrl);
-    } else {
-      setPaymentPreview('');
-    }
-  }, [paymentScreenshot]);
-
-  const handleUploadPayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!paymentScreenshot) {
-      setUploadError('કૃપા કરીને પેમેન્ટ સ્ક્રીનશોટ અપલોડ કરો!');
-      return;
-    }
-    setUploadError('');
-    setUploadingPayment(true);
-
-    try {
-      let compressedScreenshot = paymentScreenshot;
-      try {
-        compressedScreenshot = await compressImage(paymentScreenshot);
-      } catch (e) {
-        console.error('Error compressing payment screenshot:', e);
-      }
-
-      const formData = new FormData();
-      formData.append('paymentScreenshot', compressedScreenshot);
-
-      const res = await fetch(`${API_BASE_URL}/api/submissions/${inquiryId}/pay`, {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
-      if (res.ok) {
-        window.location.reload();
-      } else {
-        setUploadError(data.error || 'અપલોડ કરવામાં ભૂલ થઈ. કૃપા કરીને ફરી પ્રયાસ કરો.');
-      }
-    } catch (err) {
-      setUploadError('સર્વર સાથે કનેક્ટ થઈ શક્યું નથી.');
-    } finally {
-      setUploadingPayment(false);
-    }
-  };
+  const [pass, setPass] = useState<PassData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
 
   useEffect(() => {
     if (!inquiryId) return;
 
-    const fetchStatus = async () => {
+    async function loadPass() {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/submissions/status/${inquiryId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setSubmission(data);
-        } else {
-          setError('Inquiry ID not found or invalid.');
+        setLoading(true);
+        setError(null);
+
+        const res = await fetch(`${API_BASE_URL}/api/passes/${encodeURIComponent(inquiryId)}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Unable to load digital entry pass.');
         }
-      } catch (err) {
-        setError('Connection failed. Make sure backend server is running.');
+
+        setPass(data);
+
+        // Generate high-resolution, high-contrast QR Code data URL
+        if (data.qrToken) {
+          const url = await QRCode.toDataURL(data.qrToken, {
+            width: 480,
+            margin: 2,
+            color: {
+              dark: '#000000',
+              light: '#ffffff'
+            },
+            errorCorrectionLevel: 'M'
+          });
+          setQrDataUrl(url);
+        }
+      } catch (err: any) {
+        setError(err.message || 'Failed to load pass.');
       } finally {
         setLoading(false);
       }
-    };
+    }
 
-    fetchStatus();
+    loadPass();
   }, [inquiryId]);
 
-  // Canvas drawing functions
-  const drawHeartMask = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
-    ctx.beginPath();
-    ctx.moveTo(x + w / 2, y + h * 0.24);
-    ctx.bezierCurveTo(x + w * 0.28, y - h * 0.06, x - w * 0.06, y + h * 0.22, x + w * 0.01, y + h * 0.56);
-    ctx.bezierCurveTo(x + w * 0.06, y + h * 0.78, x + w * 0.32, y + h * 0.94, x + w / 2, y + h * 1.02);
-    ctx.bezierCurveTo(x + w * 0.68, y + h * 0.94, x + w * 0.94, y + h * 0.78, x + w * 0.99, y + h * 0.56);
-    ctx.bezierCurveTo(x + w * 1.06, y + h * 0.22, x + w * 0.72, y - h * 0.06, x + w / 2, y + h * 0.24);
-    ctx.closePath();
+  const handlePrint = () => {
+    window.print();
   };
 
-  const drawTextDetails = (ctx: CanvasRenderingContext2D, sub: Submission) => {
-    ctx.save();
-    const hX = sub.heartX ?? 144;
-    const hY = sub.heartY ?? 112;
-    const hW = sub.heartWidth ?? 288;
-    const hH = sub.heartHeight ?? 260;
-
-    const textX = hX + hW / 2;
-    const textY = hY - 20;
-
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    // Draw a dark outline for high contrast readability
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 6;
-    ctx.lineJoin = 'round';
-    ctx.font = 'bold 30px "Oswald", "Impact", "Arial Narrow", sans-serif';
-    ctx.strokeText(sub.inquiryId, textX, textY);
-    
-    // Draw the CPL text in gold
-    ctx.fillStyle = '#D4AF37';
-    ctx.fillText(sub.inquiryId, textX, textY);
-    ctx.restore();
+  const handleDownloadInvitation = () => {
+    if (!inquiryId) return;
+    window.open(`${API_BASE_URL}/api/invitations/${encodeURIComponent(inquiryId)}/download`, '_blank');
   };
 
-  const drawCard = (sub: Submission) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    canvas.width = 576;
-    canvas.height = 1024;
-
-    const templateImg = new Image();
-    const templatePath = sub.cardTemplate || '/card_template.png';
-    const templateImgSrc = (templatePath.startsWith('data:') || templatePath.startsWith('http://') || templatePath.startsWith('https://') || templatePath === '/card_template.png')
-      ? templatePath
-      : `${API_BASE_URL}${templatePath}`;
-    const isTemplateRemote = templateImgSrc.startsWith('http://') || templateImgSrc.startsWith('https://');
-    if (isTemplateRemote) {
-      templateImg.crossOrigin = 'anonymous';
-    }
-
-    templateImg.onload = () => {
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = canvas.width;
-      tempCanvas.height = canvas.height;
-      const tempCtx = tempCanvas.getContext('2d');
-      if (!tempCtx) return;
-
-      tempCtx.drawImage(templateImg, 0, 0, canvas.width, canvas.height);
-
-      const hX = sub.heartX ?? 144;
-      const hY = sub.heartY ?? 112;
-      const hW = sub.heartWidth ?? 288;
-      const hH = sub.heartHeight ?? 260;
-
-      // Make white area transparent strictly inside the heart bounding box coordinates
-      try {
-        const imgData = tempCtx.getImageData(hX, hY, hW, hH);
-        const data = imgData.data;
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          if (r > 220 && g > 220 && b > 220) {
-            data[i + 3] = 0; // Make transparent
-          }
-        }
-        tempCtx.putImageData(imgData, hX, hY);
-      } catch (e) {
-        console.error("Error doing transparency scan: ", e);
-      }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const coupleImg = new Image();
-      const photoPath = sub.photoThumbnailUrl || sub.couplePhoto;
-      const coupleImgSrc = (photoPath.startsWith('data:') || photoPath.startsWith('http://') || photoPath.startsWith('https://')) ? photoPath : `${API_BASE_URL}${photoPath}`;
-      const isCoupleRemote = coupleImgSrc.startsWith('http://') || coupleImgSrc.startsWith('https://');
-      if (isCoupleRemote) {
-        coupleImg.crossOrigin = 'anonymous';
-      }
-
-      const drawFinalCard = () => {
-        const imgAspect = coupleImg.width / coupleImg.height;
-        const heartAspect = hW / hH;
-        let drawW = hW;
-        let drawH = hH;
-        let offsetX = 0;
-        let offsetY = 0;
-
-        if (imgAspect > heartAspect) {
-          drawW = hH * imgAspect;
-          offsetX = -(drawW - hW) / 2;
-        } else {
-          drawH = hW / imgAspect;
-          offsetY = -(drawH - hH) / 2;
-        }
-
-        const zoom = (sub.photoZoom ?? 1.0) * userZoom;
-        const finalW = drawW * zoom;
-        const finalH = drawH * zoom;
-        const finalOffsetX = offsetX - (finalW - drawW) / 2;
-        const finalOffsetY = (offsetY - (finalH - drawH) / 2) + (sub.photoOffsetY ?? 0) + userOffsetY;
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(hX, hY, hW, hH);
-        ctx.clip();
-        ctx.drawImage(coupleImg, hX + finalOffsetX, hY + finalOffsetY, finalW, finalH);
-        ctx.restore();
-        ctx.drawImage(tempCanvas, 0, 0);
-        drawTextDetails(ctx, sub);
-        try {
-          setCanvasDataUrl(canvas.toDataURL('image/png'));
-        } catch (e) {
-          console.error("Canvas export failed:", e);
-          setUseCanvasDirectly(true);
-        }
-        setCardReady(true);
-      };
-
-      coupleImg.onload = () => {
-        drawFinalCard();
-      };
-
-      let coupleRetried = false;
-      coupleImg.onerror = (err) => {
-        console.error("Error loading coupleImg:", err);
-        if (!coupleRetried && isCoupleRemote) {
-          console.warn("CORS couple image load failed, retrying without credentials/anonymous...");
-          coupleRetried = true;
-          coupleImg.removeAttribute('crossOrigin');
-          coupleImg.src = coupleImgSrc + (coupleImgSrc.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
-        } else {
-          drawTextDetails(ctx, sub);
-          try {
-            setCanvasDataUrl(canvas.toDataURL('image/png'));
-          } catch (e) {
-            console.error("Canvas export failed on couple error fallback:", e);
-            setUseCanvasDirectly(true);
-          }
-          setCardReady(true);
-        }
-      };
-      coupleImg.src = coupleImgSrc;
-    };
-
-    let templateRetried = false;
-    templateImg.onerror = (err) => {
-      console.error("Error loading templateImg:", err);
-      if (!templateRetried && isTemplateRemote) {
-        console.warn("CORS template image load failed, retrying without CORS...");
-        templateRetried = true;
-        templateImg.removeAttribute('crossOrigin');
-        templateImg.src = templateImgSrc + (templateImgSrc.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
-      } else {
-        try {
-          setCanvasDataUrl(canvas.toDataURL('image/png'));
-        } catch (e) {
-          console.error("Canvas export failed on template error fallback:", e);
-          setUseCanvasDirectly(true);
-        }
-        setCardReady(true);
-      }
-    };
-
-    templateImg.src = templateImgSrc;
-  };
-
-  useEffect(() => {
-    if (submission && submission.status === 'approved' && canvasElement) {
-      drawCard(submission);
-    }
-  }, [submission, userZoom, userOffsetY, canvasElement]);
-
-  const downloadCard = () => {
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    if (isIOS) {
-      alert("iPhone પર ડાઉનલોડ કરવા માટે કાર્ડ પર લાંબો સમય ટચ (press and hold) કરી રાખીને 'Save to Photos' અથવા 'Add to Photos' કરો, અથવા આ સ્ક્રીનનો સ્ક્રીનશોટ (Screenshot) પાડી લો.");
-      return;
-    }
-    
-    try {
-      const link = document.createElement('a');
-      link.download = `${submission?.surname}_${submission?.husbandName}_Invitation_Pass.png`;
-      link.href = canvasDataUrl || (canvasRef.current ? canvasRef.current.toDataURL('image/png') : '');
-      link.click();
-    } catch (err) {
-      console.error("Failed to download canvas via data URL:", err);
-      alert("કાર્ડ તૈયાર છે. ડાઉનલોડ કરવા માટે લાંબા સમય સુધી કાર્ડ પર ટચ કરી રાખીને સેવ (Save Image) કરો અથવા આ સ્ક્રીનનો સ્ક્રીનશોટ (Screenshot) પાડી લો.");
-    }
-  };
-
-  if (loading || loadingPrograms) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center font-sans p-6 text-center space-y-4">
-        <div className="w-12 h-12 rounded-full border-4 border-amber-500/20 border-t-amber-500 animate-spin" />
-        <div>
-          <p className="text-lg font-semibold text-slate-200">Loading your invitation pass details...</p>
-          <p className="text-xs text-slate-450 mt-1">
-            કૃપા કરીને પ્રતીક્ષા કરો...
-          </p>
-        </div>
+      <div className="min-h-screen bg-[#FAF9F6] flex flex-col items-center justify-center p-4 text-stone-900">
+        <div className="w-10 h-10 border-4 border-rose-600 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-sm font-semibold text-stone-700">Loading your Digital Entry Pass...</p>
       </div>
     );
   }
 
-  if (error || !submission) {
+  if (error || !pass) {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center font-sans p-6">
-        <div className="max-w-md w-full bg-slate-950/70 border border-slate-800/80 rounded-3xl p-8 text-center backdrop-blur-xl shadow-2xl">
-          <AlertTriangleIcon className="w-12 h-12 text-rose-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-slate-200">Error</h2>
-          <p className="text-slate-400 text-sm mt-2">{error || 'Inquiry not found.'}</p>
-          <a href="/" className="mt-6 inline-block w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-sm transition-all shadow-md">
-            Back to Home
-          </a>
+      <div className="min-h-screen bg-[#FAF9F6] flex flex-col items-center justify-center p-4 text-stone-900">
+        <div className="max-w-md w-full bg-white border border-stone-200 rounded-3xl p-6 sm:p-8 text-center space-y-4 shadow-xl">
+          <div className="w-14 h-14 bg-rose-50 text-rose-600 border border-rose-200 rounded-2xl flex items-center justify-center mx-auto">
+            <AlertTriangleIcon className="w-7 h-7" />
+          </div>
+          <h2 className="text-xl font-bold text-stone-900 tracking-tight">Pass Not Available</h2>
+          <p className="text-sm text-stone-600 leading-relaxed">
+            {error || 'The requested digital pass could not be found or payment verification is still pending.'}
+          </p>
+          <div className="pt-2">
+            <a
+              href="/"
+              className="inline-block px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-rose-600/20"
+            >
+              Return to Home
+            </a>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-between font-sans">
-      <header className="py-6 px-8 border-b border-slate-800 bg-slate-950/50 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Ek Duje Ke Liye Logo" className="h-10 w-auto object-contain" />
-            <span className="text-xl font-bold tracking-wider text-slate-100 uppercase">Ek Duje Ke Liye</span>
+    <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex flex-col items-center justify-center p-3 sm:p-6 select-none print:bg-white print:text-black">
+      
+      {/* Mobile-First Digital Pass Card */}
+      <div className="w-full max-w-sm bg-white text-stone-900 rounded-3xl shadow-2xl overflow-hidden border border-stone-200/90 flex flex-col print:shadow-none print:border-stone-400">
+        
+        {/* Pass Header Banner */}
+        <div className="bg-gradient-to-r from-rose-700 via-rose-600 to-amber-700 text-white p-5 text-center relative">
+          <div className="flex items-center justify-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-rose-200 mb-1">
+            <ShieldCheckIcon className="w-3.5 h-3.5" />
+            <span>Official Gate Entry Pass</span>
+          </div>
+          <h1 className="text-lg font-black tracking-tight leading-tight">EK DUJE KE LIYE</h1>
+          <p className="text-xs text-rose-100 font-medium mt-0.5">A Special Program for Couples</p>
+
+          {/* Top Status & Registration Number Banner */}
+          <div className="flex items-center justify-center gap-2 mt-3">
+            <div className="inline-flex items-center gap-1 bg-emerald-500 text-white px-3 py-1 rounded-full text-[11px] font-extrabold tracking-wide uppercase shadow-xs">
+              <CheckCircleIcon className="w-3.5 h-3.5" />
+              <span>ENTRY APPROVED</span>
+            </div>
           </div>
         </div>
-      </header>
 
-      <main className="flex-grow flex items-center justify-center p-6 md:p-12">
-        <div className="w-full max-w-xl bg-slate-950/70 border border-slate-800/80 rounded-3xl p-8 backdrop-blur-xl shadow-2xl relative overflow-hidden text-center">
-          <div className="absolute -top-40 -right-40 w-96 h-96 bg-rose-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-
-          {submission.status === 'inquiry' && (
-            <div className="space-y-6 py-6">
-              <div className="w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto">
-                {submission.isDateFinal ? (
-                  <PartyPopperIcon className="w-8 h-8 text-amber-500" />
-                ) : (
-                  <FileTextIcon className="w-8 h-8 text-amber-500" />
-                )}
-              </div>
-
-              {/* Slot Selection / Change Option */}
-              {programs.length > 1 && !submission.isDateFinal && (
-                <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 text-left max-w-md mx-auto space-y-3">
-                  <span className="block text-[10px] font-bold text-amber-500 uppercase tracking-wider">
-                    પ્રોગ્રામ સ્લોટ બદલો (Change Program Slot)
-                  </span>
-                  <p className="text-[11px] text-slate-450 leading-relaxed">
-                    જો તમને ફાળવેલ તારીખ અનુકૂળ ન હોય, તો તમે નીચેથી અન્ય કોઈ ઉપલબ્ધ તારીખ પસંદ કરીને "સ્લોટ બદલો" પર ક્લિક કરી શકો છો.
-                  </p>
-                  <form onSubmit={handleChangeSlot} className="flex gap-2 items-end">
-                    <div className="flex-grow">
-                      <select
-                        value={selectedSlotId}
-                        onChange={(e) => setSelectedSlotId(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-amber-500 transition-colors font-medium cursor-pointer"
-                      >
-                        <option value="" disabled>પ્રોગ્રામ સ્લોટ પસંદ કરો...</option>
-                        {programs
-                          .filter((p) => {
-                            const isCurrent = p.id === submission.programId;
-                            const isSoldOut = p.bookingsCount + 2 > p.capacity;
-                            return isCurrent || !isSoldOut;
-                          })
-                          .map((p) => {
-                            const isCurrent = p.id === submission.programId;
-                            const remainingSeats = p.capacity - p.bookingsCount;
-                            return (
-                              <option key={p.id} value={p.id}>
-                                {p.name} ({p.date}) {isCurrent ? "[વર્તમાન]" : `(${Math.floor(remainingSeats / 2)} left)`}
-                              </option>
-                            );
-                          })}
-                      </select>
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={updatingSlot || !selectedSlotId || selectedSlotId === submission.programId}
-                      className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 active:scale-[0.98] text-slate-950 font-bold rounded-xl text-xs transition-all cursor-pointer whitespace-nowrap"
-                    >
-                      {updatingSlot ? 'બદલાઈ રહ્યું છે...' : 'સ્લોટ બદલો'}
-                    </button>
-                  </form>
-                  {slotError && (
-                    <p className="text-[10px] text-rose-450 bg-rose-500/10 border border-rose-500/20 py-1.5 px-3.5 rounded-lg text-center font-medium">
-                      {slotError}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {submission.isDateFinal ? (
-                <>
-                  <h2 className="text-2xl font-bold text-slate-100">પ્રોગ્રામની તારીખ નક્કી થઈ ગઈ છે!</h2>
-                  <p className="text-slate-300 text-sm max-w-md mx-auto leading-relaxed">
-                    આ પ્રોગ્રામની તારીખ **{submission.programDate}** ({submission.programTime}) નક્કી થયેલ છે. તમારી સીટ કન્ફર્મ કરવા માટે કૃપા કરીને નીચે આપેલા QR કોડ પર ₹{submission.amount || 1500} પેમેન્ટ કરો અને તેનો સ્ક્રીનશોટ અપલોડ કરો.
-                  </p>
-                  
-                  {/* QR Code and Payee Details */}
-                  <div className="flex flex-col items-center justify-center p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 max-w-xs mx-auto">
-                    <div className="w-40 h-40 bg-white p-2 rounded-xl flex items-center justify-center shadow-lg">
-                      <img
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=${submission.upiId}&pn=${submission.payeeName}&am=${submission.amount}&cu=INR`)}`}
-                        alt="UPI QR Code"
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    <div className="text-center space-y-1">
-                      <span className="text-[10px] text-slate-500 uppercase tracking-widest block font-semibold">Scan to Pay</span>
-                      <span className="text-xs text-rose-400 font-bold block">{submission.upiId}</span>
-                      <span className="text-[11px] text-slate-400 block font-medium">Name: {submission.payeeName}</span>
-                      <span className="text-sm text-slate-200 font-extrabold block mt-1">Amount: ₹{submission.amount}</span>
-                    </div>
-                  </div>
-
-                  <form onSubmit={handleUploadPayment} className="space-y-4 max-w-md mx-auto">
-                    <div className="border-2 border-dashed border-rose-950/40 hover:border-rose-500/50 rounded-2xl p-4 text-center cursor-pointer transition-colors relative bg-slate-900/50">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        required
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            setPaymentScreenshot(e.target.files[0]);
-                          }
-                        }}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      />
-                      {paymentPreview ? (
-                        <div className="flex flex-col items-center gap-2">
-                          <img src={paymentPreview} alt="Screenshot Preview" className="w-20 h-20 object-cover rounded-lg border border-slate-700" />
-                          <span className="text-xs text-slate-400 font-medium">{paymentScreenshot?.name}</span>
-                        </div>
-                      ) : (
-                        <div className="space-y-1">
-                          <div className="text-2xl text-slate-500">&uarr;</div>
-                          <p className="text-xs font-medium text-slate-300">Upload Payment Screenshot</p>
-                          <p className="text-[10px] text-slate-500 font-normal">Supports JPG, PNG, WEBP</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {uploadError && (
-                      <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 py-2 px-3 rounded-lg text-center font-medium">
-                        {uploadError}
-                      </p>
-                    )}
-
-                    <button
-                      type="submit"
-                      disabled={uploadingPayment}
-                      className="w-full py-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 active:scale-[0.99] text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-rose-500/20"
-                    >
-                      {uploadingPayment ? 'સબમિટ થઈ રહ્યું છે...' : 'પેમેન્ટ કન્ફર્મ કરો'}
-                    </button>
-                  </form>
-                </>
-              ) : (
-                <>
-                  <h2 className="text-2xl font-bold text-slate-100">ઇન્ક્વાયરી રજીસ્ટ્રેશન સફળ!</h2>
-                  <p className="text-slate-300 text-sm max-w-sm mx-auto leading-relaxed">
-                    નમસ્તે <strong>{submission.husbandName} & {submission.wifeName}</strong>, આ પ્રોગ્રામની તારીખ હજી નક્કી થઈ નથી.
-                  </p>
-                  <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl max-w-xs mx-auto">
-                    <span className="text-xs text-slate-500 uppercase tracking-wider block">Inquiry ID</span>
-                    <span className="text-xl font-extrabold text-amber-500 tracking-wider font-mono">{submission.inquiryId}</span>
-                  </div>
-                  <p className="text-xs text-slate-400 leading-relaxed max-w-xs mx-auto">
-                    જ્યારે પણ આ પ્રોગ્રામની તારીખ નક્કી થશે ત્યારે અમે તમને વૉટ્સએપ/ફોન દ્વારા જાણ કરીશું. તારીખ નક્કી થયા પછી તમે અહીંથી જ પેમેન્ટ સબમિટ કરી શકશો.
-                  </p>
-                  <button
-                    onClick={() => window.location.reload()}
-                    className="w-full py-3 border border-slate-800 hover:bg-slate-900 active:scale-[0.99] text-slate-300 font-bold rounded-xl transition-all"
-                  >
-                    Refresh Status
-                  </button>
-                </>
-              )}
+        {/* Pass Body */}
+        <div className="p-5 sm:p-6 flex flex-col items-center text-center space-y-4">
+          
+          {/* HUGE HERO REGISTRATION NUMBER BOX */}
+          <div className="w-full bg-amber-50 border-2 border-amber-300 rounded-2xl p-3.5 text-center shadow-xs">
+            <span className="text-[11px] font-black text-amber-900 uppercase tracking-widest block">
+              REGISTRATION NUMBER
+            </span>
+            <div className="text-2xl sm:text-3xl font-black font-mono tracking-wider text-amber-950 my-0.5">
+              {pass.inquiryId}
             </div>
-          )}
+            <span className="text-[10px] text-amber-800/80 font-semibold block">
+              Please present this number or QR code at entry
+            </span>
+          </div>
 
-          {submission.status === 'pending' && (
-            <div className="space-y-6 py-6">
-              <div className="w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto animate-pulse">
-                <HourglassIcon className="w-8 h-8 text-amber-500" />
+          {/* Couple Info with Compact Thumbnail */}
+          <div className="flex items-center gap-3 bg-stone-50 border border-stone-200/80 rounded-2xl p-3 w-full text-left">
+            {pass.couplePhoto ? (
+              <img
+                src={pass.couplePhoto}
+                alt="Couple"
+                className="w-12 h-12 rounded-xl object-cover border border-stone-300 flex-shrink-0"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-xl bg-rose-100 text-rose-700 font-bold flex items-center justify-center flex-shrink-0 text-sm">
+                EDKL
               </div>
-              <h2 className="text-2xl font-bold text-slate-100">પેમેન્ટ વેરિફિકેશન ચાલુ છે</h2>
-              <p className="text-slate-300 text-sm max-w-sm mx-auto leading-relaxed">
-                નમસ્તે <strong>{submission.husbandName} & {submission.wifeName}</strong>, તમારું પેમેન્ટ સફળતાપૂર્વક અપલોડ થઈ ગયું છે. અમે વેરિફાય કરીને ટૂંક સમયમાં તમારો પાસ કન્ફર્મ કરી દઈશું.
-              </p>
-              <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl max-w-xs mx-auto">
-                <span className="text-xs text-slate-500 uppercase tracking-wider block">Inquiry ID</span>
-                <span className="text-xl font-extrabold text-amber-500 tracking-wider font-mono">{submission.inquiryId}</span>
-              </div>
-              <p className="text-xs text-slate-500">
-                કૃપા કરીને એડમિનિસ્ટ્રેટર દ્વારા પેમેન્ટ મંજૂર કરવાની પ્રતીક્ષા કરો. મંજૂર થયા પછી પાસ ડાઉનલોડ કરવા આ પેજને રીફ્રેશ કરો.
-              </p>
-              <button
-                onClick={() => window.location.reload()}
-                className="w-full py-3 border border-slate-800 hover:bg-slate-900 active:scale-[0.99] text-slate-300 font-bold rounded-xl transition-all"
-              >
-                Refresh Status
-              </button>
+            )}
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider block">
+                Admit Couple
+              </span>
+              <h2 className="text-sm font-bold text-stone-900 truncate">
+                {pass.coupleName}
+              </h2>
             </div>
-          )}
+          </div>
 
-          {submission.status === 'rejected' && (
-            <div className="space-y-6 py-6">
-              <div className="w-16 h-16 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto">
-                <XIcon className="w-8 h-8 text-rose-500" />
-              </div>
-              <h2 className="text-2xl font-bold text-slate-100">Verification Rejected</h2>
-              <p className="text-slate-300 text-sm leading-relaxed">
-                Your card request was rejected by the administrator.
-              </p>
-              <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl max-w-md mx-auto text-rose-400 text-sm">
-                <strong>Reason:</strong> {submission.rejectionReason || 'No reason provided.'}
-              </div>
-              <p className="text-xs text-slate-500">
-                Please register again or contact support to resolve the issue.
-              </p>
-              <a href="/" className="inline-block w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-sm transition-all shadow-md">
-                Try Again / Register New
-              </a>
+          {/* Event Details Box */}
+          <div className="w-full bg-stone-50/70 border border-stone-200/60 rounded-2xl p-3 text-left space-y-1.5 text-xs text-stone-700">
+            <div className="font-bold text-stone-900 text-xs leading-snug">
+              {pass.programName}
             </div>
-          )}
-
-          {submission.status === 'approved' && (
-            <div className="space-y-6 flex flex-col items-center">
-              <div className="text-center w-full">
-                <div className="w-12 h-12 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center mx-auto mb-2 text-xl">
-                  ✓
-                </div>
-                <h2 className="text-2xl font-bold text-slate-100 tracking-tight">Your Invitation Card is Approved!</h2>
-                <p className="text-slate-400 text-sm mt-1">Your payment was verified. Use the button below to download the invitation pass.</p>
-              </div>
-
-              {/* Prominent Registration Number Badge */}
-              <div className="bg-gradient-to-r from-amber-500/15 via-rose-500/15 to-amber-500/15 border border-amber-500/40 rounded-2xl p-4 my-1 text-center max-w-sm w-full space-y-0.5">
-                <span className="text-[11px] font-bold text-amber-300 uppercase tracking-widest block">
-                  રજીસ્ટ્રેશન નંબર (Registration Pass ID)
-                </span>
-                <span className="text-2xl sm:text-3xl font-extrabold text-amber-400 font-mono tracking-wider block select-all">
-                  {submission.inquiryId}
-                </span>
-              </div>
-
-              <div className="overflow-hidden rounded-2xl border border-slate-800 shadow-xl max-w-full my-2 relative" style={{ width: '300px', height: '533px' }}>
-                <canvas
-                  ref={setCanvasRef}
-                  style={{ width: '300px', height: '533px' }}
-                  className={useCanvasDirectly ? "mx-auto block bg-slate-950" : "hidden"}
-                />
-                {!useCanvasDirectly && (
-                  canvasDataUrl ? (
-                    <img
-                      src={canvasDataUrl}
-                      alt="Invitation Card"
-                      style={{ width: '300px', height: '533px' }}
-                      className="mx-auto block bg-slate-950"
-                    />
-                  ) : (
-                    <div style={{ width: '300px', height: '533px' }} className="animate-pulse bg-slate-950 flex items-center justify-center text-xs text-slate-500">
-                      Preparing pass card...
-                    </div>
-                  )
-                )}
-              </div>
-
-              {/* User Image Adjustment Sliders */}
-              <div className="w-full bg-slate-900/60 border border-slate-800 rounded-2xl p-4 my-2 space-y-4 max-w-sm">
-                <span className="block text-[10px] font-bold text-amber-500 uppercase tracking-wider text-left">Adjust Your Photo / ફોટો સરખો કરો</span>
-
-                <div className="space-y-3 text-left">
-                  <div>
-                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Zoom (મોટો/નાનો કરો)</label>
-                    <input
-                      type="range"
-                      min="0.5"
-                      max="2.0"
-                      step="0.05"
-                      value={userZoom}
-                      onChange={(e) => setUserZoom(Number(e.target.value))}
-                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Position (ઉપર/નીચે કરો)</label>
-                    <input
-                      type="range"
-                      min="-150"
-                      max="150"
-                      value={userOffsetY}
-                      onChange={(e) => setUserOffsetY(Number(e.target.value))}
-                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={downloadCard}
-                className="w-full py-4 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-bold rounded-2xl transition-all shadow-lg shadow-amber-500/20"
-              >
-                Download Pass
-              </button>
+            <div className="flex items-center gap-1.5 text-[11px] text-stone-600">
+              <CalendarIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
+              <span>{pass.programDate}</span>
+              <span className="text-stone-300">&bull;</span>
+              <ClockIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
+              <span>{pass.programTime}</span>
             </div>
-          )}
+            <div className="flex items-start gap-1.5 text-[11px] text-stone-600">
+              <MapPinIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0 mt-0.5" />
+              <span className="leading-tight">{pass.venue}</span>
+            </div>
+          </div>
+
+          {/* Large, Reliable Gate QR Code */}
+          <div className="bg-white p-3.5 rounded-2xl border-2 border-stone-900/10 shadow-sm flex flex-col items-center w-full">
+            {qrDataUrl ? (
+              <img
+                src={qrDataUrl}
+                alt="Entry QR Code"
+                className="w-56 h-56 sm:w-60 sm:h-60 object-contain mx-auto"
+              />
+            ) : (
+              <div className="w-56 h-56 bg-stone-100 flex items-center justify-center text-xs text-stone-400 mx-auto">
+                Generating QR...
+              </div>
+            )}
+            <span className="text-[10px] font-bold text-stone-500 mt-2 uppercase tracking-wider">
+              Scan at Gate Entrance
+            </span>
+          </div>
+
+          {/* Discreet Staff Manual Fallback Box */}
+          <div className="w-full bg-stone-100 border border-stone-200 rounded-xl p-2.5 text-center text-stone-600">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-stone-500 font-medium">Pass Security ID:</span>
+              <span className="font-mono font-bold text-stone-800">{pass.passId}</span>
+            </div>
+            <span className="text-[9px] text-stone-400 block mt-0.5 font-medium">
+              (For gate coordinator use only if camera scanner fails)
+            </span>
+          </div>
+
+          {/* Security Notice */}
+          <p className="text-[10px] text-stone-500 leading-tight text-center">
+            Please keep your screen brightness high when presenting this pass at the gate. Valid for admission of registered couple only.
+          </p>
         </div>
-      </main>
 
-      <footer className="py-6 px-8 border-t border-slate-800/80 bg-slate-950/20 text-center text-xs text-slate-500 space-y-2">
-        <div>&copy; {new Date().getFullYear()} Ek Duje Ke Liye &bull; Educational Seminars by Manish Vaghasiya. All rights reserved.</div>
-        <div className="flex flex-wrap items-center justify-center gap-3 text-[11px]">
-          <a href="/privacy-policy" className="text-slate-400 hover:text-amber-400 hover:underline">Privacy Policy</a>
-          <span>&bull;</span>
-          <a href="/terms" className="text-slate-400 hover:text-amber-400 hover:underline">Terms &amp; Conditions</a>
-          <span>&bull;</span>
-          <a href="/cancellation-refund-policy" className="text-slate-400 hover:text-amber-400 hover:underline">Refund Policy</a>
-          <span>&bull;</span>
-          <a href="/shipping-delivery-policy" className="text-slate-400 hover:text-amber-400 hover:underline">Delivery Policy</a>
-          <span>&bull;</span>
-          <a href="/contact" className="text-slate-400 hover:text-amber-400 hover:underline">Contact Us</a>
+        {/* Action Footer */}
+        <div className="bg-stone-50 p-4 border-t border-stone-200 flex flex-col gap-2 print:hidden">
+          <button
+            type="button"
+            onClick={handleDownloadInvitation}
+            className="w-full py-2.5 px-4 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+          >
+            <SparklesIcon className="w-4 h-4 text-rose-600" />
+            <span>Download Personalized Photo Invitation</span>
+            <DownloadIcon className="w-3.5 h-3.5 text-rose-500" />
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="w-full py-2.5 px-4 bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+          >
+            <PrinterIcon className="w-4 h-4 text-stone-600" />
+            <span>Print Entry Pass</span>
+          </button>
         </div>
-      </footer>
+
+      </div>
+
+      {/* Brand Watermark */}
+      <div className="mt-4 text-center text-xs text-stone-500 font-medium print:hidden">
+        &copy; {new Date().getFullYear()} Ek Duje Ke Liye &bull; All Rights Reserved
+      </div>
     </div>
   );
 }

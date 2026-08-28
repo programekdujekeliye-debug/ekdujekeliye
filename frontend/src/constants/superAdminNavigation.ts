@@ -14,6 +14,11 @@ export const SUPER_ADMIN_NAVIGATION: SuperAdminNavItem[] = [
     iconName: 'LayoutDashboardIcon'
   },
   {
+    id: 'scanner',
+    label: 'Gate Scanner',
+    iconName: 'CameraIcon'
+  },
+  {
     id: 'programs',
     label: 'Event Slots',
     iconName: 'TicketIcon'
@@ -22,6 +27,11 @@ export const SUPER_ADMIN_NAVIGATION: SuperAdminNavItem[] = [
     id: 'registrations',
     label: 'Registrations',
     iconName: 'UsersIcon'
+  },
+  {
+    id: 'vip_passes',
+    label: 'VIP Passes',
+    iconName: 'SparklesIcon'
   },
   {
     id: 'finance',

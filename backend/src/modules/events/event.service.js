@@ -49,55 +49,43 @@ export class EventService {
 
     if (!events || events.length === 0) return [];
 
-    // 1. Future dated events
+    // 1. Future dated events (sorted chronologically)
     const futureDatedEvents = events.filter(e => {
       if (!e.date || e.date === 'TBA' || e.date === 'TBD' || e.isDateFinal === false) return false;
-      if (e.status === 'completed') return false;
+      if (e.status === 'completed' || e.status === 'archived') return false;
       return e.date >= istDateStr;
     }).sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.sequenceNumber || 0) - (b.sequenceNumber || 0));
 
-    // RULE 1: Return maximum 2 upcoming events
-    if (futureDatedEvents.length > 0) {
-      const results = futureDatedEvents.slice(0, 2).map(prog => {
-        const capacity = prog.capacity || 1000;
-        const bookedSeats = prog.bookedSeats || 0;
-        const availableSeats = Math.max(0, capacity - bookedSeats);
-        const mapped = {
-          ...prog,
-          capacity,
-          bookedSeats,
-          availableSeats,
-          isHousefull: prog.status === 'housefull',
-          isClosed: prog.status === 'registration_closed' || prog.isInquiryClosed === true
-        };
-        if (prog.slug) slugCache.set(prog.slug.toLowerCase(), mapped);
-        if (prog.id) slugCache.set(prog.id.toLowerCase(), mapped);
-        return mapped;
-      });
-      return results;
-    }
-
-    // RULE 2: If future dated event count = 0, look for valid Date TBA / TBD event
-    const tbaEvent = events.find(e => {
+    // 2. Active Date TBA / TBD events
+    const tbdEvents = events.filter(e => {
+      if (e.status === 'completed' || e.status === 'archived') return false;
       return e.date === 'TBA' || e.date === 'TBD' || e.isDateFinal === false || !e.date || e.status === 'date_tba';
-    });
+    }).sort((a, b) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0));
 
-    if (tbaEvent) {
+    // Combine future dated events followed by upcoming TBD events
+    const combined = [...futureDatedEvents, ...tbdEvents];
+
+    if (combined.length === 0) return [];
+
+    return combined.map(prog => {
+      const isTbd = prog.date === 'TBA' || prog.date === 'TBD' || prog.isDateFinal === false || !prog.date;
+      const capacity = prog.capacity || 1000;
+      const bookedSeats = prog.bookedSeats || 0;
+      const availableSeats = isTbd ? capacity : Math.max(0, capacity - bookedSeats);
+
       const mapped = {
-        ...tbaEvent,
-        capacity: tbaEvent.capacity || 1000,
-        bookedSeats: tbaEvent.bookedSeats || 0,
-        availableSeats: tbaEvent.capacity || 1000,
-        isHousefull: false,
-        isClosed: false
+        ...prog,
+        capacity,
+        bookedSeats,
+        availableSeats,
+        isHousefull: prog.status === 'housefull',
+        isClosed: prog.status === 'registration_closed' || prog.isInquiryClosed === true
       };
-      if (tbaEvent.slug) slugCache.set(tbaEvent.slug.toLowerCase(), mapped);
-      if (tbaEvent.id) slugCache.set(tbaEvent.id.toLowerCase(), mapped);
-      return [mapped];
-    }
 
-    // RULE 3: 0 future events and 0 TBA events
-    return [];
+      if (prog.slug) slugCache.set(prog.slug.toLowerCase(), mapped);
+      if (prog.id) slugCache.set(prog.id.toLowerCase(), mapped);
+      return mapped;
+    });
   }
 
   /**

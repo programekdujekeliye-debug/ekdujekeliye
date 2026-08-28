@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { apiClient } from '../../../services/apiClient';
 import { useAdmin } from '../context/AdminContext';
-import { ShieldCheckIcon } from '../../../components/Icons';
+import { ShieldCheckIcon, AlertTriangleIcon } from '../../../components/Icons';
 
 export const AdminLogin = () => {
   const { setPassword, setIsAuthenticated, setRole, refreshPrograms } = useAdmin();
   const [inputPass, setInputPass] = useState('');
+  const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -33,59 +35,119 @@ export const AdminLogin = () => {
         refreshPrograms();
       }
     } catch (err: any) {
-      setError(err.message || 'Invalid password. Access denied.');
+      setError(err.message || 'Invalid administrator password. Access denied.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-rose-950 to-slate-900 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white/95 backdrop-blur-xl border border-white/20 p-8 rounded-3xl shadow-2xl space-y-6">
-        <div className="text-center space-y-2">
-          <div className="inline-flex p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 mb-2">
-            <ShieldCheckIcon className="w-8 h-8" />
-          </div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">EDKL EventOS</h1>
-          <p className="text-xs text-slate-500 font-medium">Event Management Command Center</p>
-        </div>
+    <div className="min-h-screen bg-[#FAF9F6] text-slate-900 flex flex-col justify-between items-center p-4 sm:p-6 relative overflow-hidden">
+      {/* Background Subtle Luxury Glows */}
+      <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[600px] h-[350px] bg-gradient-to-b from-rose-200/40 via-amber-100/30 to-transparent rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-[-10%] left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-gradient-to-t from-rose-100/30 via-transparent to-transparent rounded-full blur-2xl pointer-events-none" />
 
-        {error && (
-          <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-xs font-bold rounded-2xl">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Admin Access Password
-            </label>
-            <input
-              type="password"
-              required
-              value={inputPass}
-              onChange={(e) => setInputPass(e.target.value)}
-              placeholder="Enter administrator password..."
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-all font-mono"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-lg shadow-rose-600/20 cursor-pointer transition-all active:scale-[0.99]"
-          >
-            {loading ? 'Authenticating...' : 'Sign In to Command Center'}
-          </button>
-        </form>
-
-        <div className="text-center">
-          <span className="text-[10px] text-slate-400 font-medium">
-            Protected internal system &bull; Authorized personnel only
+      {/* Top Header Branding */}
+      <header className="w-full max-w-md pt-4 sm:pt-6 flex items-center justify-between z-10">
+        <Link href="/" className="flex items-center gap-2.5">
+          <img src="/logo.png" alt="Ek Duje Ke Liye Logo" className="h-8 sm:h-9 w-auto object-contain" />
+          <span className="font-extrabold text-slate-900 text-sm tracking-tight hidden sm:inline">
+            Ek Duje Ke Liye
           </span>
+        </Link>
+        <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 tracking-wider">
+          Management Portal
+        </span>
+      </header>
+
+      {/* Central Login Card */}
+      <main className="max-w-md w-full my-auto z-10 py-6">
+        <div className="bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-slate-900/5 space-y-6">
+          {/* Brand & Heading */}
+          <div className="text-center space-y-2">
+            <div className="inline-flex p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 shadow-xs mb-1">
+              <ShieldCheckIcon className="w-7 h-7" />
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              EDKL EventOS
+            </h1>
+            <p className="text-xs text-slate-500 font-medium">
+              Event Management &amp; Financial Command Center
+            </p>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-2xl flex items-center gap-2 animate-in fade-in">
+              <AlertTriangleIcon className="w-4 h-4 text-rose-600 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="block text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
+                  Admin Access Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowPass(!showPass)}
+                  className="text-[11px] font-bold text-rose-700 hover:text-rose-900 cursor-pointer"
+                >
+                  {showPass ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type={showPass ? 'text' : 'password'}
+                  required
+                  autoFocus
+                  value={inputPass}
+                  onChange={(e) => setInputPass(e.target.value)}
+                  placeholder="Enter administrator password..."
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 rounded-2xl text-slate-900 text-base font-mono outline-none transition-all"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || !inputPass.trim()}
+              className="w-full py-3.5 bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 hover:from-rose-700 hover:to-amber-700 disabled:opacity-50 text-white font-extrabold text-xs sm:text-sm rounded-2xl shadow-lg shadow-rose-600/20 cursor-pointer transition-all active:scale-[0.99] flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Authenticating Session...</span>
+                </>
+              ) : (
+                <span>Sign In to Command Center</span>
+              )}
+            </button>
+          </form>
+
+          {/* Security Subtext */}
+          <div className="pt-2 border-t border-slate-100 text-center space-y-2">
+            <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-semibold">
+              <ShieldCheckIcon className="w-3.5 h-3.5 text-slate-400" />
+              <span>Protected internal system &bull; Authorized personnel only</span>
+            </div>
+            <Link
+              href="/"
+              className="inline-block text-xs font-bold text-slate-500 hover:text-rose-700 transition-colors"
+            >
+              ← Return to Public Website
+            </Link>
+          </div>
         </div>
-      </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="w-full max-w-md pb-4 text-center text-[11px] text-slate-400 font-medium z-10">
+        &copy; {new Date().getFullYear()} Ek Duje Ke Liye &bull; Manish Vaghasiya
+      </footer>
     </div>
   );
 };

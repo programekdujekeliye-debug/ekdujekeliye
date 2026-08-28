@@ -1,0 +1,180 @@
+import { createRequire } from 'module';
+import path from 'path';
+import fs from 'fs';
+import { Registration } from '../models/Registration.js';
+import { Event } from '../models/Event.js';
+import { eventService } from '../modules/events/event.service.js';
+
+const require = createRequire(import.meta.url);
+const { Jimp } = require('jimp');
+
+/**
+ * Service to generate high-resolution, premium 1080x1350 personalized invitation cards
+ */
+export class InvitationCardService {
+  /**
+   * Generate an SVG/Jimp composed invitation card buffer
+   */
+  async generateCardBuffer(registration, event) {
+    const width = 1080;
+    const height = 1350;
+
+    const husband = registration.husbandName || '';
+    const wife = registration.wifeName || '';
+    const surname = registration.surname || '';
+    const coupleTitle = `${husband} & ${wife} ${surname}`.trim() || 'Respected Couple';
+
+    const eventName = event?.name || registration.programName || 'Ek Duje Ke Liye Seminar';
+    const eventDate = event?.date || registration.programDate || 'Upcoming Date';
+    const eventTime = event?.time || registration.programTime || '8:30 PM';
+    const venue = event?.venue || 'Sardar Smruti Bhavan, Surat';
+    const inquiryId = registration.inquiryId;
+
+    // Build rich SVG template
+    // Escape XML characters
+    const escapeXml = (unsafe = '') => String(unsafe).replace(/[<>&'"]/g, (c) => {
+      switch (c) {
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '&': return '&amp;';
+        case '\'': return '&apos;';
+        case '"': return '&quot;';
+        default: return c;
+      }
+    });
+
+    // Resolve couple photo base64 or remote URL
+    let couplePhotoDataUri = '';
+    const photoSrc = registration.couplePhoto || '/sample_couple.png';
+
+    try {
+      if (photoSrc.startsWith('http')) {
+        const photoRes = await fetch(photoSrc);
+        if (photoRes.ok) {
+          const arrBuf = await photoRes.arrayBuffer();
+          const base64 = Buffer.from(arrBuf).toString('base64');
+          const contentType = photoRes.headers.get('content-type') || 'image/jpeg';
+          couplePhotoDataUri = `data:${contentType};base64,${base64}`;
+        }
+      } else if (photoSrc.startsWith('/') || photoSrc.includes('\\')) {
+        const localPath = path.resolve(process.cwd(), '..', 'frontend', 'public', photoSrc.replace(/^\//, ''));
+        if (fs.existsSync(localPath)) {
+          const fileBuf = fs.readFileSync(localPath);
+          couplePhotoDataUri = `data:image/png;base64,${fileBuf.toString('base64')}`;
+        }
+      }
+    } catch (e) {
+      console.warn('[InvitationCardService] Could not load couple photo for card:', e.message);
+    }
+
+    const svgTemplate = `
+      <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#2a0813"/>
+            <stop offset="40%" stop-color="#4c0e1e"/>
+            <stop offset="100%" stop-color="#18040b"/>
+          </linearGradient>
+          <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#f6d365"/>
+            <stop offset="100%" stop-color="#fda085"/>
+          </linearGradient>
+          <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#ffffff"/>
+            <stop offset="100%" stop-color="#fdfbfb"/>
+          </linearGradient>
+          <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#000000" flood-opacity="0.5"/>
+          </filter>
+          <clipPath id="photoClip">
+            <rect x="290" y="240" width="500" height="420" rx="32"/>
+          </clipPath>
+        </defs>
+
+        <!-- Background -->
+        <rect width="${width}" height="${height}" fill="url(#bgGrad)"/>
+
+        <!-- Decorative Border -->
+        <rect x="36" y="36" width="${width - 72}" height="${height - 72}" rx="36" fill="none" stroke="url(#goldGrad)" stroke-width="3" opacity="0.6"/>
+        <rect x="48" y="48" width="${width - 96}" height="${height - 96}" rx="28" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+
+        <!-- Header -->
+        <text x="${width / 2}" y="120" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="bold" fill="#fcd34d" letter-spacing="6">
+          EK DUJE KE LIYE
+        </text>
+        <text x="${width / 2}" y="175" text-anchor="middle" font-family="'Georgia', serif" font-size="44" font-weight="bold" fill="#ffffff" letter-spacing="2">
+          You are Cordially Invited
+        </text>
+
+        <!-- Main Invitation Container -->
+        <rect x="80" y="210" width="${width - 160}" height="1020" rx="32" fill="url(#cardGrad)" filter="url(#shadow)"/>
+
+        <!-- Couple Photo Frame -->
+        ${couplePhotoDataUri ? `
+          <g clip-path="url(#photoClip)">
+            <image href="${couplePhotoDataUri}" x="290" y="240" width="500" height="420" preserveAspectRatio="xMidYMid slice"/>
+          </g>
+          <rect x="290" y="240" width="500" height="420" rx="32" fill="none" stroke="#e2e8f0" stroke-width="3"/>
+        ` : `
+          <rect x="290" y="240" width="500" height="420" rx="32" fill="#fff1f2" stroke="#fecdd3" stroke-width="3"/>
+          <text x="${width / 2}" y="460" text-anchor="middle" font-family="'Georgia', serif" font-size="32" font-weight="bold" fill="#e11d48">
+            Ek Duje Ke Liye
+          </text>
+        `}
+
+        <!-- Couple Name -->
+        <text x="${width / 2}" y="730" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="800" fill="#e11d48" letter-spacing="3">
+          HONORED GUESTS
+        </text>
+        <text x="${width / 2}" y="785" text-anchor="middle" font-family="'Georgia', serif" font-size="42" font-weight="bold" fill="#1e293b">
+          ${escapeXml(coupleTitle)}
+        </text>
+
+        <!-- Divider -->
+        <line x1="340" y1="820" x2="740" y2="820" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="8 6"/>
+
+        <!-- Invitation Body -->
+        <text x="${width / 2}" y="870" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="500" fill="#64748b">
+          We look forward to welcoming you to
+        </text>
+        <text x="${width / 2}" y="920" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="30" font-weight="bold" fill="#0f172a">
+          ${escapeXml(eventName)}
+        </text>
+
+        <!-- Schedule & Venue Details -->
+        <rect x="140" y="960" width="${width - 280}" height="150" rx="20" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+
+        <text x="${width / 2}" y="1010" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="22" font-weight="bold" fill="#be123c">
+          🗓️ ${escapeXml(eventDate)}  •  ⏰ ${escapeXml(eventTime)}
+        </text>
+        <text x="${width / 2}" y="1065" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="600" fill="#334155">
+          📍 ${escapeXml(venue)}
+        </text>
+
+        <!-- Footer Reference -->
+        <text x="${width / 2}" y="1175" text-anchor="middle" font-family="'Courier New', monospace" font-size="16" font-weight="bold" fill="#94a3b8" letter-spacing="2">
+          REGISTRATION ID: ${escapeXml(inquiryId)}
+        </text>
+        <text x="${width / 2}" y="1295" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#fcd34d" letter-spacing="4">
+          EK DUJE KE LIYE &bull; A SPECIAL PROGRAM FOR COUPLES
+        </text>
+      </svg>
+    `;
+
+    return Buffer.from(svgTemplate);
+  }
+
+  /**
+   * Ensure invitation card metadata is updated on Registration
+   */
+  async ensureInvitationCard(inquiryId) {
+    const reg = await Registration.findOne({ inquiryId: { $regex: new RegExp(`^${inquiryId}$`, 'i') } });
+    if (!reg) return null;
+
+    const event = await eventService.getEventBySlug(reg.programId);
+    const buffer = await this.generateCardBuffer(reg, event);
+    return { buffer, registration: reg, event };
+  }
+}
+
+export const invitationCardService = new InvitationCardService();

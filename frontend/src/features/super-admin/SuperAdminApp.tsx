@@ -5,8 +5,10 @@ import { AdminProvider, useAdmin } from '../admin/context/AdminContext';
 import { AdminLogin } from '../admin/auth/AdminLogin';
 import { AdminLayout } from '../../components/admin/layout/AdminLayout';
 import { SuperAdminDashboard } from './dashboard/SuperAdminDashboard';
+import { ScannerPage } from '../admin/scanner/ScannerPage';
 import { EventsPage } from '../admin/events/EventsPage';
 import { RegistrationsPage } from '../admin/registrations/RegistrationsPage';
+import { VipPassesPage } from '../admin/vip/VipPassesPage';
 import { FinancePage } from '../admin/finance/FinancePage';
 import { WhatsAppPage } from '../admin/whatsapp/WhatsAppPage';
 import { SettingsPage } from '../admin/settings/SettingsPage';
@@ -63,22 +65,22 @@ const SuperAdminAppContent = () => {
     const confirmText = prompt('Type DELETE to confirm complete database clear:');
     if (confirmText !== 'DELETE') {
       alert('Action cancelled.');
-      return;
-    }
-
-    try {
-      await settingsApi.clearAllData();
-      alert('All submissions data cleared successfully.');
-      window.location.reload();
-    } catch (err: any) {
-      alert(err.message || 'Failed to clear data.');
+    } else {
+      try {
+        await settingsApi.clearAllData();
+        alert('All submissions data cleared successfully.');
+        window.location.reload();
+      } catch (err: any) {
+        alert(err.message || 'Failed to clear data.');
+      }
     }
   };
 
   if (checkingAuth) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white text-xs font-bold">
-        Initializing Super Admin Command Center...
+      <div className="min-h-screen bg-[#FAF9F6] flex flex-col items-center justify-center gap-3 text-slate-800 text-xs font-bold">
+        <div className="w-8 h-8 border-3 border-purple-600 border-t-transparent rounded-full animate-spin" />
+        <span>Initializing Super Admin Command Center...</span>
       </div>
     );
   }
@@ -90,17 +92,19 @@ const SuperAdminAppContent = () => {
   // Strict Super Admin Access Guard
   if (role !== 'superadmin') {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-4">
-        <div className="p-4 bg-red-950/50 border border-red-800 text-red-400 rounded-3xl max-w-md space-y-3">
-          <span className="text-3xl">🚫</span>
-          <h2 className="text-lg font-bold text-white">Access Denied</h2>
-          <p className="text-xs text-red-300">
+      <div className="min-h-screen bg-[#FAF9F6] flex flex-col items-center justify-center p-6 text-center space-y-4">
+        <div className="p-6 bg-white border border-red-200 text-slate-800 rounded-3xl max-w-md shadow-xl space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto text-xl font-bold">
+            !
+          </div>
+          <h2 className="text-lg font-extrabold text-slate-900">Access Denied</h2>
+          <p className="text-xs text-slate-600 font-medium leading-relaxed">
             Super Administrator privileges are required to access this portal. Your active account is limited to operational event management.
           </p>
           <div className="pt-2">
             <a
               href="/admin"
-              className="inline-block px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md transition-all"
+              className="inline-block px-5 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold text-xs rounded-xl shadow-md transition-all"
             >
               Return to Event Operations (/admin)
             </a>
@@ -111,15 +115,13 @@ const SuperAdminAppContent = () => {
   }
 
   return (
-    <AdminLayout
-      isSuperAdmin={true}
-      onExportClick={() => setShowExportModal(true)}
-      onClearDataClick={handleClearAllData}
-    >
+    <AdminLayout isSuperAdmin={true}>
       {/* Super Admin Privileged Views */}
       {activeSection === 'dashboard' && <SuperAdminDashboard />}
+      {activeSection === 'scanner' && <ScannerPage />}
       {activeSection === 'programs' && <EventsPage />}
       {activeSection === 'registrations' && <RegistrationsPage />}
+      {activeSection === 'vip_passes' && <VipPassesPage />}
       {activeSection === 'finance' && <FinancePage />}
       {activeSection === 'storage' && <StoragePage />}
       {activeSection === 'whatsapp' && <WhatsAppPage />}

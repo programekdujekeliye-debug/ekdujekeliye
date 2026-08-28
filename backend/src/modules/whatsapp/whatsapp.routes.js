@@ -2,6 +2,9 @@ import { Router } from 'express';
 import {
   handleVerification,
   handleEvents,
+  getMetaTemplates,
+  sendTestMessage,
+  getWhatsappLogs,
   getTemplates,
   createTemplate,
   activateTemplate,
@@ -15,7 +18,12 @@ export const whatsappRouter = Router();
 whatsappRouter.get('/webhook', handleVerification);
 whatsappRouter.post('/webhook', handleEvents);
 
-// Template Management
+// Meta Approved Templates & Live Test Tool
+whatsappRouter.get('/meta-templates', requireAuth, getMetaTemplates);
+whatsappRouter.post('/send-test', requireAuth, sendTestMessage);
+whatsappRouter.get('/logs', requireAuth, getWhatsappLogs);
+
+// Template Management (Custom DB Templates)
 whatsappRouter.get('/templates', requireAuth, getTemplates);
 whatsappRouter.post('/templates', requireAuth, createTemplate);
 whatsappRouter.post('/templates/:id/use', requireAuth, activateTemplate);

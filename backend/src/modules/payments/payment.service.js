@@ -1,107 +1,134 @@
+import { razorpayService } from '../../integrations/razorpay/razorpay.service.js';
 import { Registration } from '../../models/Registration.js';
-import { Event } from '../../models/Event.js';
 import { Payment } from '../../models/Payment.js';
 import { WebhookEvent } from '../../models/WebhookEvent.js';
-import {
-  createRazorpayOrder,
-  verifyCheckoutSignature,
-  verifyWebhookSignature
-} from '../../integrations/razorpay/razorpay.service.js';
+import { eventService } from '../events/event.service.js';
+import { qrPassService } from '../passes/qrPass.service.js';
+import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
 
 export class PaymentService {
   /**
-   * Create Razorpay Order for an inquiry
+   * Create Razorpay Standard Checkout Order
    */
-  async createOrder({ inquiryId }) {
-    const submission = await Registration.findOne({ inquiryId, isDeleted: { $ne: true } });
-    if (!submission) {
-      const err = new Error('Registration inquiry not found.');
-      err.status = 404;
-      throw err;
-    }
-
-    const program = await Event.findOne({ id: submission.programId });
-    if (!program) {
-      const err = new Error('Program not found.');
-      err.status = 404;
-      throw err;
-    }
-
-    const price = program.price !== undefined ? Number(program.price) : 1500;
-
-    const order = await createRazorpayOrder({
-      inquiryId: submission.inquiryId,
-      amount: price,
-      currency: 'INR',
-      notes: {
-        husbandName: submission.husbandName,
-        wifeName: submission.wifeName,
-        phoneNumber: submission.phoneNumber,
-        programName: program.name
-      }
+  async createCheckoutOrder({ inquiryId, customerToken }) {
+    const submission = await Registration.findOne({
+      $or: [
+        { inquiryId: inquiryId?.trim() },
+        { customerToken: customerToken?.trim() }
+      ]
     });
 
-    submission.payment = {
-      provider: 'razorpay',
-      status: 'created',
-      amount: price,
-      currency: 'INR',
-      razorpayOrderId: order.id,
-      attempts: (submission.payment?.attempts || 0) + 1,
-      createdAt: new Date()
+    if (!submission) {
+      throw new Error('Registration record not found.');
+    }
+
+    if (submission.payment?.status === 'captured' || submission.status === 'approved') {
+      return {
+        alreadyPaid: true,
+        inquiryId: submission.inquiryId,
+        message: 'Registration is already paid and confirmed.'
+      };
+    }
+
+    const event = await eventService.getEventBySlug(submission.programId);
+    const amountInr = event?.price || submission.payment?.amount || 1500;
+
+    const receipt = `RCPT_${submission.inquiryId}_${Date.now()}`.substring(0, 40);
+    const notes = {
+      inquiryId: submission.inquiryId,
+      programId: submission.programId || '',
+      programName: (event?.name || submission.programName || 'Ek Duje Ke Liye').substring(0, 40)
     };
+
+    const order = await razorpayService.createOrder({
+      amountInr,
+      currency: 'INR',
+      receipt,
+      notes
+    });
+
+    submission.payment.razorpayOrderId = order.id;
+    submission.payment.amount = amountInr;
+    submission.payment.status = 'pending';
+    submission.payment.attempts = (submission.payment.attempts || 0) + 1;
     await submission.save();
 
     return {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
+      keyId: razorpayService.keyId,
       inquiryId: submission.inquiryId,
-      programName: program.name,
-      husbandName: submission.husbandName,
-      wifeName: submission.wifeName,
-      phoneNumber: submission.phoneNumber
+      coupleName: `${submission.husbandName || ''} & ${submission.wifeName || ''}`.trim(),
+      phoneNumber: submission.phoneNumber,
+      programName: event?.name || submission.programName
     };
   }
 
   /**
-   * Verify Checkout Signature
+   * Create Razorpay Order (Alias for createCheckoutOrder)
    */
-  async verifyPayment({ inquiryId, razorpay_order_id, razorpay_payment_id, razorpay_signature }) {
-    const isValid = verifyCheckoutSignature({
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature
+  async createOrder({ inquiryId, customerToken }) {
+    return this.createCheckoutOrder({ inquiryId, customerToken });
+  }
+
+  /**
+   * Verify Payment (Alias for verifyPaymentSignature)
+   */
+  async verifyPayment(params) {
+    return this.verifyPaymentSignature(params);
+  }
+
+  /**
+   * Verify and Authorize Payment from Frontend Signature
+   */
+  async verifyPaymentSignature({
+    razorpayOrderId,
+    razorpayPaymentId,
+    razorpaySignature,
+    razorpay_order_id,
+    razorpay_payment_id,
+    razorpay_signature,
+    inquiryId
+  }) {
+    const orderId = razorpayOrderId || razorpay_order_id;
+    const paymentId = razorpayPaymentId || razorpay_payment_id;
+    const signature = razorpaySignature || razorpay_signature;
+
+    const isValid = razorpayService.verifyPaymentSignature({
+      orderId,
+      paymentId,
+      signature
     });
 
     if (!isValid) {
-      const err = new Error('Payment signature verification failed.');
-      err.status = 400;
-      throw err;
+      throw new Error('Invalid Razorpay cryptographic payment signature.');
     }
 
-    const submission = await Registration.findOne({ inquiryId });
+    const query = orderId
+      ? { $or: [{ 'payment.razorpayOrderId': orderId }, { inquiryId: inquiryId?.trim() }] }
+      : { inquiryId: inquiryId?.trim() };
+
+    const submission = await Registration.findOne(query);
+
     if (!submission) {
-      const err = new Error('Registration not found.');
-      err.status = 404;
-      throw err;
+      throw new Error(`Registration not found for order ${orderId || inquiryId}`);
     }
 
     submission.status = 'approved';
     submission.payment.status = 'captured';
-    submission.payment.razorpayPaymentId = razorpay_payment_id;
-    submission.payment.razorpayOrderId = razorpay_order_id;
-    submission.payment.razorpaySignature = razorpay_signature;
+    submission.payment.razorpayPaymentId = razorpayPaymentId;
+    submission.payment.razorpaySignature = razorpaySignature;
     submission.payment.paidAt = new Date();
     await submission.save();
 
-    // Create payment ledger entry
+    // Record verified transaction in ledger
     try {
       await Payment.findOneAndUpdate(
-        { paymentId: razorpay_payment_id },
+        { paymentId: razorpayPaymentId },
         {
-          paymentId: razorpay_payment_id,
-          orderId: razorpay_order_id,
+          paymentId: razorpayPaymentId,
+          orderId: razorpayOrderId,
           inquiryId: submission.inquiryId,
           eventId: submission.programId,
           amount: submission.payment.amount || 1500,
@@ -113,6 +140,41 @@ export class PaymentService {
         { upsert: true }
       );
     } catch (e) {}
+
+    // 1. Authoritative Ensure Digital Pass with Asymmetric Ed25519 Signatures
+    try {
+      const event = await eventService.getEventBySlug(submission.programId);
+      const pass = await qrPassService.ensurePass(submission, event);
+
+      const customerName = `${submission.husbandName || ''} & ${submission.wifeName || ''}`.trim() || 'Guest';
+      const eventName = event?.name || submission.programName || 'Ek Duje Ke Liye Seminar';
+      const eventDate = event?.date || submission.programDate || '';
+      const eventTime = event?.time || submission.programTime || '8:30 PM';
+      const venue = event?.venue || 'Sardar Smruti Bhavan, Surat';
+
+      // Dispatch M3: Payment Confirmation & Digital Pass
+      await sendUtilityTemplate({
+        recipientPhone: submission.phoneNumber,
+        templateKey: 'edkl_payment_confirmed_pass_v1',
+        languageCode: 'en_US',
+        variables: {
+          customerName,
+          eventName,
+          eventDate,
+          eventTime,
+          venue,
+          registrationId: submission.inquiryId,
+          inquiryId: submission.inquiryId
+        },
+        idempotencyKey: `PAYMENT_CONFIRMED:${submission._id}:${razorpayPaymentId}`,
+        registrationId: submission._id,
+        eventId: submission.programId,
+        inquiryId: submission.inquiryId,
+        trigger: 'payment_verified'
+      });
+    } catch (err) {
+      console.error('[PaymentService] Error ensuring pass/whatsapp on verify:', err);
+    }
 
     return submission;
   }
@@ -166,6 +228,62 @@ export class PaymentService {
           { upsert: true }
         );
       } catch (e) {}
+
+      // Authoritative Captured Finalization: Ensure Pass & Queue WhatsApp Confirmation
+      try {
+        const event = await eventService.getEventBySlug(submission.programId);
+        const pass = await qrPassService.ensurePass(submission, event);
+
+        const customerName = `${submission.husbandName || ''} & ${submission.wifeName || ''}`.trim() || 'Guest';
+        const eventName = event?.name || submission.programName || 'Ek Duje Ke Liye Seminar';
+        const eventDate = event?.date || submission.programDate || '';
+        const eventTime = event?.time || submission.programTime || '8:30 PM';
+        const venue = event?.venue || 'Sardar Smruti Bhavan, Surat';
+
+        // Dispatch M3: Payment Confirmation
+        await sendUtilityTemplate({
+          recipientPhone: submission.phoneNumber,
+          templateKey: 'edkl_payment_confirmed_pass_v1',
+          languageCode: 'en_US',
+          variables: {
+            customerName,
+            eventName,
+            eventDate,
+            eventTime,
+            venue,
+            registrationId: submission.inquiryId,
+            inquiryId: submission.inquiryId
+          },
+          idempotencyKey: `PAYMENT_CONFIRMED:${submission._id}:${paymentId}`,
+          registrationId: submission._id,
+          eventId: submission.programId,
+          inquiryId: submission.inquiryId,
+          trigger: 'payment_webhook_captured'
+        });
+
+        // Dispatch M4: Digital Pass Ready
+        await sendUtilityTemplate({
+          recipientPhone: submission.phoneNumber,
+          templateKey: 'edkl_event_reminder_v1',
+          languageCode: 'en_US',
+          variables: {
+            customerName,
+            eventName,
+            eventDate,
+            eventTime,
+            venue,
+            registrationId: submission.inquiryId,
+            inquiryId: submission.inquiryId
+          },
+          idempotencyKey: `PASS_READY:${pass.passId}:v${pass.version || 1}`,
+          registrationId: submission._id,
+          eventId: submission.programId,
+          inquiryId: submission.inquiryId,
+          trigger: 'pass_issued'
+        });
+      } catch (err) {
+        console.error('[PaymentService] Error ensuring pass/whatsapp on webhook:', err);
+      }
     }
 
     return { status: 'captured', inquiryId: submission?.inquiryId };

@@ -4,6 +4,8 @@ import { Registration } from '../../models/Registration.js';
 import { Event } from '../../models/Event.js';
 import { Counter, getNextSequence } from '../../models/Counter.js';
 import { storageService } from '../../services/storage.service.js';
+import { qrPassService } from '../passes/qrPass.service.js';
+import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
 
 export const submitRegistration = async (req, res) => {
   const { husbandName, wifeName, surname, phoneNumber, programId } = req.body;
@@ -221,6 +223,7 @@ export const manualInviteeRegistration = async (req, res) => {
       wifeName,
       surname,
       phoneNumber,
+      isVip: true,
       programId: program.id,
       programName: program.name,
       programDate: program.date,
@@ -237,6 +240,36 @@ export const manualInviteeRegistration = async (req, res) => {
     });
 
     await sub.save();
+
+    // Authoritative Cryptographic Pass Generation for VIP Guest
+    try {
+      await qrPassService.ensurePass(sub, program);
+
+      // Dispatch WhatsApp VIP Pass Notification
+      const customerName = `${husbandName} & ${wifeName}`.trim();
+      await sendUtilityTemplate({
+        recipientPhone: phoneNumber,
+        templateKey: 'edkl_payment_confirmed_pass_v1',
+        languageCode: 'en_US',
+        variables: {
+          customerName,
+          eventName: program.name || 'Ek Duje Ke Liye Seminar',
+          eventDate: program.date || 'TBD',
+          eventTime: program.time || '8:30 PM',
+          venue: program.venue || 'Sardar Smruti Bhavan, Surat',
+          registrationId: inquiryId,
+          inquiryId
+        },
+        idempotencyKey: `VIP_PASS:${sub._id}:${inquiryId}`,
+        registrationId: sub._id,
+        eventId: program.id,
+        inquiryId,
+        trigger: 'payment_verified'
+      });
+    } catch (passErr) {
+      console.warn('[ManualInvitee] Pass or WhatsApp dispatch notice:', passErr.message);
+    }
+
     res.json({ success: true, data: sub });
   } catch (err) {
     res.status(500).json({ error: 'Error creating manual invitee.' });
@@ -244,11 +277,22 @@ export const manualInviteeRegistration = async (req, res) => {
 };
 
 export const getSubmissionsList = async (req, res) => {
-  const { programId, status, attendance, paymentStatus, search, sortBy = 'createdAt', sortOrder = 'desc', page = 1, limit = 50 } = req.query;
+  const { programId, status, attendance, paymentStatus, isVip, search, sortBy = 'createdAt', sortOrder = 'desc', page = 1, limit = 50 } = req.query;
   const safeLimit = Math.min(Math.max(1, Number(limit) || 50), 200);
   const safePage = Math.max(1, Number(page) || 1);
 
   const query = { isDeleted: { $ne: true } };
+
+  if (isVip === 'true') {
+    query.$or = [
+      { isVip: true },
+      { inquiryId: { $regex: '^IP-', $options: 'i' } },
+      { 'payment.provider': 'manual_invite' }
+    ];
+  } else if (isVip === 'false') {
+    query.isVip = { $ne: true };
+    query.inquiryId = { $not: /^IP-/i };
+  }
 
   if (programId && programId !== 'all') query.programId = programId;
   if (status && status !== 'all') query.status = status;

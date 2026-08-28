@@ -37,6 +37,8 @@ export interface Submission {
   updatedAt?: string;
 }
 
+export type Registration = Submission;
+
 export interface DuplicateGroup {
   id: string;
   type: 'phone' | 'name' | 'both';

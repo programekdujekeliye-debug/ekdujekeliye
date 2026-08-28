@@ -1,1 +1,1 @@
-export { default, metadata } from '../shipping-delivery-policy/page';
+export { default } from '../shipping-delivery-policy/page';

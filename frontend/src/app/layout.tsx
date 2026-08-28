@@ -1,6 +1,15 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Cinzel, Noto_Sans_Gujarati } from "next/font/google";
 import "./globals.css";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  themeColor: "#FAF9F6",
+  colorScheme: "light"
+};
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   variable: "--font-sans",
@@ -24,14 +33,17 @@ const notoSansGujarati = Noto_Sans_Gujarati({
 });
 
 export const metadata: Metadata = {
-  title: "Ek Duje Ke Liye | Educational Relationship & Couple Seminars",
-  description: "Official registration and pass portal for Ek Duje Ke Liye — an educational relationship, couple communication, and life skills seminar initiative led by Manish Vaghasiya.",
-  keywords: ["Ek Duje Ke Liye", "Educational Seminar", "Couple Communication Workshop", "Relationship Education", "Life Skills Training", "Manish Vaghasiya"],
+  title: "Ek Duje Ke Liye | A Special Program for Couples",
+  description: "Official registration and digital pass portal for Ek Duje Ke Liye — a special interactive program created for couples led by Manish Vaghasiya.",
+  keywords: ["Ek Duje Ke Liye", "Couple Seminar", "Couple Program", "Relationship Event", "Couple Experience", "Manish Vaghasiya"],
   openGraph: {
-    title: "Ek Duje Ke Liye | Educational Relationship & Couple Seminars",
-    description: "Educational relationship, couple communication, and life-skills seminars led by Manish Vaghasiya.",
+    title: "Ek Duje Ke Liye | A Special Program for Couples",
+    description: "A special interactive experience created for married couples led by Manish Vaghasiya.",
     type: "website",
     locale: "gu_IN",
+  },
+  other: {
+    "color-scheme": "light"
   }
 };
 
@@ -43,9 +55,10 @@ export default function RootLayout({
   return (
     <html
       lang="gu"
-      className={`${plusJakartaSans.variable} ${cinzel.variable} ${notoSansGujarati.variable} h-full antialiased`}
+      style={{ colorScheme: 'light' }}
+      className={`${plusJakartaSans.variable} ${cinzel.variable} ${notoSansGujarati.variable} h-full antialiased light`}
     >
-      <body className="min-h-full flex flex-col font-sans bg-[#FAF9F6] text-stone-900 selection:bg-rose-500/20 selection:text-rose-900">
+      <body className="min-h-full flex flex-col font-sans bg-[#FAF9F6] text-stone-900 selection:bg-rose-500/20 selection:text-rose-900" style={{ colorScheme: 'light' }}>
         {children}
       </body>
     </html>

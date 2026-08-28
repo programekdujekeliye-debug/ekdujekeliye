@@ -14,7 +14,8 @@ import {
   MessageCircleIcon,
   ActivityIcon,
   ArchiveIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  SparklesIcon
 } from '../../Icons';
 
 interface AdminSidebarProps {
@@ -27,6 +28,7 @@ const iconMap: Record<string, React.FC<{ className?: string }>> = {
   LayoutDashboardIcon,
   TicketIcon,
   UsersIcon,
+  SparklesIcon,
   DollarSignIcon,
   MessageCircleIcon,
   SettingsIcon,
@@ -84,7 +86,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               className="md:hidden p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center cursor-pointer"
               aria-label="Close Navigation Drawer"
             >
-              <span className="text-base font-bold">✕</span>
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
             </button>
           </div>
 

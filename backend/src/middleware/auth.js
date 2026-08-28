@@ -54,7 +54,7 @@ export const requireArchiveWorkerAuth = (req, res, next) => {
 
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 
-  if (token && (token === env.ARCHIVE_WORKER_SECRET || token === env.SUPER_ADMIN_PASSWORD)) {
+  if (token && ((env.ARCHIVE_WORKER_SECRET && token === env.ARCHIVE_WORKER_SECRET) || token === env.SUPER_ADMIN_PASSWORD)) {
     req.worker = { type: 'ARCHIVE_WORKER', authenticated: true };
     return next();
   }
@@ -71,7 +71,7 @@ export const requireBackupWorkerAuth = (req, res, next) => {
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 
   // Strictly dedicated to BACKUP_WORKER_SECRET (or Super Admin manual trigger)
-  if (token && (token === env.BACKUP_WORKER_SECRET || token === env.SUPER_ADMIN_PASSWORD)) {
+  if (token && ((env.BACKUP_WORKER_SECRET && token === env.BACKUP_WORKER_SECRET) || token === env.SUPER_ADMIN_PASSWORD)) {
     req.worker = { type: 'BACKUP_WORKER', authenticated: true };
     return next();
   }
@@ -81,7 +81,10 @@ export const requireBackupWorkerAuth = (req, res, next) => {
 
 export const requireCronAuth = (req, res, next) => {
   const secret = req.headers['x-cron-secret'] || req.query.secret;
-  if (!env.CRON_SECRET || secret === env.CRON_SECRET) {
+  if (!env.CRON_SECRET) {
+    return res.status(503).json({ error: 'Cron secret is not configured.' });
+  }
+  if (secret === env.CRON_SECRET) {
     return next();
   }
   return res.status(403).json({ error: 'Forbidden: Invalid cron secret.' });

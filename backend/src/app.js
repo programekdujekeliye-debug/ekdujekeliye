@@ -17,6 +17,10 @@ import { adminRouter } from './modules/admin/admin.routes.js';
 import { archiveRouter } from './modules/archive/archive.routes.js';
 import { backupRouter } from './modules/backup/backup.routes.js';
 import { mediaRouter } from './modules/media/media.routes.js';
+import { passRouter } from './modules/passes/pass.routes.js';
+import { scannerRouter } from './modules/scanner/scanner.routes.js';
+import { invitationRouter } from './modules/invitations/invitation.routes.js';
+import { feedbackRouter } from './modules/feedback/feedback.routes.js';
 
 // Controller direct mappings for total legacy URL compatibility
 import { getPublicEvents, getEventBySlug } from './modules/events/event.controller.js';
@@ -82,16 +86,21 @@ app.get('/api/config/public', async (req, res) => {
     const setting = await Setting.findOne({ key: 'global' }).lean();
     res.json({
       brandName: setting?.brandName || 'Ek Duje Ke Liye',
-      businessCategory: setting?.businessCategory || 'Education & Training',
-      businessDescription: setting?.businessDescription || 'Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops',
+      businessCategory: setting?.businessCategory || 'Events & Programs',
+      businessDescription: setting?.businessDescription || 'Ek Duje Ke Liye - A Special Program for Couples',
       supportPhone: setting?.supportPhone || '+91 82003 02328',
       supportWhatsapp: setting?.supportWhatsapp || '+91 82003 02328',
       supportEmail: setting?.supportEmail || 'privacy.ekdujekeliye@gmail.com',
       websiteEmail: setting?.websiteEmail || '',
-      instagramUrl: setting?.instagramUrl || '',
-      facebookUrl: setting?.facebookUrl || '',
+      instagramUrl: setting?.instagramUrl || 'https://www.instagram.com/ekdujekeliye',
+      facebookUrl: setting?.facebookUrl || 'https://www.facebook.com/ekdujekeliye',
       youtubeUrl: setting?.youtubeUrl || '',
-      linktreeUrl: setting?.linktreeUrl || '',
+      linktreeUrl: setting?.linktreeUrl || 'https://linktr.ee/ekdujekeliye',
+      manishYoutubeUrl: setting?.manishYoutubeUrl || 'https://www.youtube.com/@manishvaghasiya',
+      manishInstagramUrl: setting?.manishInstagramUrl || 'https://www.instagram.com/manishvaghasiya_',
+      manishFacebookUrl: setting?.manishFacebookUrl || 'https://www.facebook.com/manishvaghasiya',
+      manishLinkedinUrl: setting?.manishLinkedinUrl || 'https://www.linkedin.com/in/manishvaghasiya',
+      manishTwitterUrl: setting?.manishTwitterUrl || 'https://twitter.com/manishvaghasiya',
       defaultCity: setting?.defaultCity || 'Surat',
       defaultCountry: setting?.defaultCountry || 'India',
       defaultCurrency: setting?.defaultCurrency || 'INR',
@@ -106,8 +115,8 @@ app.get('/api/config/public', async (req, res) => {
   } catch (err) {
     res.json({
       brandName: 'Ek Duje Ke Liye',
-      businessCategory: 'Education & Training',
-      businessDescription: 'Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops',
+      businessCategory: 'Events & Programs',
+      businessDescription: 'Ek Duje Ke Liye - A Special Program for Couples',
       supportPhone: '+91 82003 02328',
       supportWhatsapp: '+91 82003 02328',
       supportEmail: 'privacy.ekdujekeliye@gmail.com',
@@ -150,12 +159,15 @@ app.post('/api/submit', upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), s
 app.get('/api/submissions/status/:inquiryId', getRegistrationStatus);
 app.use('/api/submissions', registrationRouter);
 
-// 3. Payments
+// 3. Payments & Passes
 app.post('/api/payments/create-order', createOrder);
 app.post('/api/payments/verify', verifyPayment);
 app.get('/api/payments/status/:inquiryId', getPaymentStatus);
 app.post('/api/webhooks/razorpay', handleRazorpayWebhook);
 app.use('/api/payments', paymentRouter);
+app.use('/api/passes', passRouter);
+app.use('/api/invitations', invitationRouter);
+app.use('/api/feedback', feedbackRouter);
 
 // 4. WhatsApp
 app.get('/api/webhooks/whatsapp', handleVerification);
@@ -166,13 +178,26 @@ app.post('/api/whatsapp-templates', requireAuth, createTemplate);
 app.post('/api/whatsapp-templates/:id/use', requireAuth, activateTemplate);
 app.use('/api/whatsapp', whatsappRouter);
 
-// 5. Admin, Settings & System Resource Guardrails Monitor
+// 5. System Environment Diagnostic & Settings
+app.get('/api/system/environment', (req, res) => {
+  res.json({
+    appEnv: env.APP_ENV,
+    databaseEnvironment: env.DATABASE_ENV,
+    databaseName: env.DATABASE_NAME,
+    razorpayMode: env.RAZORPAY_MODE.toUpperCase(),
+    whatsappMode: env.WHATSAPP_MODE.toUpperCase(),
+    cloudinaryEnvironment: env.CLOUDINARY_ENV.toUpperCase(),
+    driveEnvironment: env.DRIVE_ENV.toUpperCase()
+  });
+});
 app.get('/api/admin/system/resources', requireSuperAuth, getSystemResources);
 app.get('/api/settings', getSettings);
 app.post('/api/settings', requireSuperAuth, updateSettings);
 app.get('/api/db-status', requireSuperAuth, getDbStatus);
 app.get('/api/notifications', requireAuth, getNotifications);
 app.post('/api/notifications/dismiss', requireAuth, dismissNotification);
+app.use('/api/admin/scanner', scannerRouter);
+app.use('/api/scanner', scannerRouter);
 app.use('/api/admin', adminRouter);
 
 // 6. Super Admin & Worker Protected Storage, Archive & Backup Routes

@@ -6,6 +6,8 @@ import { Submission } from '../../../types';
 import { API_BASE_URL } from '../../../config';
 import { DuplicateSubmissionsView } from './DuplicateSubmissionsView';
 import { TrashSubmissionsView } from './TrashSubmissionsView';
+import { BatchExportModal } from '../reports/BatchExportModal';
+import { LuxurySelect } from '../../../components/LuxurySelect';
 import {
   SearchIcon,
   CheckCircleIcon,
@@ -14,7 +16,8 @@ import {
   PhoneIcon,
   AlertTriangleIcon,
   WhatsappIcon,
-  CreditCardIcon
+  CreditCardIcon,
+  DownloadIcon
 } from '../../../components/Icons';
 
 export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean }) => {
@@ -23,6 +26,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
   const [viewMode, setViewMode] = useState<'all' | 'duplicates' | 'trash'>('all');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
@@ -261,83 +265,93 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
         <TrashSubmissionsView />
       ) : (
         <div className="space-y-4">
-          {/* Filter & Search Bar */}
-          <div className="bg-white border border-slate-200 shadow-xs rounded-2xl p-4 md:p-5 space-y-4">
-            <div className="relative flex items-center bg-slate-50 border border-slate-300 focus-within:bg-white focus-within:border-rose-500 rounded-xl px-4 py-2.5 transition-all">
-              <SearchIcon className="w-4 h-4 text-slate-500 flex-shrink-0 mr-3" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by token ID (e.g. EK06-01), name, surname, or phone..."
-                className="w-full bg-transparent border-none text-slate-900 placeholder-slate-400 focus:outline-none text-xs sm:text-sm font-medium"
-              />
-              {searchQuery && (
+          {/* Filter & Search Bar with Direct Export Actions */}
+          <div className="bg-white border border-slate-200 shadow-xs rounded-2xl p-3 sm:p-4 md:p-5 space-y-4 w-full min-w-0">
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between w-full min-w-0">
+              <div className="relative flex-1 flex items-center bg-slate-50 border border-slate-300 focus-within:bg-white focus-within:border-rose-500 rounded-xl px-3 sm:px-4 py-2.5 transition-all min-w-0">
+                <SearchIcon className="w-4 h-4 text-slate-500 flex-shrink-0 mr-2 sm:mr-3" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by token ID, name, or phone..."
+                  className="w-full min-w-0 bg-transparent border-none text-slate-900 placeholder-slate-400 focus:outline-none text-xs sm:text-sm font-medium"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="text-xs text-slate-400 hover:text-slate-600 font-bold ml-2 p-1 cursor-pointer shrink-0"
+                    aria-label="Clear search"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* Unified Export Center Button for Registrations */}
+              <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
                 <button
-                  onClick={() => setSearchQuery('')}
-                  className="text-xs text-slate-400 hover:text-slate-600 font-bold ml-2 cursor-pointer"
+                  onClick={() => setShowExportModal(true)}
+                  className="w-full sm:w-auto px-4 py-2.5 bg-rose-700 hover:bg-rose-800 text-white font-extrabold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all whitespace-nowrap active:scale-95"
+                  title="Open Custom Dynamic Export Center"
                 >
-                  ✕
+                  <DownloadIcon className="w-4 h-4 flex-shrink-0" />
+                  <span>Export Center</span>
                 </button>
-              )}
+              </div>
             </div>
 
-            {/* Filter Dropdowns */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 flex flex-col gap-1">
-                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Registration Status</label>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
-                >
-                  <option value="all">All Registrations</option>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-              </div>
+            {/* Filter Dropdowns with LuxurySelect */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+              <LuxurySelect
+                label="Registration Status"
+                value={statusFilter}
+                onChange={(val) => setStatusFilter(val)}
+                options={[
+                  { value: 'all', label: 'All Registrations' },
+                  { value: 'pending', label: 'Pending', badge: 'Review' },
+                  { value: 'approved', label: 'Approved', badge: 'Verified' },
+                  { value: 'rejected', label: 'Rejected' }
+                ]}
+              />
 
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 flex flex-col gap-1">
-                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Payment Status</label>
-                <select
-                  value={paymentFilter}
-                  onChange={(e) => setPaymentFilter(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
-                >
-                  <option value="all">All Payments</option>
-                  <option value="paid">✓ Paid (Captured)</option>
-                  <option value="pending">⏳ Pending Payment</option>
-                  <option value="failed">✕ Failed</option>
-                </select>
-              </div>
+              <LuxurySelect
+                label="Payment Status"
+                value={paymentFilter}
+                onChange={(val) => setPaymentFilter(val)}
+                options={[
+                  { value: 'all', label: 'All Payments' },
+                  { value: 'paid', label: 'Paid (Captured)', badge: 'PAID' },
+                  { value: 'pending', label: 'Pending Payment', badge: 'DUE' },
+                  { value: 'failed', label: 'Failed / Cancelled' }
+                ]}
+              />
 
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 flex flex-col gap-1">
-                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Attendance</label>
-                <select
-                  value={attendanceFilter}
-                  onChange={(e) => setAttendanceFilter(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
-                >
-                  <option value="all">All Attendance</option>
-                  <option value="present">Present Only</option>
-                  <option value="absent">Absent Only</option>
-                  <option value="unmarked">Unmarked Only</option>
-                </select>
-              </div>
+              <LuxurySelect
+                label="Gate Attendance"
+                value={attendanceFilter}
+                onChange={(val) => setAttendanceFilter(val)}
+                options={[
+                  { value: 'all', label: 'All Attendance' },
+                  { value: 'present', label: 'Present Only', badge: 'ENTERED' },
+                  { value: 'absent', label: 'Absent Only' },
+                  { value: 'unmarked', label: 'Unmarked Only' }
+                ]}
+              />
 
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 flex flex-col gap-1">
-                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Page Size</label>
-                <select
-                  value={pageSize}
-                  onChange={(e) => setPageSize(Number(e.target.value))}
-                  className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
-                >
-                  <option value="25">25 per page</option>
-                  <option value="50">50 per page</option>
-                  <option value="100">100 per page</option>
-                </select>
-              </div>
+              <LuxurySelect
+                label="Page Size"
+                value={pageSize}
+                onChange={(val) => setPageSize(Number(val))}
+                options={[
+                  { value: '25', label: '25 per page' },
+                  { value: '50', label: '50 per page' },
+                  { value: '100', label: '100 per page' }
+                ]}
+              />
             </div>
           </div>
 
@@ -348,18 +362,18 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                 <span>{selectedIds.length} registration(s) selected</span>
               </div>
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                <select
-                  value={targetProgramId}
-                  onChange={(e) => setTargetProgramId(e.target.value)}
-                  className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 flex-1 sm:flex-none min-w-0"
-                >
-                  <option value="">-- Target Program Slot --</option>
-                  {programs.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.date})
-                    </option>
-                  ))}
-                </select>
+                <div className="w-full sm:w-64 min-w-0">
+                  <LuxurySelect
+                    value={targetProgramId}
+                    onChange={(val) => setTargetProgramId(val)}
+                    placeholder="-- Target Program Slot --"
+                    options={programs.map((p) => ({
+                      value: p.id,
+                      label: p.name,
+                      sublabel: p.date
+                    }))}
+                  />
+                </div>
                 <button
                   onClick={handleBulkMove}
                   className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer whitespace-nowrap min-h-[38px]"
@@ -643,7 +657,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
             </div>
 
             {/* Mobile & Tablet Card View (< lg screens) */}
-            <div className="lg:hidden p-3 sm:p-4 space-y-3">
+            <div className="lg:hidden p-3 sm:p-4 space-y-3.5">
               {loading && submissions.length === 0 ? (
                 <div className="text-center py-12 text-slate-400 font-medium text-xs">
                   Loading registrations...
@@ -661,18 +675,29 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                   const isPaid = sub.payment?.status === 'captured' || sub.status === 'approved';
                   const isPaymentFailed = sub.payment?.status === 'failed';
                   const cleanDigits = getCleanDigits(sub.phoneNumber);
-                  const isOldEvent = sub.programDate?.startsWith('2026-08') || sub.inquiryId?.startsWith('EK05') || sub.inquiryId?.startsWith('IP') || sub.inquiryId?.startsWith('EK01') || sub.inquiryId?.startsWith('EK02') || sub.inquiryId?.startsWith('EK03') || sub.inquiryId?.startsWith('EK04');
-                  const displayAmount = sub.payment?.amount !== undefined ? sub.payment.amount : (isOldEvent ? 1000 : 1500);
+                  const isOldEvent =
+                    sub.programDate?.startsWith('2026-08') ||
+                    sub.inquiryId?.startsWith('EK05') ||
+                    sub.inquiryId?.startsWith('IP') ||
+                    sub.inquiryId?.startsWith('EK01') ||
+                    sub.inquiryId?.startsWith('EK02') ||
+                    sub.inquiryId?.startsWith('EK03') ||
+                    sub.inquiryId?.startsWith('EK04');
+                  const displayAmount =
+                    sub.payment?.amount !== undefined ? sub.payment.amount : isOldEvent ? 1000 : 1500;
+                  const isVip = sub.inquiryId?.startsWith('IP');
 
                   return (
                     <div
                       key={sub.inquiryId}
-                      className={`p-3.5 sm:p-4 bg-white border rounded-2xl transition-all space-y-3 ${
-                        isSelected ? 'border-rose-400 bg-rose-50/30 ring-1 ring-rose-400' : 'border-slate-200 shadow-xs'
+                      className={`p-3.5 sm:p-4 bg-white border rounded-2xl transition-all space-y-3.5 ${
+                        isSelected
+                          ? 'border-rose-400 bg-rose-50/30 ring-2 ring-rose-400/40'
+                          : 'border-slate-200/90 shadow-xs'
                       }`}
                     >
-                      {/* Card Top: Checkbox, Token ID, Status & Payment Badge */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                      {/* Row 1: Checkbox, Token ID with Copy, and Date */}
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
                         <div className="flex items-center gap-2 min-w-0">
                           <input
                             type="checkbox"
@@ -684,56 +709,112 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                   : prev.filter((id) => id !== sub.inquiryId)
                               );
                             }}
-                            className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                            className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 flex-shrink-0 cursor-pointer"
                           />
-                          <span className="font-mono font-bold text-rose-700 text-xs sm:text-sm">{sub.inquiryId}</span>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-lg text-xs font-mono font-extrabold tracking-wide ${
+                                isVip
+                                  ? 'bg-amber-50 text-amber-900 border border-amber-300'
+                                  : 'bg-rose-50 text-rose-800 border border-rose-200'
+                              }`}
+                            >
+                              {sub.inquiryId}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(sub.inquiryId);
+                                setCopiedId(sub.inquiryId);
+                                setTimeout(() => setCopiedId(null), 2000);
+                              }}
+                              className="text-[10px] text-slate-400 hover:text-slate-700 font-bold px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 transition-colors"
+                              title="Copy Token ID"
+                            >
+                              {copiedId === sub.inquiryId ? '✓' : 'Copy'}
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {isPaid ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-1">
-                              <CheckCircleIcon className="w-3 h-3 text-emerald-600" />
-                              PAID (₹{displayAmount})
-                            </span>
-                          ) : isPaymentFailed ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-red-50 border border-red-200 text-red-700">
-                              PAYMENT FAILED
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-50 border border-amber-200 text-amber-800 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                              UNPAID (₹{displayAmount})
+
+                        <div className="flex items-center gap-2 flex-shrink-0 text-slate-400 text-[10px]">
+                          {sub.createdAt && (
+                            <span className="font-medium">
+                              {new Date(sub.createdAt).toLocaleDateString('en-IN', {
+                                day: 'numeric',
+                                month: 'short'
+                              })}
                             </span>
                           )}
-
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border whitespace-nowrap ${
-                              isApproved
-                                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                                : isRejected
-                                ? 'bg-red-50 border-red-200 text-red-700'
-                                : 'bg-amber-50 border-amber-200 text-amber-800'
-                            }`}
+                          <button
+                            onClick={() => handleDelete(sub.inquiryId)}
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                            title="Move to Trash"
                           >
-                            {sub.status || 'pending'}
-                          </span>
+                            <TrashIcon className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
 
-                      {/* Card Middle: Photo + Couple Details + WhatsApp/Call Actions */}
-                      <div className="flex items-start gap-3">
-                        {/* Thumbnail / Drive */}
+                      {/* Row 2: Status Chips & Payment Pills */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {isPaid ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-1">
+                            <CheckCircleIcon className="w-3 h-3 text-emerald-600" />
+                            <span>Paid (₹{displayAmount})</span>
+                          </span>
+                        ) : isPaymentFailed ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-red-50 border border-red-200 text-red-700 flex items-center gap-1">
+                            <AlertTriangleIcon className="w-3 h-3 text-red-600" />
+                            <span>Payment Failed</span>
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-50 border border-amber-300 text-amber-900 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            <span>Unpaid (₹{displayAmount})</span>
+                          </span>
+                        )}
+
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border whitespace-nowrap ${
+                            isApproved
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                              : isRejected
+                              ? 'bg-red-50 border-red-200 text-red-700'
+                              : 'bg-amber-50 border-amber-200 text-amber-800'
+                          }`}
+                        >
+                          {sub.status || 'pending'}
+                        </span>
+
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border whitespace-nowrap ${
+                            sub.attendance === 'present'
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                              : sub.attendance === 'absent'
+                              ? 'bg-slate-100 border-slate-300 text-slate-600'
+                              : 'bg-slate-50 border-slate-200 text-slate-500'
+                          }`}
+                        >
+                          {sub.attendance === 'present' ? '✓ Present' : sub.attendance === 'absent' ? 'Absent' : 'Unmarked'}
+                        </span>
+                      </div>
+
+                      {/* Row 3: Couple Information + Photo */}
+                      <div className="flex items-start gap-3 bg-slate-50/70 border border-slate-200/70 rounded-xl p-3">
+                        {/* Thumbnail / Photo */}
                         <div className="flex flex-col items-center gap-1 flex-shrink-0">
                           {sub.couplePhoto ? (
                             <button
                               type="button"
                               onClick={() => setSelectedImage(sub.photoThumbnailUrl || sub.couplePhoto)}
-                              className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer shadow-xs"
+                              className="w-14 h-14 rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer shadow-xs active:scale-95 transition-transform"
+                              title="Tap to enlarge photo"
                             >
                               <img
                                 src={
                                   (sub.photoThumbnailUrl || sub.couplePhoto).startsWith('http') ||
                                   (sub.photoThumbnailUrl || sub.couplePhoto).startsWith('data:')
-                                    ? (sub.photoThumbnailUrl || sub.couplePhoto)
+                                    ? sub.photoThumbnailUrl || sub.couplePhoto
                                     : `${API_BASE_URL}${sub.photoThumbnailUrl || sub.couplePhoto}`
                                 }
                                 alt="Couple"
@@ -742,107 +823,115 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                               />
                             </button>
                           ) : (
-                            <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">
+                            <div className="w-14 h-14 rounded-xl bg-slate-200/80 border border-slate-300 flex items-center justify-center text-slate-400 text-[11px] font-bold">
                               No Pic
                             </div>
                           )}
+
                           {sub.hasArchivedOriginal && (
                             <button
                               type="button"
                               onClick={() => handleOpenArchivedOriginal(sub.inquiryId)}
-                              className="px-1.5 py-0.5 bg-sky-50 text-sky-700 border border-sky-200 rounded text-[9px] font-bold"
+                              className="px-1.5 py-0.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded text-[9px] font-bold transition-colors"
                             >
                               Drive ↗
                             </button>
                           )}
                         </div>
 
-                        {/* Text info & Phone/WhatsApp Buttons */}
+                        {/* Details */}
                         <div className="flex-1 min-w-0 space-y-1">
-                          <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm truncate">
+                          <h4 className="font-extrabold text-slate-900 text-sm leading-snug break-words">
                             {sub.husbandName} &amp; {sub.wifeName}
                           </h4>
-                          <p className="text-[11px] text-slate-500 font-medium truncate">{sub.surname}</p>
-                          
-                          {/* Direct Phone & WhatsApp Actions */}
-                          <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                            <a
-                              href={`tel:+91${cleanDigits}`}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-900 font-mono font-bold text-xs rounded-lg transition-colors"
-                              title="Call Number"
-                            >
-                              <PhoneIcon className="w-3 h-3 text-slate-600" />
-                              <span>{sub.phoneNumber}</span>
-                            </a>
-                            <a
-                              href={getDirectWhatsAppUrl(sub.phoneNumber)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-xs transition-colors cursor-pointer"
-                              title="Chat on WhatsApp"
-                            >
-                              <WhatsappIcon className="w-3.5 h-3.5 text-white" />
-                              <span>WhatsApp</span>
-                            </a>
+                          <p className="text-xs text-slate-600 font-semibold">{sub.surname}</p>
+
+                          <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 pt-0.5">
+                            <MapPinIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="truncate">{sub.programName || 'Seminar Slot'}</span>
                           </div>
-
-                          <p className="text-[10px] text-slate-400 truncate flex items-center gap-1 pt-0.5">
-                            <MapPinIcon className="w-3 h-3 flex-shrink-0" />
-                            <span>{sub.programName || 'N/A'} ({sub.programDate})</span>
-                          </p>
-
-                          {!isPaid && (
-                            <div className="pt-1 flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => copyPaymentLink(sub.inquiryId)}
-                                className="text-[11px] font-bold text-rose-600 hover:text-rose-800 underline cursor-pointer"
-                              >
-                                {copiedId === sub.inquiryId ? '✓ Copied Payment Link' : 'Copy Payment Link'}
-                              </button>
-                              <a
-                                href={getWhatsAppMessageUrl(sub)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 underline"
-                              >
-                                Send Link via WhatsApp →
-                              </a>
-                            </div>
-                          )}
                         </div>
                       </div>
 
-                      {/* Card Bottom: Attendance & Actions */}
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
-                        {/* Attendance Touch Target */}
-                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
-                          <span className="text-[10px] font-bold uppercase text-slate-500 flex-shrink-0">Attendance:</span>
+                      {/* Row 4: Phone & WhatsApp Communication Bar */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <a
+                          href={`tel:+91${cleanDigits}`}
+                          className="px-3 py-2 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-900 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                          title="Call Couple"
+                        >
+                          <PhoneIcon className="w-3.5 h-3.5 text-slate-700 flex-shrink-0" />
+                          <span className="truncate font-mono">{sub.phoneNumber}</span>
+                        </a>
+
+                        <a
+                          href={getDirectWhatsAppUrl(sub.phoneNumber)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+                          title="Chat on WhatsApp"
+                        >
+                          <WhatsappIcon className="w-3.5 h-3.5 text-white flex-shrink-0" />
+                          <span>WhatsApp</span>
+                        </a>
+                      </div>
+
+                      {/* Unpaid Payment Action Box */}
+                      {!isPaid && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 space-y-2">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-bold text-amber-900">Payment Pending:</span>
+                            <button
+                              type="button"
+                              onClick={() => copyPaymentLink(sub.inquiryId)}
+                              className="font-bold text-rose-700 hover:text-rose-900 underline cursor-pointer"
+                            >
+                              {copiedId === sub.inquiryId ? '✓ Copied Link' : 'Copy Pay Link'}
+                            </button>
+                          </div>
+                          <a
+                            href={getWhatsAppMessageUrl(sub)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block w-full py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] rounded-lg text-center shadow-xs transition-colors"
+                          >
+                            Send Payment Link on WhatsApp →
+                          </a>
+                        </div>
+                      )}
+
+                      {/* Row 5: Attendance Selector & Actions Strip */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                        {/* Attendance Dropdown */}
+                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 flex-1 min-w-0">
+                          <span className="text-[10px] font-extrabold uppercase text-slate-500 flex-shrink-0">
+                            Attendance:
+                          </span>
                           <select
                             value={sub.attendance || 'unmarked'}
                             onChange={(e) => handleAttendance(sub.inquiryId, e.target.value as any)}
-                            className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none w-full cursor-pointer min-h-[30px]"
+                            className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none w-full cursor-pointer min-h-[28px]"
                           >
                             <option value="unmarked">Unmarked</option>
-                            <option value="present">Present</option>
+                            <option value="present">Present (Checked In)</option>
                             <option value="absent">Absent</option>
                           </select>
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
                           {isPending && (
                             <>
                               <button
                                 onClick={() => handleApprove(sub.inquiryId)}
-                                className="px-3 py-1.5 min-h-[36px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer whitespace-nowrap"
-                                title="Approve & Confirm"
+                                className="flex-1 sm:flex-none px-3 py-2 min-h-[36px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer whitespace-nowrap"
+                                title="Approve & Confirm Pass"
                               >
                                 Approve
                               </button>
                               <button
                                 onClick={() => handleReject(sub.inquiryId)}
-                                className="px-3 py-1.5 min-h-[36px] bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-xs rounded-xl cursor-pointer whitespace-nowrap"
+                                className="flex-1 sm:flex-none px-3 py-2 min-h-[36px] bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-xs rounded-xl cursor-pointer whitespace-nowrap"
                               >
                                 Reject
                               </button>
@@ -852,18 +941,12 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                             href={`/pass/${sub.inquiryId}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="px-2.5 py-1.5 min-h-[36px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer"
-                            title="View Pass"
+                            className="flex-1 sm:flex-none px-3 py-2 min-h-[36px] bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                            title="Open Digital Pass"
                           >
-                            Pass ↗
+                            <span>Pass</span>
+                            <span>↗</span>
                           </a>
-                          <button
-                            onClick={() => handleDelete(sub.inquiryId)}
-                            className="p-2 min-h-[36px] min-w-[36px] text-slate-400 hover:text-rose-600 rounded-xl hover:bg-rose-50 cursor-pointer flex items-center justify-center transition-colors"
-                            title="Delete"
-                          >
-                            <TrashIcon className="w-3.5 h-3.5" />
-                          </button>
                         </div>
                       </div>
                     </div>
@@ -934,9 +1017,9 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
               </div>
               <button
                 onClick={() => setArchivedViewer((prev) => ({ ...prev, isOpen: false }))}
-                className="text-slate-400 hover:text-white px-2.5 py-1 text-sm font-bold rounded-lg hover:bg-slate-800 cursor-pointer"
+                className="text-slate-400 hover:text-white px-2.5 py-1 text-sm font-bold rounded-lg hover:bg-slate-800 cursor-pointer flex items-center gap-1"
               >
-                ✕ Close
+                <span>Close</span>
               </button>
             </div>
 
@@ -964,6 +1047,13 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
           </div>
         </div>
       )}
+
+      {/* Dynamic Data Export Center Modal */}
+      <BatchExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        defaultProgramId={selectedProgramId}
+      />
     </div>
   );
 };

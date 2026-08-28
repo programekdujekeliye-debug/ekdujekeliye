@@ -1,0 +1,7 @@
+{
+  "keyId": "edkl-k1",
+  "createdAt": "2026-08-28T11:17:00.848Z",
+  "privateKeyPem": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIJK50sC9eg4bofUc6XgCpBfuDI3v5ii09O2hywl/BWsV\n-----END PRIVATE KEY-----\n",
+  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA7iyzWoOjDXmMJGgi0LdxplI0oYYM3Jq7hnrpP3LyYGs=\n-----END PUBLIC KEY-----\n",
+  "publicKeySpkiBase64": "MCowBQYDK2VwAyEA7iyzWoOjDXmMJGgi0LdxplI0oYYM3Jq7hnrpP3LyYGs="
+}

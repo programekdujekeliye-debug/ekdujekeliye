@@ -1,28 +1,73 @@
-import React from 'react';
-import type { Metadata } from 'next';
-import Link from 'next/link';
+'use client';
 
-export const metadata: Metadata = {
-  title: 'Privacy Policy | Ek Duje Ke Liye - Educational Seminars',
-  description: 'Privacy Policy and Data Protection guidelines for Ek Duje Ke Liye educational relationship seminar and workshop registration platform led by Manish Vaghasiya.',
-};
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { API_BASE_URL } from '../../config';
+import { ShieldCheckIcon, PhoneIcon, MapPinIcon } from '../../components/Icons';
 
 export default function PrivacyPolicyPage() {
+  const [config, setConfig] = useState<{
+    brandName?: string;
+    supportPhone?: string;
+    supportWhatsapp?: string;
+    supportEmail?: string;
+    defaultCity?: string;
+    businessCategory?: string;
+    businessDescription?: string;
+    defaultSpeakerName?: string;
+  }>({
+    brandName: 'Ek Duje Ke Liye',
+    supportPhone: '+91 82003 02328',
+    supportWhatsapp: '+91 82003 02328',
+    supportEmail: 'privacy.ekdujekeliye@gmail.com',
+    defaultCity: 'Surat, Gujarat',
+    businessCategory: 'Events & Programs',
+    businessDescription: 'Ek Duje Ke Liye - A Special Program for Couples',
+    defaultSpeakerName: 'Manish Vaghasiya'
+  });
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/config/public`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data) {
+          setConfig((prev) => ({
+            ...prev,
+            ...data,
+            supportPhone: data.supportPhone || prev.supportPhone,
+            supportWhatsapp: data.supportWhatsapp || prev.supportWhatsapp,
+            supportEmail: data.supportEmail || prev.supportEmail,
+            defaultCity: data.defaultCity || prev.defaultCity,
+            brandName: data.brandName || prev.brandName,
+            defaultSpeakerName: data.defaultSpeakerName || prev.defaultSpeakerName
+          }));
+        }
+      })
+      .catch((err) => console.error('Failed to load dynamic privacy config:', err));
+  }, []);
+
+  const brand = config.brandName || 'Ek Duje Ke Liye';
+  const speaker = config.defaultSpeakerName || 'Manish Vaghasiya';
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1a050d] via-[#0c0306] to-[#080205] text-slate-100 flex flex-col justify-between font-sans relative">
+    <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex flex-col justify-between font-sans relative">
       {/* Header */}
-      <header className="py-6 px-8 border-b border-rose-950/40 bg-slate-950/60 backdrop-blur-md sticky top-0 z-50">
+      <header className="py-5 px-6 md:px-8 border-b border-stone-200/80 bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-xs">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <Link href="/" className="flex items-center gap-3">
-            <img src="/logo.png" alt="Ek Duje Ke Liye Logo" className="h-10 w-auto object-contain" />
+            <img src="/logo.png" alt="Ek Duje Ke Liye Logo" className="h-9 w-auto object-contain" />
             <div>
-              <span className="text-xl font-bold tracking-wider text-slate-100 uppercase block leading-tight">Ek Duje Ke Liye</span>
-              <span className="text-[10px] tracking-widest text-rose-400 font-bold uppercase block">Educational Seminars by Manish Vaghasiya</span>
+              <span className="text-lg font-extrabold tracking-tight text-stone-900 uppercase block leading-tight">
+                {brand}
+              </span>
+              <span className="text-[10px] tracking-widest text-rose-700 font-bold uppercase block">
+                A Program for Couples by {speaker}
+              </span>
             </div>
           </Link>
           <Link
             href="/"
-            className="text-xs text-rose-400 hover:text-rose-300 font-semibold border border-rose-500/30 hover:bg-rose-500/10 px-4 py-2 rounded-xl transition-all"
+            className="text-xs text-rose-700 hover:text-rose-800 font-bold border border-stone-300 hover:bg-stone-100 px-4 py-2 rounded-xl transition-all shadow-xs"
           >
             ← Back to Home
           </Link>
@@ -30,160 +75,134 @@ export default function PrivacyPolicyPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-grow max-w-4xl mx-auto px-6 py-12 w-full z-10">
-        <div className="bg-white/5 border border-white/10 rounded-3xl p-8 md:p-12 backdrop-blur-xl shadow-2xl space-y-8">
-
+      <main className="flex-grow max-w-4xl mx-auto px-6 py-10 sm:py-12 w-full z-10">
+        <div className="bg-white border border-stone-200/90 rounded-3xl p-6 sm:p-10 md:p-12 shadow-xl space-y-8">
           <div>
-            <span className="text-xs font-bold text-rose-400 uppercase tracking-widest block mb-2">Legal &amp; Compliance</span>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-slate-100 tracking-tight">Privacy Policy</h1>
-            <p className="text-xs text-slate-400 mt-2">Last Updated: August 28, 2026 &bull; Domain: www.ekdujekeliye.in</p>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-extrabold uppercase tracking-wider mb-2">
+              <ShieldCheckIcon className="w-3.5 h-3.5" />
+              <span>Legal &amp; Compliance</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-stone-900 tracking-tight">
+              Privacy Policy
+            </h1>
+            <p className="text-xs text-stone-500 mt-2 font-medium">
+              Last Updated: August 2026 &bull; Domain: www.ekdujekeliye.in
+            </p>
           </div>
 
-          <div className="space-y-6 text-sm text-slate-300 leading-relaxed">
-
+          <div className="space-y-6 text-sm text-stone-700 leading-relaxed">
             {/* Section 1 */}
             <section className="space-y-3">
-              <h2 className="text-lg font-bold text-rose-300">1. Introduction &amp; Operating Context</h2>
+              <h2 className="text-base sm:text-lg font-bold text-stone-900">
+                1. Introduction &amp; Operating Context
+              </h2>
               <p>
-                Welcome to <strong>Ek Duje Ke Liye</strong> (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). <strong>Ek Duje Ke Liye</strong> is an educational seminar and workshop initiative led by <strong>Manish Vaghasiya</strong>. We provide educational relationship seminars, couple communication workshops, and practical life-skills training programs on our website (<strong>ekdujekeliye.in</strong>).
+                Welcome to <strong>{brand}</strong> (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;).{' '}
+                <strong>{brand}</strong> is an interactive relationship seminar and couple workshop initiative led by{' '}
+                <strong>{speaker}</strong>. We provide seminar registration services, digital entry pass issuance, and event coordination through our official platform (<strong>ekdujekeliye.in</strong>).
               </p>
               <p>
-                We respect your privacy and are committed to protecting the personal information you share with us when registering for our educational seminars, workshops, and digital pass services. This Privacy Policy describes how we collect, use, store, process, and safeguard your data.
+                We respect your privacy and are committed to protecting the personal information you provide when booking seats for our seminars. This Privacy Policy outlines how your data is collected, utilized, stored, and protected.
               </p>
             </section>
 
             {/* Section 2 */}
             <section className="space-y-3">
-              <h2 className="text-lg font-bold text-rose-300">2. Information We Collect</h2>
-              <p>When you register for an educational seminar or workshop on our platform, we collect the following information:</p>
-              <ul className="list-disc pl-5 space-y-1.5 text-slate-300">
-                <li><strong>Couple Names:</strong> Husband&apos;s Name, Wife&apos;s Name, and Surname to personalize your seminar entry pass and attendance record.</li>
-                <li><strong>Contact Information:</strong> 10-digit Mobile Phone Number for booking confirmation, digital pass delivery, and seminar schedule reminders.</li>
-                <li><strong>Couple Photograph:</strong> A couple photograph uploaded by you for generating your customized souvenir seminar entry badge.</li>
-                <li><strong>Payment Transaction Data:</strong> Transaction identifiers, payment gateway order references, and status codes for verifying seminar fee payments. We do not store sensitive credit card numbers, CVVs, or bank account PINs.</li>
-                <li><strong>Seminar Slot Selection:</strong> Chosen date, city, venue, and program batch details.</li>
+              <h2 className="text-base sm:text-lg font-bold text-stone-900">
+                2. Information We Collect
+              </h2>
+              <p>When you register for a couple seminar, we collect the following details:</p>
+              <ul className="list-disc pl-5 space-y-1.5 text-stone-600">
+                <li><strong>Couple Names:</strong> Husband&apos;s Name, Wife&apos;s Name, and Family Surname for generating personalized digital passes and hall attendance rosters.</li>
+                <li><strong>Contact Phone:</strong> 10-digit Mobile Number for booking confirmation, pass delivery, and seminar updates.</li>
+                <li><strong>Couple Photograph:</strong> An uploaded photograph used strictly to personalize your official souvenir seminar entry badge.</li>
+                <li><strong>Payment Transaction Data:</strong> Gateway order identifiers, payment status, and verification timestamps processed through Razorpay. We do not collect or store card CVVs, PINs, or net banking passwords.</li>
+                <li><strong>Seminar Slot:</strong> Selected event date, batch timing, and venue location.</li>
               </ul>
             </section>
 
             {/* Section 3 */}
             <section className="space-y-3">
-              <h2 className="text-lg font-bold text-rose-300">3. How We Use Your Information</h2>
-              <p>We use the collected information exclusively for legitimate educational seminar operations:</p>
-              <ul className="list-disc pl-5 space-y-1.5 text-slate-300">
-                <li>To generate and issue your personalized educational seminar admission pass and digital entry token.</li>
-                <li>To verify seminar registration and process registration fees securely via our authorized payment processor (Razorpay).</li>
-                <li>To manage seminar hall capacity, seating arrangements, educational materials, and attendee check-in.</li>
-                <li>To send transactional notifications, pass download links, and critical schedule updates via WhatsApp and SMS.</li>
-                <li>To provide attendee support and respond to inquiry requests.</li>
+              <h2 className="text-base sm:text-lg font-bold text-stone-900">
+                3. Purpose &amp; Use of Information
+              </h2>
+              <p>Collected information is used strictly for legitimate event management purposes:</p>
+              <ul className="list-disc pl-5 space-y-1.5 text-stone-600">
+                <li>Issuing official digital couple passes with encrypted QR entry codes.</li>
+                <li>Processing seminar registration fees securely via our payment gateway (Razorpay).</li>
+                <li>Managing hall capacity, seating allocation, and check-in desk verification.</li>
+                <li>Sending transactional booking receipts, pass download links, and reminder alerts via WhatsApp and SMS.</li>
+                <li>Providing customer support and answering event inquiries.</li>
               </ul>
             </section>
 
             {/* Section 4 */}
             <section className="space-y-3">
-              <h2 className="text-lg font-bold text-rose-300">4. WhatsApp Cloud API &amp; Communications</h2>
+              <h2 className="text-base sm:text-lg font-bold text-stone-900">
+                4. WhatsApp Business Cloud API &amp; Communications
+              </h2>
               <p>
-                We use the <strong>Meta WhatsApp Business Cloud API</strong> to deliver automated service messages. By submitting your registration form and providing your mobile number:
+                We use the <strong>Meta WhatsApp Business Cloud API</strong> to deliver automated transactional updates. By submitting your registration form:
               </p>
-              <ul className="list-disc pl-5 space-y-1.5 text-slate-300">
-                <li>You consent to receive transactional notifications regarding your seminar registration status, digital pass delivery, and event reminders.</li>
-                <li>We do not send unsolicited promotional spam, nor do we sell or share your phone number with unaffiliated marketing agencies.</li>
-                <li>You may opt out of non-essential communications at any time by contacting our support team.</li>
+              <ul className="list-disc pl-5 space-y-1.5 text-stone-600">
+                <li>You consent to receive booking receipts, pass download URLs, and seminar reminder notices on WhatsApp.</li>
+                <li>We do not send unsolicited commercial spam or share your mobile number with external marketing agencies.</li>
+                <li>You may request communication preferences at any time through our support channels.</li>
               </ul>
             </section>
 
             {/* Section 5 */}
             <section className="space-y-3">
-              <h2 className="text-lg font-bold text-rose-300">5. Storage &amp; Data Security</h2>
+              <h2 className="text-base sm:text-lg font-bold text-stone-900">
+                5. Data Security &amp; Storage
+              </h2>
               <p>
-                We employ industry-standard technical and organizational security measures to protect your personal data:
+                We implement robust security controls including 256-bit SSL encryption, restricted administrative access, and encrypted cloud storage to protect attendee information from unauthorized access or alteration.
               </p>
-              <ul className="list-disc pl-5 space-y-1.5 text-slate-300">
-                <li><strong>Cloud Storage:</strong> Photographs uploaded to our platform are stored on secured cloud media servers (Cloudinary) with encrypted transmission (HTTPS / SSL).</li>
-                <li><strong>Database Protection:</strong> Registration records are stored in secure, access-controlled MongoDB Atlas cloud databases.</li>
-                <li><strong>Access Control:</strong> Only authorized seminar coordinators have access to attendee details for verification and badge issuance.</li>
-              </ul>
             </section>
 
             {/* Section 6 */}
             <section className="space-y-3">
-              <h2 className="text-lg font-bold text-rose-300">6. Third-Party Service Providers</h2>
-              <p>
-                We share data with trusted third-party technology providers strictly to fulfill the seminar registration, communication, and payment process:
-              </p>
-              <ul className="list-disc pl-5 space-y-1.5 text-slate-300">
-                <li><strong>Razorpay:</strong> Payment gateway for secure, 256-bit encrypted processing of seminar registration fees.</li>
-                <li><strong>Meta Platforms, Inc. (WhatsApp Business Cloud API):</strong> For message delivery and digital pass notifications.</li>
-                <li><strong>Cloudinary:</strong> For secure image processing and pass asset hosting.</li>
-                <li><strong>MongoDB Atlas / Cloud Hosting:</strong> For website hosting and encrypted database management.</li>
-              </ul>
-              <p>We do not sell, rent, or trade your personal information to any third party for commercial marketing purposes.</p>
-            </section>
-
-            {/* Section 7 - Data Deletion Instructions */}
-            <section id="data-deletion" className="space-y-3 bg-rose-500/10 border border-rose-500/20 rounded-2xl p-6">
-              <h2 className="text-lg font-bold text-rose-400">7. User Data Deletion Instructions</h2>
-              <p>
-                In compliance with international data protection standards, you have the right to request the deletion of your personal data at any time.
-              </p>
-              <p className="font-semibold text-slate-200">How to request data deletion:</p>
-              <ol className="list-decimal pl-5 space-y-1 text-slate-300">
-                <li>Send an email to <strong>privacy.ekdujekeliye@gmail.com</strong> or message our support team with the subject line <em>&quot;Data Deletion Request&quot;</em>.</li>
-                <li>Include your <strong>Inquiry ID</strong> (e.g., <code>EK01-01</code>) and registered <strong>Phone Number</strong>.</li>
-                <li>Our team will verify your identity and permanently delete your registration records, uploaded photos, and pass data from our active databases and cloud storage within 7 business days.</li>
-                <li>A confirmation notification will be sent once your data has been completely purged.</li>
-              </ol>
-            </section>
-
-            {/* Section 8 */}
-            <section className="space-y-3">
-              <h2 className="text-lg font-bold text-rose-300">8. Children&apos;s Privacy</h2>
-              <p>
-                Our educational seminars are intended exclusively for married couples and adult attendees. We do not knowingly collect or solicit personal information from individuals under the age of 18.
-              </p>
-            </section>
-
-            {/* Section 9 */}
-            <section className="space-y-3">
-              <h2 className="text-lg font-bold text-rose-300">9. Contact Us &amp; Grievance Redressal</h2>
-              <p>If you have any questions, concerns, or requests regarding this Privacy Policy or our data handling practices, please contact us at:</p>
-              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-xs space-y-1">
-                <p><strong>Organization:</strong> Ek Duje Ke Liye — Educational Seminars led by Manish Vaghasiya</p>
-                <p><strong>Email:</strong> privacy.ekdujekeliye@gmail.com</p>
-                <p><strong>Website:</strong> https://ekdujekeliye.in</p>
-                <p><strong>WhatsApp Support:</strong> +91 82003 02328</p>
-                <p><strong>Location:</strong> Surat, Gujarat, India</p>
+              <h2 className="text-base sm:text-lg font-bold text-stone-900">
+                6. Contact &amp; Grievance Redressal
+              </h2>
+              <p>For any privacy-related questions or data update requests, please contact our administrative desk:</p>
+              <div className="bg-stone-50 border border-stone-200 rounded-2xl p-5 text-xs space-y-2.5 text-stone-700">
+                <p><strong>Initiative:</strong> {brand} &bull; Led by {speaker}</p>
+                <p><strong>Support Helpline:</strong> <a href={`tel:${config.supportPhone}`} className="text-rose-700 font-bold hover:underline">{config.supportPhone}</a></p>
+                <p><strong>WhatsApp Support:</strong> <a href={`https://wa.me/${config.supportWhatsapp?.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-emerald-700 font-bold hover:underline">{config.supportWhatsapp} ↗</a></p>
+                <p><strong>Official Email:</strong> <a href={`mailto:${config.supportEmail}`} className="text-stone-900 font-bold hover:underline">{config.supportEmail}</a></p>
+                <p><strong>Operating City:</strong> {config.defaultCity || 'Surat, Gujarat, India'}</p>
               </div>
             </section>
-
           </div>
 
-          <div className="pt-6 border-t border-slate-800 flex justify-between items-center text-xs text-slate-400">
-            <Link href="/" className="hover:text-rose-400 transition-colors">
-              ← Return to Seminar Home
+          <div className="pt-6 border-t border-stone-200 flex justify-between items-center text-xs text-stone-600">
+            <Link href="/" className="hover:text-rose-700 font-bold transition-colors">
+              ← Return to Home
             </Link>
-            <Link href="/terms" className="hover:text-rose-400 transition-colors">
+            <Link href="/terms" className="hover:text-rose-700 font-bold transition-colors">
               Terms &amp; Conditions →
             </Link>
           </div>
-
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="py-6 px-8 border-t border-slate-800/80 bg-slate-950/40 text-center text-xs text-slate-500 space-y-2">
+      <footer className="py-6 px-8 border-t border-stone-200 bg-white text-center text-xs text-stone-500 space-y-2">
         <div>
-          &copy; {new Date().getFullYear()} Ek Duje Ke Liye &bull; Educational Seminars by Manish Vaghasiya. All rights reserved.
+          &copy; {new Date().getFullYear()} {brand} &bull; A Program for Couples by {speaker}. All rights reserved.
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3 text-[11px]">
-          <Link href="/privacy-policy" className="text-slate-400 hover:underline">Privacy Policy</Link>
+          <Link href="/privacy-policy" className="text-stone-600 hover:text-rose-600 hover:underline">Privacy Policy</Link>
           <span>&bull;</span>
-          <Link href="/terms" className="text-slate-400 hover:underline">Terms &amp; Conditions</Link>
+          <Link href="/terms" className="text-stone-600 hover:text-rose-600 hover:underline">Terms &amp; Conditions</Link>
           <span>&bull;</span>
-          <Link href="/cancellation-refund-policy" className="text-slate-400 hover:underline">Refund Policy</Link>
+          <Link href="/cancellation-refund-policy" className="text-stone-600 hover:text-rose-600 hover:underline">Refund Policy</Link>
           <span>&bull;</span>
-          <Link href="/shipping-delivery-policy" className="text-slate-400 hover:underline">Delivery Policy</Link>
+          <Link href="/shipping-delivery-policy" className="text-stone-600 hover:text-rose-600 hover:underline">Delivery Policy</Link>
           <span>&bull;</span>
-          <Link href="/contact" className="text-slate-400 hover:underline">Contact Us</Link>
+          <Link href="/contact" className="text-stone-600 hover:text-rose-600 hover:underline">Contact Us</Link>
         </div>
       </footer>
     </div>

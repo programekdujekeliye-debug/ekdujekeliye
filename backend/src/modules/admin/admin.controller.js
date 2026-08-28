@@ -263,25 +263,30 @@ export const getSettings = async (req, res) => {
       payeeName: 'Ek Duje Ke Liye',
       amount: '1500',
       brandName: 'Ek Duje Ke Liye',
-      businessCategory: 'Education & Training',
-      businessDescription: 'Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops',
+      businessCategory: 'Events & Programs',
+      businessDescription: 'Ek Duje Ke Liye - A Special Program for Couples',
       supportPhone: '+91 82003 02328',
       supportWhatsapp: '+91 82003 02328',
-      supportEmail: 'privacy.ekdujekeliye@gmail.com',
-      websiteEmail: '',
-      instagramUrl: '',
-      facebookUrl: '',
-      youtubeUrl: '',
-      linktreeUrl: '',
-      defaultCity: 'Surat',
-      defaultCountry: 'India',
-      defaultCurrency: 'INR',
-      defaultPrice: 1500,
-      defaultSpeakerName: 'Manish Vaghasiya',
-      defaultSpeakerTitle: 'Couple Relationship Counselor & Life Coach',
-      defaultRegistrationInstructions: '',
-      defaultPassInstructions: '',
-      defaultFooterCopy: ''
+      supportEmail: setting?.supportEmail || 'privacy.ekdujekeliye@gmail.com',
+      websiteEmail: setting?.websiteEmail || '',
+      instagramUrl: setting?.instagramUrl || 'https://www.instagram.com/ekdujekeliye',
+      facebookUrl: setting?.facebookUrl || 'https://www.facebook.com/ekdujekeliye',
+      youtubeUrl: setting?.youtubeUrl || '',
+      linktreeUrl: setting?.linktreeUrl || 'https://linktr.ee/ekdujekeliye',
+      manishYoutubeUrl: setting?.manishYoutubeUrl || 'https://www.youtube.com/@manishvaghasiya',
+      manishInstagramUrl: setting?.manishInstagramUrl || 'https://www.instagram.com/manishvaghasiya_',
+      manishFacebookUrl: setting?.manishFacebookUrl || 'https://www.facebook.com/manishvaghasiya',
+      manishLinkedinUrl: setting?.manishLinkedinUrl || 'https://www.linkedin.com/in/manishvaghasiya',
+      manishTwitterUrl: setting?.manishTwitterUrl || 'https://twitter.com/manishvaghasiya',
+      defaultCity: setting?.defaultCity || 'Surat',
+      defaultCountry: setting?.defaultCountry || 'India',
+      defaultCurrency: setting?.defaultCurrency || 'INR',
+      defaultPrice: setting?.defaultPrice || 1500,
+      defaultSpeakerName: setting?.defaultSpeakerName || 'Manish Vaghasiya',
+      defaultSpeakerTitle: setting?.defaultSpeakerTitle || 'Couple Relationship Counselor & Life Coach',
+      defaultRegistrationInstructions: setting?.defaultRegistrationInstructions || '',
+      defaultPassInstructions: setting?.defaultPassInstructions || '',
+      defaultFooterCopy: setting?.defaultFooterCopy || ''
     });
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching settings.' });
@@ -309,6 +314,11 @@ export const updateSettings = async (req, res) => {
       facebookUrl,
       youtubeUrl,
       linktreeUrl,
+      manishYoutubeUrl,
+      manishInstagramUrl,
+      manishFacebookUrl,
+      manishLinkedinUrl,
+      manishTwitterUrl,
       defaultCity,
       defaultCountry,
       defaultCurrency,
@@ -345,6 +355,12 @@ export const updateSettings = async (req, res) => {
     if (facebookUrl !== undefined) setting.facebookUrl = facebookUrl;
     if (youtubeUrl !== undefined) setting.youtubeUrl = youtubeUrl;
     if (linktreeUrl !== undefined) setting.linktreeUrl = linktreeUrl;
+
+    if (manishYoutubeUrl !== undefined) setting.manishYoutubeUrl = manishYoutubeUrl;
+    if (manishInstagramUrl !== undefined) setting.manishInstagramUrl = manishInstagramUrl;
+    if (manishFacebookUrl !== undefined) setting.manishFacebookUrl = manishFacebookUrl;
+    if (manishLinkedinUrl !== undefined) setting.manishLinkedinUrl = manishLinkedinUrl;
+    if (manishTwitterUrl !== undefined) setting.manishTwitterUrl = manishTwitterUrl;
 
     if (defaultCity !== undefined) setting.defaultCity = defaultCity;
     if (defaultCountry !== undefined) setting.defaultCountry = defaultCountry;

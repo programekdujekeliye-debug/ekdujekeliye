@@ -2,39 +2,38 @@
 
 import React, { useState, useEffect } from 'react';
 import { settingsApi } from '../../../services/admin/settingsApi';
-import { ManualInviteeModal } from './ManualInviteeModal';
 import {
-  CreditCardIcon,
   PhoneIcon,
   LayersIcon,
   CheckIcon,
   AlertTriangleIcon
 } from '../../../components/Icons';
 
-type SettingsTab = 'payment' | 'brand_support' | 'social' | 'defaults';
+type SettingsTab = 'brand_support' | 'social' | 'defaults';
 
 export const SettingsPage = () => {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('payment');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('brand_support');
 
   // Form State
-  const [upiId, setUpiId] = useState('');
-  const [payeeName, setPayeeName] = useState('');
-  const [amount, setAmount] = useState<number>(1500);
-  const [upiIds, setUpiIds] = useState('');
-  const [upiLimit, setUpiLimit] = useState<number>(50);
-
   const [brandName, setBrandName] = useState('Ek Duje Ke Liye');
-  const [businessCategory, setBusinessCategory] = useState('Education & Training');
-  const [businessDescription, setBusinessDescription] = useState('Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops');
+  const [businessCategory, setBusinessCategory] = useState('Events & Programs');
+  const [businessDescription, setBusinessDescription] = useState('Ek Duje Ke Liye - A Special Program for Couples');
   const [supportPhone, setSupportPhone] = useState('');
   const [supportWhatsapp, setSupportWhatsapp] = useState('');
   const [supportEmail, setSupportEmail] = useState('');
   const [websiteEmail, setWebsiteEmail] = useState('');
 
-  const [instagramUrl, setInstagramUrl] = useState('');
-  const [facebookUrl, setFacebookUrl] = useState('');
+  const [instagramUrl, setInstagramUrl] = useState('https://www.instagram.com/ekdujekeliye');
+  const [facebookUrl, setFacebookUrl] = useState('https://www.facebook.com/ekdujekeliye');
   const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [linktreeUrl, setLinktreeUrl] = useState('');
+  const [linktreeUrl, setLinktreeUrl] = useState('https://linktr.ee/ekdujekeliye');
+
+  // Manish Vaghasiya Personal Social Channels
+  const [manishYoutubeUrl, setManishYoutubeUrl] = useState('https://www.youtube.com/@manishvaghasiya');
+  const [manishInstagramUrl, setManishInstagramUrl] = useState('https://www.instagram.com/manishvaghasiya_');
+  const [manishFacebookUrl, setManishFacebookUrl] = useState('https://www.facebook.com/manishvaghasiya');
+  const [manishLinkedinUrl, setManishLinkedinUrl] = useState('https://www.linkedin.com/in/manishvaghasiya');
+  const [manishTwitterUrl, setManishTwitterUrl] = useState('https://twitter.com/manishvaghasiya');
 
   const [defaultCity, setDefaultCity] = useState('Surat');
   const [defaultCountry, setDefaultCountry] = useState('India');
@@ -53,24 +52,24 @@ export const SettingsPage = () => {
       setLoading(true);
       const data = await settingsApi.getSettings();
       if (data) {
-        setUpiId(data.upiId || '');
-        setPayeeName(data.payeeName || 'Ek Duje Ke Liye');
-        setAmount(Number(data.amount) || 1500);
-        setUpiIds(Array.isArray(data.upiIds) ? data.upiIds.join(', ') : (data.upiIds || data.upiId || ''));
-        setUpiLimit(data.upiLimit || 50);
-
         setBrandName(data.brandName || 'Ek Duje Ke Liye');
-        setBusinessCategory(data.businessCategory || 'Education & Training');
-        setBusinessDescription(data.businessDescription || 'Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops');
+        setBusinessCategory(data.businessCategory || 'Events & Programs');
+        setBusinessDescription(data.businessDescription || 'Ek Duje Ke Liye - A Special Program for Couples');
         setSupportPhone(data.supportPhone || '');
         setSupportWhatsapp(data.supportWhatsapp || '');
         setSupportEmail(data.supportEmail || '');
         setWebsiteEmail(data.websiteEmail || '');
 
-        setInstagramUrl(data.instagramUrl || '');
-        setFacebookUrl(data.facebookUrl || '');
+        setInstagramUrl(data.instagramUrl || 'https://www.instagram.com/ekdujekeliye');
+        setFacebookUrl(data.facebookUrl || 'https://www.facebook.com/ekdujekeliye');
         setYoutubeUrl(data.youtubeUrl || '');
-        setLinktreeUrl(data.linktreeUrl || '');
+        setLinktreeUrl(data.linktreeUrl || 'https://linktr.ee/ekdujekeliye');
+
+        setManishYoutubeUrl(data.manishYoutubeUrl || 'https://www.youtube.com/@manishvaghasiya');
+        setManishInstagramUrl(data.manishInstagramUrl || 'https://www.instagram.com/manishvaghasiya_');
+        setManishFacebookUrl(data.manishFacebookUrl || 'https://www.facebook.com/manishvaghasiya');
+        setManishLinkedinUrl(data.manishLinkedinUrl || 'https://www.linkedin.com/in/manishvaghasiya');
+        setManishTwitterUrl(data.manishTwitterUrl || 'https://twitter.com/manishvaghasiya');
 
         setDefaultCity(data.defaultCity || 'Surat');
         setDefaultCountry(data.defaultCountry || 'India');
@@ -98,11 +97,6 @@ export const SettingsPage = () => {
       setError('');
       setSuccess('');
       await settingsApi.updateSettings({
-        upiId,
-        payeeName,
-        amount,
-        upiIds: upiIds.split(',').map((s) => s.trim()).filter(Boolean),
-        upiLimit,
         brandName,
         businessCategory,
         businessDescription,
@@ -114,6 +108,11 @@ export const SettingsPage = () => {
         facebookUrl,
         youtubeUrl,
         linktreeUrl,
+        manishYoutubeUrl,
+        manishInstagramUrl,
+        manishFacebookUrl,
+        manishLinkedinUrl,
+        manishTwitterUrl,
         defaultCity,
         defaultCountry,
         defaultCurrency,
@@ -140,7 +139,7 @@ export const SettingsPage = () => {
               <span>Global Brand &amp; Business Configuration</span>
             </h2>
             <p className="text-slate-500 text-xs mt-0.5">
-              Control global defaults, public support channels, social links, and UPI account rotation in MongoDB.
+              Configure public brand information, support channels, social links, and event defaults.
             </p>
           </div>
         </div>
@@ -148,10 +147,9 @@ export const SettingsPage = () => {
         {/* Tab Navigation */}
         <div className="flex border-b border-slate-200 mt-5 overflow-x-auto gap-2">
           {[
-            { id: 'payment', label: '1. Payment & UPI Rotation' },
-            { id: 'brand_support', label: '2. Brand & Support Contacts' },
-            { id: 'social', label: '3. Social Media Links' },
-            { id: 'defaults', label: '4. Business Defaults' }
+            { id: 'brand_support', label: '1. Brand & Support Contacts' },
+            { id: 'social', label: '2. Social Media Links' },
+            { id: 'defaults', label: '3. Business Defaults' }
           ].map((t) => (
             <button
               key={t.id}
@@ -185,99 +183,8 @@ export const SettingsPage = () => {
 
       {/* Main Settings Form */}
       <form onSubmit={handleUpdate} className="bg-white border border-slate-200 shadow-xs rounded-2xl p-5 sm:p-6 space-y-6">
-        {/* Tab 1: Payment & UPI Rotation */}
-        {activeTab === 'payment' && (
-          <div className="space-y-4">
-            <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-              <CreditCardIcon className="w-4 h-4 text-rose-600" />
-              <span>UPI Rotation &amp; Offline Payment Routing</span>
-            </h3>
-            <p className="text-xs text-slate-500">
-              Configure dynamic UPI ID list for automatic round-robin load distribution.
-            </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  UPI ID List (Comma separated)
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={upiIds}
-                  onChange={(e) => {
-                    setUpiIds(e.target.value);
-                    const first = e.target.value.split(',')[0]?.trim();
-                    if (first) setUpiId(first);
-                  }}
-                  placeholder="upi1@okaxis, upi2@okicici"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Active UPI ID
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={upiId}
-                  onChange={(e) => setUpiId(e.target.value)}
-                  placeholder="payee@upi"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Rotation Limit (Registrations / UPI)
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={upiLimit}
-                  onChange={(e) => setUpiLimit(Number(e.target.value))}
-                  placeholder="50"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Payee Account Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={payeeName}
-                  onChange={(e) => setPayeeName(e.target.value)}
-                  placeholder="Ek Duje Ke Liye"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Default Fallback Fee (₹)
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  value={amount}
-                  onChange={(e) => setAmount(Number(e.target.value))}
-                  placeholder="1500"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 2: Brand & Support Contacts */}
+        {/* Tab 1: Brand & Support Contacts */}
         {activeTab === 'brand_support' && (
           <div className="space-y-4">
             <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
@@ -309,7 +216,7 @@ export const SettingsPage = () => {
                   type="text"
                   value={businessCategory}
                   onChange={(e) => setBusinessCategory(e.target.value)}
-                  placeholder="Education & Training"
+                  placeholder="Events & Programs"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
                 />
               </div>
@@ -321,7 +228,7 @@ export const SettingsPage = () => {
                   type="text"
                   value={businessDescription}
                   onChange={(e) => setBusinessDescription(e.target.value)}
-                  placeholder="Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops"
+                  placeholder="Ek Duje Ke Liye - A Special Program for Couples"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
                 />
               </div>
@@ -339,7 +246,7 @@ export const SettingsPage = () => {
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Support WhatsApp Number
+                  Helpline Support WhatsApp
                 </label>
                 <input
                   type="tel"
@@ -349,15 +256,27 @@ export const SettingsPage = () => {
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
                 />
               </div>
-              <div className="sm:col-span-2">
+              <div>
                 <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Public Support Email
+                  Public Contact Email
                 </label>
                 <input
                   type="email"
                   value={supportEmail}
                   onChange={(e) => setSupportEmail(e.target.value)}
-                  placeholder="support@ekdujekeliye.in"
+                  placeholder="privacy.ekdujekeliye@gmail.com"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Website Admin Email (Notifications)
+                </label>
+                <input
+                  type="email"
+                  value={websiteEmail}
+                  onChange={(e) => setWebsiteEmail(e.target.value)}
+                  placeholder="admin@ekdujekeliye.in"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
                 />
               </div>
@@ -365,71 +284,147 @@ export const SettingsPage = () => {
           </div>
         )}
 
-        {/* Tab 3: Social Media Links */}
+        {/* Tab 2: Social Media Links */}
         {activeTab === 'social' && (
-          <div className="space-y-4">
-            <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-              <LayersIcon className="w-4 h-4 text-rose-600" />
-              <span>Official Social Media &amp; Profiles</span>
-            </h3>
-            <p className="text-xs text-slate-500">
-              Links shown on public website footer and registration confirmation pages.
-            </p>
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                <LayersIcon className="w-4 h-4 text-rose-600" />
+                <span>Ek Duje Ke Liye &bull; Official Brand Social Media</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Official organization links attached to public badges, headers, and footer icons.
+              </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Instagram URL
-                </label>
-                <input
-                  type="url"
-                  value={instagramUrl}
-                  onChange={(e) => setInstagramUrl(e.target.value)}
-                  placeholder="https://instagram.com/ekdujekeliye01"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Instagram Profile URL
+                  </label>
+                  <input
+                    type="url"
+                    value={instagramUrl}
+                    onChange={(e) => setInstagramUrl(e.target.value)}
+                    placeholder="https://instagram.com/ekdujekeliye"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Linktree URL (Optional)
+                  </label>
+                  <input
+                    type="url"
+                    value={linktreeUrl}
+                    onChange={(e) => setLinktreeUrl(e.target.value)}
+                    placeholder="https://linktr.ee/ekdujekeliye"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Facebook URL (Optional)
+                  </label>
+                  <input
+                    type="url"
+                    value={facebookUrl}
+                    onChange={(e) => setFacebookUrl(e.target.value)}
+                    placeholder="https://facebook.com/ekdujekeliye"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    YouTube Channel URL (Optional)
+                  </label>
+                  <input
+                    type="url"
+                    value={youtubeUrl}
+                    onChange={(e) => setYoutubeUrl(e.target.value)}
+                    placeholder="https://youtube.com/@..."
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Linktree URL
-                </label>
-                <input
-                  type="url"
-                  value={linktreeUrl}
-                  onChange={(e) => setLinktreeUrl(e.target.value)}
-                  placeholder="https://linktr.ee/ekdujekeliye"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Facebook URL (Optional)
-                </label>
-                <input
-                  type="url"
-                  value={facebookUrl}
-                  onChange={(e) => setFacebookUrl(e.target.value)}
-                  placeholder="https://facebook.com/..."
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  YouTube Channel URL (Optional)
-                </label>
-                <input
-                  type="url"
-                  value={youtubeUrl}
-                  onChange={(e) => setYoutubeUrl(e.target.value)}
-                  placeholder="https://youtube.com/@..."
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
-                />
+            </div>
+
+            {/* Manish Vaghasiya Personal Channels */}
+            <div className="pt-4 border-t border-slate-200">
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                <LayersIcon className="w-4 h-4 text-amber-600" />
+                <span>Manish Vaghasiya &bull; Personal Profiles</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Host / speaker personal media channels linked in the website footer.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    YouTube Channel
+                  </label>
+                  <input
+                    type="url"
+                    value={manishYoutubeUrl}
+                    onChange={(e) => setManishYoutubeUrl(e.target.value)}
+                    placeholder="https://www.youtube.com/@manishvaghasiya"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Instagram Profile
+                  </label>
+                  <input
+                    type="url"
+                    value={manishInstagramUrl}
+                    onChange={(e) => setManishInstagramUrl(e.target.value)}
+                    placeholder="https://www.instagram.com/manishvaghasiya_"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Facebook Profile
+                  </label>
+                  <input
+                    type="url"
+                    value={manishFacebookUrl}
+                    onChange={(e) => setManishFacebookUrl(e.target.value)}
+                    placeholder="https://www.facebook.com/manishvaghasiya"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    LinkedIn Profile
+                  </label>
+                  <input
+                    type="url"
+                    value={manishLinkedinUrl}
+                    onChange={(e) => setManishLinkedinUrl(e.target.value)}
+                    placeholder="https://www.linkedin.com/in/manishvaghasiya"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Twitter / X Profile
+                  </label>
+                  <input
+                    type="url"
+                    value={manishTwitterUrl}
+                    onChange={(e) => setManishTwitterUrl(e.target.value)}
+                    placeholder="https://twitter.com/manishvaghasiya"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
+                  />
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Tab 4: Business Defaults */}
+        {/* Tab 3: Business Defaults */}
         {activeTab === 'defaults' && (
           <div className="space-y-4">
             <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
@@ -504,9 +499,6 @@ export const SettingsPage = () => {
           </button>
         </div>
       </form>
-
-      {/* Manual Invitee Modal Component */}
-      <ManualInviteeModal />
     </div>
   );
 };

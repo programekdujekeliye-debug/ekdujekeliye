@@ -1,0 +1,22 @@
+{
+  "name": "EDKL Gate Scanner",
+  "short_name": "GateScanner",
+  "description": "Ek Duje Ke Liye Mobile Event Ticket & QR Scanner",
+  "start_url": "/admin/scanner",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#E11D48",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

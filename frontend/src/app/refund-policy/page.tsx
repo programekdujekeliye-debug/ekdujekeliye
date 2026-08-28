@@ -1,1 +1,1 @@
-export { default, metadata } from '../cancellation-refund-policy/page';
+export { default } from '../cancellation-refund-policy/page';

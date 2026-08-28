@@ -7,7 +7,7 @@ import { backupsApi } from '../../../services/admin/backupsApi';
 import { resourcesApi } from '../../../services/admin/resourcesApi';
 import { settingsApi } from '../../../services/admin/settingsApi';
 import { ArchiveCandidate, MediaArchiveJob, BackupRecordItem, DatabaseStats } from '../../../types';
-import { ArchiveIcon, RefreshCwIcon, ShieldCheckIcon, HourglassIcon, CameraIcon, CheckIcon, CogIcon, XIcon, DatabaseIcon } from '../../../components/Icons';
+import { ArchiveIcon, RefreshCwIcon, ShieldCheckIcon, HourglassIcon, CameraIcon, CheckIcon, CogIcon, XIcon, DatabaseIcon, ExternalLinkIcon } from '../../../components/Icons';
 
 export const StoragePage = () => {
   const { selectedProgramId } = useAdmin();
@@ -879,16 +879,18 @@ export const StoragePage = () => {
                               {isVerified ? (
                                 <>
                                   <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">
-                                    ✓ Google Drive Verified
+                                    <CheckIcon className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                                    <span>Google Drive Verified</span>
                                   </span>
                                   {b.driveFolderId && (
                                     <a
                                       href={`https://drive.google.com/drive/folders/${b.driveFolderId}`}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="text-[10px] font-bold text-purple-700 hover:text-purple-900 underline"
+                                      className="text-[10px] font-bold text-purple-700 hover:text-purple-900 underline inline-flex items-center gap-1"
                                     >
-                                      Open Drive Folder ↗
+                                      <span>Open Drive Folder</span>
+                                      <ExternalLinkIcon className="w-3 h-3" />
                                     </a>
                                   )}
                                 </>
@@ -926,13 +928,20 @@ export const StoragePage = () => {
                           {b.type}
                         </span>
                         <span
-                          className={`px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md border ${
+                          className={`px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md border inline-flex items-center gap-1 ${
                             isVerified
                               ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                               : 'bg-amber-50 text-amber-800 border-amber-200'
                           }`}
                         >
-                          {isVerified ? '✓ Verified' : b.status.toUpperCase()}
+                          {isVerified ? (
+                            <>
+                              <CheckIcon className="w-3 h-3 text-emerald-600" />
+                              <span>Verified</span>
+                            </>
+                          ) : (
+                            b.status.toUpperCase()
+                          )}
                         </span>
                       </div>
 
@@ -950,9 +959,10 @@ export const StoragePage = () => {
                             href={`https://drive.google.com/drive/folders/${b.driveFolderId}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-[11px] font-bold text-purple-700 hover:text-purple-900 underline block"
+                            className="text-[11px] font-bold text-purple-700 hover:text-purple-900 underline inline-flex items-center gap-1"
                           >
-                            Open in Google Drive ↗
+                            <span>Open in Google Drive</span>
+                            <ExternalLinkIcon className="w-3.5 h-3.5" />
                           </a>
                         </div>
                       )}

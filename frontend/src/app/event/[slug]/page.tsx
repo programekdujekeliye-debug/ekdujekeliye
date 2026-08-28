@@ -164,7 +164,7 @@ export default function EventDetailPage() {
           const found = list.find((p) => (p.slug && p.slug.toLowerCase() === slug.toLowerCase()) || p.id === slug);
           if (found) return false;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
     return true;
   });
@@ -215,7 +215,7 @@ export default function EventDetailPage() {
               if (typeof window !== 'undefined') {
                 sessionStorage.setItem(`edkl_event_${slug.toLowerCase()}`, JSON.stringify(match));
               }
-            } catch (e) {}
+            } catch (e) { }
             return;
           }
         }
@@ -230,7 +230,7 @@ export default function EventDetailPage() {
         if (typeof window !== 'undefined') {
           sessionStorage.setItem(`edkl_event_${slug.toLowerCase()}`, JSON.stringify(data));
         }
-      } catch (e) {}
+      } catch (e) { }
     } catch (err: any) {
       if (!event) {
         setError(err.message || 'Failed to load event details.');
@@ -278,7 +278,7 @@ export default function EventDetailPage() {
         amount: orderData.amount,
         currency: orderData.currency || 'INR',
         name: 'Ek Duje Ke Liye',
-        description: 'Registration fee for Ek Duje Ke Liye educational seminar/workshop',
+        description: `Registration fee for ${event?.name || 'Ek Duje Ke Liye couple program'}`,
         prefill: {
           name: orderData.customerName,
           contact: orderData.phoneNumber
@@ -441,7 +441,7 @@ export default function EventDetailPage() {
 
       {/* Main Content */}
       <main className="flex-grow max-w-5xl mx-auto px-6 py-10 w-full z-10">
-        
+
         {/* Success State */}
         {paymentStatus === 'success' && createdInquiryId && (
           <div className="bg-white border border-emerald-200 rounded-3xl p-8 md:p-12 shadow-2xl text-center space-y-6 max-w-2xl mx-auto animate-fade-in">
@@ -542,7 +542,7 @@ export default function EventDetailPage() {
         {/* Normal Registration Form View */}
         {paymentStatus !== 'success' && paymentStatus !== 'pending' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            
+
             {/* Left: Event Details Card */}
             <div className="lg:col-span-5 bg-white border border-stone-200/90 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
               <div>
@@ -551,13 +551,13 @@ export default function EventDetailPage() {
                     {event.city || 'Event Details'}
                   </span>
                   <span className="px-2.5 py-0.5 bg-amber-50 border border-amber-200 text-amber-900 text-[10px] font-bold rounded-md uppercase tracking-wider">
-                    Educational Seminar
+                    Couple Program
                   </span>
                 </div>
                 <h1 className="text-2xl md:text-3xl font-extrabold text-stone-900 leading-tight">
                   {event.name}
                 </h1>
-                <p className="text-xs text-stone-500 mt-1 font-medium">Educational Seminar led by Manish Vaghasiya</p>
+                <p className="text-xs text-stone-500 mt-1 font-medium">A Special Program for Couples led by Manish Vaghasiya</p>
               </div>
 
               <div className="space-y-3.5 pt-2 text-sm">
@@ -598,15 +598,15 @@ export default function EventDetailPage() {
                 <div className="flex items-center gap-3 text-stone-700">
                   <TicketIcon className="w-5 h-5 text-amber-600 flex-shrink-0" />
                   <div>
-                    <span className="text-xs text-stone-500 block font-medium">Seminar Pass Fee</span>
+                    <span className="text-xs text-stone-500 block font-medium">Couple Pass Fee</span>
                     <span className="font-extrabold text-stone-900 text-2xl">₹{price}</span>
                     <span className="text-xs text-stone-500 ml-1.5 font-medium">(Per Married Couple)</span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3 text-stone-700 pt-1 border-t border-stone-100">
-                  <span className="text-xs text-rose-700 font-bold block">Service Type:</span>
-                  <span className="text-xs text-stone-700 font-semibold">Educational Seminar &amp; Workshop</span>
+                  <span className="text-xs text-rose-700 font-bold block">Event Type:</span>
+                  <span className="text-xs text-stone-700 font-semibold">Interactive Couple Seminar</span>
                 </div>
               </div>
 
@@ -622,7 +622,7 @@ export default function EventDetailPage() {
                   <span>Important Seminar Guidelines:</span>
                 </p>
                 <ul className="list-disc pl-4 space-y-1 text-stone-700">
-                  <li>Educational seminar format exclusively for married couples (2 persons per pass).</li>
+                  <li>Program format exclusively for married couples (2 persons per pass).</li>
                   <li>Children are strictly not permitted inside the seminar hall.</li>
                   <li><strong className="text-amber-900 font-bold">Non-Refundable &amp; Non-Transferable:</strong> સેમિનાર ફી કોઈપણ સંજોગોમાં રિફંડ કે ટ્રાન્સફર થશે નહીં.</li>
                   <li>Instant digital pass issued immediately upon Razorpay payment.</li>
@@ -632,14 +632,14 @@ export default function EventDetailPage() {
 
             {/* Right: Couple Registration Form */}
             <div className="lg:col-span-7 bg-white border border-stone-200/90 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
-              
+
               <div>
                 <h2 className="text-xl md:text-2xl font-extrabold text-stone-900">Couple Seminar Registration</h2>
                 <p className="text-xs text-stone-600 mt-1 font-medium">
-                  Fill in your details to register and reserve your official couple educational seminar pass.
+                  Fill in your details to register and reserve your official couple pass.
                 </p>
                 <div className="mt-3 p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-700 font-medium">
-                  You are registering for an educational Ek Duje Ke Liye seminar/workshop conducted by Manish Vaghasiya.
+                  You are registering for Ek Duje Ke Liye couple program conducted by Manish Vaghasiya.
                 </div>
               </div>
 
@@ -658,14 +658,14 @@ export default function EventDetailPage() {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-5">
-                  
+
                   {errorMessage && (
                     <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-semibold">
                       {errorMessage}
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
                     <div>
                       <label className="text-xs font-bold text-stone-700 block mb-1.5">
                         પતિનું નામ (Husband&apos;s Name) *
@@ -676,7 +676,7 @@ export default function EventDetailPage() {
                         value={husbandName}
                         onChange={(e) => setHusbandName(e.target.value)}
                         placeholder="e.g. Ramesh"
-                        className="w-full bg-stone-50 border border-stone-300 focus:bg-white focus:border-rose-500 rounded-xl px-4 py-3 text-sm text-stone-900 outline-none transition-all"
+                        className="w-full bg-stone-50 border border-stone-300 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 rounded-xl px-4 py-3 text-base text-stone-900 outline-none transition-all"
                       />
                     </div>
 
@@ -690,12 +690,12 @@ export default function EventDetailPage() {
                         value={wifeName}
                         onChange={(e) => setWifeName(e.target.value)}
                         placeholder="e.g. Geeta"
-                        className="w-full bg-stone-50 border border-stone-300 focus:bg-white focus:border-rose-500 rounded-xl px-4 py-3 text-sm text-stone-900 outline-none transition-all"
+                        className="w-full bg-stone-50 border border-stone-300 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 rounded-xl px-4 py-3 text-base text-stone-900 outline-none transition-all"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
                     <div>
                       <label className="text-xs font-bold text-stone-700 block mb-1.5">
                         અટક (Surname) *
@@ -706,7 +706,7 @@ export default function EventDetailPage() {
                         value={surname}
                         onChange={(e) => setSurname(e.target.value)}
                         placeholder="e.g. Patel"
-                        className="w-full bg-stone-50 border border-stone-300 focus:bg-white focus:border-rose-500 rounded-xl px-4 py-3 text-sm text-stone-900 outline-none transition-all"
+                        className="w-full bg-stone-50 border border-stone-300 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 rounded-xl px-4 py-3 text-base text-stone-900 outline-none transition-all"
                       />
                     </div>
 
@@ -721,7 +721,7 @@ export default function EventDetailPage() {
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
                         placeholder="e.g. 9876543210"
-                        className="w-full bg-stone-50 border border-stone-300 focus:bg-white focus:border-rose-500 rounded-xl px-4 py-3 text-sm text-stone-900 outline-none transition-all"
+                        className="w-full bg-stone-50 border border-stone-300 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 rounded-xl px-4 py-3 text-base text-stone-900 outline-none transition-all"
                       />
                     </div>
                   </div>
@@ -818,7 +818,7 @@ export default function EventDetailPage() {
       {/* Footer */}
       <footer className="py-6 px-8 border-t border-stone-200 bg-white text-center text-xs text-stone-500 space-y-2">
         <div>
-          &copy; {new Date().getFullYear()} Ek Duje Ke Liye &bull; Educational Seminars by Manish Vaghasiya. All rights reserved.
+          &copy; {new Date().getFullYear()} Ek Duje Ke Liye &bull; A Program for Couples by Manish Vaghasiya. All rights reserved.
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3 text-[11px]">
           <Link href="/privacy-policy" className="text-stone-600 hover:text-rose-600 hover:underline">Privacy Policy</Link>

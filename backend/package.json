@@ -13,7 +13,11 @@
     "test:order": "node tests/test_order_creation.js",
     "seed:programs": "node scripts/seed_september_programs.js",
     "migrate:v2": "node scripts/migrate-event-config-v2.js",
-    "audit:static-data": "node ../scripts/audit-static-business-data.js"
+    "audit:static-data": "node ../scripts/audit-static-business-data.js",
+    "whatsapp:templates:list": "node src/integrations/whatsapp/cli.js list",
+    "whatsapp:templates:validate": "node src/integrations/whatsapp/cli.js validate",
+    "whatsapp:templates:sync": "node src/integrations/whatsapp/cli.js sync",
+    "whatsapp:templates:status": "node src/integrations/whatsapp/cli.js status"
   },
   "dependencies": {
     "cloudinary": "^2.10.0",
@@ -25,6 +29,7 @@
     "multer": "^2.2.0",
     "node-cron": "^4.6.0",
     "razorpay": "^2.9.8",
+    "sharp": "^0.35.4",
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {

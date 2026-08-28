@@ -95,3 +95,22 @@ export const fetchOrder = async (orderId) => {
   const instance = getRazorpayInstance();
   return await instance.orders.fetch(orderId);
 };
+
+export const razorpayService = {
+  get keyId() {
+    return getRazorpayKeyId();
+  },
+  async createOrder({ amountInr, currency = 'INR', receipt, notes }) {
+    return await createRazorpayOrder({ inquiryId: receipt, amount: amountInr, currency, notes });
+  },
+  verifyPaymentSignature({ orderId, paymentId, signature }) {
+    return verifyCheckoutSignature({
+      razorpay_order_id: orderId,
+      razorpay_payment_id: paymentId,
+      razorpay_signature: signature
+    });
+  },
+  verifyWebhookSignature,
+  fetchPayment,
+  fetchOrder
+};

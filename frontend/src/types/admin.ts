@@ -2,8 +2,10 @@ export type AdminRole = 'superadmin' | 'admin' | 'guest';
 
 export type AdminSection = 
   | 'dashboard'
+  | 'scanner'
   | 'programs'
   | 'registrations'
+  | 'vip_passes'
   | 'finance'
   | 'whatsapp'
   | 'settings'
@@ -42,6 +44,11 @@ export interface SiteSettings {
   facebookUrl?: string;
   youtubeUrl?: string;
   linktreeUrl?: string;
+  manishYoutubeUrl?: string;
+  manishInstagramUrl?: string;
+  manishFacebookUrl?: string;
+  manishLinkedinUrl?: string;
+  manishTwitterUrl?: string;
   defaultCity?: string;
   defaultCountry?: string;
   defaultCurrency?: string;
