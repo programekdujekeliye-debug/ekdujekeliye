@@ -21,9 +21,9 @@ async function runMigration() {
     setting = new Setting({
       key: 'global',
       brandName: 'Ek Duje Ke Liye',
-      supportPhone: '+91 98251 00000',
-      supportWhatsapp: '+91 98251 00000',
-      supportEmail: 'contact@ekdujekeliye.in',
+      supportPhone: '+91 82003 02328',
+      supportWhatsapp: '+91 82003 02328',
+      supportEmail: 'privacy.ekdujekeliye@gmail.com',
       websiteEmail: 'info@ekdujekeliye.in',
       defaultCity: 'Surat',
       defaultCountry: 'India',

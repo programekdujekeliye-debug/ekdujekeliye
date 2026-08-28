@@ -773,7 +773,7 @@ export const EventsPage = () => {
                         type="tel"
                         value={formData.contactPhone || ''}
                         onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-                        placeholder="+91 98251 00000"
+                        placeholder="+91 82003 02328"
                         className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
                       />
                     </div>
@@ -783,7 +783,7 @@ export const EventsPage = () => {
                         type="tel"
                         value={formData.contactWhatsapp || ''}
                         onChange={(e) => setFormData({ ...formData, contactWhatsapp: e.target.value })}
-                        placeholder="+91 98251 00000"
+                        placeholder="+91 82003 02328"
                         className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
                       />
                     </div>
