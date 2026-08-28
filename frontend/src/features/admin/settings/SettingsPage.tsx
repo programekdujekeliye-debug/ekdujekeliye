@@ -65,15 +65,15 @@ export const SettingsPage = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Payment Settings Card */}
-      <div className="bg-white border border-slate-200/90 shadow-xs rounded-2xl p-6 space-y-6">
+      <div className="bg-white border border-slate-200/90 shadow-xs rounded-2xl p-4 sm:p-6 space-y-5">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+          <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
             <span>💳</span>
             <span>Payment &amp; UPI Rotation Settings</span>
           </h2>
-          <p className="text-slate-500 text-xs mt-1 font-medium">
+          <p className="text-slate-500 text-[11px] sm:text-xs mt-1 font-medium">
             Configure active UPI account details, limits, and rotating payee IDs for QR codes.
           </p>
         </div>
@@ -97,7 +97,7 @@ export const SettingsPage = () => {
                   if (first) setUpiId(first);
                 }}
                 placeholder="upi1@okaxis, upi2@okicici"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500"
+                className="w-full px-3 py-2.5 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500"
               />
             </div>
 
@@ -111,7 +111,7 @@ export const SettingsPage = () => {
                 value={upiId}
                 onChange={(e) => setUpiId(e.target.value)}
                 placeholder="payee@upi"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500"
+                className="w-full px-3 py-2.5 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500"
               />
             </div>
 
@@ -126,12 +126,12 @@ export const SettingsPage = () => {
                 value={upiLimit}
                 onChange={(e) => setUpiLimit(Number(e.target.value))}
                 placeholder="50"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500"
+                className="w-full px-3 py-2.5 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Payee Account Name
@@ -142,7 +142,7 @@ export const SettingsPage = () => {
                 value={payeeName}
                 onChange={(e) => setPayeeName(e.target.value)}
                 placeholder="e.g. EK DUJE KE LIYE"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500"
+                className="w-full px-3 py-2.5 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500"
               />
             </div>
 
@@ -156,7 +156,7 @@ export const SettingsPage = () => {
                 min="1"
                 value={amount}
                 onChange={(e) => setAmount(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs font-bold focus:bg-white focus:outline-none focus:border-rose-500"
+                className="w-full px-3 py-2.5 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm font-bold focus:bg-white focus:outline-none focus:border-rose-500"
               />
             </div>
           </div>
@@ -164,7 +164,7 @@ export const SettingsPage = () => {
           <button
             type="submit"
             disabled={submitting}
-            className="px-6 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
+            className="w-full sm:w-auto px-6 py-2.5 min-h-[42px] bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
           >
             {submitting ? 'Saving Settings...' : 'Save Payment Settings'}
           </button>

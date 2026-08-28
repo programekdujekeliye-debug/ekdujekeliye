@@ -65,20 +65,20 @@ export const IntegrationsCenter = ({ authPassword }: { authPassword: string }) =
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
-            <ShieldCheckIcon className="w-5 h-5 text-purple-600" />
-            Integrations &amp; Infrastructure Health
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 bg-white border border-slate-200 p-4 sm:p-5 lg:p-6 rounded-2xl shadow-xs min-w-0 w-full">
+        <div className="min-w-0 flex-1 w-full">
+          <h2 className="text-base sm:text-lg md:text-xl font-extrabold text-slate-900 flex flex-wrap items-center gap-2 leading-tight break-words">
+            <ShieldCheckIcon className="w-5 h-5 text-purple-600 flex-shrink-0" />
+            <span>Integrations &amp; Infrastructure Health</span>
           </h2>
-          <p className="text-xs text-slate-500 mt-1 font-medium">
+          <p className="text-[11px] sm:text-xs text-slate-500 mt-1 font-medium leading-normal break-words">
             Active vendor connections and security status. Raw API secrets and private keys are never exposed.
           </p>
         </div>
         <button
           onClick={fetchIntegrations}
           disabled={loading}
-          className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer"
+          className="p-2.5 min-h-[42px] min-w-[42px] bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer flex items-center justify-center self-end sm:self-auto"
           title="Refresh Status"
         >
           <RefreshCwIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -90,13 +90,13 @@ export const IntegrationsCenter = ({ authPassword }: { authPassword: string }) =
           Verifying third-party service connections...
         </div>
       ) : error ? (
-        <div className="p-6 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold">
+        <div className="p-4 sm:p-6 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold">
           {error}
         </div>
       ) : data ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5 lg:gap-6">
           {/* Razorpay Gateway */}
-          <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-4 shadow-xs">
+          <div className="p-4 sm:p-6 bg-white border border-slate-200 rounded-2xl space-y-4 shadow-xs">
             <div className="flex justify-between items-center">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Payment Gateway</span>
               <span className="px-2.5 py-1 text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md">

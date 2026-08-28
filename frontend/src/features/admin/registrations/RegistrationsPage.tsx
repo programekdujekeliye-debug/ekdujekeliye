@@ -287,17 +287,17 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
 
           {/* Bulk Transfer Action Bar */}
           {selectedIds.length > 0 && (
-            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="text-xs font-bold text-rose-900">
-                <span>{selectedIds.length} registrations selected.</span>
+                <span>{selectedIds.length} registration(s) selected</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <select
                   value={targetProgramId}
                   onChange={(e) => setTargetProgramId(e.target.value)}
-                  className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+                  className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 flex-1 sm:flex-none min-w-0"
                 >
-                  <option value="">-- Choose Target Program Slot --</option>
+                  <option value="">-- Target Program Slot --</option>
                   {programs.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} ({p.date})
@@ -306,23 +306,24 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                 </select>
                 <button
                   onClick={handleBulkMove}
-                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer whitespace-nowrap min-h-[38px]"
                 >
                   Move Selected
                 </button>
                 <button
                   onClick={() => setSelectedIds([])}
-                  className="px-3 py-2 bg-white border border-slate-300 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+                  className="px-3 py-2 bg-white border border-slate-300 text-slate-700 font-bold text-xs rounded-xl cursor-pointer whitespace-nowrap min-h-[38px]"
                 >
-                  Clear Selection
+                  Clear
                 </button>
               </div>
             </div>
           )}
 
-          {/* Registrations List Table */}
+          {/* Registrations List Container */}
           <div className="bg-white border border-slate-200 shadow-xs rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* Desktop Table View (lg and above) */}
+            <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-700">
                 <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
                   <tr>
@@ -398,7 +399,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                           </td>
                           <td className="px-4 py-3.5">
                             <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border whitespace-nowrap ${
                                 isApproved
                                   ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                                   : isRejected
@@ -456,7 +457,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                 )}
                               </div>
                               {sub.photoStorageStatus === 'ARCHIVED' && (
-                                <span className="text-[9px] font-bold text-sky-600 uppercase tracking-tight">
+                                <span className="text-[9px] font-bold text-sky-600 uppercase tracking-tight whitespace-nowrap">
                                   Archived Original
                                 </span>
                               )}
@@ -468,13 +469,13 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                 <>
                                   <button
                                     onClick={() => handleApprove(sub.inquiryId)}
-                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg shadow-2xs cursor-pointer"
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg shadow-2xs cursor-pointer whitespace-nowrap"
                                   >
                                     Approve
                                   </button>
                                   <button
                                     onClick={() => handleReject(sub.inquiryId)}
-                                    className="px-2.5 py-1 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-bold text-[11px] rounded-lg cursor-pointer"
+                                    className="px-2.5 py-1 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-bold text-[11px] rounded-lg cursor-pointer whitespace-nowrap"
                                   >
                                     Reject
                                   </button>
@@ -497,23 +498,191 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
               </table>
             </div>
 
+            {/* Mobile & Tablet Card View (< lg screens) */}
+            <div className="lg:hidden p-3 sm:p-4 space-y-3">
+              {loading && submissions.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 font-medium text-xs">
+                  Loading registrations...
+                </div>
+              ) : submissions.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 font-medium text-xs">
+                  No registrations match the selected filters.
+                </div>
+              ) : (
+                submissions.map((sub) => {
+                  const isSelected = selectedIds.includes(sub.inquiryId);
+                  const isApproved = sub.status === 'approved';
+                  const isRejected = sub.status === 'rejected';
+                  const isPending = !isApproved && !isRejected;
+
+                  return (
+                    <div
+                      key={sub.inquiryId}
+                      className={`p-3.5 sm:p-4 bg-white border rounded-2xl transition-all space-y-3 ${
+                        isSelected ? 'border-rose-400 bg-rose-50/30 ring-1 ring-rose-400' : 'border-slate-200 shadow-xs'
+                      }`}
+                    >
+                      {/* Card Top: Checkbox, Token ID, Status */}
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              setSelectedIds((prev) =>
+                                e.target.checked
+                                  ? [...prev, sub.inquiryId]
+                                  : prev.filter((id) => id !== sub.inquiryId)
+                              );
+                            }}
+                            className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                          />
+                          <span className="font-mono font-bold text-rose-700 text-xs sm:text-sm">{sub.inquiryId}</span>
+                        </div>
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border whitespace-nowrap ${
+                            isApproved
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                              : isRejected
+                              ? 'bg-red-50 border-red-200 text-red-700'
+                              : 'bg-amber-50 border-amber-200 text-amber-800'
+                          }`}
+                        >
+                          {sub.status || 'pending'}
+                        </span>
+                      </div>
+
+                      {/* Card Middle: Photo + Couple Details */}
+                      <div className="flex items-start gap-3">
+                        {/* Thumbnail / Drive */}
+                        <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                          {sub.couplePhoto ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedImage(sub.photoThumbnailUrl || sub.couplePhoto)}
+                              className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer shadow-xs"
+                            >
+                              <img
+                                src={
+                                  (sub.photoThumbnailUrl || sub.couplePhoto).startsWith('http') ||
+                                  (sub.photoThumbnailUrl || sub.couplePhoto).startsWith('data:')
+                                    ? (sub.photoThumbnailUrl || sub.couplePhoto)
+                                    : `${API_BASE_URL}${sub.photoThumbnailUrl || sub.couplePhoto}`
+                                }
+                                alt="Couple"
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
+                            </button>
+                          ) : (
+                            <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">
+                              No Pic
+                            </div>
+                          )}
+                          {sub.hasArchivedOriginal && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenArchivedOriginal(sub.inquiryId)}
+                              className="px-1.5 py-0.5 bg-sky-50 text-sky-700 border border-sky-200 rounded text-[9px] font-bold"
+                            >
+                              Drive ↗
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Text info */}
+                        <div className="flex-1 min-w-0 space-y-0.5">
+                          <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm truncate">
+                            {sub.husbandName} &amp; {sub.wifeName}
+                          </h4>
+                          <p className="text-[11px] text-slate-500 font-medium truncate">{sub.surname}</p>
+                          <a
+                            href={`tel:${sub.phoneNumber}`}
+                            className="text-[11px] text-rose-600 font-mono font-bold block"
+                          >
+                            📞 {sub.phoneNumber}
+                          </a>
+                          <p className="text-[10px] text-slate-400 truncate">
+                            📍 {sub.programName || 'N/A'} ({sub.programDate})
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Card Bottom: Attendance & Actions */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
+                        {/* Attendance Touch Target */}
+                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
+                          <span className="text-[10px] font-bold uppercase text-slate-500 flex-shrink-0">Attendance:</span>
+                          <select
+                            value={sub.attendance || 'unmarked'}
+                            onChange={(e) => handleAttendance(sub.inquiryId, e.target.value as any)}
+                            className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none w-full cursor-pointer min-h-[30px]"
+                          >
+                            <option value="unmarked">⚪ Unmarked</option>
+                            <option value="present">🟢 Present</option>
+                            <option value="absent">🔴 Absent</option>
+                          </select>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                          {isPending && (
+                            <>
+                              <button
+                                onClick={() => handleApprove(sub.inquiryId)}
+                                className="px-3 py-1.5 min-h-[36px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer whitespace-nowrap"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => handleReject(sub.inquiryId)}
+                                className="px-3 py-1.5 min-h-[36px] bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-bold text-xs rounded-xl cursor-pointer whitespace-nowrap"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          )}
+                          <a
+                            href={`/pass/${sub.inquiryId}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-2.5 py-1.5 min-h-[36px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer"
+                            title="View Pass"
+                          >
+                            Pass ↗
+                          </a>
+                          <button
+                            onClick={() => handleDelete(sub.inquiryId)}
+                            className="p-2 min-h-[36px] min-w-[36px] text-slate-400 hover:text-red-600 rounded-xl hover:bg-red-50 cursor-pointer flex items-center justify-center"
+                            title="Delete"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
             {/* Pagination Controls */}
             <div className="flex flex-col sm:flex-row justify-between items-center p-4 border-t border-slate-200 gap-3 text-xs text-slate-600">
-              <span>
+              <span className="text-center sm:text-left">
                 Showing {submissions.length} of {totalSubmissions} entries (Page {currentPage} of {totalPages})
               </span>
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full sm:w-auto justify-center">
                 <button
                   disabled={currentPage <= 1 || loading}
                   onClick={() => fetchList(currentPage - 1)}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-800 font-bold rounded-lg cursor-pointer transition-all"
+                  className="flex-1 sm:flex-none px-4 py-2 min-h-[38px] bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-800 font-bold rounded-xl cursor-pointer transition-all whitespace-nowrap"
                 >
                   Previous
                 </button>
                 <button
                   disabled={currentPage >= totalPages || loading}
                   onClick={() => fetchList(currentPage + 1)}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-800 font-bold rounded-lg cursor-pointer transition-all"
+                  className="flex-1 sm:flex-none px-4 py-2 min-h-[38px] bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-800 font-bold rounded-xl cursor-pointer transition-all whitespace-nowrap"
                 >
                   Next
                 </button>

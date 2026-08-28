@@ -58,19 +58,19 @@ export const DuplicateSubmissionsView = () => {
   return (
     <div className="space-y-6">
       {/* Global Bulk Action Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-white border border-slate-200 shadow-xs rounded-2xl p-4">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white border border-slate-200 shadow-xs rounded-2xl p-4">
         <div className="text-xs font-bold text-slate-800 flex items-center gap-2">
           <span>✅</span>
           <span>{selectedInquiryIds.length} duplicate submissions selected.</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
           {selectedInquiryIds.length > 0 && (
             <button
               onClick={handleBulkDelete}
               disabled={deleting}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
+              className="flex-1 sm:flex-none px-4 py-2 min-h-[38px] bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer whitespace-nowrap"
             >
-              🗑️ Delete Selected ({selectedInquiryIds.length})
+              🗑️ Delete ({selectedInquiryIds.length})
             </button>
           )}
           <button
@@ -78,7 +78,7 @@ export const DuplicateSubmissionsView = () => {
               const allIds = duplicateGroups.flatMap((g) => g.submissions.map((s) => s.inquiryId));
               setSelectedInquiryIds(selectedInquiryIds.length === allIds.length ? [] : allIds);
             }}
-            className="px-3 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
+            className="flex-1 sm:flex-none px-3 py-2 min-h-[38px] border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer whitespace-nowrap"
           >
             {selectedInquiryIds.length === duplicateGroups.flatMap((g) => g.submissions.map((s) => s.inquiryId)).length
               ? 'Deselect All'
@@ -88,7 +88,7 @@ export const DuplicateSubmissionsView = () => {
       </div>
 
       {duplicateGroups.map((group) => (
-        <div key={group.id} className="bg-white border border-slate-200 shadow-xs rounded-2xl p-6 space-y-4">
+        <div key={group.id} className="bg-white border border-slate-200 shadow-xs rounded-2xl p-4 sm:p-6 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div className="flex items-center gap-2.5">
               <span className="text-xl">⚠️</span>
@@ -101,14 +101,14 @@ export const DuplicateSubmissionsView = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {group.submissions.map((sub) => {
               const isSelected = selectedInquiryIds.includes(sub.inquiryId);
 
               return (
                 <div
                   key={sub.inquiryId}
-                  className={`border rounded-xl p-5 flex flex-col justify-between transition-all space-y-4 relative ${
+                  className={`border rounded-xl p-4 sm:p-5 flex flex-col justify-between transition-all space-y-4 relative ${
                     isSelected ? 'border-rose-400 bg-rose-50/40' : 'border-slate-200 bg-slate-50/60'
                   }`}
                 >

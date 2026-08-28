@@ -68,25 +68,25 @@ export const WhatsAppPage = () => {
   const filteredTemplates = templates.filter((t) => t.type === tab);
 
   return (
-    <div className="bg-white border border-slate-200/90 shadow-xs rounded-2xl p-6 space-y-6">
+    <div className="bg-white border border-slate-200/90 shadow-xs rounded-2xl p-4 sm:p-5 lg:p-6 space-y-6 min-w-0 w-full">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-            <MessageCircleIcon className="w-5 h-5 text-emerald-600" />
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 min-w-0 w-full">
+        <div className="min-w-0 flex-1 w-full">
+          <h2 className="text-base sm:text-lg md:text-xl font-extrabold text-slate-900 tracking-tight flex flex-wrap items-center gap-2 leading-tight break-words">
+            <MessageCircleIcon className="w-5 h-5 text-emerald-600 flex-shrink-0" />
             <span>WhatsApp Message Templates &amp; Automation</span>
           </h2>
-          <p className="text-slate-500 text-xs mt-1 font-medium">
+          <p className="text-slate-500 text-[11px] sm:text-xs mt-1 font-medium leading-normal break-words">
             Manage message templates sent to users for pass distribution, payment confirmations, and photos.
           </p>
         </div>
 
         {/* Tab switcher */}
-        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 self-stretch sm:self-auto">
+        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => setTab('pass_delivery')}
-            className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer truncate ${
               tab === 'pass_delivery'
                 ? 'bg-white text-rose-700 shadow-xs border border-slate-200'
                 : 'text-slate-600 hover:text-slate-900'
@@ -97,7 +97,7 @@ export const WhatsAppPage = () => {
           <button
             type="button"
             onClick={() => setTab('payment_request')}
-            className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer truncate ${
               tab === 'payment_request'
                 ? 'bg-white text-rose-700 shadow-xs border border-slate-200'
                 : 'text-slate-600 hover:text-slate-900'
@@ -108,7 +108,7 @@ export const WhatsAppPage = () => {
           <button
             type="button"
             onClick={() => setTab('photo_delivery')}
-            className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer truncate ${
               tab === 'photo_delivery'
                 ? 'bg-white text-rose-700 shadow-xs border border-slate-200'
                 : 'text-slate-600 hover:text-slate-900'
@@ -120,12 +120,12 @@ export const WhatsAppPage = () => {
       </div>
 
       {/* Add Template Form */}
-      <form onSubmit={handleCreate} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4">
+      <form onSubmit={handleCreate} className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 sm:p-4 space-y-4">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
           Create New {tab === 'pass_delivery' ? 'Pass Delivery' : tab === 'payment_request' ? 'Payment Request' : 'Photo Delivery'} Template
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 items-end">
           <div className="md:col-span-1">
             <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Template Name</label>
             <input
@@ -134,11 +134,11 @@ export const WhatsAppPage = () => {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="e.g. Gujarati Pass Msg"
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-slate-900 text-sm focus:outline-none focus:border-rose-500 transition-colors"
+              className="w-full px-3 py-2.5 min-h-[42px] bg-white border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:outline-none focus:border-rose-500 transition-colors"
             />
           </div>
 
-          <div className="md:col-span-2 flex gap-3">
+          <div className="md:col-span-2 flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
             <div className="flex-grow">
               <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Message Text</label>
               <input
@@ -147,21 +147,21 @@ export const WhatsAppPage = () => {
                 value={newText}
                 onChange={(e) => setNewText(e.target.value)}
                 placeholder="Hello! Download your pass here: {passUrl}"
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-slate-900 text-sm focus:outline-none focus:border-rose-500 transition-colors"
+                className="w-full px-3 py-2.5 min-h-[42px] bg-white border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:outline-none focus:border-rose-500 transition-colors"
               />
             </div>
             <button
               type="submit"
-              className="px-5 py-2 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold rounded-xl text-xs transition-all shadow-md h-[38px] self-end cursor-pointer"
+              className="px-5 py-2.5 min-h-[42px] bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer whitespace-nowrap"
             >
-              Create
+              Create Template
             </button>
           </div>
         </div>
 
         {/* Variables Chip list */}
-        <div className="text-[10px] text-slate-500 flex flex-wrap items-center gap-2">
-          <span className="font-bold text-slate-700">Supported Variables:</span>
+        <div className="text-[10px] text-slate-500 flex flex-wrap items-center gap-1.5">
+          <span className="font-bold text-slate-700">Variables:</span>
           {tab === 'pass_delivery' ? (
             <>
               <code className="bg-slate-200/80 px-1.5 py-0.5 rounded">{`{husbandName}`}</code>

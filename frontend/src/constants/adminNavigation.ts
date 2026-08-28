@@ -20,12 +20,12 @@ export const NORMAL_ADMIN_NAVIGATION: AdminNavItem[] = [
   },
   {
     id: 'programs',
-    label: 'Program Slots',
+    label: 'Event Slots',
     iconName: 'TicketIcon'
   },
   {
     id: 'registrations',
-    label: 'Registrations & Attendance',
+    label: 'Registrations',
     iconName: 'UsersIcon'
   },
   {
@@ -35,7 +35,7 @@ export const NORMAL_ADMIN_NAVIGATION: AdminNavItem[] = [
   },
   {
     id: 'settings',
-    label: 'Event & VIP Settings',
+    label: 'Settings',
     iconName: 'SettingsIcon'
   }
 ];

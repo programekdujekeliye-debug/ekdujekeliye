@@ -150,14 +150,17 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({ isOpen, onCl
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-6 border border-slate-200">
-        <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-          <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+    <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in overflow-y-auto">
+      <div className="bg-white rounded-3xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-5 border border-slate-200 my-auto">
+        <div className="flex justify-between items-center border-b border-slate-100 pb-3 sm:pb-4">
+          <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
             <span>📥</span>
             <span>Batch Export Center</span>
           </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 font-bold p-1">
+          <button
+            onClick={onClose}
+            className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full font-bold cursor-pointer transition-colors"
+          >
             ✕
           </button>
         </div>
@@ -170,7 +173,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({ isOpen, onCl
             <select
               value={exportProgramId}
               onChange={(e) => setExportProgramId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs font-semibold focus:outline-none focus:border-rose-500"
+              className="w-full px-3 py-2.5 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm font-semibold focus:outline-none focus:border-rose-500 cursor-pointer"
             >
               <option value="">All Programs (બધા પ્રોગ્રામ)</option>
               {programs.map((p) => (
@@ -188,7 +191,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({ isOpen, onCl
             <select
               value={exportStatus}
               onChange={(e) => setExportStatus(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs font-semibold focus:outline-none focus:border-rose-500"
+              className="w-full px-3 py-2.5 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm font-semibold focus:outline-none focus:border-rose-500 cursor-pointer"
             >
               <option value="">All Statuses</option>
               <option value="approved">Approved Only</option>
@@ -197,18 +200,18 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({ isOpen, onCl
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
             <button
               onClick={handleExportCSV}
               disabled={isExporting}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all"
+              className="w-full py-3 min-h-[44px] bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center"
             >
               {isExporting ? 'Exporting...' : 'Export as CSV'}
             </button>
             <button
               onClick={handleExportPDF}
               disabled={isExporting}
-              className="w-full py-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all"
+              className="w-full py-3 min-h-[44px] bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center"
             >
               {isExporting ? 'Generating...' : 'Print / Save PDF'}
             </button>

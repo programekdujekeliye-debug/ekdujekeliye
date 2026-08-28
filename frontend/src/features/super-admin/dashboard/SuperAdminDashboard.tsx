@@ -47,34 +47,34 @@ export const SuperAdminDashboard = () => {
   }, [selectedProgramId]);
 
   return (
-    <div className="space-y-8">
-      {/* Top Command Metric Cards (Operational & Infrastructure - Financial details moved exclusively to Finance section) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="space-y-6">
+      {/* Top Command Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5 lg:gap-6">
         {/* Total Inquiries */}
-        <div className="p-6 bg-white border border-slate-200/90 rounded-2xl shadow-xs space-y-1">
-          <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block">Total Inquiries</span>
-          <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 block">{totalInquiries}</span>
-          <span className="text-[11px] text-slate-400 font-medium block">Latest Token: {latestTokenId}</span>
+        <div className="p-4 sm:p-5 lg:p-6 bg-white border border-slate-200/90 rounded-2xl shadow-xs space-y-1">
+          <span className="text-[11px] sm:text-xs text-slate-500 font-bold uppercase tracking-wider block">Total Inquiries</span>
+          <span className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 block truncate">{totalInquiries}</span>
+          <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">Latest Token: {latestTokenId}</span>
         </div>
 
         {/* Approved Passes */}
-        <div className="p-6 bg-white border border-slate-200/90 rounded-2xl shadow-xs space-y-1">
-          <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block">Approved Registrations</span>
-          <span className="text-3xl sm:text-4xl font-extrabold text-emerald-600 block">{approvedCount}</span>
-          <span className="text-[11px] text-emerald-600/80 font-medium block">Confirmed couple slots</span>
+        <div className="p-4 sm:p-5 lg:p-6 bg-white border border-slate-200/90 rounded-2xl shadow-xs space-y-1">
+          <span className="text-[11px] sm:text-xs text-slate-500 font-bold uppercase tracking-wider block">Approved Passes</span>
+          <span className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-emerald-600 block truncate">{approvedCount}</span>
+          <span className="text-[10px] sm:text-[11px] text-emerald-600/80 font-medium block truncate">Confirmed couple slots</span>
         </div>
 
         {/* Pending Review */}
-        <div className="p-6 bg-white border border-slate-200/90 rounded-2xl shadow-xs space-y-1">
-          <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block">Pending Review</span>
-          <span className="text-3xl sm:text-4xl font-extrabold text-amber-600 block">{pendingCount}</span>
-          <span className="text-[11px] text-amber-600/80 font-medium block">Awaiting verification</span>
+        <div className="p-4 sm:p-5 lg:p-6 bg-white border border-slate-200/90 rounded-2xl shadow-xs space-y-1">
+          <span className="text-[11px] sm:text-xs text-slate-500 font-bold uppercase tracking-wider block">Pending Review</span>
+          <span className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-amber-600 block truncate">{pendingCount}</span>
+          <span className="text-[10px] sm:text-[11px] text-amber-600/80 font-medium block truncate">Awaiting verification</span>
         </div>
 
         {/* MongoDB Database Storage & System Health */}
-        <div className="p-6 bg-white border border-slate-200/90 rounded-2xl shadow-xs space-y-1">
-          <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block">Database &amp; System</span>
-          <span className="text-2xl font-extrabold text-slate-900 mt-1 block">
+        <div className="p-4 sm:p-5 lg:p-6 bg-white border border-slate-200/90 rounded-2xl shadow-xs space-y-1">
+          <span className="text-[11px] sm:text-xs text-slate-500 font-bold uppercase tracking-wider block">Database &amp; System</span>
+          <span className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-1 block truncate">
             {dbStats ? `${dbStats.storageSizeMB.toFixed(1)} MB / ${dbStats.totalLimitMB} MB` : 'Loading...'}
           </span>
           {dbStats && (
@@ -87,8 +87,8 @@ export const SuperAdminDashboard = () => {
                   style={{ width: `${Math.min(100, (dbStats.storageSizeMB / dbStats.totalLimitMB) * 100)}%` }}
                 />
               </div>
-              <span className="text-[10px] text-slate-400 font-medium block">
-                {((dbStats.storageSizeMB / dbStats.totalLimitMB) * 100).toFixed(1)}% used &bull; Render RSS: {resources?.memory?.rssMB ? `${resources.memory.rssMB} MB` : 'Safe'}
+              <span className="text-[10px] text-slate-400 font-medium block truncate">
+                {((dbStats.storageSizeMB / dbStats.totalLimitMB) * 100).toFixed(1)}% used &bull; RSS: {resources?.memory?.rssMB ? `${resources.memory.rssMB} MB` : 'Safe'}
               </span>
             </div>
           )}

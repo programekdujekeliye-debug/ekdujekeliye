@@ -63,34 +63,34 @@ export const TrashSubmissionsView = () => {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-slate-200 shadow-xs rounded-2xl p-6">
+      <div className="bg-white border border-slate-200 shadow-xs rounded-2xl p-4 sm:p-6">
         <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-4">
-          <h3 className="font-extrabold text-slate-900 text-base">Trash Bin ({totalSubmissions} items)</h3>
+          <h3 className="font-extrabold text-slate-900 text-sm sm:text-base">Trash Bin ({totalSubmissions} items)</h3>
         </div>
 
         <div className="divide-y divide-slate-100">
           {submissions.map((sub) => (
             <div key={sub.inquiryId} className="py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
+              <div className="min-w-0 flex-1">
                 <span className="font-mono text-xs font-bold text-rose-700">{sub.inquiryId}</span>
-                <p className="text-xs font-bold text-slate-900 mt-0.5">
+                <p className="text-xs font-bold text-slate-900 mt-0.5 truncate">
                   {sub.husbandName} &amp; {sub.wifeName} {sub.surname}
                 </p>
                 <span className="text-[11px] text-slate-500 font-mono">{sub.phoneNumber}</span>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2 self-end sm:self-center w-full sm:w-auto">
                 <button
                   onClick={() => handleRestore(sub.inquiryId)}
-                  className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold transition-all border border-emerald-200 cursor-pointer"
+                  className="flex-1 sm:flex-none px-3 py-2 min-h-[38px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold transition-all border border-emerald-200 cursor-pointer text-center"
                 >
                   Restore
                 </button>
                 <button
                   onClick={() => handlePermanentDelete(sub.inquiryId)}
-                  className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-xs font-bold transition-all border border-red-200 cursor-pointer"
+                  className="flex-1 sm:flex-none px-3 py-2 min-h-[38px] bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold transition-all border border-red-200 cursor-pointer text-center"
                 >
-                  Delete Permanently
+                  Delete
                 </button>
               </div>
             </div>
@@ -107,14 +107,14 @@ export const TrashSubmissionsView = () => {
               <button
                 disabled={page <= 1}
                 onClick={() => fetchTrash(page - 1)}
-                className="px-3 py-1.5 bg-slate-100 disabled:opacity-50 rounded-lg font-bold"
+                className="px-3 py-1.5 min-h-[36px] bg-slate-100 hover:bg-slate-200 disabled:opacity-50 rounded-xl font-bold cursor-pointer"
               >
                 Previous
               </button>
               <button
                 disabled={page >= totalPages}
                 onClick={() => fetchTrash(page + 1)}
-                className="px-3 py-1.5 bg-slate-100 disabled:opacity-50 rounded-lg font-bold"
+                className="px-3 py-1.5 min-h-[36px] bg-slate-100 hover:bg-slate-200 disabled:opacity-50 rounded-xl font-bold cursor-pointer"
               >
                 Next
               </button>

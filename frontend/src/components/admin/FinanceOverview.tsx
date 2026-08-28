@@ -100,29 +100,29 @@ export const FinanceOverview = ({ authPassword, selectedProgramId }: { authPassw
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
-            <DollarSignIcon className="w-5 h-5 text-emerald-600" />
-            Financial Ledger &amp; Revenue Overview
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 bg-white border border-slate-200 p-4 sm:p-5 lg:p-6 rounded-2xl shadow-xs min-w-0 w-full">
+        <div className="min-w-0 flex-1 w-full">
+          <h2 className="text-base sm:text-lg md:text-xl font-extrabold text-slate-900 flex flex-wrap items-center gap-2 leading-tight break-words">
+            <DollarSignIcon className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+            <span>Financial Ledger &amp; Revenue Overview</span>
           </h2>
-          <p className="text-xs text-slate-500 mt-1 font-medium">
-            Authoritative revenue calculations computed directly from verified registration records and payment transactions.
+          <p className="text-[11px] sm:text-xs text-slate-500 mt-1 font-medium leading-normal break-words">
+            Authoritative revenue calculations computed directly from verified registration records.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <button
             onClick={handleExportCSV}
             disabled={!data}
-            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2 cursor-pointer transition-all"
+            className="flex-1 sm:flex-none px-4 py-2.5 min-h-[42px] bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all whitespace-nowrap"
           >
-            <DownloadIcon className="w-4 h-4" />
+            <DownloadIcon className="w-4 h-4 flex-shrink-0" />
             <span>Export Finance CSV</span>
           </button>
           <button
             onClick={fetchFinance}
             disabled={loading}
-            className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer"
+            className="p-2.5 min-h-[42px] min-w-[42px] bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer flex items-center justify-center"
             title="Refresh Finance Data"
           >
             <RefreshCwIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -135,35 +135,35 @@ export const FinanceOverview = ({ authPassword, selectedProgramId }: { authPassw
           Computing financial analytics from payment ledger...
         </div>
       ) : error ? (
-        <div className="p-6 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold">
+        <div className="p-4 sm:p-6 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold">
           {error}
         </div>
       ) : data ? (
         <>
           {/* Summary Metric Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-2 shadow-xs">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Gross Revenue</span>
-              <span className="text-3xl font-extrabold text-emerald-600 block">₹{data.grossRevenue.toLocaleString('en-IN')}</span>
-              <span className="text-[11px] text-slate-500 font-medium block">From {data.totalTransactions} registered couples</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5 lg:gap-6">
+            <div className="p-4 sm:p-5 lg:p-6 bg-white border border-slate-200 rounded-2xl space-y-1 shadow-xs">
+              <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block">Gross Revenue</span>
+              <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600 block truncate">₹{data.grossRevenue.toLocaleString('en-IN')}</span>
+              <span className="text-[10px] sm:text-[11px] text-slate-500 font-medium block truncate">From {data.totalTransactions} registered couples</span>
             </div>
 
-            <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-2 shadow-xs">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Net Revenue</span>
-              <span className="text-3xl font-extrabold text-slate-900 block">₹{data.netRevenue.toLocaleString('en-IN')}</span>
-              <span className="text-[11px] text-slate-500 font-medium block">After ₹{data.totalRefunds} refunds</span>
+            <div className="p-4 sm:p-5 lg:p-6 bg-white border border-slate-200 rounded-2xl space-y-1 shadow-xs">
+              <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block">Net Revenue</span>
+              <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 block truncate">₹{data.netRevenue.toLocaleString('en-IN')}</span>
+              <span className="text-[10px] sm:text-[11px] text-slate-500 font-medium block truncate">After ₹{data.totalRefunds} refunds</span>
             </div>
 
-            <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-2 shadow-xs">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Average Ticket</span>
-              <span className="text-3xl font-extrabold text-amber-600 block">₹{data.averageTicketValue.toLocaleString('en-IN')}</span>
-              <span className="text-[11px] text-slate-500 font-medium block">Per registered couple pass</span>
+            <div className="p-4 sm:p-5 lg:p-6 bg-white border border-slate-200 rounded-2xl space-y-1 shadow-xs">
+              <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block">Average Ticket</span>
+              <span className="text-2xl sm:text-3xl font-extrabold text-amber-600 block truncate">₹{data.averageTicketValue.toLocaleString('en-IN')}</span>
+              <span className="text-[10px] sm:text-[11px] text-slate-500 font-medium block truncate">Per registered couple pass</span>
             </div>
 
-            <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-2 shadow-xs">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Pending Collections</span>
-              <span className="text-3xl font-extrabold text-slate-600 block">₹{data.pendingAmount.toLocaleString('en-IN')}</span>
-              <span className="text-[11px] text-slate-500 font-medium block">{data.pendingTransactionsCount} unconfirmed reservations</span>
+            <div className="p-4 sm:p-5 lg:p-6 bg-white border border-slate-200 rounded-2xl space-y-1 shadow-xs">
+              <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block">Pending Collections</span>
+              <span className="text-2xl sm:text-3xl font-extrabold text-slate-600 block truncate">₹{data.pendingAmount.toLocaleString('en-IN')}</span>
+              <span className="text-[10px] sm:text-[11px] text-slate-500 font-medium block truncate">{data.pendingTransactionsCount} unconfirmed reservations</span>
             </div>
           </div>
         </>

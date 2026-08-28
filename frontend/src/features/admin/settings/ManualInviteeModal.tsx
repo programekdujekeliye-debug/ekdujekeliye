@@ -67,13 +67,13 @@ export const ManualInviteeModal = () => {
   };
 
   return (
-    <div className="bg-white border border-slate-200 shadow-xs rounded-2xl p-6 space-y-6">
+    <div className="bg-white border border-slate-200 shadow-xs rounded-2xl p-4 sm:p-6 space-y-5">
       <div>
-        <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+        <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
           <span>✍️</span>
           <span>Manual Invitee Registration (VIP Passes)</span>
         </h3>
-        <p className="text-xs text-slate-500 font-medium mt-1">
+        <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-1">
           Directly register invited guests, automatically generating an instant approved pass with prefix IP-.
         </p>
       </div>
@@ -85,14 +85,14 @@ export const ManualInviteeModal = () => {
           {generatedPassUrl && (
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-2 border-t border-emerald-200">
               <span className="font-mono text-xs text-emerald-900 select-all break-all">{generatedPassUrl}</span>
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => {
                     navigator.clipboard.writeText(generatedPassUrl);
                     alert('Pass link copied to clipboard!');
                   }}
-                  className="px-3 py-1.5 bg-emerald-200 hover:bg-emerald-300 text-emerald-900 text-xs font-bold rounded-lg cursor-pointer"
+                  className="flex-1 sm:flex-none px-3 py-2 min-h-[38px] bg-emerald-200 hover:bg-emerald-300 text-emerald-900 text-xs font-bold rounded-xl cursor-pointer"
                 >
                   Copy Link
                 </button>
@@ -102,7 +102,7 @@ export const ManualInviteeModal = () => {
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                  className="flex-1 sm:flex-none px-3 py-2 min-h-[38px] bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer flex items-center justify-center"
                 >
                   Share on WhatsApp
                 </a>
@@ -113,7 +113,7 @@ export const ManualInviteeModal = () => {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <div>
             <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Husband Name</label>
             <input
@@ -122,7 +122,7 @@ export const ManualInviteeModal = () => {
               value={husbandName}
               onChange={(e) => setHusbandName(e.target.value)}
               placeholder="Husband's name"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500"
+              className="w-full px-3 py-2.5 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500"
             />
           </div>
           <div>
@@ -133,7 +133,7 @@ export const ManualInviteeModal = () => {
               value={wifeName}
               onChange={(e) => setWifeName(e.target.value)}
               placeholder="Wife's name"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500"
+              className="w-full px-3 py-2.5 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500"
             />
           </div>
           <div>
@@ -144,12 +144,12 @@ export const ManualInviteeModal = () => {
               value={surname}
               onChange={(e) => setSurname(e.target.value)}
               placeholder="Surname"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500"
+              className="w-full px-3 py-2.5 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500"
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <div>
             <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Mobile Number</label>
             <input
@@ -159,7 +159,7 @@ export const ManualInviteeModal = () => {
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
               placeholder="10-digit number"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500"
+              className="w-full px-3 py-2.5 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500"
             />
           </div>
           <div>
@@ -168,7 +168,7 @@ export const ManualInviteeModal = () => {
               required
               value={programId}
               onChange={(e) => setProgramId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs font-semibold focus:bg-white focus:outline-none focus:border-rose-500"
+              className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm font-semibold focus:bg-white focus:outline-none focus:border-rose-500 cursor-pointer"
             >
               <option value="">-- Choose Slot --</option>
               {programs.map((p) => (
@@ -184,7 +184,7 @@ export const ManualInviteeModal = () => {
               type="file"
               accept="image/*"
               onChange={(e) => e.target.files?.[0] && setCouplePhoto(e.target.files[0])}
-              className="w-full text-slate-600 text-xs file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 cursor-pointer bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5"
+              className="w-full text-slate-600 text-xs file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 cursor-pointer bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 min-h-[42px]"
             />
           </div>
         </div>
@@ -192,7 +192,7 @@ export const ManualInviteeModal = () => {
         <button
           type="submit"
           disabled={loading}
-          className="px-6 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
+          className="w-full sm:w-auto px-6 py-2.5 min-h-[42px] bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
         >
           {loading ? 'Creating Pass...' : 'Register VIP Guest'}
         </button>

@@ -10,17 +10,17 @@ export interface SuperAdminNavItem {
 export const SUPER_ADMIN_NAVIGATION: SuperAdminNavItem[] = [
   {
     id: 'dashboard',
-    label: 'Command Overview',
+    label: 'Overview',
     iconName: 'LayoutDashboardIcon'
   },
   {
     id: 'programs',
-    label: 'All Program Slots',
+    label: 'Event Slots',
     iconName: 'TicketIcon'
   },
   {
     id: 'registrations',
-    label: 'Global Registrations',
+    label: 'Registrations',
     iconName: 'UsersIcon'
   },
   {
@@ -40,17 +40,17 @@ export const SUPER_ADMIN_NAVIGATION: SuperAdminNavItem[] = [
   },
   {
     id: 'settings',
-    label: 'Payment & Global Settings',
+    label: 'Global Settings',
     iconName: 'SettingsIcon'
   },
   {
     id: 'resources',
-    label: 'Resource Monitor',
+    label: 'System Resources',
     iconName: 'ActivityIcon'
   },
   {
     id: 'integrations',
-    label: 'Integrations & Vendors',
+    label: 'Integrations',
     iconName: 'ShieldCheckIcon'
   }
 ];

@@ -153,14 +153,14 @@ export const EventsPage = () => {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Create / Edit Program Form */}
-      <div className="bg-white border border-slate-200/90 shadow-xs rounded-2xl p-6 space-y-6">
+      <div className="bg-white border border-slate-200/90 shadow-xs rounded-2xl p-4 sm:p-6 space-y-5">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
+          <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
             {editingProgram ? 'Edit Program Slot' : 'Add Program Slot'}
           </h2>
-          <p className="text-slate-500 text-xs mt-1 font-medium">
+          <p className="text-slate-500 text-[11px] sm:text-xs mt-1 font-medium">
             Schedule an event with a specific date, pricing, venue, and seat capacity.
           </p>
         </div>
@@ -187,11 +187,11 @@ export const EventsPage = () => {
               value={editingProgram ? editName : name}
               onChange={(e) => (editingProgram ? setEditName(e.target.value) : setName(e.target.value))}
               placeholder="e.g. Ek Duje Ke Liye - Surat"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors font-medium"
+              className="w-full px-3 py-2.5 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors font-medium"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Program Date
@@ -201,7 +201,7 @@ export const EventsPage = () => {
                 required={editingProgram ? editIsDateFinal : isDateFinal}
                 value={editingProgram ? editDate : date}
                 onChange={(e) => (editingProgram ? setEditDate(e.target.value) : setDate(e.target.value))}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
               />
             </div>
             <div>
@@ -213,12 +213,12 @@ export const EventsPage = () => {
                 value={editingProgram ? editTime : time}
                 onChange={(e) => (editingProgram ? setEditTime(e.target.value) : setTime(e.target.value))}
                 placeholder="e.g. 8:30 PM"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Couple Pass Price (₹)
@@ -232,7 +232,7 @@ export const EventsPage = () => {
                   const val = e.target.value === '' ? '' : Number(e.target.value);
                   editingProgram ? setEditPrice(val) : setPrice(val);
                 }}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm font-bold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm font-bold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
               />
             </div>
             <div>
@@ -244,7 +244,7 @@ export const EventsPage = () => {
                 value={editingProgram ? editCity : city}
                 onChange={(e) => (editingProgram ? setEditCity(e.target.value) : setCity(e.target.value))}
                 placeholder="Surat"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
               />
             </div>
           </div>
@@ -258,11 +258,11 @@ export const EventsPage = () => {
               value={editingProgram ? editVenue : venue}
               onChange={(e) => (editingProgram ? setEditVenue(e.target.value) : setVenue(e.target.value))}
               placeholder="e.g. Sardar Patel Smruti Bhavan, Varachha, Surat"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+              className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Status
@@ -270,7 +270,7 @@ export const EventsPage = () => {
               <select
                 value={editingProgram ? editStatus : status}
                 onChange={(e) => (editingProgram ? setEditStatus(e.target.value) : setStatus(e.target.value))}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm font-semibold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm font-semibold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors cursor-pointer"
               >
                 <option value="upcoming">Upcoming (Active)</option>
                 <option value="few_seats">Few Seats Left</option>
@@ -290,7 +290,7 @@ export const EventsPage = () => {
                   const val = e.target.value as 'internal' | 'external';
                   editingProgram ? setEditRegistrationMode(val) : setRegistrationMode(val);
                 }}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm font-semibold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+                className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm font-semibold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors cursor-pointer"
               >
                 <option value="internal">Internal (Website &amp; Razorpay)</option>
                 <option value="external">External Link</option>
@@ -312,7 +312,7 @@ export const EventsPage = () => {
                 editingProgram ? setEditCapacity(val) : setCapacity(val);
               }}
               placeholder="e.g. 600"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
+              className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
             />
           </div>
 
@@ -320,7 +320,7 @@ export const EventsPage = () => {
             <button
               type="submit"
               disabled={submitting}
-              className="flex-1 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 active:scale-[0.99] disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
+              className="flex-1 py-2.5 min-h-[42px] bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 active:scale-[0.99] disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
             >
               {submitting ? 'Saving...' : editingProgram ? 'Update Program' : 'Create Program Slot'}
             </button>
@@ -328,7 +328,7 @@ export const EventsPage = () => {
               <button
                 type="button"
                 onClick={() => setEditingProgram(null)}
-                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                className="px-4 py-2.5 min-h-[42px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
               >
                 Cancel
               </button>
@@ -339,10 +339,10 @@ export const EventsPage = () => {
 
       {/* Program Slots List */}
       <div className="lg:col-span-2 space-y-4">
-        <div className="bg-white border border-slate-200/90 shadow-xs rounded-2xl p-6 space-y-4">
+        <div className="bg-white border border-slate-200/90 shadow-xs rounded-2xl p-4 sm:p-6 space-y-4">
           <div className="flex justify-between items-center border-b border-slate-100 pb-4">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Active Program Slots</h2>
+              <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">Active Program Slots</h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
                 Overview of current seminars and capacity limits.
               </p>
@@ -352,7 +352,7 @@ export const EventsPage = () => {
             </span>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {loadingPrograms && programs.length === 0 ? (
               <div className="text-center py-12 text-slate-400 font-medium text-xs">Loading program slots...</div>
             ) : programs.length === 0 ? (
@@ -365,11 +365,11 @@ export const EventsPage = () => {
                 return (
                   <div
                     key={prog.id}
-                    className="p-5 border border-slate-200 rounded-xl hover:border-slate-300 transition-all bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+                    className="p-4 sm:p-5 border border-slate-200 rounded-2xl hover:border-slate-300 transition-all bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
                   >
-                    <div className="space-y-2">
+                    <div className="space-y-2 min-w-0 w-full">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-bold text-slate-900 text-sm">{prog.name}</h3>
+                        <h3 className="font-bold text-slate-900 text-sm truncate">{prog.name}</h3>
                         <span className="px-2 py-0.5 text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-full font-bold">
                           ₹{prog.price ?? 1500}
                         </span>
@@ -389,7 +389,7 @@ export const EventsPage = () => {
                         </span>
                       </div>
 
-                      <div className="text-xs text-slate-600 flex items-center gap-4 flex-wrap">
+                      <div className="text-xs text-slate-600 flex items-center gap-3 sm:gap-4 flex-wrap">
                         <span>
                           📅 <strong>{prog.date}</strong>
                         </span>
@@ -401,23 +401,23 @@ export const EventsPage = () => {
                           / {Math.floor(prog.capacity / 2)} couples
                         </span>
                         {prog.venue && (
-                          <span className="text-slate-500">
+                          <span className="text-slate-500 truncate max-w-full">
                             🏛️ {prog.venue}
                           </span>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 self-end sm:self-center">
+                    <div className="flex items-center gap-2 self-end sm:self-center flex-shrink-0">
                       <button
                         onClick={() => handleStartEdit(prog)}
-                        className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-bold transition-all border border-amber-200 cursor-pointer"
+                        className="px-3 py-1.5 min-h-[36px] bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-bold transition-all border border-amber-200 cursor-pointer"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDelete(prog.id)}
-                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-xs font-bold transition-all border border-red-200 cursor-pointer"
+                        className="px-3 py-1.5 min-h-[36px] bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold transition-all border border-red-200 cursor-pointer"
                       >
                         Delete
                       </button>

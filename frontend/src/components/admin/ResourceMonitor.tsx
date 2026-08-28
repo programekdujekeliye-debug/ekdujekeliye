@@ -100,29 +100,29 @@ export const ResourceMonitor = ({ authPassword }: { authPassword: string }) => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
-            <ActivityIcon className="w-5 h-5 text-rose-600" />
-            Zero-Cost Infrastructure Guardrails &amp; Monitor
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 bg-white border border-slate-200 p-4 sm:p-5 lg:p-6 rounded-2xl shadow-xs min-w-0 w-full">
+        <div className="min-w-0 flex-1 w-full">
+          <h2 className="text-base sm:text-lg md:text-xl font-extrabold text-slate-900 flex flex-wrap items-center gap-2 leading-tight break-words">
+            <ActivityIcon className="w-5 h-5 text-rose-600 flex-shrink-0" />
+            <span>Zero-Cost Infrastructure Guardrails &amp; Monitor</span>
           </h2>
-          <p className="text-xs text-slate-500 mt-1 font-medium">
+          <p className="text-[11px] sm:text-xs text-slate-500 mt-1 font-medium leading-normal break-words">
             Real-time telemetry tracking memory, database limits, Cloudinary credits, and backup archives.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
           <button
             onClick={handleRunBackup}
             disabled={backingUp}
-            className="px-4 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2 cursor-pointer transition-all"
+            className="flex-1 sm:flex-none px-4 py-2.5 min-h-[42px] bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all whitespace-nowrap"
           >
-            <DownloadIcon className="w-4 h-4" />
-            <span>{backingUp ? 'Compressing & Backing Up...' : 'Run Gzip Database Backup'}</span>
+            <DownloadIcon className="w-4 h-4 flex-shrink-0" />
+            <span>{backingUp ? 'Compressing...' : 'Run Gzip Backup'}</span>
           </button>
           <button
             onClick={fetchResources}
             disabled={loading}
-            className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer"
+            className="p-2.5 min-h-[42px] min-w-[42px] bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer flex items-center justify-center"
             title="Refresh Metrics"
           >
             <RefreshCwIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -132,12 +132,12 @@ export const ResourceMonitor = ({ authPassword }: { authPassword: string }) => {
 
       {/* Backup Success Toast */}
       {backupResult && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 text-xs space-y-1 animate-fade-in shadow-xs">
-          <div className="flex items-center gap-2 font-bold text-emerald-800">
-            <ShieldCheckIcon className="w-4 h-4 text-emerald-600" />
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 text-xs space-y-1 animate-fade-in shadow-xs break-words">
+          <div className="flex items-center gap-2 font-bold text-emerald-800 flex-wrap">
+            <ShieldCheckIcon className="w-4 h-4 text-emerald-600 flex-shrink-0" />
             <span>Database Backup Successfully Created &amp; Verified</span>
           </div>
-          <p className="text-[11px] font-mono opacity-90">
+          <p className="text-[11px] font-mono opacity-90 break-all">
             File: {backupResult.filename} ({backupResult.compressedSizeKB} KB) | Checksum: {backupResult.checksum?.slice(0, 16)}...
           </p>
         </div>
@@ -149,20 +149,20 @@ export const ResourceMonitor = ({ authPassword }: { authPassword: string }) => {
           {data.warnings.map((w, idx) => (
             <div
               key={idx}
-              className={`p-4 rounded-2xl border flex items-center justify-between gap-4 shadow-xs ${
+              className={`p-3.5 sm:p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs ${
                 w.level === 'CRITICAL'
                   ? 'bg-red-50 border-red-300 text-red-900'
                   : 'bg-amber-50 border-amber-300 text-amber-900'
               }`}
             >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{w.level === 'CRITICAL' ? '🚨' : '⚠️'}</span>
-                <div>
+              <div className="flex items-start gap-2.5 min-w-0">
+                <span className="text-lg sm:text-xl flex-shrink-0">{w.level === 'CRITICAL' ? '🚨' : '⚠️'}</span>
+                <div className="min-w-0 flex-1">
                   <h4 className="text-xs font-bold uppercase tracking-wider">{w.code}</h4>
-                  <p className="text-xs mt-0.5 font-medium">{w.message}</p>
+                  <p className="text-xs mt-0.5 font-medium break-words leading-relaxed">{w.message}</p>
                 </div>
               </div>
-              <span className={`px-2.5 py-1 text-[10px] font-extrabold rounded-lg uppercase ${
+              <span className={`px-2.5 py-1 text-[10px] font-extrabold rounded-lg uppercase whitespace-nowrap self-end sm:self-center ${
                 w.level === 'CRITICAL' ? 'bg-red-200 text-red-900' : 'bg-amber-200 text-amber-900'
               }`}>
                 {w.level}
@@ -177,16 +177,16 @@ export const ResourceMonitor = ({ authPassword }: { authPassword: string }) => {
           Querying backend infrastructure health...
         </div>
       ) : error ? (
-        <div className="p-6 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold">
+        <div className="p-4 sm:p-6 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold break-words">
           {error}
         </div>
       ) : data ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5 lg:gap-6">
           {/* Render Memory Card */}
-          <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-4 shadow-xs">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Render Backend</span>
-              <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md uppercase ${
+          <div className="p-4 sm:p-5 lg:p-6 bg-white border border-slate-200 rounded-2xl space-y-4 shadow-xs min-w-0">
+            <div className="flex justify-between items-center gap-2">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider truncate">Render Backend</span>
+              <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md uppercase whitespace-nowrap ${
                 data.memory.status === 'SAFE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
                 data.memory.status === 'WATCH' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
                 'bg-red-50 text-red-700 border border-red-200'
@@ -195,8 +195,8 @@ export const ResourceMonitor = ({ authPassword }: { authPassword: string }) => {
               </span>
             </div>
             <div>
-              <span className="text-2xl font-extrabold text-slate-900">{data.memory.rssMB} MB</span>
-              <span className="text-xs text-slate-500 font-medium block mt-0.5">RSS Memory (Budget: {data.memory.budgetMB} MB)</span>
+              <span className="text-xl sm:text-2xl font-extrabold text-slate-900 block truncate">{data.memory.rssMB} MB</span>
+              <span className="text-[11px] sm:text-xs text-slate-500 font-medium block mt-0.5 break-words">RSS Memory (Budget: {data.memory.budgetMB} MB)</span>
             </div>
             <div className="space-y-1.5 text-xs text-slate-600 font-medium border-t border-slate-100 pt-3">
               <div className="flex justify-between">
