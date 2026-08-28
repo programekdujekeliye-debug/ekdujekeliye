@@ -1,14 +1,14 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { AlertTriangleIcon } from '../../components/Icons';
+import { AlertTriangleIcon, ShieldCheckIcon } from '../../components/Icons';
 
 export const metadata: Metadata = {
-  title: 'Terms & Conditions | Ek Duje Ke Liye - Educational Seminars',
-  description: 'Terms and Conditions and registration guidelines for Ek Duje Ke Liye educational seminars and couple workshops led by Manish Vaghasiya.',
+  title: 'Cancellation & Refund Policy | Ek Duje Ke Liye',
+  description: 'Cancellation and Refund Policy for Ek Duje Ke Liye educational relationship seminars and couple workshops led by Manish Vaghasiya.',
 };
 
-export default function TermsPage() {
+export default function CancellationRefundPolicyPage() {
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 flex flex-col justify-between font-sans relative">
       {/* Header */}
@@ -36,70 +36,65 @@ export default function TermsPage() {
           
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-bold uppercase tracking-wider mb-2">
-              Official Educational Seminar Terms
+              Official Cancellation &amp; Refund Policy
             </div>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-stone-900 tracking-tight">Terms &amp; Conditions</h1>
+            <h1 className="text-3xl md:text-4xl font-extrabold text-stone-900 tracking-tight">Cancellation &amp; Refund Policy</h1>
             <p className="text-xs text-stone-500 mt-2">Last Updated: August 28, 2026 &bull; Domain: www.ekdujekeliye.in</p>
           </div>
 
           <div className="space-y-6 text-sm text-stone-700 leading-relaxed">
             
             <section className="space-y-3">
-              <h2 className="text-lg font-bold text-stone-900">1. Acceptance of Terms &amp; Scope of Services</h2>
+              <h2 className="text-lg font-bold text-stone-900">1. Nature of Services</h2>
               <p>
-                <strong>Ek Duje Ke Liye</strong> is an educational relationship and life-skills seminar initiative led by <strong>Manish Vaghasiya</strong>. The services offered through <strong>www.ekdujekeliye.in</strong> comprise educational seminars, couple communication workshops, registration services, digital attendance passes, and participant assistance (&quot;Services&quot;).
-              </p>
-              <p>
-                By registering on this website, completing an order, or attending any educational seminar session, you agree to be bound by these Terms and Conditions.
+                <strong>Ek Duje Ke Liye</strong> is an educational seminar and workshop initiative led by <strong>Manish Vaghasiya</strong>. All fees collected on <strong>www.ekdujekeliye.in</strong> are registration fees for reserved seats at structured educational couple seminars and workshops.
               </p>
             </section>
 
-            <section className="space-y-3 bg-amber-50/80 border border-amber-200/90 rounded-2xl p-5">
+            <section className="space-y-3 bg-amber-50/80 border border-amber-200/90 rounded-2xl p-6">
               <h2 className="text-lg font-bold text-amber-900 flex items-center gap-2">
                 <AlertTriangleIcon className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                <span>2. Strict Non-Refundable &amp; Non-Transferable Policy</span>
+                <span>2. 100% Non-Refundable &amp; Non-Transferable Policy</span>
               </h2>
               <p className="text-stone-800 font-semibold">
                 કોઈપણ સંજોગોમાં સેમિનાર નોંધણી ફી રિફંડ કે બીજા કોઈ વ્યક્તિને ટ્રાન્સફર થશે નહીં.
               </p>
               <ul className="list-disc pl-5 space-y-2 text-stone-700 text-xs">
-                <li><strong>No Refunds:</strong> All payments made for couple seminar registration fees are <strong>100% Non-Refundable</strong> under any personal circumstances, absence, or late arrival.</li>
-                <li><strong>No Transfers:</strong> Entry passes are personalized and issued exclusively to the registered married couple named and pictured on the digital badge. Passes cannot be transferred, resold, or assigned to other couples or individuals.</li>
-                <li><strong>Advance Hall &amp; Material Commitments:</strong> Because seminar auditorium seats and educational materials are committed in advance for each registered couple, cancellations cannot be accommodated.</li>
+                <li><strong>No Cancellations / No Refunds:</strong> Once an educational seminar registration fee is paid through our payment gateway (Razorpay) or official channels, it is <strong>100% non-refundable</strong> under all circumstances including personal emergencies, change of mind, schedule conflicts, late arrival, or absenteeism.</li>
+                <li><strong>Strictly Non-Transferable:</strong> Admission passes are issued in the name and photograph of the specific married couple registered. Passes cannot be re-assigned, transferred, or sold to any other couple or individual.</li>
+                <li><strong>Operational Rationale:</strong> Auditorium seats, seminar kits, interactive study materials, and logistic resources are reserved and pre-funded in advance based on confirmed registrations.</li>
               </ul>
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-lg font-bold text-stone-900">3. Admission &amp; Seminar Code of Conduct</h2>
+              <h2 className="text-lg font-bold text-stone-900">3. Organizer Rescheduling or Postponement</h2>
+              <p>
+                In the rare event that an educational seminar batch must be rescheduled by the organizers due to administrative necessity, venue unavailability, or force majeure events:
+              </p>
               <ul className="list-disc pl-5 space-y-1.5 text-stone-600">
-                <li>Each pass admits exactly one married couple (2 adults).</li>
-                <li>Children and non-registered guests are strictly not permitted inside the seminar hall to ensure an undisturbed educational environment for all couples.</li>
-                <li>Attendees must present their verified digital or printed pass with QR code and Inquiry ID at the seminar check-in desk.</li>
+                <li>All confirmed couple registrations will automatically be transferred and honored for the rescheduled seminar date at no additional fee.</li>
+                <li>Participants will be notified immediately of the revised date and venue via WhatsApp, SMS, and/or email.</li>
               </ul>
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-lg font-bold text-stone-900">4. Rescheduling by Organizers</h2>
+              <h2 className="text-lg font-bold text-stone-900">4. Payment Issues &amp; Double Charges</h2>
               <p>
-                In the rare event that an educational seminar batch must be rescheduled due to administrative, weather, or unforeseen circumstances, all registered couples will automatically be allotted entry to the rescheduled session date without any extra charges.
+                In case of technical errors during payment processing (e.g., amount debited from your bank account but registration token was not generated due to network disruption):
               </p>
+              <ul className="list-disc pl-5 space-y-1.5 text-stone-600">
+                <li>Please email our support team at <strong>privacy.ekdujekeliye@gmail.com</strong> or message our helpline at <strong>+91 92135 32835</strong> with your transaction reference or bank debit statement.</li>
+                <li>If a genuine duplicate payment is verified by our payment gateway (Razorpay), the redundant transaction will be credited back to your original payment source within 5–7 working days as per standard banking timelines.</li>
+              </ul>
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-lg font-bold text-stone-900">5. Communications &amp; WhatsApp Notifications</h2>
-              <p>
-                By providing your mobile number during registration, you authorize our team to send booking confirmations, digital pass download links, and seminar updates directly to your WhatsApp account and SMS.
-              </p>
-            </section>
-
-            <section className="space-y-3">
-              <h2 className="text-lg font-bold text-stone-900">6. Official Contact &amp; Support</h2>
+              <h2 className="text-lg font-bold text-stone-900">5. Contact Support</h2>
               <div className="bg-stone-50 border border-stone-200 rounded-2xl p-5 text-xs space-y-2 text-stone-700">
-                <p><strong>Organizer:</strong> Ek Duje Ke Liye — Educational Seminars led by Manish Vaghasiya</p>
-                <p><strong>Official Email:</strong> privacy.ekdujekeliye@gmail.com</p>
+                <p><strong>Initiative:</strong> Ek Duje Ke Liye — Educational Seminars led by Manish Vaghasiya</p>
+                <p><strong>Support Email:</strong> privacy.ekdujekeliye@gmail.com</p>
                 <p><strong>Support Helpline:</strong> +91 92135 32835</p>
-                <p><strong>Operating City:</strong> Surat, Gujarat, India</p>
-                <p><strong>Venue Address:</strong> As specified on your official seminar booking pass.</p>
+                <p><strong>Operating Location:</strong> Surat, Gujarat, India</p>
               </div>
             </section>
 
@@ -109,8 +104,8 @@ export default function TermsPage() {
             <Link href="/" className="hover:text-rose-700 font-bold transition-colors">
               ← Return to Seminar Home
             </Link>
-            <Link href="/privacy-policy" className="hover:text-rose-700 font-bold transition-colors">
-              Privacy Policy →
+            <Link href="/terms" className="hover:text-rose-700 font-bold transition-colors">
+              Terms &amp; Conditions →
             </Link>
           </div>
 

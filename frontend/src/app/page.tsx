@@ -293,18 +293,18 @@ export default function HomePage() {
           <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold uppercase tracking-widest mx-auto lg:mx-0 shadow-xs">
               <HeartHandshakeIcon className="w-3.5 h-3.5 text-rose-600" />
-              <span>A Life-Transforming Couple Experience</span>
+              <span>Educational Relationship &amp; Life-Skills Seminar</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-stone-900 tracking-tight leading-[1.18]">
               એક દૂજે કે લિયે <br />
               <span className="text-gradient-royal">
-                પ્રેમ અને સમજણનો સેમિનાર
+                પ્રેમ અને સમજણનો એજ્યુકેશનલ સેમિનાર
               </span>
             </h1>
 
             <p className="text-stone-600 text-base md:text-lg leading-relaxed max-w-2xl mx-auto lg:mx-0 font-normal">
-              પતિ-પત્ની વચ્ચે ઊંડો પ્રેમ, અખૂટ વિશ્વાસ, મધુર સંવાદ અને અતૂટ સંબંધ બાંધવા માટેનો સ્પેશિયલ કપલ સેમિનાર by <strong>Manish Vaghasiya</strong>.
+              પતિ-પત્ની વચ્ચે ઊંડો પ્રેમ, અખૂટ વિશ્વાસ, મધુર સંવાદ અને વ્યવહારુ જીવન કૌશલ્ય કેળવવા માટેનો એજ્યુકેશનલ કપલ સેમિનાર led by <strong>Manish Vaghasiya</strong>.
             </p>
 
             <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4 pt-2">
@@ -313,7 +313,7 @@ export default function HomePage() {
                 className="inline-flex items-center gap-2.5 px-8 py-4 bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-extrabold rounded-2xl transition-all shadow-xl shadow-rose-600/25 text-sm uppercase tracking-wider transform hover:scale-105 active:scale-95 cursor-pointer"
               >
                 <TicketIcon className="w-4 h-4" />
-                <span>View Upcoming Events</span>
+                <span>View Upcoming Seminars</span>
               </a>
               <a
                 href="#experience"
@@ -326,16 +326,16 @@ export default function HomePage() {
             {/* Badges */}
             <div className="pt-6 border-t border-stone-200 flex flex-wrap items-center justify-center lg:justify-start gap-6 text-xs font-semibold text-stone-600">
               <div className="flex items-center gap-2">
-                <span className="text-rose-600 font-bold">✓</span> For Married Couples Only
+                <span className="text-rose-600 font-bold">✓</span> Educational Seminar (Married Couples Only)
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-rose-600 font-bold">✓</span> Instant Pass on Razorpay
+                <span className="text-rose-600 font-bold">✓</span> Instant Digital Pass on Razorpay
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-rose-600 font-bold">✓</span> WhatsApp Delivery
               </div>
               <div className="flex items-center gap-2 text-amber-800 font-bold">
-                <span className="text-amber-600">✓</span> Non-Refundable &amp; Non-Transferable
+                <span className="text-amber-600">✓</span> Strictly Non-Refundable &amp; Non-Transferable
               </div>
             </div>
           </div>
@@ -368,10 +368,10 @@ export default function HomePage() {
           <div className="text-center space-y-3 max-w-2xl mx-auto">
             <span className="text-xs font-bold text-rose-700 uppercase tracking-widest block">Reserve Your Seats</span>
             <h2 className="text-3xl md:text-4xl font-extrabold text-stone-900 tracking-tight">
-              Upcoming Events &amp; Cities
+              Upcoming Educational Seminars &amp; Workshops
             </h2>
             <p className="text-stone-600 text-sm font-medium">
-              Choose your preferred city and book your couple admission pass securely.
+              Choose your preferred city and register for your couple educational seminar pass securely.
             </p>
           </div>
 
@@ -399,15 +399,15 @@ export default function HomePage() {
             <div className="flex justify-center py-12">
               <div className="flex flex-col items-center gap-3">
                 <div className="w-10 h-10 border-3 border-rose-600/20 border-t-rose-600 rounded-full animate-spin" />
-                <p className="text-xs text-rose-700 font-bold">Loading upcoming events...</p>
+                <p className="text-xs text-rose-700 font-bold">Loading upcoming educational seminars...</p>
               </div>
             </div>
           ) : programs.length === 0 ? (
             <div className="bg-white border border-stone-200 rounded-3xl p-12 text-center max-w-lg mx-auto space-y-3 shadow-md">
               <TicketIcon className="w-8 h-8 text-rose-600 mx-auto" />
-              <h3 className="text-xl font-bold text-stone-900">New Events Coming Soon</h3>
+              <h3 className="text-xl font-bold text-stone-900">New Seminar Dates Coming Soon</h3>
               <p className="text-xs text-stone-600 leading-relaxed font-medium">
-                New seminar dates will be announced soon. Follow our official Instagram for instant updates.
+                New educational relationship seminar dates will be announced soon. Follow our official channels for instant updates.
               </p>
             </div>
           ) : (
@@ -446,10 +446,15 @@ export default function HomePage() {
                   >
                     <div className="space-y-4">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 border border-rose-200 text-rose-800 font-bold text-xs rounded-lg uppercase tracking-wider">
-                          <MapPinIcon className="w-3.5 h-3.5 text-rose-600" />
-                          <span>{prog.city || 'Surat'}</span>
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 border border-rose-200 text-rose-800 font-bold text-xs rounded-lg uppercase tracking-wider">
+                            <MapPinIcon className="w-3.5 h-3.5 text-rose-600" />
+                            <span>{prog.city || 'Surat'}</span>
+                          </span>
+                          <span className="hidden sm:inline-block px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-900 font-bold text-[10px] rounded-lg uppercase tracking-wider">
+                            Educational Seminar
+                          </span>
+                        </div>
                         <span className={`px-3 py-1 font-bold text-[11px] rounded-lg border uppercase tracking-wider ${statusClass}`}>
                           {statusLabel}
                         </span>
@@ -514,7 +519,7 @@ export default function HomePage() {
                             className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-rose-600/20 text-center transform hover:scale-105 active:scale-95"
                           >
                             <TicketIcon className="w-4 h-4" />
-                            <span>Book Pass</span>
+                            <span>Register for Seminar</span>
                           </Link>
                         )}
                       </div>
@@ -642,20 +647,20 @@ export default function HomePage() {
           </div>
 
           <div className="md:col-span-7 space-y-4 text-left">
-            <span className="text-xs font-bold text-rose-700 uppercase tracking-widest block">Speaker &amp; Facilitator</span>
+            <span className="text-xs font-bold text-rose-700 uppercase tracking-widest block">Educational Initiative</span>
             <h2 className="text-3xl font-extrabold text-stone-900">Manish Vaghasiya</h2>
             <p className="text-sm text-stone-700 leading-relaxed font-medium">
-              ગુજરાતભરમાં સેંકડો પરિવારો અને હજારો દંપતીઓને વૈવાહિક સુખ, આંતરિક જોડાણ અને પારિવારિક શાંતિ તરફ દોરનાર લોકપ્રિય વક્તા અને જીવન માર્ગદર્શક.
+              Ek Duje Ke Liye is an educational seminar and workshop initiative led by Manish Vaghasiya. The initiative focuses on relationship education, couple communication, family values, mutual understanding and practical life skills through structured educational sessions and workshops.
             </p>
             <p className="text-xs text-stone-600 leading-relaxed font-normal">
-              &quot;એક દૂજે કે લિયે&quot; સેમિનાર દ્વારા તેઓ હળવાશ, ઊંડા મનોવૈજ્ઞાનિક દ્રષ્ટિકોણ અને વાસ્તવિક જીવનના ઉદાહરણો સાથે સંબંધોને પુનર્જીવિત કરવાનું કાર્ય કરે છે.
+              ગુજરાતભરમાં સેંકડો પરિવારો અને હજારો દંપતીઓને વૈવાહિક સુખ, આંતરિક જોડાણ અને પારિવારિક શાંતિ તરફ દોરવા માટે વ્યવહારુ જીવન કૌશલ્ય અને સંવાદની પદ્ધતિઓ શીખવવામાં આવે છે.
             </p>
             <div className="pt-2">
               <a
                 href="#events"
                 className="inline-block px-6 py-3 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold text-xs uppercase rounded-xl transition-all shadow-md shadow-rose-600/20"
               >
-                Join Next Event With Manish Vaghasiya →
+                Register for Upcoming Seminar →
               </a>
             </div>
           </div>
@@ -794,67 +799,64 @@ export default function HomePage() {
           <div className="space-y-3 md:col-span-2">
             <div className="flex items-center gap-3">
               <img src="/logo.png" alt={publicConfig.brandName || "Ek Duje Ke Liye"} className="h-10 w-auto" />
-              <span className="text-lg font-extrabold text-stone-900 uppercase">{publicConfig.brandName || "Ek Duje Ke Liye"}</span>
+              <div>
+                <span className="text-lg font-extrabold text-stone-900 uppercase block leading-tight">
+                  {publicConfig.brandName || "Ek Duje Ke Liye"}
+                </span>
+                <span className="text-[11px] font-bold text-rose-700 block">
+                  Educational Seminars &amp; Workshops by Manish Vaghasiya
+                </span>
+              </div>
             </div>
-            <p className="text-stone-600 text-xs max-w-sm leading-relaxed font-normal">
-              An emotional and transformational relationship seminar exclusively designed for married couples by Manish Vaghasiya.
+            <p className="text-stone-600 text-xs max-w-md leading-relaxed font-normal">
+              Ek Duje Ke Liye is an educational seminar and workshop initiative led by Manish Vaghasiya, dedicated to empowering married couples through relationship education, communication skills, family values, and practical life-skills training.
             </p>
           </div>
 
           <div className="space-y-2">
             <span className="text-sm font-bold text-stone-900 block mb-2">Quick Links</span>
             <ul className="space-y-1.5 font-medium">
-              <li><a href="#events" className="hover:text-rose-600">Upcoming Events</a></li>
+              <li><a href="#events" className="hover:text-rose-600">Upcoming Seminars</a></li>
               <li><a href="#experience" className="hover:text-rose-600">The Experience</a></li>
-              <li><a href="#about" className="hover:text-rose-600">About Host</a></li>
+              <li><a href="#about" className="hover:text-rose-600">About Manish Vaghasiya</a></li>
               <li><a href="#gallery" className="hover:text-rose-600">Photo Gallery</a></li>
+              <li><Link href="/contact" className="hover:text-rose-600">Contact Us</Link></li>
               <li><Link href="/admin" className="hover:text-rose-600">Admin Portal</Link></li>
             </ul>
           </div>
 
           <div className="space-y-2">
-            <span className="text-sm font-bold text-stone-900 block mb-2">Connect &amp; Social</span>
+            <span className="text-sm font-bold text-stone-900 block mb-2">Legal &amp; Policies</span>
             <ul className="space-y-1.5 font-medium">
-              <li>
-                <a
-                  href={publicConfig.linktreeUrl || "https://linktr.ee/ekdujekeliye"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-rose-600"
-                >
-                  Official Linktree ↗
-                </a>
-              </li>
-              <li>
-                <a
-                  href={publicConfig.instagramUrl || "https://instagram.com/ekdujekeliye01"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-rose-600"
-                >
-                  Instagram ↗
-                </a>
-              </li>
+              <li><Link href="/privacy-policy" className="hover:text-rose-600">Privacy Policy</Link></li>
+              <li><Link href="/terms" className="hover:text-rose-600">Terms &amp; Conditions</Link></li>
+              <li><Link href="/cancellation-refund-policy" className="hover:text-rose-600">Cancellation &amp; Refund Policy</Link></li>
+              <li><Link href="/shipping-delivery-policy" className="hover:text-rose-600">Shipping &amp; Delivery Policy</Link></li>
+              <li><Link href="/contact" className="hover:text-rose-600">Help &amp; Support</Link></li>
               {publicConfig.supportPhone && (
-                <li>
-                  <a href={`tel:${publicConfig.supportPhone}`} className="hover:text-rose-600">
-                    Helpline: {publicConfig.supportPhone}
-                  </a>
+                <li className="pt-1 text-stone-500">
+                  <span>Helpline: {publicConfig.supportPhone}</span>
                 </li>
               )}
-              <li><Link href="/privacy-policy" className="hover:text-rose-600">Privacy Policy</Link></li>
-              <li><Link href="/terms" className="hover:text-rose-600">Terms of Service</Link></li>
             </ul>
           </div>
 
         </div>
 
         <div className="max-w-7xl mx-auto pt-6 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-          <div>&copy; {new Date().getFullYear()} {publicConfig.brandName || "Ek Duje Ke Liye"}. All rights reserved.</div>
-          <div className="flex gap-4">
+          <div>
+            &copy; {new Date().getFullYear()} {publicConfig.brandName || "Ek Duje Ke Liye"} &bull; Educational Seminars by Manish Vaghasiya. All rights reserved.
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 text-[11px]">
             <Link href="/privacy-policy" className="hover:underline">Privacy Policy</Link>
             <span>&bull;</span>
-            <Link href="/terms" className="hover:underline">Terms of Service</Link>
+            <Link href="/terms" className="hover:underline">Terms &amp; Conditions</Link>
+            <span>&bull;</span>
+            <Link href="/cancellation-refund-policy" className="hover:underline">Refund Policy</Link>
+            <span>&bull;</span>
+            <Link href="/shipping-delivery-policy" className="hover:underline">Delivery Policy</Link>
+            <span>&bull;</span>
+            <Link href="/contact" className="hover:underline">Contact</Link>
           </div>
         </div>
       </footer>
@@ -876,6 +878,21 @@ export default function HomePage() {
         </a>
       </div>
 
+      {/* Structured Data (JSON-LD) for Educational Organization */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "EducationalOrganization",
+            "name": "Ek Duje Ke Liye",
+            "description": "Educational relationship and life-skills seminar initiative led by Manish Vaghasiya.",
+            "url": "https://www.ekdujekeliye.in",
+            "areaServed": "IN",
+            "knowsAbout": ["Relationship Education", "Couple Communication", "Family Values", "Life Skills Training"]
+          })
+        }}
+      />
     </div>
   );
 }

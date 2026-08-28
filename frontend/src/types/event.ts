@@ -76,6 +76,8 @@ export interface GlobalSettings {
   payeeName: string;
   amount: string;
   brandName?: string;
+  businessCategory?: string;
+  businessDescription?: string;
   supportPhone?: string;
   supportWhatsapp?: string;
   supportEmail?: string;

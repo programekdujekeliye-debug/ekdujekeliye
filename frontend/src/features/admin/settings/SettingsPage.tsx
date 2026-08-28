@@ -24,6 +24,8 @@ export const SettingsPage = () => {
   const [upiLimit, setUpiLimit] = useState<number>(50);
 
   const [brandName, setBrandName] = useState('Ek Duje Ke Liye');
+  const [businessCategory, setBusinessCategory] = useState('Education & Training');
+  const [businessDescription, setBusinessDescription] = useState('Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops');
   const [supportPhone, setSupportPhone] = useState('');
   const [supportWhatsapp, setSupportWhatsapp] = useState('');
   const [supportEmail, setSupportEmail] = useState('');
@@ -58,6 +60,8 @@ export const SettingsPage = () => {
         setUpiLimit(data.upiLimit || 50);
 
         setBrandName(data.brandName || 'Ek Duje Ke Liye');
+        setBusinessCategory(data.businessCategory || 'Education & Training');
+        setBusinessDescription(data.businessDescription || 'Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops');
         setSupportPhone(data.supportPhone || '');
         setSupportWhatsapp(data.supportWhatsapp || '');
         setSupportEmail(data.supportEmail || '');
@@ -100,6 +104,8 @@ export const SettingsPage = () => {
         upiIds: upiIds.split(',').map((s) => s.trim()).filter(Boolean),
         upiLimit,
         brandName,
+        businessCategory,
+        businessDescription,
         supportPhone,
         supportWhatsapp,
         supportEmail,
@@ -297,6 +303,30 @@ export const SettingsPage = () => {
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Business Category
+                </label>
+                <input
+                  type="text"
+                  value={businessCategory}
+                  onChange={(e) => setBusinessCategory(e.target.value)}
+                  placeholder="Education & Training"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Business Description
+                </label>
+                <input
+                  type="text"
+                  value={businessDescription}
+                  onChange={(e) => setBusinessDescription(e.target.value)}
+                  placeholder="Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Helpline Support Phone
                 </label>
                 <input
@@ -319,7 +349,7 @@ export const SettingsPage = () => {
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
                 />
               </div>
-              <div>
+              <div className="sm:col-span-2">
                 <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Public Support Email
                 </label>

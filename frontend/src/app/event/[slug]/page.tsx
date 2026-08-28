@@ -226,7 +226,7 @@ export default function EventDetailPage() {
         amount: orderData.amount,
         currency: orderData.currency || 'INR',
         name: 'Ek Duje Ke Liye',
-        description: `${orderData.programName || 'Couple Pass'} Registration`,
+        description: 'Registration fee for Ek Duje Ke Liye educational seminar/workshop',
         prefill: {
           name: orderData.customerName,
           contact: orderData.phoneNumber
@@ -494,13 +494,18 @@ export default function EventDetailPage() {
             {/* Left: Event Details Card */}
             <div className="lg:col-span-5 bg-white border border-stone-200/90 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
               <div>
-                <span className="text-xs font-bold text-rose-700 uppercase tracking-widest block mb-2">
-                  {event.city || 'Event Details'}
-                </span>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-bold text-rose-700 uppercase tracking-widest block">
+                    {event.city || 'Event Details'}
+                  </span>
+                  <span className="px-2.5 py-0.5 bg-amber-50 border border-amber-200 text-amber-900 text-[10px] font-bold rounded-md uppercase tracking-wider">
+                    Educational Seminar
+                  </span>
+                </div>
                 <h1 className="text-2xl md:text-3xl font-extrabold text-stone-900 leading-tight">
                   {event.name}
                 </h1>
-                <p className="text-xs text-stone-500 mt-1 font-medium">by Manish Vaghasiya</p>
+                <p className="text-xs text-stone-500 mt-1 font-medium">Educational Seminar led by Manish Vaghasiya</p>
               </div>
 
               <div className="space-y-3.5 pt-2 text-sm">
@@ -541,10 +546,15 @@ export default function EventDetailPage() {
                 <div className="flex items-center gap-3 text-stone-700">
                   <TicketIcon className="w-5 h-5 text-amber-600 flex-shrink-0" />
                   <div>
-                    <span className="text-xs text-stone-500 block font-medium">Pass Price</span>
+                    <span className="text-xs text-stone-500 block font-medium">Seminar Pass Fee</span>
                     <span className="font-extrabold text-stone-900 text-2xl">₹{price}</span>
                     <span className="text-xs text-stone-500 ml-1.5 font-medium">(Per Married Couple)</span>
                   </div>
+                </div>
+
+                <div className="flex items-center gap-3 text-stone-700 pt-1 border-t border-stone-100">
+                  <span className="text-xs text-rose-700 font-bold block">Service Type:</span>
+                  <span className="text-xs text-stone-700 font-semibold">Educational Seminar &amp; Workshop</span>
                 </div>
               </div>
 
@@ -557,13 +567,13 @@ export default function EventDetailPage() {
               <div className="bg-rose-50 border border-rose-200/80 rounded-2xl p-4 text-xs text-rose-900 space-y-1.5">
                 <p className="font-bold flex items-center gap-1.5">
                   <SparklesIcon className="w-3.5 h-3.5 text-rose-600" />
-                  <span>Important Event Guidelines:</span>
+                  <span>Important Seminar Guidelines:</span>
                 </p>
                 <ul className="list-disc pl-4 space-y-1 text-stone-700">
-                  <li>Only married couples admitted (2 persons per pass).</li>
-                  <li>Children are strictly not allowed.</li>
+                  <li>Educational seminar format exclusively for married couples (2 persons per pass).</li>
+                  <li>Children are strictly not permitted inside the seminar hall.</li>
                   <li><strong className="text-amber-900 font-bold">Non-Refundable &amp; Non-Transferable:</strong> સેમિનાર ફી કોઈપણ સંજોગોમાં રિફંડ કે ટ્રાન્સફર થશે નહીં.</li>
-                  <li>Instant pass issued immediately upon Razorpay payment.</li>
+                  <li>Instant digital pass issued immediately upon Razorpay payment.</li>
                 </ul>
               </div>
             </div>
@@ -572,10 +582,13 @@ export default function EventDetailPage() {
             <div className="lg:col-span-7 bg-white border border-stone-200/90 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
               
               <div>
-                <h2 className="text-xl md:text-2xl font-extrabold text-stone-900">Couple Registration</h2>
+                <h2 className="text-xl md:text-2xl font-extrabold text-stone-900">Couple Seminar Registration</h2>
                 <p className="text-xs text-stone-600 mt-1 font-medium">
-                  Fill in your details to book your official couple entry pass.
+                  Fill in your details to register and reserve your official couple educational seminar pass.
                 </p>
+                <div className="mt-3 p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-700 font-medium">
+                  You are registering for an educational Ek Duje Ke Liye seminar/workshop conducted by Manish Vaghasiya.
+                </div>
               </div>
 
               {isClosed ? (
@@ -724,7 +737,7 @@ export default function EventDetailPage() {
                         </>
                       ) : (
                         <>
-                          <span>Pay ₹{price} &amp; Confirm Booking</span>
+                          <span>Pay ₹{price} &amp; Register for Seminar</span>
                           <TicketIcon className="w-4 h-4" />
                         </>
                       )}
@@ -751,12 +764,20 @@ export default function EventDetailPage() {
       </main>
 
       {/* Footer */}
-      <footer className="py-6 px-8 border-t border-stone-200 bg-white text-center text-xs text-stone-500 space-y-1">
-        <div>&copy; {new Date().getFullYear()} Ek Duje Ke Liye. All rights reserved.</div>
-        <div className="space-x-3">
+      <footer className="py-6 px-8 border-t border-stone-200 bg-white text-center text-xs text-stone-500 space-y-2">
+        <div>
+          &copy; {new Date().getFullYear()} Ek Duje Ke Liye &bull; Educational Seminars by Manish Vaghasiya. All rights reserved.
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-3 text-[11px]">
           <Link href="/privacy-policy" className="text-stone-600 hover:text-rose-600 hover:underline">Privacy Policy</Link>
           <span>&bull;</span>
           <Link href="/terms" className="text-stone-600 hover:text-rose-600 hover:underline">Terms &amp; Conditions</Link>
+          <span>&bull;</span>
+          <Link href="/cancellation-refund-policy" className="text-stone-600 hover:text-rose-600 hover:underline">Refund Policy</Link>
+          <span>&bull;</span>
+          <Link href="/shipping-delivery-policy" className="text-stone-600 hover:text-rose-600 hover:underline">Delivery Policy</Link>
+          <span>&bull;</span>
+          <Link href="/contact" className="text-stone-600 hover:text-rose-600 hover:underline">Contact Us</Link>
         </div>
       </footer>
     </div>

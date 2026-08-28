@@ -82,6 +82,8 @@ app.get('/api/config/public', async (req, res) => {
     const setting = await Setting.findOne({ key: 'global' }).lean();
     res.json({
       brandName: setting?.brandName || 'Ek Duje Ke Liye',
+      businessCategory: setting?.businessCategory || 'Education & Training',
+      businessDescription: setting?.businessDescription || 'Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops',
       supportPhone: setting?.supportPhone || '',
       supportWhatsapp: setting?.supportWhatsapp || '',
       supportEmail: setting?.supportEmail || '',
@@ -104,6 +106,8 @@ app.get('/api/config/public', async (req, res) => {
   } catch (err) {
     res.json({
       brandName: 'Ek Duje Ke Liye',
+      businessCategory: 'Education & Training',
+      businessDescription: 'Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops',
       supportPhone: '',
       supportWhatsapp: '',
       supportEmail: '',

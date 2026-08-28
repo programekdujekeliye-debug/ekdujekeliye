@@ -789,12 +789,18 @@ export default function PassDownloadPage() {
         </div>
       </main>
 
-      <footer className="py-6 px-8 border-t border-slate-800/80 bg-slate-950/20 text-center text-xs text-slate-500 space-y-1">
-        <div>&copy; {new Date().getFullYear()} Ek Duje Ke Liye. All rights reserved.</div>
-        <div className="space-x-3">
+      <footer className="py-6 px-8 border-t border-slate-800/80 bg-slate-950/20 text-center text-xs text-slate-500 space-y-2">
+        <div>&copy; {new Date().getFullYear()} Ek Duje Ke Liye &bull; Educational Seminars by Manish Vaghasiya. All rights reserved.</div>
+        <div className="flex flex-wrap items-center justify-center gap-3 text-[11px]">
           <a href="/privacy-policy" className="text-slate-400 hover:text-amber-400 hover:underline">Privacy Policy</a>
           <span>&bull;</span>
           <a href="/terms" className="text-slate-400 hover:text-amber-400 hover:underline">Terms &amp; Conditions</a>
+          <span>&bull;</span>
+          <a href="/cancellation-refund-policy" className="text-slate-400 hover:text-amber-400 hover:underline">Refund Policy</a>
+          <span>&bull;</span>
+          <a href="/shipping-delivery-policy" className="text-slate-400 hover:text-amber-400 hover:underline">Delivery Policy</a>
+          <span>&bull;</span>
+          <a href="/contact" className="text-slate-400 hover:text-amber-400 hover:underline">Contact Us</a>
         </div>
       </footer>
     </div>

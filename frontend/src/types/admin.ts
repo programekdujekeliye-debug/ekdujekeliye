@@ -32,6 +32,8 @@ export interface SiteSettings {
   upiIds?: string | string[];
   upiLimit?: number;
   brandName?: string;
+  businessCategory?: string;
+  businessDescription?: string;
   supportPhone?: string;
   supportWhatsapp?: string;
   supportEmail?: string;

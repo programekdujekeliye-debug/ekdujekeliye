@@ -104,7 +104,7 @@ export default function PaymentRetryPage() {
         amount: orderData.amount,
         currency: orderData.currency || 'INR',
         name: 'Ek Duje Ke Liye',
-        description: `${orderData.programName || 'Couple Pass'} Registration`,
+        description: 'Registration fee for Ek Duje Ke Liye educational seminar/workshop',
         prefill: {
           name: orderData.customerName,
           contact: orderData.phoneNumber
@@ -252,7 +252,7 @@ export default function PaymentRetryPage() {
               <span className="text-xs font-bold text-amber-800 uppercase tracking-widest block">Complete Your Booking</span>
               <h1 className="text-2xl font-extrabold text-stone-900">Payment Pending</h1>
               <p className="text-xs text-stone-600 font-medium">
-                Please complete your payment to generate and receive your official couple admission pass.
+                Please complete your payment to register and receive your official couple educational seminar pass.
               </p>
             </div>
 
@@ -268,8 +268,12 @@ export default function PaymentRetryPage() {
                 <span className="font-bold text-stone-900">{statusData.inquiryId}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-stone-500 font-medium">Event:</span>
+                <span className="text-stone-500 font-medium">Service / Event:</span>
                 <span className="font-semibold text-stone-900">{statusData.programName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500 font-medium">Service Type:</span>
+                <span className="font-semibold text-stone-900">Educational Seminar / Workshop</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-stone-500 font-medium">Date:</span>
@@ -280,7 +284,7 @@ export default function PaymentRetryPage() {
                 <span className="font-semibold text-stone-900">{statusData.coupleName}</span>
               </div>
               <div className="flex justify-between pt-2 border-t border-stone-200">
-                <span className="text-stone-500 font-bold uppercase">Pass Amount:</span>
+                <span className="text-stone-500 font-bold uppercase">Seminar Fee:</span>
                 <span className="text-base font-extrabold text-stone-900">₹{statusData.price !== undefined ? statusData.price : (statusData.amount || 1500)}</span>
               </div>
             </div>
@@ -292,7 +296,7 @@ export default function PaymentRetryPage() {
                 <span>Non-Refundable &amp; Non-Transferable</span>
               </span>
               <p className="text-[10px] text-amber-800 font-medium">
-                પાસ ફી કોઈપણ સંજોગોમાં રિફંડ કે ટ્રાન્સફર થશે નહીં.
+                સેમિનાર ફી કોઈપણ સંજોગોમાં રિફંડ કે ટ્રાન્સફર થશે નહીં.
               </p>
             </div>
 
@@ -319,8 +323,21 @@ export default function PaymentRetryPage() {
       </main>
 
       {/* Footer */}
-      <footer className="py-6 px-8 border-t border-stone-200 bg-white text-center text-xs text-stone-500 space-y-1">
-        <div>&copy; {new Date().getFullYear()} Ek Duje Ke Liye. All rights reserved.</div>
+      <footer className="py-6 px-8 border-t border-stone-200 bg-white text-center text-xs text-stone-500 space-y-2">
+        <div>
+          &copy; {new Date().getFullYear()} Ek Duje Ke Liye &bull; Educational Seminars by Manish Vaghasiya. All rights reserved.
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-3 text-[11px]">
+          <Link href="/privacy-policy" className="text-stone-600 hover:text-rose-600 hover:underline">Privacy Policy</Link>
+          <span>&bull;</span>
+          <Link href="/terms" className="text-stone-600 hover:text-rose-600 hover:underline">Terms &amp; Conditions</Link>
+          <span>&bull;</span>
+          <Link href="/cancellation-refund-policy" className="text-stone-600 hover:text-rose-600 hover:underline">Refund Policy</Link>
+          <span>&bull;</span>
+          <Link href="/shipping-delivery-policy" className="text-stone-600 hover:text-rose-600 hover:underline">Delivery Policy</Link>
+          <span>&bull;</span>
+          <Link href="/contact" className="text-stone-600 hover:text-rose-600 hover:underline">Contact Us</Link>
+        </div>
       </footer>
     </div>
   );

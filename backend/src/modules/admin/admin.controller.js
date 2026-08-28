@@ -263,6 +263,8 @@ export const getSettings = async (req, res) => {
       payeeName: 'Ek Duje Ke Liye',
       amount: '1500',
       brandName: 'Ek Duje Ke Liye',
+      businessCategory: 'Education & Training',
+      businessDescription: 'Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops',
       supportPhone: '',
       supportWhatsapp: '',
       supportEmail: '',
@@ -297,6 +299,8 @@ export const updateSettings = async (req, res) => {
       payeeName,
       amount,
       brandName,
+      businessCategory,
+      businessDescription,
       supportPhone,
       supportWhatsapp,
       supportEmail,
@@ -330,6 +334,8 @@ export const updateSettings = async (req, res) => {
     if (amount !== undefined) setting.amount = String(amount);
 
     if (brandName !== undefined) setting.brandName = brandName;
+    if (businessCategory !== undefined) setting.businessCategory = businessCategory;
+    if (businessDescription !== undefined) setting.businessDescription = businessDescription;
     if (supportPhone !== undefined) setting.supportPhone = supportPhone;
     if (supportWhatsapp !== undefined) setting.supportWhatsapp = supportWhatsapp;
     if (supportEmail !== undefined) setting.supportEmail = supportEmail;
