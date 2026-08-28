@@ -83,7 +83,7 @@ export default function CancellationRefundPolicyPage() {
                 In case of technical errors during payment processing (e.g., amount debited from your bank account but registration token was not generated due to network disruption):
               </p>
               <ul className="list-disc pl-5 space-y-1.5 text-stone-600">
-                <li>Please email our support team at <strong>privacy.ekdujekeliye@gmail.com</strong> or message our helpline at <strong>+91 92135 32835</strong> with your transaction reference or bank debit statement.</li>
+                <li>Please email our support team at <strong>privacy.ekdujekeliye@gmail.com</strong> or message our helpline at <strong>+91 82003 02328</strong> with your transaction reference or bank debit statement.</li>
                 <li>If a genuine duplicate payment is verified by our payment gateway (Razorpay), the redundant transaction will be credited back to your original payment source within 5–7 working days as per standard banking timelines.</li>
               </ul>
             </section>
@@ -93,7 +93,7 @@ export default function CancellationRefundPolicyPage() {
               <div className="bg-stone-50 border border-stone-200 rounded-2xl p-5 text-xs space-y-2 text-stone-700">
                 <p><strong>Initiative:</strong> Ek Duje Ke Liye — Educational Seminars led by Manish Vaghasiya</p>
                 <p><strong>Support Email:</strong> privacy.ekdujekeliye@gmail.com</p>
-                <p><strong>Support Helpline:</strong> +91 92135 32835</p>
+                <p><strong>Support Helpline:</strong> +91 82003 02328</p>
                 <p><strong>Operating Location:</strong> Surat, Gujarat, India</p>
               </div>
             </section>

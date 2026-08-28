@@ -16,8 +16,8 @@ export default function ContactPage() {
     businessDescription?: string;
   }>({
     brandName: 'Ek Duje Ke Liye',
-    supportPhone: '+91 92135 32835',
-    supportWhatsapp: '+91 92135 32835',
+    supportPhone: '+91 82003 02328',
+    supportWhatsapp: '+91 82003 02328',
     supportEmail: 'privacy.ekdujekeliye@gmail.com',
     defaultCity: 'Surat, Gujarat',
     businessCategory: 'Education & Training',

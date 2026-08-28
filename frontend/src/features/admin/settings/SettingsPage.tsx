@@ -333,7 +333,7 @@ export const SettingsPage = () => {
                   type="tel"
                   value={supportPhone}
                   onChange={(e) => setSupportPhone(e.target.value)}
-                  placeholder="+91 98251 00000"
+                  placeholder="+91 82003 02328"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
                 />
               </div>
@@ -345,7 +345,7 @@ export const SettingsPage = () => {
                   type="tel"
                   value={supportWhatsapp}
                   onChange={(e) => setSupportWhatsapp(e.target.value)}
-                  placeholder="+91 98251 00000"
+                  placeholder="+91 82003 02328"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-rose-500 font-medium"
                 />
               </div>

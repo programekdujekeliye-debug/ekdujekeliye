@@ -97,7 +97,7 @@ export default function TermsPage() {
               <div className="bg-stone-50 border border-stone-200 rounded-2xl p-5 text-xs space-y-2 text-stone-700">
                 <p><strong>Organizer:</strong> Ek Duje Ke Liye — Educational Seminars led by Manish Vaghasiya</p>
                 <p><strong>Official Email:</strong> privacy.ekdujekeliye@gmail.com</p>
-                <p><strong>Support Helpline:</strong> +91 92135 32835</p>
+                <p><strong>Support Helpline:</strong> +91 82003 02328</p>
                 <p><strong>Operating City:</strong> Surat, Gujarat, India</p>
                 <p><strong>Venue Address:</strong> As specified on your official seminar booking pass.</p>
               </div>

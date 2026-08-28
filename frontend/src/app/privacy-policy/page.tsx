@@ -150,7 +150,7 @@ export default function PrivacyPolicyPage() {
                 <p><strong>Organization:</strong> Ek Duje Ke Liye — Educational Seminars led by Manish Vaghasiya</p>
                 <p><strong>Email:</strong> privacy.ekdujekeliye@gmail.com</p>
                 <p><strong>Website:</strong> https://ekdujekeliye.in</p>
-                <p><strong>WhatsApp Support:</strong> +91 92135 32835</p>
+                <p><strong>WhatsApp Support:</strong> +91 82003 02328</p>
                 <p><strong>Location:</strong> Surat, Gujarat, India</p>
               </div>
             </section>

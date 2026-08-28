@@ -79,7 +79,7 @@ export default function ShippingDeliveryPolicyPage() {
                 If you have completed your payment but did not receive your digital pass or WhatsApp confirmation message within 15 minutes:
               </p>
               <div className="bg-stone-50 border border-stone-200 rounded-2xl p-5 text-xs space-y-2 text-stone-700">
-                <p><strong>Support Helpline:</strong> +91 92135 32835 (Call or WhatsApp)</p>
+                <p><strong>Support Helpline:</strong> +91 82003 02328 (Call or WhatsApp)</p>
                 <p><strong>Support Email:</strong> privacy.ekdujekeliye@gmail.com</p>
                 <p><strong>Organization:</strong> Ek Duje Ke Liye — Educational Seminars led by Manish Vaghasiya</p>
                 <p><strong>Operating Location:</strong> Surat, Gujarat, India</p>

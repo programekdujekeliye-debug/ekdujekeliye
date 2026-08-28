@@ -15,8 +15,8 @@ const SettingSchema = new mongoose.Schema({
   brandName: { type: String, default: 'Ek Duje Ke Liye' },
   businessCategory: { type: String, default: 'Education & Training' },
   businessDescription: { type: String, default: 'Relationship Education, Couple Communication, Life Skills Training and Educational Seminars/Workshops' },
-  supportPhone: { type: String, default: '' },
-  supportWhatsapp: { type: String, default: '' },
+  supportPhone: { type: String, default: '+91 82003 02328' },
+  supportWhatsapp: { type: String, default: '+91 82003 02328' },
   supportEmail: { type: String, default: '' },
   websiteEmail: { type: String, default: '' },
   
