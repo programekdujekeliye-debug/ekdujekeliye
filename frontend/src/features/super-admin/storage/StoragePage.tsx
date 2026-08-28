@@ -286,10 +286,10 @@ export const StoragePage = () => {
         <div className="p-4 sm:p-5 lg:p-6 bg-white border border-slate-200 rounded-2xl space-y-1 shadow-xs">
           <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block">MongoDB Storage</span>
           <span className="text-xl sm:text-2xl font-extrabold text-slate-900 block truncate">
-            {dbStats ? `${dbStats.storageSizeMB.toFixed(1)} MB` : '...'}
+            {dbStats ? `${(Number(dbStats.storageSizeMB ?? dbStats.dataSizeMB ?? 0)).toFixed(1)} MB` : '...'}
           </span>
           <span className="text-[10px] sm:text-[11px] text-slate-500 font-medium block truncate">
-            {dbStats ? `${((dbStats.storageSizeMB / dbStats.totalLimitMB) * 100).toFixed(1)}% of 512 MB Free Limit` : '...'}
+            {dbStats ? `${((Number(dbStats.storageSizeMB ?? dbStats.dataSizeMB ?? 0) / Number(dbStats.totalLimitMB || 512)) * 100).toFixed(1)}% of 512 MB Free Limit` : '...'}
           </span>
         </div>
 

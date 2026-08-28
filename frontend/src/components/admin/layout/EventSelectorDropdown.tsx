@@ -52,18 +52,18 @@ export const EventSelectorDropdown: React.FC<EventSelectorDropdownProps> = ({
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  const upcomingPrograms = programs.filter(
-    (p) =>
-      p.status === 'upcoming' ||
-      p.status === 'few_seats' ||
-      p.status === 'housefull' ||
-      p.status === 'date_tba' ||
-      p.date === 'TBD' ||
-      (p.date && p.date >= todayStr)
+  const tbaPrograms = programs.filter(
+    (p) => p.date === 'TBD' || p.date === 'TBA' || p.status === 'date_tba' || !p.isDateFinal
   );
 
   const completedPrograms = programs.filter(
-    (p) => p.status === 'completed' || p.status === 'archived' || (p.date && p.date < todayStr && p.date !== 'TBD')
+    (p) => p.status === 'completed' || p.status === 'archived' || (p.date && p.date < todayStr && p.date !== 'TBD' && p.date !== 'TBA')
+  );
+
+  const upcomingPrograms = programs.filter(
+    (p) =>
+      !tbaPrograms.some((t) => t.id === p.id) &&
+      !completedPrograms.some((c) => c.id === p.id)
   );
 
   const currentProgram = programs.find((p) => p.id === selectedProgramId);
@@ -223,6 +223,59 @@ export const EventSelectorDropdown: React.FC<EventSelectorDropdownProps> = ({
                         </div>
                       </div>
                       {isSelected && <CheckIcon className="w-4 h-4 text-rose-600 flex-shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Date TBA Events Group */}
+            {tbaPrograms.length > 0 && (
+              <div className="pt-2 space-y-1">
+                <div className="px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-sky-700 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-600"></span>
+                  <span>Date To Be Announced</span>
+                </div>
+                {tbaPrograms.map((p) => {
+                  const isSelected = selectedProgramId === p.id;
+
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        onSelectProgram(p.id);
+                        setIsOpen(false);
+                      }}
+                      className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center justify-between gap-3 cursor-pointer ${
+                        isSelected
+                          ? 'bg-sky-50/80 border border-sky-200/80 text-sky-900 font-bold'
+                          : 'hover:bg-slate-50 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                          isSelected ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 border border-sky-200/60'
+                        }`}>
+                          <CalendarIcon className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-bold text-slate-900 truncate">
+                              {p.city || 'Gujarat'} &bull; {p.name}
+                            </span>
+                            <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-sky-100 text-sky-800 border border-sky-200">
+                              Date TBA
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                            <span className="font-medium">Date to be announced</span>
+                            <span>&bull;</span>
+                            <span className="font-semibold text-slate-700">₹{p.price ?? 1500}</span>
+                          </div>
+                        </div>
+                      </div>
+                      {isSelected && <CheckIcon className="w-4 h-4 text-sky-600 flex-shrink-0" />}
                     </button>
                   );
                 })}

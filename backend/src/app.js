@@ -34,11 +34,14 @@ import {
   getDbStatus,
   getSystemResources,
   getNotifications,
-  dismissNotification
+  dismissNotification,
+  getAdminDashboardSummary,
+  getSuperAdminDashboardSummary
 } from './modules/admin/admin.controller.js';
 import { requireAuth, requireSuperAuth, requireCronAuth } from './middleware/auth.js';
 import { runPaymentReminders } from './jobs/paymentReminders.job.js';
 import { getRazorpayKeyId } from './integrations/razorpay/razorpay.service.js';
+import { Setting } from './models/Setting.js';
 import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -74,12 +77,41 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'Backend server is running successfully.', version: '2.0.0' });
 });
 
-app.get('/api/config/public', (req, res) => {
-  res.json({
-    razorpayKeyId: getRazorpayKeyId(),
-    currency: 'INR',
-    defaultAmount: 1500
-  });
+app.get('/api/config/public', async (req, res) => {
+  try {
+    const setting = await Setting.findOne({ key: 'global' }).lean();
+    res.json({
+      brandName: setting?.brandName || 'Ek Duje Ke Liye',
+      supportPhone: setting?.supportPhone || '',
+      supportWhatsapp: setting?.supportWhatsapp || '',
+      supportEmail: setting?.supportEmail || '',
+      websiteEmail: setting?.websiteEmail || '',
+      instagramUrl: setting?.instagramUrl || '',
+      facebookUrl: setting?.facebookUrl || '',
+      youtubeUrl: setting?.youtubeUrl || '',
+      linktreeUrl: setting?.linktreeUrl || '',
+      defaultCity: setting?.defaultCity || 'Surat',
+      defaultCountry: setting?.defaultCountry || 'India',
+      defaultCurrency: setting?.defaultCurrency || 'INR',
+      defaultPrice: setting?.defaultPrice || Number(setting?.amount) || 1500,
+      defaultSpeakerName: setting?.defaultSpeakerName || 'Manish Vaghasiya',
+      defaultSpeakerTitle: setting?.defaultSpeakerTitle || 'Couple Relationship Counselor & Life Coach',
+      defaultFooterCopy: setting?.defaultFooterCopy || '',
+      razorpayKeyId: getRazorpayKeyId(),
+      currency: 'INR',
+      defaultAmount: setting?.defaultPrice || Number(setting?.amount) || 1500
+    });
+  } catch (err) {
+    res.json({
+      brandName: 'Ek Duje Ke Liye',
+      supportPhone: '',
+      supportWhatsapp: '',
+      supportEmail: '',
+      razorpayKeyId: getRazorpayKeyId(),
+      currency: 'INR',
+      defaultAmount: 1500
+    });
+  }
 });
 
 // High-Performance Aggregated Discovery Endpoints (V2)
@@ -100,8 +132,14 @@ app.get('/api/submissions/:inquiryId/screenshot', getPaymentScreenshotRedirect);
 
 // --- 100% Backwards Compatible Route Mappings ---
 
-// 1. Programs / Events
+// 1. Programs / Events / Options / Summary
 app.use('/api/programs', eventRouter);
+app.use('/api/events', eventRouter);
+app.use('/api/admin/events', eventRouter);
+
+// Operational Dashboard Direct Routes
+app.get('/api/admin/dashboard', requireAuth, getAdminDashboardSummary);
+app.get('/api/super-admin/dashboard', requireSuperAuth, getSuperAdminDashboardSummary);
 
 // 2. Registrations & Inquiries
 app.post('/api/submit', upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), submitRegistration);
@@ -137,6 +175,8 @@ app.use('/api/admin', adminRouter);
 app.use('/api/internal/archive', archiveRouter);
 app.use('/api/internal/backups', backupRouter);
 app.use('/api/super-admin/archive', archiveRouter);
+app.use('/api/admin/archive', archiveRouter);
+app.use('/api/archive', archiveRouter);
 app.use('/api/super-admin/backups', backupRouter);
 app.use('/api/super-admin/finance', financeRouter);
 app.use('/api/super-admin/system', adminRouter);

@@ -1,3 +1,8 @@
+import dns from 'dns';
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
 import mongoose from 'mongoose';
 import { env } from './env.js';
 
@@ -7,30 +12,19 @@ import { env } from './env.js';
  */
 export const connectDatabase = async () => {
   try {
-    mongoose.set('autoIndex', false); // Disable automatic index builds in foreground to avoid startup buffering
+    mongoose.set('autoIndex', false);
+    mongoose.set('autoCreate', false);
 
     const options = {
-      maxPoolSize: 10,                 // Conservative pool limit for small node instances
-      minPoolSize: 1,                  // Keep 1 persistent socket open to avoid cold connection latency
-      serverSelectionTimeoutMS: 5000,  // Fail fast if Atlas is unreachable
-      socketTimeoutMS: 45000,          // Close inactive sockets to free memory
-      family: 4                        // Force IPv4 to prevent dual-stack DNS delays
+      maxPoolSize: 10,
+      minPoolSize: 1,
+      serverSelectionTimeoutMS: 15000,
+      socketTimeoutMS: 45000,
+      family: 4
     };
 
     await mongoose.connect(env.MONGO_URI, options);
     console.log('[Database] Successfully connected to MongoDB Atlas (Connection Pool active).');
-
-    // Asynchronously synchronize model indexes in background without blocking startup
-    setImmediate(async () => {
-      try {
-        if (mongoose.modelNames().includes('Registration')) await mongoose.model('Registration').ensureIndexes();
-        if (mongoose.modelNames().includes('Event')) await mongoose.model('Event').ensureIndexes();
-        if (mongoose.modelNames().includes('WebhookEvent')) await mongoose.model('WebhookEvent').ensureIndexes();
-        console.log('[Database] Domain indexes synchronized successfully.');
-      } catch (err) {
-        console.warn('[Database] Background index synchronization notice:', err.message);
-      }
-    });
   } catch (err) {
     console.error('[Database] Failed to connect to MongoDB Atlas:', err);
     throw err;

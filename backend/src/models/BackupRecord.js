@@ -29,7 +29,8 @@ const BackupRecordSchema = new mongoose.Schema({
   lastError: { type: String, default: null }
 }, {
   collection: 'backup_records',
-  timestamps: true
+  timestamps: true,
+  autoIndex: false
 });
 
 BackupRecordSchema.index({ type: 1, createdAt: -1 });

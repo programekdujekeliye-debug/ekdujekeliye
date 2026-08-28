@@ -92,7 +92,7 @@ export default function TermsPage() {
                 <p><strong>Organizer:</strong> Ek Duje Ke Liye by Manish Vaghasiya</p>
                 <p><strong>Official Email:</strong> privacy.ekdujekeliye@gmail.com</p>
                 <p><strong>Support Helpline:</strong> +91 92135 32835</p>
-                <p><strong>Venue Address:</strong> Sardar Patel Smruti Bhavan, Mini Bazar, Varachha Road, Surat, Gujarat 395006</p>
+                <p><strong>Venue Address:</strong> As specified on your official booking pass and confirmation receipt.</p>
               </div>
             </section>
 

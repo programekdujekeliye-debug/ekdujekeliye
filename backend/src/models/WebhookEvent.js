@@ -8,7 +8,8 @@ const WebhookEventSchema = new mongoose.Schema({
   payloadSummary: { type: mongoose.Schema.Types.Mixed }
 }, {
   collection: 'webhook_events',
-  timestamps: true
+  timestamps: true,
+  autoIndex: false
 });
 
 WebhookEventSchema.index({ provider: 1, eventId: 1 }, { unique: true });

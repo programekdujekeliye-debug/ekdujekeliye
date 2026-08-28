@@ -115,7 +115,7 @@ export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       isFetchingRef.current = true;
       setLoadingPrograms(true);
-      const data = await eventsApi.getEvents();
+      const data = await eventsApi.getEventOptions();
       const list = data || [];
       setPrograms(list);
 

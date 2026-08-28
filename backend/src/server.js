@@ -1,7 +1,21 @@
+import dns from 'dns';
+// Enforce IPv4-first resolution to prevent Windows NAT64 IPv6 socket timeouts on MongoDB Atlas
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
 import { app } from './app.js';
 import { env } from './config/env.js';
 import { connectDatabase } from './config/database.js';
 import { initializeBackupCron } from './jobs/backup.job.js';
+
+process.on('uncaughtException', (err) => {
+  console.error('[Uncaught Exception]:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Unhandled Rejection]:', reason);
+});
 
 const startServer = async () => {
   try {
@@ -12,8 +26,13 @@ const startServer = async () => {
     initializeBackupCron();
 
     // 3. Start HTTP server
-    const server = app.listen(env.PORT, () => {
+    const server = app.listen(env.PORT, '0.0.0.0', () => {
       console.log(`[Ek Duje Ke Liye] V2 Platform Server running on port ${env.PORT} (${env.NODE_ENV})`);
+    });
+
+    server.on('error', (err) => {
+      console.error('[Server Error]:', err.message);
+      process.exit(1);
     });
 
     // Graceful shutdown handlers

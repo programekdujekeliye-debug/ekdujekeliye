@@ -11,7 +11,9 @@
     "test:razorpay": "node tests/test_razorpay.js",
     "test:webhook": "node tests/test_webhook.js",
     "test:order": "node tests/test_order_creation.js",
-    "seed:programs": "node scripts/seed_september_programs.js"
+    "seed:programs": "node scripts/seed_september_programs.js",
+    "migrate:v2": "node scripts/migrate-event-config-v2.js",
+    "audit:static-data": "node ../scripts/audit-static-business-data.js"
   },
   "dependencies": {
     "cloudinary": "^2.10.0",

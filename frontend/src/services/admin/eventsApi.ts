@@ -6,6 +6,14 @@ export const eventsApi = {
     return apiClient<Program[]>('/api/programs');
   },
 
+  async getEventOptions(): Promise<Program[]> {
+    return apiClient<Program[]>('/api/admin/events/options');
+  },
+
+  async getEventsSummary(): Promise<Program[]> {
+    return apiClient<Program[]>('/api/admin/events/summary');
+  },
+
   async createEvent(eventData: Partial<Program>): Promise<Program> {
     return apiClient<Program>('/api/programs', {
       method: 'POST',
@@ -19,6 +27,12 @@ export const eventsApi = {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(eventData)
+    });
+  },
+
+  async duplicateEvent(id: string): Promise<{ success: boolean; message: string; program: Program }> {
+    return apiClient<{ success: boolean; message: string; program: Program }>(`/api/programs/${id}/duplicate`, {
+      method: 'POST'
     });
   },
 

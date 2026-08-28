@@ -1,5 +1,6 @@
 {
   "watch": ["src", "index.js"],
-  "ignore": ["backups/*", "backups/**", "*.json", "logs/*"],
-  "ext": "js,json"
+  "ignore": ["backups/*", "backups/**", "*.json", "logs/*", "scripts/*", "scripts/**"],
+  "ext": "js",
+  "delay": 2000
 }

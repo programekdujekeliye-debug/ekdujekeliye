@@ -21,7 +21,8 @@ const JobSchema = new mongoose.Schema({
   completedAt: { type: Date }
 }, {
   collection: 'jobs',
-  timestamps: true
+  timestamps: true,
+  autoIndex: false
 });
 
 JobSchema.index({ status: 1, runAt: 1 });

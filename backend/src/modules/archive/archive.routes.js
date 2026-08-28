@@ -44,9 +44,16 @@ archiveRouter.post('/fail-item', requireArchiveWorkerAuth, failArchivedItem);
 // =========================================================
 archiveRouter.get('/candidates', requireSuperAuth, getArchiveCandidates);
 archiveRouter.post('/events/:eventId/start', requireSuperAuth, startEventArchive);
+archiveRouter.post('/start/:eventId', requireSuperAuth, startEventArchive);
+archiveRouter.post('/start', requireSuperAuth, startEventArchive);
 archiveRouter.post('/events/:eventId/pause', requireSuperAuth, pauseEventArchive);
+archiveRouter.post('/pause/:eventId', requireSuperAuth, pauseEventArchive);
+archiveRouter.post('/pause', requireSuperAuth, pauseEventArchive);
 archiveRouter.post('/events/:eventId/resume', requireSuperAuth, resumeEventArchive);
+archiveRouter.post('/resume/:eventId', requireSuperAuth, resumeEventArchive);
+archiveRouter.post('/resume', requireSuperAuth, resumeEventArchive);
 archiveRouter.post('/events/:eventId/retry-failed', requireSuperAuth, retryEventFailedJobs);
+archiveRouter.post('/retry-failed/:eventId', requireSuperAuth, retryEventFailedJobs);
 archiveRouter.post('/queue-single', requireSuperAuth, queueSingleAsset);
 archiveRouter.post('/queue-event', requireSuperAuth, queueEventArchive);
 archiveRouter.get('/jobs', requireSuperAuth, getArchiveJobs);

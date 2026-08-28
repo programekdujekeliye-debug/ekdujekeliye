@@ -64,7 +64,8 @@ const MediaArchiveSchema = new mongoose.Schema({
   cloudinaryOriginalDeletedAt: { type: Date, default: null }
 }, {
   collection: 'media_archives',
-  timestamps: true
+  timestamps: true,
+  autoIndex: false
 });
 
 MediaArchiveSchema.index({ status: 1, eventId: 1 });

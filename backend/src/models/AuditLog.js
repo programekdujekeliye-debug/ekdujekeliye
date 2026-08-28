@@ -12,7 +12,8 @@ const AuditLogSchema = new mongoose.Schema({
   userAgent: { type: String }
 }, {
   collection: 'audit_logs',
-  timestamps: { createdAt: true, updatedAt: false }
+  timestamps: { createdAt: true, updatedAt: false },
+  autoIndex: false
 });
 
 AuditLogSchema.index({ eventId: 1, createdAt: -1 });

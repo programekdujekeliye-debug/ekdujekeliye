@@ -1,10 +1,7 @@
-'use client';
-
 import React, { useState, useEffect } from 'react';
 import { useAdmin } from '../../admin/context/AdminContext';
+import { dashboardApi } from '../../../services/admin/dashboardApi';
 import { settingsApi } from '../../../services/admin/settingsApi';
-import { registrationsApi } from '../../../services/admin/registrationsApi';
-import { resourcesApi } from '../../../services/admin/resourcesApi';
 import { DatabaseStats } from '../../../types';
 import { RegistrationsPage } from '../../admin/registrations/RegistrationsPage';
 
@@ -15,28 +12,23 @@ export const SuperAdminDashboard = () => {
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [latestTokenId, setLatestTokenId] = useState<string>('N/A');
   const [dbStats, setDbStats] = useState<DatabaseStats | null>(null);
-  const [resources, setResources] = useState<any | null>(null);
 
   const fetchCommandStats = async () => {
     try {
-      const [allSubs, appSubs, pendSubs, db, res] = await Promise.all([
-        registrationsApi.getSubmissions({ page: 1, limit: 1, programId: selectedProgramId }).catch(() => null),
-        registrationsApi.getSubmissions({ page: 1, limit: 1, status: 'approved', programId: selectedProgramId }).catch(() => null),
-        registrationsApi.getSubmissions({ page: 1, limit: 1, status: 'pending', programId: selectedProgramId }).catch(() => null),
-        settingsApi.getDbStatus().catch(() => null),
-        resourcesApi.getSystemResources().catch(() => null)
+      const [dash, db] = await Promise.all([
+        dashboardApi.getAdminDashboard(selectedProgramId).catch(() => null),
+        settingsApi.getDbStatus().catch(() => null)
       ]);
 
-      if (allSubs) {
-        setTotalInquiries(allSubs.totalSubmissions || allSubs.total || 0);
-        if (allSubs.submissions && allSubs.submissions.length > 0) {
-          setLatestTokenId(allSubs.submissions[0].inquiryId);
+      if (dash && dash.stats) {
+        setTotalInquiries(dash.stats.total || 0);
+        setApprovedCount(dash.stats.approved || 0);
+        setPendingCount(dash.stats.pending || 0);
+        if (dash.recentSubmissions && dash.recentSubmissions.length > 0) {
+          setLatestTokenId(dash.recentSubmissions[0].inquiryId);
         }
       }
-      if (appSubs) setApprovedCount(appSubs.totalSubmissions || appSubs.total || 0);
-      if (pendSubs) setPendingCount(pendSubs.totalSubmissions || pendSubs.total || 0);
       if (db) setDbStats(db);
-      if (res) setResources(res);
     } catch (err) {
       console.error('Failed to load Super Admin command metrics:', err);
     }
@@ -75,20 +67,20 @@ export const SuperAdminDashboard = () => {
         <div className="p-4 sm:p-5 lg:p-6 bg-white border border-slate-200/90 rounded-2xl shadow-xs space-y-1">
           <span className="text-[11px] sm:text-xs text-slate-500 font-bold uppercase tracking-wider block">Database &amp; System</span>
           <span className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-1 block truncate">
-            {dbStats ? `${dbStats.storageSizeMB.toFixed(1)} MB / ${dbStats.totalLimitMB} MB` : 'Loading...'}
+            {dbStats ? `${(Number(dbStats.storageSizeMB ?? dbStats.dataSizeMB ?? 0)).toFixed(1)} MB / ${Number(dbStats.totalLimitMB || 512)} MB` : 'Loading...'}
           </span>
           {dbStats && (
             <div className="mt-2 space-y-1">
               <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                 <div
                   className={`h-1.5 rounded-full ${
-                    dbStats.storageSizeMB / dbStats.totalLimitMB > 0.8 ? 'bg-red-500' : 'bg-emerald-500'
+                    (Number(dbStats.storageSizeMB ?? dbStats.dataSizeMB ?? 0) / Number(dbStats.totalLimitMB || 512)) > 0.8 ? 'bg-red-500' : 'bg-emerald-500'
                   }`}
-                  style={{ width: `${Math.min(100, (dbStats.storageSizeMB / dbStats.totalLimitMB) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (Number(dbStats.storageSizeMB ?? dbStats.dataSizeMB ?? 0) / Number(dbStats.totalLimitMB || 512)) * 100)}%` }}
                 />
               </div>
               <span className="text-[10px] text-slate-400 font-medium block truncate">
-                {((dbStats.storageSizeMB / dbStats.totalLimitMB) * 100).toFixed(1)}% used &bull; RSS: {resources?.memory?.rssMB ? `${resources.memory.rssMB} MB` : 'Safe'}
+                {((Number(dbStats.storageSizeMB ?? dbStats.dataSizeMB ?? 0) / Number(dbStats.totalLimitMB || 512)) * 100).toFixed(1)}% of free tier storage used
               </span>
             </div>
           )}

@@ -11,7 +11,8 @@ const WhatsappTemplateSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: false }
 }, {
   collection: 'whatsapp_template',
-  timestamps: true
+  timestamps: true,
+  autoIndex: false
 });
 
 export const WhatsappTemplate = mongoose.models.WhatsappTemplate || mongoose.model('WhatsappTemplate', WhatsappTemplateSchema);

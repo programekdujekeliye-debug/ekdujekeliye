@@ -44,7 +44,8 @@ const RegistrationSchema = new mongoose.Schema({
   }
 }, {
   collection: 'submission',
-  timestamps: true
+  timestamps: true,
+  autoIndex: false
 });
 
 // Indexes for performance and duplicate prevention

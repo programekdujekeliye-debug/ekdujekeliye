@@ -2,233 +2,214 @@ import { Event } from '../../models/Event.js';
 import { Registration } from '../../models/Registration.js';
 import { generateEventSlug } from '../../utils/slug.js';
 
-// In-Memory Short TTL Cache for Zero-Cost Public Reads (5 Minutes)
+// In-Memory Short TTL Cache for Zero-Cost Reads
 let publicEventsCache = null;
 let publicEventsCacheExpiry = 0;
+let adminEventsCache = null;
+let adminEventsCacheExpiry = 0;
 const slugCache = new Map();
 
 export class EventService {
   /**
-   * Invalidate public discovery caches on event mutations
+   * Invalidate discovery caches on event mutations
    */
   invalidateCache() {
     publicEventsCache = null;
     publicEventsCacheExpiry = 0;
+    adminEventsCache = null;
+    adminEventsCacheExpiry = 0;
     slugCache.clear();
   }
 
   /**
-   * Get all active & upcoming events for public discovery (Aggregated & Cached)
-   * Blazing fast: single aggregation round-trip with in-memory caching.
+   * Simple and Reliable Public Upcoming Events (2 Future Max -> If Zero then TBD)
+   * Rule 1: Real future dated events (date >= today in Asia/Kolkata), max 2.
+   * Rule 2: If future count = 0, return valid Date TBA/TBD event.
+   * Rule 3: If nothing, return empty array (shows "New Events Coming Soon").
    */
-  async getPublicEvents() {
-    const now = Date.now();
-    if (publicEventsCache && now < publicEventsCacheExpiry) {
-      return publicEventsCache;
-    }
+  async getPublicUpcomingEvents() {
+    const now = new Date();
+    const istDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(now);
 
-    const programs = await Event.find(
-      { status: { $nin: ['completed', 'archived'] } },
+    const events = await Event.find(
+      { status: { $ne: 'archived' } },
       {
-        id: 1,
-        sequenceNumber: 1,
-        name: 1,
-        slug: 1,
-        city: 1,
-        venue: 1,
-        mapUrl: 1,
-        description: 1,
-        heroImage: 1,
-        price: 1,
-        status: 1,
-        featured: 1,
-        registrationMode: 1,
-        externalRegistrationUrl: 1,
-        sortOrder: 1,
-        date: 1,
-        time: 1,
-        capacity: 1,
-        isDateFinal: 1,
-        cardTemplate: 1,
-        isInquiryClosed: 1
-      }
-    )
-      .sort({ sequenceNumber: 1, sortOrder: 1, date: 1 })
-      .lean();
-
-    if (programs.length === 0) {
-      // If no upcoming, check if there's any completed/past fallback
-      publicEventsCache = [];
-      publicEventsCacheExpiry = now + 60 * 1000;
-      return [];
-    }
-
-    const programIds = programs.map(p => p.id);
-
-    // Single aggregation query for all event booking counts
-    const activeCounts = await Registration.aggregate([
-      {
-        $match: {
-          programId: { $in: programIds },
-          status: { $in: ['approved', 'pending'] },
-          isDeleted: { $ne: true }
-        }
-      },
-      {
-        $group: {
-          _id: '$programId',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-
-    const countMap = new Map();
-    activeCounts.forEach(c => countMap.set(c._id, c.count));
-
-    const result = programs.map(prog => {
-      const activeCount = countMap.get(prog.id) || 0;
-      const activeBookings = activeCount * 2;
-      const availableSeats = Math.max(0, prog.capacity - activeBookings);
-
-      return {
-        ...prog,
-        bookingsCount: activeBookings,
-        activeBookings,
-        availableSeats,
-        isSoldOut: availableSeats <= 0
-      };
-    });
-
-    publicEventsCache = result;
-    publicEventsCacheExpiry = now + 5 * 60 * 1000; // 5 minutes cache
-    return result;
-  }
-
-  /**
-   * Get single event by slug with lean projection
-   */
-  async getEventBySlug(slug) {
-    const now = Date.now();
-    const cached = slugCache.get(slug);
-    if (cached && now < cached.expiry) {
-      return cached.data;
-    }
-
-    const event = await Event.findOne(
-      { slug },
-      {
-        id: 1,
-        sequenceNumber: 1,
-        name: 1,
-        slug: 1,
-        city: 1,
-        venue: 1,
-        mapUrl: 1,
-        description: 1,
-        heroImage: 1,
-        price: 1,
-        status: 1,
-        featured: 1,
-        registrationMode: 1,
-        externalRegistrationUrl: 1,
-        date: 1,
-        time: 1,
-        capacity: 1,
-        isDateFinal: 1,
-        cardTemplate: 1,
-        isInquiryClosed: 1
+        id: 1, sequenceNumber: 1, name: 1, shortName: 1, slug: 1, city: 1,
+        venue: 1, venueAddress: 1, mapUrl: 1, description: 1, price: 1,
+        status: 1, date: 1, time: 1, capacity: 1, bookedSeats: 1, isDateFinal: 1,
+        isInquiryClosed: 1, registrationMode: 1, externalRegistrationUrl: 1,
+        heroImage: 1, posterImage: 1
       }
     ).lean();
 
+    if (!events || events.length === 0) return [];
+
+    // 1. Future dated events
+    const futureDatedEvents = events.filter(e => {
+      if (!e.date || e.date === 'TBA' || e.date === 'TBD' || e.isDateFinal === false) return false;
+      if (e.status === 'completed') return false;
+      return e.date >= istDateStr;
+    }).sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.sequenceNumber || 0) - (b.sequenceNumber || 0));
+
+    // RULE 1: Return maximum 2 upcoming events
+    if (futureDatedEvents.length > 0) {
+      return futureDatedEvents.slice(0, 2).map(prog => {
+        const capacity = prog.capacity || 1000;
+        const bookedSeats = prog.bookedSeats || 0;
+        const availableSeats = Math.max(0, capacity - bookedSeats);
+        return {
+          ...prog,
+          capacity,
+          bookedSeats,
+          availableSeats,
+          isHousefull: prog.status === 'housefull',
+          isClosed: prog.status === 'registration_closed' || prog.isInquiryClosed === true
+        };
+      });
+    }
+
+    // RULE 2: If future dated event count = 0, look for valid Date TBA / TBD event
+    const tbaEvent = events.find(e => {
+      return e.date === 'TBA' || e.date === 'TBD' || e.isDateFinal === false || !e.date || e.status === 'date_tba';
+    });
+
+    if (tbaEvent) {
+      return [{
+        ...tbaEvent,
+        capacity: tbaEvent.capacity || 1000,
+        bookedSeats: tbaEvent.bookedSeats || 0,
+        availableSeats: tbaEvent.capacity || 1000,
+        isHousefull: false,
+        isClosed: false
+      }];
+    }
+
+    // RULE 3: 0 future events and 0 TBA events
+    return [];
+  }
+
+  /**
+   * Public discovery endpoint (Home Page)
+   */
+  async getPublicEvents() {
+    return this.getPublicUpcomingEvents();
+  }
+
+  /**
+   * Get single event by slug with real-time seat availability
+   */
+  async getEventBySlug(slug) {
+    if (!slug) return null;
+
+    const event = await Event.findOne({
+      $or: [{ slug: slug.toLowerCase() }, { id: slug }]
+    }).lean();
+
     if (!event) return null;
 
-    const activeCount = await Registration.countDocuments({
-      programId: event.id,
-      status: { $in: ['approved', 'pending'] },
-      isDeleted: { $ne: true }
-    });
-    const activeBookings = activeCount * 2;
-    const availableSeats = Math.max(0, event.capacity - activeBookings);
-
-    const data = {
+    return {
       ...event,
-      activeBookings,
-      availableSeats,
-      isSoldOut: availableSeats <= 0
+      isHousefull: event.status === 'housefull',
+      isClosed: event.status === 'registration_closed' || event.isInquiryClosed === true
+    };
+  }
+
+  /**
+   * Ultra-lightweight event selector options (< 2 KB)
+   * Categorized: Upcoming first, then TBD, then Completed
+   */
+  async getEventOptions() {
+    const events = await Event.find(
+      { status: { $ne: 'archived' } },
+      { id: 1, name: 1, shortName: 1, date: 1, time: 1, status: 1, city: 1, venue: 1, sequenceNumber: 1, isDateFinal: 1 }
+    ).lean();
+
+    return this.sortEventsCategorized(events);
+  }
+
+  /**
+   * Helper: Sort events with Upcoming first, then TBD/TBA, then Completed
+   */
+  sortEventsCategorized(events) {
+    const now = new Date();
+    const istDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(now);
+
+    const getRank = (e) => {
+      if (e.status === 'completed' || e.status === 'archived') return 3; // Completed / Archived show last
+      if (e.status === 'date_tba' || e.date === 'TBA' || e.date === 'TBD' || e.isDateFinal === false || !e.date) return 2; // TBD / TBA show middle
+      if (e.date < istDateStr) return 3; // Past dated show last
+      return 1; // Upcoming show FIRST
     };
 
-    slugCache.set(slug, { data, expiry: now + (5 * 60 * 1000) }); // 5 minutes cache
-    return data;
+    return [...events].sort((a, b) => {
+      const rankA = getRank(a);
+      const rankB = getRank(b);
+
+      if (rankA !== rankB) return rankA - rankB;
+
+      // Upcoming (Rank 1): nearest date first
+      if (rankA === 1) {
+        return (a.date || '').localeCompare(b.date || '') || (a.sequenceNumber || 0) - (b.sequenceNumber || 0);
+      }
+      // TBD (Rank 2): by sequenceNumber or name
+      if (rankA === 2) {
+        return (a.sequenceNumber || 0) - (b.sequenceNumber || 0) || (a.name || '').localeCompare(b.name || '');
+      }
+      // Completed (Rank 3): most recent completed first
+      return (b.date || '').localeCompare(a.date || '') || (b.sequenceNumber || 0) - (a.sequenceNumber || 0);
+    });
   }
 
   /**
    * Get full admin program list with registration breakdown
    */
   async getAdminEvents() {
-    const programs = await Event.find({}).sort({ sequenceNumber: 1, date: 1 }).lean();
-    const programIds = programs.map(p => p.id);
-
-    // Fast batch aggregation by programId and status
-    const statusCounts = await Registration.aggregate([
+    const programs = await Event.find(
+      {},
       {
-        $match: {
-          programId: { $in: programIds },
-          isDeleted: { $ne: true }
-        }
-      },
-      {
-        $group: {
-          _id: {
-            programId: '$programId',
-            status: '$status',
-            isCpl: { $regexMatch: { input: '$inquiryId', regex: /^CPL/i } },
-            isIp: { $regexMatch: { input: '$inquiryId', regex: /^IP/i } }
-          },
-          count: { $sum: 1 }
-        }
+        id: 1, sequenceNumber: 1, name: 1, shortName: 1, slug: 1, city: 1,
+        venue: 1, venueAddress: 1, status: 1, date: 1, time: 1, capacity: 1,
+        bookedSeats: 1, isDateFinal: 1, isInquiryClosed: 1, price: 1, archiveStatus: 1,
+        registrationMode: 1, externalRegistrationUrl: 1, heroImage: 1, posterImage: 1
       }
-    ]);
+    ).lean();
+
+    const sortedPrograms = this.sortEventsCategorized(programs);
 
     const statsMap = new Map();
-    statusCounts.forEach(item => {
-      const pId = item._id.programId;
-      if (!statsMap.has(pId)) {
-        statsMap.set(pId, {
-          approved: 0, pending: 0, inquiry: 0, rejected: 0,
-          cplApproved: 0, cplPending: 0, cplInquiry: 0, cplRejected: 0,
-          ipApproved: 0, ipPending: 0, ipInquiry: 0, ipRejected: 0
-        });
-      }
-      const s = statsMap.get(pId);
-      const st = item._id.status;
-      const cnt = item.count;
+    try {
+      const statsList = await Registration.aggregate([
+        { $match: { isDeleted: { $ne: true } } },
+        {
+          $group: {
+            _id: '$programId',
+            approved: { $sum: { $cond: [{ $eq: ['$status', 'approved'] }, 1, 0] } },
+            pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+            inquiry: { $sum: { $cond: [{ $eq: ['$status', 'inquiry'] }, 1, 0] } },
+            rejected: { $sum: { $cond: [{ $eq: ['$status', 'rejected'] }, 1, 0] } },
+            present: { $sum: { $cond: [{ $eq: ['$attendance', true] }, 1, 0] } }
+          }
+        }
+      ]);
+      statsList.forEach(s => {
+        if (s && s._id) statsMap.set(s._id, s);
+      });
+    } catch (e) {
+      console.warn('[eventService] Stats aggregation fallback:', e.message);
+    }
 
-      if (st === 'approved') s.approved += cnt;
-      else if (st === 'pending') s.pending += cnt;
-      else if (st === 'inquiry') s.inquiry += cnt;
-      else if (st === 'rejected') s.rejected += cnt;
-
-      if (item._id.isCpl) {
-        if (st === 'approved') s.cplApproved += cnt;
-        else if (st === 'pending') s.cplPending += cnt;
-        else if (st === 'inquiry') s.cplInquiry += cnt;
-        else if (st === 'rejected') s.cplRejected += cnt;
-      }
-      if (item._id.isIp) {
-        if (st === 'approved') s.ipApproved += cnt;
-        else if (st === 'pending') s.ipPending += cnt;
-        else if (st === 'inquiry') s.ipInquiry += cnt;
-        else if (st === 'rejected') s.ipRejected += cnt;
-      }
-    });
-
-    const results = programs.map(prog => {
-      const s = statsMap.get(prog.id) || {
-        approved: 0, pending: 0, inquiry: 0, rejected: 0,
-        cplApproved: 0, cplPending: 0, cplInquiry: 0, cplRejected: 0,
-        ipApproved: 0, ipPending: 0, ipInquiry: 0, ipRejected: 0
-      };
-
+    return sortedPrograms.map(prog => {
+      const s = statsMap.get(prog.id) || { approved: 0, pending: 0, inquiry: 0, rejected: 0, present: 0 };
       const activeBookings = (s.approved + s.pending) * 2;
       const availableSeats = Math.max(0, prog.capacity - activeBookings);
 
@@ -240,18 +221,17 @@ export class EventService {
         pendingCount: s.pending,
         inquiryCount: s.inquiry,
         rejectedCount: s.rejected,
-        cplApproved: s.cplApproved,
-        cplPending: s.cplPending,
-        cplInquiry: s.cplInquiry,
-        cplRejected: s.cplRejected,
-        ipApproved: s.ipApproved,
-        ipPending: s.ipPending,
-        ipInquiry: s.ipInquiry,
-        ipRejected: s.ipRejected
+        cplApproved: s.approved,
+        cplPending: s.pending,
+        cplInquiry: s.inquiry,
+        cplRejected: s.rejected,
+        ipApproved: s.approved,
+        ipPending: s.pending,
+        ipInquiry: s.inquiry,
+        ipRejected: s.rejected,
+        presentCount: s.present
       };
     });
-
-    return results;
   }
 }
 

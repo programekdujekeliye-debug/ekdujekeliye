@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { MediaArchive } from '../../models/MediaArchive.js';
 import { Event } from '../../models/Event.js';
 import { Registration } from '../../models/Registration.js';
@@ -12,16 +13,29 @@ import { mediaService } from '../media/media.service.js';
  */
 export const updateEventArchiveProgress = async (eventId) => {
   try {
-    const event = await Event.findOne({ id: eventId });
+    const event = await Event.findOne({
+      $or: [{ id: eventId }, { slug: eventId }]
+    });
     if (!event) return null;
 
-    const [submissionsCount, archives] = await Promise.all([
+    const actualEventId = event.id;
+
+    const [submissionsCount, archiveStatsList] = await Promise.all([
       Registration.countDocuments({
-        programId: eventId,
+        programId: actualEventId,
         isDeleted: { $ne: true },
         couplePhoto: { $exists: true, $ne: null, $ne: '', $ne: '/sample_couple.png' }
       }),
-      MediaArchive.find({ eventId }).select('status originalSize').lean()
+      MediaArchive.aggregate([
+        { $match: { eventId: actualEventId } },
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 },
+            totalBytes: { $sum: '$originalSize' }
+          }
+        }
+      ])
     ]);
 
     let verified = 0;
@@ -30,16 +44,20 @@ export const updateEventArchiveProgress = async (eventId) => {
     let failed = 0;
     let totalBytes = 0;
 
-    archives.forEach(a => {
-      if (a.status === 'VERIFIED' || a.status === 'ARCHIVED' || a.status === 'DELETE_PENDING') {
-        verified++;
-        totalBytes += (a.originalSize || 0);
-      } else if (a.status === 'QUEUED') {
-        queued++;
-      } else if (a.status === 'COPYING') {
-        copying++;
-      } else if (a.status === 'FAILED') {
-        failed++;
+    archiveStatsList.forEach(a => {
+      const st = a._id;
+      const cnt = a.count || 0;
+      const bytes = a.totalBytes || 0;
+
+      if (st === 'VERIFIED' || st === 'ARCHIVED' || st === 'DELETE_PENDING') {
+        verified += cnt;
+        totalBytes += bytes;
+      } else if (st === 'QUEUED') {
+        queued += cnt;
+      } else if (st === 'COPYING') {
+        copying += cnt;
+      } else if (st === 'FAILED') {
+        failed += cnt;
       }
     });
 
@@ -479,64 +497,100 @@ export const failArchivedItem = async (req, res) => {
  */
 export const getArchiveCandidates = async (req, res) => {
   try {
-    const events = await Event.find().sort({ date: -1 }).lean();
-
-    const candidates = await Promise.all(
-      events.map(async (ev) => {
-        const totalRegistrations = await Registration.countDocuments({
-          programId: ev.id,
-          isDeleted: { $ne: true }
-        });
-
-        const couplePhotosCount = await Registration.countDocuments({
-          programId: ev.id,
-          isDeleted: { $ne: true },
-          couplePhoto: { $exists: true, $ne: null, $ne: '', $ne: '/sample_couple.png' }
-        });
-
-        const archives = await MediaArchive.find({ eventId: ev.id }).select('status').lean();
-
-        let archivedCount = 0;
-        let queuedCount = 0;
-        let copyingCount = 0;
-        let failedCount = 0;
-
-        archives.forEach(a => {
-          if (a.status === 'VERIFIED' || a.status === 'ARCHIVED' || a.status === 'DELETE_PENDING') archivedCount++;
-          else if (a.status === 'QUEUED') queuedCount++;
-          else if (a.status === 'COPYING') copyingCount++;
-          else if (a.status === 'FAILED') failedCount++;
-        });
-
-        const isCompleted = ev.status === 'completed' || ev.status === 'archived';
-        const progressPercent = couplePhotosCount > 0 ? Math.min(100, Math.round((archivedCount / couplePhotosCount) * 100)) : 0;
-
-        let derivedStatus = ev.archiveStatus || 'NOT_REQUIRED';
-        if (!ev.archiveStatus || ev.archiveStatus === 'NOT_REQUIRED') {
-          if (archivedCount >= couplePhotosCount && couplePhotosCount > 0) derivedStatus = 'COMPLETED';
-          else if (queuedCount > 0) derivedStatus = 'QUEUED';
+    const [events, regStatsList, archiveStatsList] = await Promise.all([
+      Event.find({}, { id: 1, name: 1, date: 1, city: 1, status: 1, archiveStatus: 1 }).sort({ date: -1 }).lean(),
+      Registration.aggregate([
+        { $match: { isDeleted: { $ne: true } } },
+        {
+          $group: {
+            _id: '$programId',
+            total: { $sum: 1 },
+            couplePhotos: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $ne: ['$couplePhoto', null] },
+                      { $ne: ['$couplePhoto', ''] },
+                      { $ne: ['$couplePhoto', '/sample_couple.png'] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            }
+          }
         }
+      ]),
+      MediaArchive.aggregate([
+        {
+          $group: {
+            _id: { eventId: '$eventId', status: '$status' },
+            count: { $sum: 1 }
+          }
+        }
+      ])
+    ]);
 
-        return {
-          id: ev.id,
-          name: ev.name,
-          date: ev.date,
-          city: ev.city || 'Surat',
-          status: ev.status,
-          isCompleted,
-          archiveStatus: derivedStatus,
-          isCurrentlyActive: derivedStatus === 'ARCHIVING',
-          totalRegistrations,
-          eligibleCouplePhotos: couplePhotosCount,
-          archivedAssets: archivedCount,
-          queuedAssets: queuedCount,
-          copyingAssets: copyingCount,
-          failedAssets: failedCount,
-          progressPercent,
-          estimatedSizeMB: parseFloat(((couplePhotosCount * 1.2)).toFixed(1))
-        };
-      })
-    );
+    const regStatsMap = new Map();
+    regStatsList.forEach(r => { if (r && r._id) regStatsMap.set(r._id, r); });
+
+    const archiveMap = new Map();
+    archiveStatsList.forEach(a => {
+      if (a && a._id && a._id.eventId) {
+        const evId = a._id.eventId;
+        if (!archiveMap.has(evId)) {
+          archiveMap.set(evId, { verified: 0, queued: 0, copying: 0, failed: 0 });
+        }
+        const s = archiveMap.get(evId);
+        const st = a._id.status;
+        if (st === 'VERIFIED' || st === 'ARCHIVED' || st === 'DELETE_PENDING') s.verified += a.count;
+        else if (st === 'QUEUED') s.queued += a.count;
+        else if (st === 'COPYING') s.copying += a.count;
+        else if (st === 'FAILED') s.failed += a.count;
+      }
+    });
+
+    const candidates = events.map(ev => {
+      const r = regStatsMap.get(ev.id) || { total: 0, couplePhotos: 0 };
+      const a = archiveMap.get(ev.id) || { verified: 0, queued: 0, copying: 0, failed: 0 };
+
+      const totalRegistrations = r.total;
+      const couplePhotosCount = r.couplePhotos;
+      const archivedCount = a.verified;
+      const queuedCount = a.queued;
+      const copyingCount = a.copying;
+      const failedCount = a.failed;
+
+      const isCompleted = ev.status === 'completed' || ev.status === 'archived';
+      const progressPercent = couplePhotosCount > 0 ? Math.min(100, Math.round((archivedCount / couplePhotosCount) * 100)) : 0;
+
+      let derivedStatus = ev.archiveStatus || 'NOT_REQUIRED';
+      if (!ev.archiveStatus || ev.archiveStatus === 'NOT_REQUIRED') {
+        if (archivedCount >= couplePhotosCount && couplePhotosCount > 0) derivedStatus = 'COMPLETED';
+        else if (queuedCount > 0) derivedStatus = 'QUEUED';
+      }
+
+      return {
+        id: ev.id,
+        name: ev.name,
+        date: ev.date,
+        city: ev.city || 'Surat',
+        status: ev.status,
+        isCompleted,
+        archiveStatus: derivedStatus,
+        isCurrentlyActive: derivedStatus === 'ARCHIVING',
+        totalRegistrations,
+        eligibleCouplePhotos: couplePhotosCount,
+        archivedAssets: archivedCount,
+        queuedAssets: queuedCount,
+        copyingAssets: copyingCount,
+        failedAssets: failedCount,
+        progressPercent,
+        estimatedSizeMB: parseFloat(((couplePhotosCount * 1.2)).toFixed(1))
+      };
+    });
 
     res.json({ success: true, candidates });
   } catch (err) {
@@ -550,15 +604,21 @@ export const getArchiveCandidates = async (req, res) => {
  */
 export const startEventArchive = async (req, res) => {
   try {
-    const { eventId } = req.params;
+    const eventId = req.params.eventId || req.body?.eventId || req.query?.eventId;
     if (!eventId) {
       return res.status(400).json({ error: 'eventId is required.' });
     }
 
-    const event = await Event.findOne({ id: eventId });
+    const allEvents = await Event.find(
+      {},
+      { id: 1, name: 1, slug: 1, status: 1, archiveStatus: 1 }
+    ).lean();
+    const event = allEvents.find(e => e.id === eventId || e.slug === eventId || String(e._id) === eventId);
     if (!event) {
-      return res.status(404).json({ error: 'Event not found.' });
+      return res.status(404).json({ error: `Event "${eventId}" not found.` });
     }
+
+    const targetEventId = event.id || String(event._id);
 
     // Guard: Prevent archiving active / upcoming events
     const isCompleted = event.status === 'completed' || event.status === 'archived';
@@ -569,46 +629,43 @@ export const startEventArchive = async (req, res) => {
     }
 
     // Guard: Enforce ONLY ONE active event in ARCHIVING state
-    const currentlyRunning = await Event.findOne({
-      archiveStatus: 'ARCHIVING',
-      id: { $ne: eventId }
-    }).lean();
-
+    const currentlyRunning = allEvents.find(e => e.archiveStatus === 'ARCHIVING' && e.id !== targetEventId);
     if (currentlyRunning) {
+      console.log('[startEventArchive] Another archive already running:', currentlyRunning.name);
       return res.status(409).json({
         error: `Another event archive is currently running: "${currentlyRunning.name}" (${currentlyRunning.id}). Please wait for it to finish or pause it first.`,
         runningEvent: { id: currentlyRunning.id, name: currentlyRunning.name }
       });
     }
 
-    // 1. Discover all eligible couple photos for this event
-    const submissions = await Registration.find({
-      programId: eventId,
-      isDeleted: { $ne: true },
-      couplePhoto: { $exists: true, $ne: null, $ne: '', $ne: '/sample_couple.png' }
-    }).lean();
+    console.log('[startEventArchive] Step 3: Querying registrations for event...');
+    const allSubmissions = await Registration.find(
+      { programId: targetEventId, isDeleted: { $ne: true } },
+      { inquiryId: 1, couplePhoto: 1, husbandName: 1, wifeName: 1, surname: 1 }
+    ).lean();
+
+    const submissions = allSubmissions.filter(sub => {
+      const p = sub.couplePhoto;
+      return Boolean(p && p !== '/sample_couple.png' && p !== 'null' && p !== '');
+    });
 
     const eventSlug = event.slug || event.id;
     const itemsToInsert = [];
 
-    const publicIds = submissions.map(sub => {
-      const photoUrl = sub.couplePhoto;
-      const publicIdMatch = photoUrl.match(/\/([^/]+)\.(jpg|jpeg|png|webp)/i);
-      return publicIdMatch ? publicIdMatch[1] : `sub_${sub.inquiryId}_photo`;
-    });
-
-    const existingRecords = await MediaArchive.find({ sourcePublicId: { $in: publicIds } }).select('sourcePublicId').lean();
+    // Query existing records by indexed eventId (< 10ms)
+    const existingRecords = await MediaArchive.find({ eventId: targetEventId }).select('sourcePublicId').lean();
     const existingSet = new Set(existingRecords.map(r => r.sourcePublicId));
 
     submissions.forEach(sub => {
       const photoUrl = sub.couplePhoto;
+      if (!photoUrl) return;
       const publicIdMatch = photoUrl.match(/\/([^/]+)\.(jpg|jpeg|png|webp)/i);
       const publicId = publicIdMatch ? publicIdMatch[1] : `sub_${sub.inquiryId}_photo`;
 
       if (!existingSet.has(publicId)) {
-        const filename = `${sub.inquiryId}_${sub.husbandName}_${sub.wifeName}_${sub.surname}.jpg`.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const filename = `${sub.inquiryId || 'reg'}_${sub.husbandName || 'couple'}_${sub.wifeName || ''}_${sub.surname || ''}.jpg`.replace(/[^a-zA-Z0-9._-]/g, '_');
         itemsToInsert.push({
-          eventId,
+          eventId: targetEventId,
           registrationId: sub.inquiryId,
           mediaType: 'couple_photo',
           sourceProvider: photoUrl.includes('cloudinary') ? 'cloudinary' : 'local',
@@ -625,23 +682,49 @@ export const startEventArchive = async (req, res) => {
     });
 
     if (itemsToInsert.length > 0) {
-      await MediaArchive.insertMany(itemsToInsert, { ordered: false });
+      try {
+        await MediaArchive.collection.insertMany(itemsToInsert, { ordered: false });
+      } catch (insertErr) {
+        // Expected duplicate key handling for idempotent queueing
+      }
     }
 
-    event.archiveStatus = 'ARCHIVING';
-    event.archiveRequestedAt = new Date();
-    event.archiveStartedAt = event.archiveStartedAt || new Date();
-    event.archiveRequestedBy = 'SUPER_ADMIN';
-    await event.save();
+    const queuedCount = itemsToInsert.length + existingSet.size;
 
-    const updatedEvent = await updateEventArchiveProgress(eventId);
+    await Event.updateOne(
+      { id: targetEventId },
+      {
+        $set: {
+          archiveStatus: 'ARCHIVING',
+          archiveRequestedAt: new Date(),
+          archiveStartedAt: event.archiveStartedAt || new Date(),
+          archiveRequestedBy: 'SUPER_ADMIN',
+          archiveStats: {
+            totalAssets: submissions.length,
+            queuedAssets: queuedCount,
+            copyingAssets: 0,
+            archivedAssets: 0,
+            failedAssets: 0,
+            totalBytes: 0,
+            lastWorkerAt: null
+          }
+        }
+      }
+    );
 
-    res.json({
+    return res.json({
       success: true,
       message: `Google Drive archive started for ${event.name}. Automatic worker will process remaining batches.`,
-      eventId,
-      archiveStatus: updatedEvent.archiveStatus,
-      stats: updatedEvent.archiveStats
+      eventId: targetEventId,
+      archiveStatus: 'ARCHIVING',
+      stats: {
+        totalAssets: submissions.length,
+        queuedAssets: queuedCount,
+        copyingAssets: 0,
+        archivedAssets: 0,
+        failedAssets: 0,
+        totalBytes: 0
+      }
     });
   } catch (err) {
     res.status(500).json({ error: `Failed to start event archive: ${err.message}` });

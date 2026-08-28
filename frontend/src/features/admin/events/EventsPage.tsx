@@ -4,55 +4,178 @@ import React, { useState } from 'react';
 import { useAdmin } from '../context/AdminContext';
 import { eventsApi } from '../../../services/admin/eventsApi';
 import { Program } from '../../../types';
-import { MapPinIcon, CalendarIcon, UsersIcon, BuildingIcon } from '../../../components/Icons';
+import {
+  MapPinIcon,
+  CalendarIcon,
+  UsersIcon,
+  BuildingIcon,
+  PencilIcon,
+  TrashIcon,
+  LayersIcon,
+  CheckIcon,
+  AlertTriangleIcon,
+  XIcon
+} from '../../../components/Icons';
+
+type EventTab = 'general' | 'location' | 'pricing' | 'content' | 'speaker' | 'pass_seo';
 
 export const EventsPage = () => {
-  const { programs, refreshPrograms, loadingPrograms } = useAdmin();
+  const { programs, refreshPrograms, loadingPrograms, role } = useAdmin();
+  const isSuperAdmin = role === 'superadmin';
 
-  // Create Form State
-  const [name, setName] = useState('');
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('8:30 PM');
-  const [price, setPrice] = useState<number | ''>(1500);
-  const [city, setCity] = useState('Surat');
-  const [venue, setVenue] = useState('Sardar Patel Smruti Bhavan, Varachha, Surat');
-  const [mapUrl, setMapUrl] = useState('https://share.google/y1jtFAZXuKusYTiUD');
-  const [status, setStatus] = useState('upcoming');
-  const [slug, setSlug] = useState('');
-  const [registrationMode, setRegistrationMode] = useState<'internal' | 'external'>('internal');
-  const [externalUrl, setExternalUrl] = useState('');
-  const [capacity, setCapacity] = useState<number | ''>('');
-  const [isDateFinal, setIsDateFinal] = useState(true);
-  const [isInquiryClosed, setIsInquiryClosed] = useState(false);
-  const [photoLink, setPhotoLink] = useState('');
-  const [cardTemplate, setCardTemplate] = useState<string | null>(null);
-
-  // Edit State
+  // Active Tab in Create/Edit Modal
+  const [activeTab, setActiveTab] = useState<EventTab>('general');
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProgram, setEditingProgram] = useState<Program | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editDate, setEditDate] = useState('');
-  const [editTime, setEditTime] = useState('8:30 PM');
-  const [editPrice, setEditPrice] = useState<number | ''>(1500);
-  const [editCity, setEditCity] = useState('');
-  const [editVenue, setEditVenue] = useState('');
-  const [editMapUrl, setEditMapUrl] = useState('');
-  const [editStatus, setEditStatus] = useState('upcoming');
-  const [editSlug, setEditSlug] = useState('');
-  const [editRegistrationMode, setEditRegistrationMode] = useState<'internal' | 'external'>('internal');
-  const [editExternalUrl, setEditExternalUrl] = useState('');
-  const [editCapacity, setEditCapacity] = useState<number | ''>('');
-  const [editIsDateFinal, setEditIsDateFinal] = useState(true);
-  const [editIsInquiryClosed, setEditIsInquiryClosed] = useState(false);
-  const [editPhotoLink, setEditPhotoLink] = useState('');
+
+  // Form State
+  const [formData, setFormData] = useState<Partial<Program>>({
+    name: '',
+    shortName: '',
+    slug: '',
+    date: '',
+    time: '8:30 PM',
+    price: 1500,
+    currency: 'INR',
+    city: 'Surat',
+    venue: '',
+    venueAddress: '',
+    mapUrl: '',
+    description: '',
+    headline: '',
+    subheadline: '',
+    instructions: '',
+    heroImage: '',
+    posterImage: '',
+    contactPhone: '',
+    contactWhatsapp: '',
+    contactEmail: '',
+    speakerName: 'Manish Vaghasiya',
+    speakerTitle: 'Couple Relationship Counselor & Life Coach',
+    speakerImage: '',
+    speakerBio: '',
+    ctaLabel: 'Book Couple Pass',
+    passTitle: '',
+    passInstructions: '',
+    seoTitle: '',
+    seoDescription: '',
+    status: 'upcoming',
+    registrationMode: 'internal',
+    externalRegistrationUrl: '',
+    capacity: 1000,
+    isDateFinal: true,
+    isInquiryClosed: false,
+    heartX: 157,
+    heartY: 91,
+    heartWidth: 260,
+    heartHeight: 312,
+    photoZoom: 0.55,
+    photoOffsetY: 0
+  });
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      shortName: '',
+      slug: '',
+      date: '',
+      time: '8:30 PM',
+      price: 1500,
+      currency: 'INR',
+      city: 'Surat',
+      venue: '',
+      venueAddress: '',
+      mapUrl: '',
+      description: '',
+      headline: '',
+      subheadline: '',
+      instructions: '',
+      heroImage: '',
+      posterImage: '',
+      contactPhone: '',
+      contactWhatsapp: '',
+      contactEmail: '',
+      speakerName: 'Manish Vaghasiya',
+      speakerTitle: 'Couple Relationship Counselor & Life Coach',
+      speakerImage: '',
+      speakerBio: '',
+      ctaLabel: 'Book Couple Pass',
+      passTitle: '',
+      passInstructions: '',
+      seoTitle: '',
+      seoDescription: '',
+      status: 'upcoming',
+      registrationMode: 'internal',
+      externalRegistrationUrl: '',
+      capacity: 1000,
+      isDateFinal: true,
+      isInquiryClosed: false,
+      heartX: 157,
+      heartY: 91,
+      heartWidth: 260,
+      heartHeight: 312,
+      photoZoom: 0.55,
+      photoOffsetY: 0
+    });
+    setEditingProgram(null);
+    setActiveTab('general');
+    setError('');
+    setSuccess('');
+  };
+
+  const handleOpenCreate = () => {
+    resetForm();
+    setIsModalOpen(true);
+  };
+
+  const handleStartEdit = (prog: Program) => {
+    setEditingProgram(prog);
+    setFormData({
+      ...prog,
+      isDateFinal: prog.isDateFinal !== false,
+      price: prog.price ?? 1500,
+      capacity: prog.capacity || 1000
+    });
+    setActiveTab('general');
+    setError('');
+    setSuccess('');
+    setIsModalOpen(true);
+  };
+
+  const handleDuplicate = async (prog: Program) => {
+    if (!confirm(`Duplicate "${prog.name}" to create a new event slot?`)) return;
+    try {
+      setDuplicatingId(prog.id);
+      await eventsApi.duplicateEvent(prog.id);
+      await refreshPrograms();
+      setSuccess(`Event "${prog.name}" duplicated successfully.`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to duplicate event.');
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to permanently delete event "${name}"?`)) return;
+    try {
+      await eventsApi.deleteEvent(id);
+      await refreshPrograms();
+      setSuccess(`Event "${name}" deleted.`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete event.');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || (isDateFinal && !date) || !capacity) {
-      setError('Please fill in all required fields.');
+    if (!formData.name || (formData.isDateFinal && !formData.date) || !formData.capacity) {
+      setError('Please fill in required fields: Name, Date (or set Date TBA), and Capacity.');
       return;
     }
 
@@ -60,380 +183,673 @@ export const EventsPage = () => {
       setSubmitting(true);
       setError('');
       setSuccess('');
-      await eventsApi.createEvent({
-        name,
-        date,
-        time,
-        price: price ? Number(price) : 1500,
-        city,
-        venue,
-        mapUrl,
-        status,
-        slug,
-        registrationMode,
-        externalRegistrationUrl: externalUrl,
-        capacity: Number(capacity),
-        isDateFinal,
-        isInquiryClosed,
-        photoLink,
-        cardTemplate
-      });
 
-      setSuccess('Program slot created successfully.');
-      setName('');
-      setDate('');
-      setCapacity('');
-      refreshPrograms();
+      if (editingProgram) {
+        await eventsApi.updateEvent(editingProgram.id, formData);
+        setSuccess(`Event "${formData.name}" updated successfully.`);
+      } else {
+        await eventsApi.createEvent(formData);
+        setSuccess(`Event "${formData.name}" created successfully.`);
+      }
+
+      setIsModalOpen(false);
+      resetForm();
+      await refreshPrograms();
     } catch (err: any) {
-      setError(err.message || 'Failed to create program slot.');
+      setError(err.message || 'Failed to save event.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleStartEdit = (prog: Program) => {
-    setEditingProgram(prog);
-    setEditName(prog.name);
-    setEditDate(prog.date);
-    setEditTime(prog.time || '8:30 PM');
-    setEditPrice(prog.price ?? 1500);
-    setEditCity(prog.city || '');
-    setEditVenue(prog.venue || '');
-    setEditMapUrl(prog.mapUrl || '');
-    setEditStatus(prog.status || 'upcoming');
-    setEditSlug(prog.slug || '');
-    setEditRegistrationMode((prog.registrationMode as any) || 'internal');
-    setEditExternalUrl(prog.externalRegistrationUrl || '');
-    setEditCapacity(prog.capacity);
-    setEditIsDateFinal(prog.isDateFinal !== false);
-    setEditIsInquiryClosed(prog.isInquiryClosed || false);
-    setEditPhotoLink(prog.photoLink || '');
-  };
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'upcoming' | 'tbd' | 'completed'>('all');
 
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingProgram) return;
+  // Categorize programs
+  const todayStr = new Date().toISOString().split('T')[0];
+  const categorizedList = [...programs].sort((a, b) => {
+    const isATbd = a.date === 'TBD' || a.date === 'TBA' || a.status === 'date_tba' || a.isDateFinal === false || !a.date;
+    const isAComp = a.status === 'completed' || a.status === 'archived' || (a.date < todayStr && !isATbd);
+    const rankA = isAComp ? 3 : isATbd ? 2 : 1;
 
-    try {
-      setSubmitting(true);
-      await eventsApi.updateEvent(editingProgram.id, {
-        name: editName,
-        date: editDate,
-        time: editTime,
-        price: editPrice ? Number(editPrice) : 1500,
-        city: editCity,
-        venue: editVenue,
-        mapUrl: editMapUrl,
-        status: editStatus,
-        slug: editSlug,
-        registrationMode: editRegistrationMode,
-        externalRegistrationUrl: editExternalUrl,
-        capacity: Number(editCapacity),
-        isDateFinal: editIsDateFinal,
-        isInquiryClosed: editIsInquiryClosed,
-        photoLink: editPhotoLink
-      });
+    const isBTbd = b.date === 'TBD' || b.date === 'TBA' || b.status === 'date_tba' || b.isDateFinal === false || !b.date;
+    const isBComp = b.status === 'completed' || b.status === 'archived' || (b.date < todayStr && !isBTbd);
+    const rankB = isBComp ? 3 : isBTbd ? 2 : 1;
 
-      setEditingProgram(null);
-      refreshPrograms();
-    } catch (err: any) {
-      alert(err.message || 'Failed to update program.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    if (rankA !== rankB) return rankA - rankB;
+    if (rankA === 1) return (a.date || '').localeCompare(b.date || '') || (a.sequenceNumber || 0) - (b.sequenceNumber || 0);
+    if (rankA === 2) return (a.sequenceNumber || 0) - (b.sequenceNumber || 0) || (a.name || '').localeCompare(b.name || '');
+    return (b.date || '').localeCompare(a.date || '') || (b.sequenceNumber || 0) - (a.sequenceNumber || 0);
+  });
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this program?')) return;
-    try {
-      await eventsApi.deleteEvent(id);
-      refreshPrograms();
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete program.');
-    }
-  };
+  const filteredPrograms = categorizedList.filter(p => {
+    const isTbd = p.date === 'TBD' || p.date === 'TBA' || p.status === 'date_tba' || p.isDateFinal === false || !p.date;
+    const isCompleted = p.status === 'completed' || p.status === 'archived' || (p.date < todayStr && !isTbd);
+    const isUpcoming = !isCompleted && !isTbd;
+
+    if (categoryFilter === 'upcoming') return isUpcoming;
+    if (categoryFilter === 'tbd') return isTbd;
+    if (categoryFilter === 'completed') return isCompleted;
+    return true;
+  });
+
+  const upcomingCount = programs.filter(p => {
+    const isTbd = p.date === 'TBD' || p.date === 'TBA' || p.status === 'date_tba' || p.isDateFinal === false || !p.date;
+    const isCompleted = p.status === 'completed' || p.status === 'archived' || (p.date < todayStr && !isTbd);
+    return !isCompleted && !isTbd;
+  }).length;
+
+  const tbdCount = programs.filter(p => p.date === 'TBD' || p.date === 'TBA' || p.status === 'date_tba' || p.isDateFinal === false || !p.date).length;
+  const completedCount = programs.filter(p => p.status === 'completed' || p.status === 'archived' || (p.date < todayStr && p.date !== 'TBD' && p.date !== 'TBA')).length;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Create / Edit Program Form */}
-      <div className="bg-white border border-slate-200/90 shadow-xs rounded-2xl p-4 sm:p-6 space-y-5">
+    <div className="space-y-6">
+      {/* Top Header & Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div>
-          <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
-            {editingProgram ? 'Edit Program Slot' : 'Add Program Slot'}
-          </h2>
-          <p className="text-slate-500 text-[11px] sm:text-xs mt-1 font-medium">
-            Schedule an event with a specific date, pricing, venue, and seat capacity.
+          <h2 className="text-lg font-extrabold text-slate-900">Event Management</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Configure live event schedules, dynamic pricing, venues, capacity, and media.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={handleOpenCreate}
+          className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-rose-600/20 flex items-center justify-center gap-2 cursor-pointer self-start sm:self-auto"
+        >
+          <span>+ Create New Event</span>
+        </button>
+      </div>
 
-        {error && (
-          <div className="p-3 text-xs bg-red-50 border border-red-200 text-red-700 rounded-xl font-bold">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="p-3 text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl font-bold">
-            {success}
-          </div>
-        )}
+      {/* Category Filter Tabs */}
+      <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-xs">
+        <button
+          type="button"
+          onClick={() => setCategoryFilter('all')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            categoryFilter === 'all'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          All Slots ({programs.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setCategoryFilter('upcoming')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+            categoryFilter === 'upcoming'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'text-emerald-700 hover:bg-emerald-50'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span>Upcoming Events ({upcomingCount})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setCategoryFilter('tbd')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            categoryFilter === 'tbd'
+              ? 'bg-sky-600 text-white shadow-xs'
+              : 'text-sky-700 hover:bg-sky-50'
+          }`}
+        >
+          Date TBA ({tbdCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setCategoryFilter('completed')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            categoryFilter === 'completed'
+              ? 'bg-slate-600 text-white shadow-xs'
+              : 'text-slate-500 hover:bg-slate-100'
+          }`}
+        >
+          Completed Seminars ({completedCount})
+        </button>
+      </div>
 
-        <form onSubmit={editingProgram ? handleUpdate : handleCreate} className="space-y-4">
-          <div>
-            <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Program Name
-            </label>
-            <input
-              type="text"
-              required
-              value={editingProgram ? editName : name}
-              onChange={(e) => (editingProgram ? setEditName(e.target.value) : setName(e.target.value))}
-              placeholder="e.g. Ek Duje Ke Liye - Surat"
-              className="w-full px-3 py-2.5 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors font-medium"
-            />
-          </div>
+      {success && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2">
+          <CheckIcon className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+          <span>{success}</span>
+        </div>
+      )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Program Date
-              </label>
-              <input
-                type="date"
-                required={editingProgram ? editIsDateFinal : isDateFinal}
-                value={editingProgram ? editDate : date}
-                onChange={(e) => (editingProgram ? setEditDate(e.target.value) : setDate(e.target.value))}
-                className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Event Time
-              </label>
-              <input
-                type="text"
-                value={editingProgram ? editTime : time}
-                onChange={(e) => (editingProgram ? setEditTime(e.target.value) : setTime(e.target.value))}
-                placeholder="e.g. 8:30 PM"
-                className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
-              />
-            </div>
-          </div>
+      {/* Event Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {filteredPrograms.map((prog) => {
+          const isTbd = prog.date === 'TBD' || prog.date === 'TBA' || prog.status === 'date_tba' || !prog.isDateFinal;
+          const isCompleted = prog.status === 'completed' || prog.status === 'archived' || (prog.date < todayStr && !isTbd);
+          const coupleBookings = prog.approvedCount !== undefined ? prog.approvedCount : (prog.bookingsCount || 0);
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Couple Pass Price (₹)
-              </label>
-              <input
-                type="number"
-                min="0"
-                required
-                value={editingProgram ? editPrice : price}
-                onChange={(e) => {
-                  const val = e.target.value === '' ? '' : Number(e.target.value);
-                  editingProgram ? setEditPrice(val) : setPrice(val);
-                }}
-                className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm font-bold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                City
-              </label>
-              <input
-                type="text"
-                value={editingProgram ? editCity : city}
-                onChange={(e) => (editingProgram ? setEditCity(e.target.value) : setCity(e.target.value))}
-                placeholder="Surat"
-                className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Venue &amp; Address
-            </label>
-            <input
-              type="text"
-              value={editingProgram ? editVenue : venue}
-              onChange={(e) => (editingProgram ? setEditVenue(e.target.value) : setVenue(e.target.value))}
-              placeholder="e.g. Sardar Patel Smruti Bhavan, Varachha, Surat"
-              className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Status
-              </label>
-              <select
-                value={editingProgram ? editStatus : status}
-                onChange={(e) => (editingProgram ? setEditStatus(e.target.value) : setStatus(e.target.value))}
-                className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm font-semibold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors cursor-pointer"
-              >
-                <option value="upcoming">Upcoming (Active)</option>
-                <option value="few_seats">Few Seats Left</option>
-                <option value="housefull">Housefull / Sold Out</option>
-                <option value="registration_closed">Registration Closed</option>
-                <option value="completed">Completed / Past</option>
-                <option value="archived">Archived</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Registration Mode
-              </label>
-              <select
-                value={editingProgram ? editRegistrationMode : registrationMode}
-                onChange={(e) => {
-                  const val = e.target.value as 'internal' | 'external';
-                  editingProgram ? setEditRegistrationMode(val) : setRegistrationMode(val);
-                }}
-                className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm font-semibold focus:bg-white focus:outline-none focus:border-rose-500 transition-colors cursor-pointer"
-              >
-                <option value="internal">Internal (Website &amp; Razorpay)</option>
-                <option value="external">External Link</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Hall Capacity (Seats, e.g. 600 for 300 Couples)
-            </label>
-            <input
-              type="number"
-              required
-              min="1"
-              value={editingProgram ? editCapacity : capacity}
-              onChange={(e) => {
-                const val = e.target.value === '' ? '' : Number(e.target.value);
-                editingProgram ? setEditCapacity(val) : setCapacity(val);
-              }}
-              placeholder="e.g. 600"
-              className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs sm:text-sm focus:bg-white focus:outline-none focus:border-rose-500 transition-colors"
-            />
-          </div>
-
-          <div className="flex gap-2 pt-2">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 py-2.5 min-h-[42px] bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 active:scale-[0.99] disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
+          return (
+            <div
+              key={prog.id}
+              className={`bg-white border ${
+                isCompleted ? 'border-slate-200 bg-slate-50/60' : 'border-slate-300 hover:border-rose-300'
+              } rounded-2xl p-5 shadow-xs transition-all flex flex-col justify-between space-y-4`}
             >
-              {submitting ? 'Saving...' : editingProgram ? 'Update Program' : 'Create Program Slot'}
-            </button>
-            {editingProgram && (
+              <div className="space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border tracking-wider inline-block mb-1.5 bg-slate-100 text-slate-700 border-slate-200">
+                      {prog.city || 'Gujarat'}
+                    </span>
+                    <h3 className="font-extrabold text-slate-900 text-sm leading-snug break-words">
+                      {prog.name}
+                    </h3>
+                  </div>
+                  <span
+                    className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md border flex-shrink-0 ${
+                      prog.status === 'upcoming'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : prog.status === 'few_seats'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : prog.status === 'housefull' || prog.status === 'registration_closed'
+                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                        : isTbd
+                        ? 'bg-sky-50 text-sky-700 border-sky-200'
+                        : 'bg-slate-100 text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    {isCompleted ? 'COMPLETED' : isTbd ? 'Date TBA' : prog.status}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 text-xs text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <CalendarIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                    <span className="font-medium">{isTbd ? 'Date to be announced' : `${prog.date} (${prog.time || '8:30 PM'})`}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <BuildingIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                    <span className="font-medium truncate">{prog.venue || 'Venue to be announced'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <UsersIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                    <span>
+                      <strong className="text-slate-800 font-bold">{coupleBookings}</strong> / {prog.capacity} couples booked
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-bold text-rose-700 pt-0.5">
+                    Registration Fee: ₹{prog.price ?? 1500} {prog.currency || 'INR'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleStartEdit(prog)}
+                  className="flex-1 px-3 py-2 bg-slate-50 hover:bg-rose-50 hover:text-rose-700 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 hover:border-rose-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <PencilIcon className="w-3.5 h-3.5" />
+                  <span>Edit</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDuplicate(prog)}
+                  disabled={duplicatingId === prog.id}
+                  title="Duplicate configuration to a new event slot"
+                  className="px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-colors flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                >
+                  <LayersIcon className="w-3.5 h-3.5" />
+                  <span>{duplicatingId === prog.id ? '...' : 'Duplicate'}</span>
+                </button>
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(prog.id, prog.name)}
+                    title="Delete Event"
+                    className="p-2 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-700 rounded-xl border border-slate-200 transition-colors cursor-pointer"
+                  >
+                    <TrashIcon className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Structured Create / Edit Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-base">
+                  {editingProgram ? `Edit Event: ${editingProgram.name}` : 'Create New Event Slot'}
+                </h3>
+                <p className="text-slate-500 text-xs">
+                  All updates automatically propagate to Homepage, Pass, WhatsApp, and Payment gateways.
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => setEditingProgram(null)}
-                className="px-4 py-2.5 min-h-[42px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
               >
-                Cancel
+                <XIcon className="w-4 h-4" />
               </button>
-            )}
-          </div>
-        </form>
-      </div>
-
-      {/* Program Slots List */}
-      <div className="lg:col-span-2 space-y-4">
-        <div className="bg-white border border-slate-200/90 shadow-xs rounded-2xl p-4 sm:p-6 space-y-4">
-          <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-            <div>
-              <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">Active Program Slots</h2>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Overview of current seminars and capacity limits.
-              </p>
             </div>
-            <span className="px-3 py-1 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-extrabold rounded-full">
-              {programs.length} Slots
-            </span>
-          </div>
 
-          <div className="space-y-3 sm:space-y-4">
-            {loadingPrograms && programs.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 font-medium text-xs">Loading program slots...</div>
-            ) : programs.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 font-medium text-xs">No program slots scheduled.</div>
-            ) : (
-              programs.map((prog) => {
-                const remainingSeats = prog.capacity - (prog.bookingsCount || 0);
-                const isSoldOut = remainingSeats < 2;
+            {/* Tab Navigation */}
+            <div className="flex border-b border-slate-200 bg-slate-50/30 overflow-x-auto px-4 gap-2">
+              {[
+                { id: 'general', label: '1. General & Schedule' },
+                { id: 'location', label: '2. Location & Capacity' },
+                { id: 'pricing', label: '3. Pricing & Registration' },
+                { id: 'content', label: '4. Media & Content' },
+                { id: 'speaker', label: '5. Host & Speaker' },
+                { id: 'pass_seo', label: '6. Pass & SEO' }
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setActiveTab(t.id as EventTab)}
+                  className={`py-3 px-3 text-xs font-bold whitespace-nowrap border-b-2 transition-all cursor-pointer ${
+                    activeTab === t.id
+                      ? 'border-rose-600 text-rose-700 bg-white'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
 
-                return (
-                  <div
-                    key={prog.id}
-                    className="p-4 sm:p-5 border border-slate-200 rounded-2xl hover:border-slate-300 transition-all bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
-                  >
-                    <div className="space-y-2 min-w-0 w-full">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-bold text-slate-900 text-sm truncate">{prog.name}</h3>
-                        <span className="px-2 py-0.5 text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-full font-bold">
-                          ₹{prog.price ?? 1500}
-                        </span>
-                        {prog.city && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] bg-sky-50 border border-sky-200 text-sky-800 rounded-full font-semibold">
-                            <MapPinIcon className="w-3 h-3 text-sky-600 flex-shrink-0" />
-                            <span>{prog.city}</span>
-                          </span>
-                        )}
-                        <span
-                          className={`px-2 py-0.5 text-[10px] rounded-full font-bold uppercase ${
-                            isSoldOut
-                              ? 'bg-rose-100 text-rose-700 border border-rose-200'
-                              : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                          }`}
-                        >
-                          {isSoldOut ? 'Sold Out' : 'Active'}
-                        </span>
-                      </div>
+            {/* Modal Body / Tab Content */}
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+              {error && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center gap-2">
+                  <AlertTriangleIcon className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
 
-                      <div className="text-xs text-slate-600 flex items-center gap-3 sm:gap-4 flex-wrap">
-                        <span className="inline-flex items-center gap-1">
-                          <CalendarIcon className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-                          <strong>{prog.date}</strong>
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <UsersIcon className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-                          <span>Booked:</span>
-                          <strong className={isSoldOut ? 'text-rose-600' : 'text-rose-700'}>
-                            {Math.floor((prog.bookingsCount || 0) / 2)}
-                          </strong>{' '}
-                          / {Math.floor(prog.capacity / 2)} couples
-                        </span>
-                        {prog.venue && (
-                          <span className="inline-flex items-center gap-1 text-slate-500 truncate max-w-full">
-                            <BuildingIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                            <span>{prog.venue}</span>
-                          </span>
-                        )}
-                      </div>
+              {/* Tab 1: General & Schedule */}
+              {activeTab === 'general' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Event Title / Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.name || ''}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        placeholder="e.g. Ek Duje Ke Liye - Jamnaba Bhavan"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
                     </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Short Name (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.shortName || ''}
+                        onChange={(e) => setFormData({ ...formData, shortName: e.target.value })}
+                        placeholder="e.g. Jamnaba 2026"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        URL Slug (Leave blank to auto-generate)
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.slug || ''}
+                        onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                        placeholder="e.g. surat-21-august-2026"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Status</label>
+                      <select
+                        value={formData.status || 'upcoming'}
+                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      >
+                        <option value="upcoming">Upcoming (Open for Registrations)</option>
+                        <option value="few_seats">Few Seats Left</option>
+                        <option value="housefull">Housefull (Sold Out)</option>
+                        <option value="registration_closed">Registration Closed</option>
+                        <option value="date_tba">Date TBA Slot</option>
+                        <option value="completed">Completed / Past</option>
+                        <option value="archived">Archived</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Time</label>
+                      <input
+                        type="text"
+                        value={formData.time || '8:30 PM'}
+                        onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+                        placeholder="8:30 PM"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2 flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      <input
+                        type="checkbox"
+                        id="isDateFinal"
+                        checked={formData.isDateFinal}
+                        onChange={(e) => setFormData({ ...formData, isDateFinal: e.target.checked })}
+                        className="w-4 h-4 text-rose-600 rounded cursor-pointer"
+                      />
+                      <label htmlFor="isDateFinal" className="text-xs font-bold text-slate-800 cursor-pointer">
+                        Confirmed Event Date (Uncheck if Date is TBA / To Be Announced)
+                      </label>
+                    </div>
+                    {formData.isDateFinal && (
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Event Date *</label>
+                        <input
+                          type="date"
+                          required={formData.isDateFinal}
+                          value={formData.date || ''}
+                          onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                          className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
-                    <div className="flex items-center gap-2 self-end sm:self-center flex-shrink-0">
-                      <button
-                        onClick={() => handleStartEdit(prog)}
-                        className="px-3 py-1.5 min-h-[36px] bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-bold transition-all border border-amber-200 cursor-pointer"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(prog.id)}
-                        className="px-3 py-1.5 min-h-[36px] bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold transition-all border border-red-200 cursor-pointer"
-                      >
-                        Delete
-                      </button>
+              {/* Tab 2: Location & Capacity */}
+              {activeTab === 'location' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">City *</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.city || ''}
+                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                        placeholder="e.g. Surat"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Total Couple Capacity *
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        value={formData.capacity || ''}
+                        onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })}
+                        placeholder="e.g. 1000"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Venue Name</label>
+                      <input
+                        type="text"
+                        value={formData.venue || ''}
+                        onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
+                        placeholder="e.g. Jamnaba Bhavan, Varachha"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Full Venue Address</label>
+                      <input
+                        type="text"
+                        value={formData.venueAddress || ''}
+                        onChange={(e) => setFormData({ ...formData, venueAddress: e.target.value })}
+                        placeholder="Detailed road, area, pincode..."
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Google Maps URL</label>
+                      <input
+                        type="url"
+                        value={formData.mapUrl || ''}
+                        onChange={(e) => setFormData({ ...formData, mapUrl: e.target.value })}
+                        placeholder="https://maps.app.goo.gl/..."
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
                     </div>
                   </div>
-                );
-              })
-            )}
+                </div>
+              )}
+
+              {/* Tab 3: Pricing & Registration */}
+              {activeTab === 'pricing' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Registration Fee (₹) *
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        value={formData.price !== undefined ? formData.price : 1500}
+                        onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                        placeholder="1500"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Currency</label>
+                      <input
+                        type="text"
+                        value={formData.currency || 'INR'}
+                        onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Registration Mode
+                      </label>
+                      <select
+                        value={formData.registrationMode || 'internal'}
+                        onChange={(e) => setFormData({ ...formData, registrationMode: e.target.value as any })}
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      >
+                        <option value="internal">Internal (Direct Website Form &amp; Razorpay)</option>
+                        <option value="external">External Redirect URL</option>
+                      </select>
+                    </div>
+                    {formData.registrationMode === 'external' && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">External Registration URL</label>
+                        <input
+                          type="url"
+                          value={formData.externalRegistrationUrl || ''}
+                          onChange={(e) => setFormData({ ...formData, externalRegistrationUrl: e.target.value })}
+                          placeholder="https://..."
+                          className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                        />
+                      </div>
+                    )}
+                    <div className="sm:col-span-2 flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      <input
+                        type="checkbox"
+                        id="isInquiryClosed"
+                        checked={formData.isInquiryClosed || false}
+                        onChange={(e) => setFormData({ ...formData, isInquiryClosed: e.target.checked })}
+                        className="w-4 h-4 text-rose-600 rounded cursor-pointer"
+                      />
+                      <label htmlFor="isInquiryClosed" className="text-xs font-bold text-slate-800 cursor-pointer">
+                        Temporarily Halt / Close Inquiries for this Event
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 4: Media & Content */}
+              {activeTab === 'content' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Hero Image URL</label>
+                      <input
+                        type="text"
+                        value={formData.heroImage || ''}
+                        onChange={(e) => setFormData({ ...formData, heroImage: e.target.value })}
+                        placeholder="https://res.cloudinary.com/..."
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Poster Image URL</label>
+                      <input
+                        type="text"
+                        value={formData.posterImage || ''}
+                        onChange={(e) => setFormData({ ...formData, posterImage: e.target.value })}
+                        placeholder="https://res.cloudinary.com/..."
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Headline (Optional)</label>
+                      <input
+                        type="text"
+                        value={formData.headline || ''}
+                        onChange={(e) => setFormData({ ...formData, headline: e.target.value })}
+                        placeholder="A transformative relationship seminar for couples"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Event Description</label>
+                      <textarea
+                        rows={3}
+                        value={formData.description || ''}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        placeholder="Detailed summary of the program..."
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 5: Host & Speaker */}
+              {activeTab === 'speaker' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Speaker / Host Name</label>
+                      <input
+                        type="text"
+                        value={formData.speakerName || ''}
+                        onChange={(e) => setFormData({ ...formData, speakerName: e.target.value })}
+                        placeholder="Manish Vaghasiya"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Speaker Title</label>
+                      <input
+                        type="text"
+                        value={formData.speakerTitle || ''}
+                        onChange={(e) => setFormData({ ...formData, speakerTitle: e.target.value })}
+                        placeholder="Couple Relationship Counselor & Life Coach"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Support Contact Phone</label>
+                      <input
+                        type="tel"
+                        value={formData.contactPhone || ''}
+                        onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
+                        placeholder="+91 98251 00000"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Support WhatsApp</label>
+                      <input
+                        type="tel"
+                        value={formData.contactWhatsapp || ''}
+                        onChange={(e) => setFormData({ ...formData, contactWhatsapp: e.target.value })}
+                        placeholder="+91 98251 00000"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 6: Pass & SEO */}
+              {activeTab === 'pass_seo' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Pass Title Override</label>
+                      <input
+                        type="text"
+                        value={formData.passTitle || ''}
+                        onChange={(e) => setFormData({ ...formData, passTitle: e.target.value })}
+                        placeholder="Leave blank for default pass header"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">SEO Title</label>
+                      <input
+                        type="text"
+                        value={formData.seoTitle || ''}
+                        onChange={(e) => setFormData({ ...formData, seoTitle: e.target.value })}
+                        placeholder="Ek Duje Ke Liye - Seminar in Surat"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Pass Instructions</label>
+                      <textarea
+                        rows={2}
+                        value={formData.passInstructions || ''}
+                        onChange={(e) => setFormData({ ...formData, passInstructions: e.target.value })}
+                        placeholder="Special guidelines printed on digital pass..."
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal Footer */}
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-rose-600/20 cursor-pointer disabled:opacity-50"
+                >
+                  {submitting ? 'Saving...' : editingProgram ? 'Save Changes' : 'Create Event'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

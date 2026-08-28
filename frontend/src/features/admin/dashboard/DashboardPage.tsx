@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAdmin } from '../context/AdminContext';
-import { registrationsApi } from '../../../services/admin/registrationsApi';
+import { dashboardApi } from '../../../services/admin/dashboardApi';
 import { RegistrationsPage } from '../registrations/RegistrationsPage';
 
 export const DashboardPage = () => {
-  const { selectedProgramId, programs } = useAdmin();
+  const { selectedProgramId } = useAdmin();
   const [totalInquiries, setTotalInquiries] = useState<number>(0);
   const [approvedCount, setApprovedCount] = useState<number>(0);
   const [pendingCount, setPendingCount] = useState<number>(0);
@@ -14,20 +14,15 @@ export const DashboardPage = () => {
 
   const fetchStats = async () => {
     try {
-      const [allSubs, appSubs, pendSubs] = await Promise.all([
-        registrationsApi.getSubmissions({ page: 1, limit: 1, programId: selectedProgramId }).catch(() => null),
-        registrationsApi.getSubmissions({ page: 1, limit: 1, status: 'approved', programId: selectedProgramId }).catch(() => null),
-        registrationsApi.getSubmissions({ page: 1, limit: 1, status: 'pending', programId: selectedProgramId }).catch(() => null)
-      ]);
-
-      if (allSubs) {
-        setTotalInquiries(allSubs.totalSubmissions || allSubs.total || 0);
-        if (allSubs.submissions && allSubs.submissions.length > 0) {
-          setLatestTokenId(allSubs.submissions[0].inquiryId);
+      const data = await dashboardApi.getAdminDashboard(selectedProgramId);
+      if (data && data.stats) {
+        setTotalInquiries(data.stats.total || 0);
+        setApprovedCount(data.stats.approved || 0);
+        setPendingCount(data.stats.pending || 0);
+        if (data.recentSubmissions && data.recentSubmissions.length > 0) {
+          setLatestTokenId(data.recentSubmissions[0].inquiryId);
         }
       }
-      if (appSubs) setApprovedCount(appSubs.totalSubmissions || appSubs.total || 0);
-      if (pendSubs) setPendingCount(pendSubs.totalSubmissions || pendSubs.total || 0);
     } catch (err) {
       console.error('Failed to load operational stats:', err);
     }

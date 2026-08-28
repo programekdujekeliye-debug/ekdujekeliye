@@ -28,9 +28,27 @@ export interface AdminNotification {
 export interface SiteSettings {
   upiId: string;
   payeeName: string;
-  amount: number;
-  upiIds?: string;
+  amount: number | string;
+  upiIds?: string | string[];
   upiLimit?: number;
+  brandName?: string;
+  supportPhone?: string;
+  supportWhatsapp?: string;
+  supportEmail?: string;
+  websiteEmail?: string;
+  instagramUrl?: string;
+  facebookUrl?: string;
+  youtubeUrl?: string;
+  linktreeUrl?: string;
+  defaultCity?: string;
+  defaultCountry?: string;
+  defaultCurrency?: string;
+  defaultPrice?: number;
+  defaultSpeakerName?: string;
+  defaultSpeakerTitle?: string;
+  defaultRegistrationInstructions?: string;
+  defaultPassInstructions?: string;
+  defaultFooterCopy?: string;
 }
 
 export interface ArchiveCandidate {

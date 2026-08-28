@@ -8,11 +8,17 @@ import {
   updateSettings,
   getNotifications,
   dismissNotification,
-  clearAllData
+  clearAllData,
+  getAdminDashboardSummary,
+  getSuperAdminDashboardSummary
 } from './admin.controller.js';
 import { requireAuth, requireSuperAuth } from '../../middleware/auth.js';
 
 export const adminRouter = Router();
+
+// Fast Operational Dashboards (< 60ms)
+adminRouter.get('/dashboard', requireAuth, getAdminDashboardSummary);
+adminRouter.get('/super-dashboard', requireSuperAuth, getSuperAdminDashboardSummary);
 
 // System, Resources, Backups & Destructive Actions (Super Admin Only)
 adminRouter.get('/system/resources', requireSuperAuth, getSystemResources);

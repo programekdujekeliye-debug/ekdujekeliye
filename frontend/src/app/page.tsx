@@ -95,99 +95,77 @@ function formatIndianDate(dateStr?: string): string {
   return dateStr;
 }
 
-const INITIAL_PROGRAMS: Program[] = [
-  {
-    id: "prog-1787844365699-01",
-    name: "Ek Duje Ke Liye - Sardar Patel Smruti Bhavan",
-    slug: "surat-7-september-2026",
-    city: "Surat",
-    venue: "Sardar Patel Smruti Bhavan, Varachha, Surat",
-    mapUrl: "https://share.google/y1jtFAZXuKusYTiUD",
-    description: "A transformative 4-hour live seminar dedicated exclusively to married couples.",
-    price: 1500,
-    status: "upcoming",
-    featured: true,
-    registrationMode: "internal",
-    date: "2026-09-07",
-    time: "8:30 PM",
-    capacity: 1184,
-    bookingsCount: 0,
-    availableSeats: 1184,
-    isDateFinal: true
-  },
-  {
-    id: "prog-1787844388175-02",
-    name: "Ek Duje Ke Liye - Sardar Patel Smruti Bhavan",
-    slug: "surat-11-september-2026",
-    city: "Surat",
-    venue: "Sardar Patel Smruti Bhavan, Varachha, Surat",
-    mapUrl: "https://share.google/y1jtFAZXuKusYTiUD",
-    description: "A transformative 4-hour live seminar dedicated exclusively to married couples.",
-    price: 1500,
-    status: "upcoming",
-    featured: false,
-    registrationMode: "internal",
-    date: "2026-09-11",
-    time: "8:30 PM",
-    capacity: 1184,
-    bookingsCount: 0,
-    availableSeats: 1184,
-    isDateFinal: true
-  }
-];
-
 export default function HomePage() {
-  const [programs, setPrograms] = useState<Program[]>(INITIAL_PROGRAMS);
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [publicConfig, setPublicConfig] = useState<{
+    brandName?: string;
+    supportPhone?: string;
+    supportWhatsapp?: string;
+    supportEmail?: string;
+    instagramUrl?: string;
+    facebookUrl?: string;
+    youtubeUrl?: string;
+    linktreeUrl?: string;
+    defaultPrice?: number;
+  }>({});
   const [selectedCity, setSelectedCity] = useState('All');
-  const [loadingEvents, setLoadingEvents] = useState(false);
+  const [loadingEvents, setLoadingEvents] = useState(true);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedGalleryIdx, setSelectedGalleryIdx] = useState<number | null>(null);
 
   useEffect(() => {
-    fetchActiveEvents();
+    let isMounted = true;
+
+    const loadData = async () => {
+      setLoadingEvents(true);
+      try {
+        const [eventsRes, configRes] = await Promise.allSettled([
+          fetch(`${API_BASE_URL}/api/public/home`),
+          fetch(`${API_BASE_URL}/api/config/public`)
+        ]);
+
+        if (!isMounted) return;
+
+        if (configRes.status === 'fulfilled' && configRes.value.ok) {
+          const configData = await configRes.value.json();
+          if (isMounted) setPublicConfig(configData);
+        }
+
+        if (eventsRes.status === 'fulfilled' && eventsRes.value.ok) {
+          const data = await eventsRes.value.json();
+          const list: Program[] = Array.isArray(data) ? data : (data.programs || []);
+
+          // Sort: upcoming events first, then TBA, then completed events
+          const sorted = [...list].filter(p => p.status !== 'archived' && p.status !== 'cancelled').sort((a, b) => {
+            const isACompleted = a.status === 'completed';
+            const isBCompleted = b.status === 'completed';
+            if (isACompleted && !isBCompleted) return 1;
+            if (!isACompleted && isBCompleted) return -1;
+            return (a.sequenceNumber || 0) - (b.sequenceNumber || 0) || (a.date || '').localeCompare(b.date || '');
+          });
+
+          if (isMounted) {
+            setPrograms(sorted.length > 0 ? sorted : list);
+          }
+        }
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') {
+          console.error('Failed to load initial home page data:', err);
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingEvents(false);
+        }
+      }
+    };
+
+    loadData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
-
-  const fetchActiveEvents = async () => {
-    try {
-      let res = await fetch(`${API_BASE_URL}/api/public/home`);
-      if (!res.ok) {
-        res = await fetch(`${API_BASE_URL}/api/programs`);
-      }
-      if (res.ok) {
-        const data = await res.json();
-        const list: Program[] = Array.isArray(data) ? data : (data.programs || []);
-        const confirmedUpcoming = list.filter(
-          (p: Program) =>
-            p.status !== 'archived' &&
-            p.status !== 'cancelled' &&
-            p.status !== 'completed' &&
-            p.date !== 'TBD' &&
-            p.status !== 'date_tba'
-        );
-
-        if (confirmedUpcoming.length > 0) {
-          setPrograms(confirmedUpcoming);
-          return;
-        }
-
-        // If NO confirmed upcoming events exist, activate TBD slot
-        const tbaPrograms = list.filter(
-          (p: Program) =>
-            (p.date === 'TBD' || p.status === 'date_tba') &&
-            p.status !== 'archived' &&
-            p.status !== 'completed'
-        );
-
-        if (tbaPrograms.length > 0) {
-          setPrograms(tbaPrograms);
-          return;
-        }
-      }
-    } catch (err) {
-      console.error('Failed to fetch programs from API, using fallback:', err);
-    }
-  };
 
 
   const toggleFaq = (index: number) => {
@@ -436,6 +414,7 @@ export default function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
               {(selectedCity === 'All' ? programs : programs.filter(p => p.city === selectedCity)).map((prog) => {
                 const isExternal = prog.registrationMode === 'external';
+                const isCompleted = prog.status === 'completed';
                 const isHousefull = prog.status === 'housefull';
                 const isClosed = prog.status === 'registration_closed';
                 const isTba = prog.status === 'date_tba';
@@ -443,7 +422,10 @@ export default function HomePage() {
 
                 let statusLabel = 'UPCOMING';
                 let statusClass = 'bg-emerald-50 text-emerald-800 border-emerald-200';
-                if (prog.status === 'few_seats') {
+                if (isCompleted) {
+                  statusLabel = 'COMPLETED';
+                  statusClass = 'bg-stone-100 text-stone-600 border-stone-200';
+                } else if (prog.status === 'few_seats') {
                   statusLabel = 'FEW SEATS LEFT';
                   statusClass = 'bg-amber-50 text-amber-800 border-amber-200';
                 } else if (isHousefull) {
@@ -489,7 +471,7 @@ export default function HomePage() {
                         <div className="flex items-start gap-3">
                           <MapPinIcon className="w-4 h-4 text-stone-500 flex-shrink-0 mt-0.5" />
                           <span className="text-xs text-stone-600 leading-tight">
-                            {prog.venue || 'Sardar Patel Smruti Bhavan, Varachha, Surat'}
+                            {prog.venue || 'Venue to be announced'}
                           </span>
                         </div>
                       </div>
@@ -510,12 +492,12 @@ export default function HomePage() {
                           <span className="text-2xl font-extrabold text-stone-900">₹{eventPrice}</span>
                         </div>
 
-                        {isHousefull || isClosed ? (
+                        {isCompleted || isHousefull || isClosed ? (
                           <button
                             disabled
                             className="px-6 py-3 bg-stone-200 text-stone-500 font-bold text-xs uppercase rounded-xl cursor-not-allowed"
                           >
-                            {isHousefull ? 'Housefull' : 'Closed'}
+                            {isCompleted ? 'Completed' : isHousefull ? 'Housefull' : 'Closed'}
                           </button>
                         ) : isExternal ? (
                           <a
@@ -811,8 +793,8 @@ export default function HomePage() {
 
           <div className="space-y-3 md:col-span-2">
             <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="Ek Duje Ke Liye" className="h-10 w-auto" />
-              <span className="text-lg font-extrabold text-stone-900 uppercase">Ek Duje Ke Liye</span>
+              <img src="/logo.png" alt={publicConfig.brandName || "Ek Duje Ke Liye"} className="h-10 w-auto" />
+              <span className="text-lg font-extrabold text-stone-900 uppercase">{publicConfig.brandName || "Ek Duje Ke Liye"}</span>
             </div>
             <p className="text-stone-600 text-xs max-w-sm leading-relaxed font-normal">
               An emotional and transformational relationship seminar exclusively designed for married couples by Manish Vaghasiya.
@@ -835,7 +817,7 @@ export default function HomePage() {
             <ul className="space-y-1.5 font-medium">
               <li>
                 <a
-                  href="https://linktr.ee/ekdujekeliye"
+                  href={publicConfig.linktreeUrl || "https://linktr.ee/ekdujekeliye"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-rose-600"
@@ -845,14 +827,21 @@ export default function HomePage() {
               </li>
               <li>
                 <a
-                  href="https://instagram.com/ekdujekeliye01"
+                  href={publicConfig.instagramUrl || "https://instagram.com/ekdujekeliye01"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-rose-600"
                 >
-                  Instagram @ekdujekeliye01 ↗
+                  Instagram ↗
                 </a>
               </li>
+              {publicConfig.supportPhone && (
+                <li>
+                  <a href={`tel:${publicConfig.supportPhone}`} className="hover:text-rose-600">
+                    Helpline: {publicConfig.supportPhone}
+                  </a>
+                </li>
+              )}
               <li><Link href="/privacy-policy" className="hover:text-rose-600">Privacy Policy</Link></li>
               <li><Link href="/terms" className="hover:text-rose-600">Terms of Service</Link></li>
             </ul>
@@ -861,7 +850,7 @@ export default function HomePage() {
         </div>
 
         <div className="max-w-7xl mx-auto pt-6 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-          <div>&copy; {new Date().getFullYear()} Ek Duje Ke Liye. All rights reserved.</div>
+          <div>&copy; {new Date().getFullYear()} {publicConfig.brandName || "Ek Duje Ke Liye"}. All rights reserved.</div>
           <div className="flex gap-4">
             <Link href="/privacy-policy" className="hover:underline">Privacy Policy</Link>
             <span>&bull;</span>

@@ -18,7 +18,8 @@ const PaymentSchema = new mongoose.Schema({
   capturedAt: { type: Date }
 }, {
   collection: 'payments',
-  timestamps: true
+  timestamps: true,
+  autoIndex: false
 });
 
 PaymentSchema.index({ eventId: 1, status: 1 });

@@ -7,7 +7,8 @@ const NotificationSchema = new mongoose.Schema({
   read: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 }, {
-  collection: 'notifications'
+  collection: 'notifications',
+  autoIndex: false
 });
 
 export const Notification = mongoose.models.Notification || mongoose.model('Notification', NotificationSchema);
