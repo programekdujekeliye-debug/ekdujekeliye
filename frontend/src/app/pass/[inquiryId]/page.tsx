@@ -15,6 +15,7 @@ interface Submission {
   programDate: string;
   programTime?: string;
   couplePhoto: string;
+  photoThumbnailUrl?: string;
   status: string;
   rejectionReason?: string;
   isDateFinal?: boolean;
@@ -343,7 +344,7 @@ export default function PassDownloadPage() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const coupleImg = new Image();
-      const photoPath = sub.couplePhoto;
+      const photoPath = sub.photoThumbnailUrl || sub.couplePhoto;
       const coupleImgSrc = (photoPath.startsWith('data:') || photoPath.startsWith('http://') || photoPath.startsWith('https://')) ? photoPath : `${API_BASE_URL}${photoPath}`;
       const isCoupleRemote = coupleImgSrc.startsWith('http://') || coupleImgSrc.startsWith('https://');
       if (isCoupleRemote) {

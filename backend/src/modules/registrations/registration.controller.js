@@ -290,7 +290,7 @@ export const getSubmissionsList = async (req, res) => {
     const archives = await MediaArchive.find({
       registrationId: { $in: inquiryIds },
       status: { $in: ['VERIFIED', 'ARCHIVED', 'QUEUED', 'COPYING'] }
-    }).select('registrationId status driveFileId filename').lean();
+    }).select('registrationId status driveFileId filename operationalThumbnailUrl operationalThumbnailPublicId cloudinaryOriginalStatus').lean();
 
     const archiveMap = new Map();
     archives.forEach(a => archiveMap.set(a.registrationId, a));
@@ -299,17 +299,31 @@ export const getSubmissionsList = async (req, res) => {
       const archive = archiveMap.get(sub.inquiryId);
       const isArchived = archive && (archive.status === 'VERIFIED' || archive.status === 'ARCHIVED');
       const isQueued = archive && (archive.status === 'QUEUED' || archive.status === 'COPYING');
+      const isOriginalDeleted = archive && archive.cloudinaryOriginalStatus === 'DELETED';
       const rawPhoto = sub.couplePhoto || '';
-      const photoThumbnailUrl = (rawPhoto.includes('cloudinary.com') && rawPhoto.includes('/upload/'))
-        ? rawPhoto.replace('/upload/', '/upload/c_limit,w_400,q_auto,f_auto/')
-        : rawPhoto;
+
+      let photoThumbnailUrl = '';
+      if (archive?.operationalThumbnailUrl) {
+        photoThumbnailUrl = archive.operationalThumbnailUrl;
+      } else if (rawPhoto.includes('cloudinary.com') && rawPhoto.includes('/upload/') && !rawPhoto.includes('/archive-thumbnails/')) {
+        photoThumbnailUrl = rawPhoto.replace('/upload/', '/upload/c_limit,w_400,q_auto,f_auto/');
+      } else {
+        photoThumbnailUrl = rawPhoto;
+      }
+
+      let couplePhoto = rawPhoto;
+      if (isOriginalDeleted && archive?.operationalThumbnailUrl) {
+        couplePhoto = archive.operationalThumbnailUrl;
+      }
 
       return {
         ...sub,
+        couplePhoto,
         photoThumbnailUrl,
         photoStorageStatus: isArchived ? 'ARCHIVED' : (isQueued ? 'QUEUED' : 'ACTIVE'),
         hasArchivedOriginal: Boolean(isArchived && archive.driveFileId),
-        archiveStatus: archive ? archive.status : null
+        archiveStatus: archive ? archive.status : null,
+        cloudinaryOriginalStatus: archive?.cloudinaryOriginalStatus || 'ACTIVE'
       };
     });
 

@@ -3,6 +3,7 @@ import { Event } from '../../models/Event.js';
 import { Registration } from '../../models/Registration.js';
 import { v2 as cloudinary } from 'cloudinary';
 import { env } from '../../config/env.js';
+import { mediaService } from '../media/media.service.js';
 
 /**
  * ==========================================================
@@ -993,3 +994,296 @@ export const retryFailedJobs = async (req, res) => {
     res.status(500).json({ error: `Retry failed: ${err.message}` });
   }
 };
+
+/**
+ * ==========================================================
+ * 3. CLOUDINARY CLEANUP & THUMBNAIL APIS (requireSuperAuth)
+ * ==========================================================
+ */
+
+/**
+ * Super Admin dry-run cleanup preflight check for a single registration
+ * Does NOT delete anything. Returns READY_FOR_DELETE or BLOCKED with reasons.
+ */
+export const cleanupPreflightSingleAsset = async (req, res) => {
+  try {
+    const { registrationId } = req.params;
+    if (!registrationId) {
+      return res.status(400).json({ error: 'registrationId is required.' });
+    }
+
+    const archive = await MediaArchive.findOne({ registrationId });
+    if (!archive) {
+      return res.status(404).json({ error: `Archive record not found for registration ${registrationId}.` });
+    }
+
+    const [event, registration] = await Promise.all([
+      Event.findOne({ id: archive.eventId }).lean(),
+      Registration.findOne({ inquiryId: registrationId, isDeleted: { $ne: true } }).lean()
+    ]);
+
+    // Check whole event archive progress
+    const [submissionsCount, archives] = await Promise.all([
+      Registration.countDocuments({
+        programId: archive.eventId,
+        isDeleted: { $ne: true },
+        couplePhoto: { $exists: true, $ne: null, $ne: '', $ne: '/sample_couple.png' }
+      }),
+      MediaArchive.find({ eventId: archive.eventId }).select('status').lean()
+    ]);
+
+    let verified = 0;
+    let queued = 0;
+    let copying = 0;
+    let failed = 0;
+
+    archives.forEach(a => {
+      if (a.status === 'VERIFIED' || a.status === 'ARCHIVED') verified++;
+      else if (a.status === 'QUEUED') queued++;
+      else if (a.status === 'COPYING') copying++;
+      else if (a.status === 'FAILED') failed++;
+    });
+
+    const isEventFullyArchived = submissionsCount > 0 && queued === 0 && copying === 0 && failed === 0 && verified >= submissionsCount;
+    const isItemVerified = archive.status === 'VERIFIED' || archive.status === 'ARCHIVED';
+    const hasRealDriveFileId = Boolean(
+      archive.driveFileId &&
+      !archive.driveFileId.startsWith('1AbCdEfGh') &&
+      !archive.driveFileId.toLowerCase().includes('mock') &&
+      !archive.driveFileId.toLowerCase().includes('placeholder')
+    );
+    const hasOperationalThumbnail = Boolean(archive.operationalThumbnailUrl);
+
+    // Test Cloudinary original existence via HEAD
+    let cloudinaryOriginalExists = false;
+    try {
+      if (archive.sourceUrl) {
+        const headRes = await fetch(archive.sourceUrl, { method: 'HEAD' });
+        cloudinaryOriginalExists = (headRes.status === 200);
+      }
+    } catch (e) {
+      cloudinaryOriginalExists = false;
+    }
+
+    const blockingReasons = [];
+    if (!isEventFullyArchived) {
+      blockingReasons.push(
+        `Event "${event?.name || archive.eventId}" is not 100% archived (Eligible: ${submissionsCount}, Verified: ${verified}, Queued: ${queued}, Copying: ${copying}, Failed: ${failed}).`
+      );
+    }
+    if (!isItemVerified) {
+      blockingReasons.push(`Registration archive status is ${archive.status} (must be VERIFIED).`);
+    }
+    if (!hasRealDriveFileId) {
+      blockingReasons.push('Verified Google Drive file ID is missing or invalid.');
+    }
+    if (!env.CLOUDINARY_CLEANUP_ENABLED) {
+      blockingReasons.push('Feature flag CLOUDINARY_CLEANUP_ENABLED is set to FALSE on server.');
+    }
+    if (!hasOperationalThumbnail) {
+      blockingReasons.push('Independent operational thumbnail has not been created yet.');
+    }
+
+    const status = blockingReasons.length === 0 ? 'READY_FOR_DELETE' : 'BLOCKED';
+
+    res.json({
+      success: true,
+      registrationId,
+      eventId: archive.eventId,
+      eventName: event?.name || archive.eventId,
+      status,
+      isReady: status === 'READY_FOR_DELETE',
+      blockingReasons,
+      checks: {
+        isItemVerified,
+        hasRealDriveFileId,
+        driveFileId: archive.driveFileId,
+        hasOperationalThumbnail,
+        operationalThumbnailUrl: archive.operationalThumbnailUrl,
+        operationalThumbnailPublicId: archive.operationalThumbnailPublicId,
+        cloudinaryOriginalExists,
+        cloudinaryOriginalStatus: archive.cloudinaryOriginalStatus || 'ACTIVE',
+        featureFlagCleanupEnabled: env.CLOUDINARY_CLEANUP_ENABLED === true,
+        eventArchiveCompletion: {
+          totalEligible: submissionsCount,
+          verified,
+          queued,
+          copying,
+          failed,
+          isFullyArchived: isEventFullyArchived
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Preflight check failed: ${err.message}` });
+  }
+};
+
+/**
+ * Super Admin creates an independent operational thumbnail on Cloudinary without deleting the original
+ */
+export const createOperationalThumbnailAsset = async (req, res) => {
+  try {
+    const { registrationId } = req.params;
+    if (!registrationId) {
+      return res.status(400).json({ error: 'registrationId is required.' });
+    }
+
+    const archive = await MediaArchive.findOne({ registrationId });
+    if (!archive) {
+      return res.status(404).json({ error: `Archive record not found for registration ${registrationId}.` });
+    }
+
+    const event = await Event.findOne({ id: archive.eventId }).lean();
+    const eventSlug = event?.slug || archive.eventId;
+
+    // Use mediaService to create independent thumbnail
+    const thumbResult = await mediaService.createOperationalThumbnail({
+      sourceUrl: archive.sourceUrl,
+      eventSlug,
+      inquiryId: registrationId,
+      publicId: archive.sourcePublicId
+    });
+
+    archive.operationalThumbnailUrl = thumbResult.operationalThumbnailUrl;
+    archive.operationalThumbnailPublicId = thumbResult.operationalThumbnailPublicId;
+    archive.thumbnailSizeBytes = thumbResult.thumbnailSizeBytes;
+    archive.thumbnailCreatedAt = thumbResult.thumbnailCreatedAt;
+
+    await archive.save();
+
+    res.json({
+      success: true,
+      message: `Operational thumbnail created successfully for ${registrationId}.`,
+      registrationId,
+      eventId: archive.eventId,
+      thumbnail: {
+        url: thumbResult.operationalThumbnailUrl,
+        publicId: thumbResult.operationalThumbnailPublicId,
+        sizeBytes: thumbResult.thumbnailSizeBytes,
+        format: thumbResult.format,
+        width: thumbResult.width,
+        height: thumbResult.height
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to create operational thumbnail: ${err.message}` });
+  }
+};
+
+/**
+ * Super Admin controlled deletion with HARD SERVER-SIDE SAFETY GATE
+ * Destructive deletion will NEVER execute unless all safety gates pass.
+ */
+export const cleanupOriginalAsset = async (req, res) => {
+  try {
+    const { registrationId } = req.params;
+    if (!registrationId) {
+      return res.status(400).json({ error: 'registrationId is required.' });
+    }
+
+    // 1. HARD FEATURE FLAG CHECK
+    if (!env.CLOUDINARY_CLEANUP_ENABLED) {
+      return res.status(403).json({
+        success: false,
+        code: 'CLEANUP_FEATURE_FLAG_DISABLED',
+        error: 'Destructive Cloudinary cleanup is disabled by server configuration (CLOUDINARY_CLEANUP_ENABLED=false).'
+      });
+    }
+
+    const archive = await MediaArchive.findOne({ registrationId });
+    if (!archive) {
+      return res.status(404).json({ error: `Archive record not found for registration ${registrationId}.` });
+    }
+
+    // 2. HARD SERVER-SIDE SAFETY GATE: Event Archive 100% Verified Check
+    const [submissionsCount, archives] = await Promise.all([
+      Registration.countDocuments({
+        programId: archive.eventId,
+        isDeleted: { $ne: true },
+        couplePhoto: { $exists: true, $ne: null, $ne: '', $ne: '/sample_couple.png' }
+      }),
+      MediaArchive.find({ eventId: archive.eventId }).select('status').lean()
+    ]);
+
+    let verified = 0;
+    let queued = 0;
+    let copying = 0;
+    let failed = 0;
+
+    archives.forEach(a => {
+      if (a.status === 'VERIFIED' || a.status === 'ARCHIVED') verified++;
+      else if (a.status === 'QUEUED') queued++;
+      else if (a.status === 'COPYING') copying++;
+      else if (a.status === 'FAILED') failed++;
+    });
+
+    if (submissionsCount === 0 || queued > 0 || copying > 0 || failed > 0 || verified < submissionsCount) {
+      return res.status(409).json({
+        success: false,
+        code: 'EVENT_ARCHIVE_INCOMPLETE',
+        message: 'Cloudinary cleanup is blocked until the entire event archive is verified.',
+        progress: {
+          eligible: submissionsCount,
+          verified,
+          queued,
+          copying,
+          failed
+        }
+      });
+    }
+
+    // 3. Item-level verification check
+    if (archive.status !== 'VERIFIED' && archive.status !== 'ARCHIVED') {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot delete original: Item status is "${archive.status}" (must be VERIFIED).`
+      });
+    }
+
+    if (!archive.driveFileId || archive.driveFileId.startsWith('1AbCdEfGh') || archive.driveFileId.toLowerCase().includes('mock')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot delete original: Valid Google Drive File ID is missing.'
+      });
+    }
+
+    // 4. Ensure operational thumbnail exists before deleting original
+    if (!archive.operationalThumbnailUrl) {
+      const event = await Event.findOne({ id: archive.eventId }).lean();
+      const thumbResult = await mediaService.createOperationalThumbnail({
+        sourceUrl: archive.sourceUrl,
+        eventSlug: event?.slug || archive.eventId,
+        inquiryId: registrationId,
+        publicId: archive.sourcePublicId
+      });
+      archive.operationalThumbnailUrl = thumbResult.operationalThumbnailUrl;
+      archive.operationalThumbnailPublicId = thumbResult.operationalThumbnailPublicId;
+      archive.thumbnailSizeBytes = thumbResult.thumbnailSizeBytes;
+      archive.thumbnailCreatedAt = thumbResult.thumbnailCreatedAt;
+      await archive.save();
+    }
+
+    // 5. Delete only the original Cloudinary resource using stored sourcePublicId
+    if (archive.sourcePublicId && archive.sourceProvider === 'cloudinary') {
+      await cloudinary.uploader.destroy(archive.sourcePublicId);
+    }
+
+    archive.cloudinaryOriginalStatus = 'DELETED';
+    archive.cloudinaryOriginalDeletedAt = new Date();
+    await archive.save();
+
+    res.json({
+      success: true,
+      message: `Successfully cleaned up Cloudinary original asset for ${registrationId}.`,
+      registrationId,
+      operationalThumbnailUrl: archive.operationalThumbnailUrl,
+      driveFileId: archive.driveFileId,
+      cloudinaryOriginalStatus: 'DELETED',
+      cloudinaryOriginalDeletedAt: archive.cloudinaryOriginalDeletedAt
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Cleanup failed: ${err.message}` });
+  }
+};
+

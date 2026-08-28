@@ -508,145 +508,146 @@ function runAutomaticArchiveWorker() {
     Logger.log('👤 [Apps Script Identity] Active Google Account: ' + userEmail);
     Logger.log('🤖 [Automatic Archive Worker] Checking backend for active ARCHIVING event...');
     
-    // 1. Claim active event batch (12 items max)
-    var claimUrl = backendUrl + '/api/internal/archive/claim-active-event-batch';
-    var claimRes;
-    try {
-      claimRes = UrlFetchApp.fetch(claimUrl, {
-        method: 'post',
-        headers: {
-          'Authorization': 'Bearer ' + workerSecret,
-          'Content-Type': 'application/json'
-        },
-        payload: JSON.stringify({
-          workerId: 'gas-auto-worker-' + userEmail.replace(/[^a-zA-Z0-9]/g, '_'),
-          limit: 12
-        }),
-        muteHttpExceptions: true
-      });
-    } catch (netErr) {
-      Logger.log('❌ [Automatic Worker] Network error connecting to backend: ' + netErr.toString());
-      return;
-    }
-    
-    if (claimRes.getResponseCode() !== 200) {
-      Logger.log('❌ [Automatic Worker] Backend returned HTTP ' + claimRes.getResponseCode() + ': ' + claimRes.getContentText());
-      return;
-    }
-    
-    var batchData = JSON.parse(claimRes.getContentText());
-    var activeEvent = batchData.activeEvent;
-    var jobs = batchData.jobs || [];
-    
-    if (!activeEvent || jobs.length === 0) {
-      Logger.log('ℹ️ [Automatic Worker] No active archive work (Queue idle or no event in ARCHIVING status). Exiting.');
-      return;
-    }
-    
-    Logger.log('📦 [Automatic Worker] Active Event: ' + activeEvent.name + ' (' + activeEvent.id + ')');
-    Logger.log('🚀 [Automatic Worker] Claimed ' + jobs.length + ' job(s). Starting Cloudinary -> Google Drive transfer...');
-    
-    var processed = 0;
-    var succeeded = 0;
-    var failed = 0;
-    
-    for (var i = 0; i < jobs.length; i++) {
-      if (new Date().getTime() - startTime > CONFIG.MAX_EXECUTION_TIME_MS) {
-        Logger.log('⏳ [Automatic Worker] Reached execution time budget. Pausing. Next recurring trigger will continue automatically.');
-        break;
-      }
-      
-      var job = jobs[i];
-      Logger.log('\n--- [' + (i + 1) + '/' + jobs.length + '] Processing: ' + job.registrationId + ' (' + job.filename + ') ---');
-      
+    var totalProcessed = 0;
+    var totalSucceeded = 0;
+    var totalFailed = 0;
+
+    while (new Date().getTime() - startTime < CONFIG.MAX_EXECUTION_TIME_MS) {
+      // 1. Claim active event batch (12 items max)
+      var claimUrl = backendUrl + '/api/internal/archive/claim-active-event-batch';
+      var claimRes;
       try {
-        var targetFolder = getOrCreateFolderPath(job.folderPath);
-        
-        // Check for existing file by name to avoid duplicate copies
-        var existingFiles = targetFolder.getFilesByName(job.filename);
-        var driveFile = null;
-        
-        if (existingFiles.hasNext()) {
-          driveFile = existingFiles.next();
-          Logger.log('ℹ️ Existing file found in folder by name. Reusing: ' + driveFile.getId());
-        } else {
-          var mediaRes = UrlFetchApp.fetch(job.sourceUrl, { muteHttpExceptions: true });
-          if (mediaRes.getResponseCode() !== 200) {
-            throw new Error('Cloudinary fetch returned HTTP ' + mediaRes.getResponseCode());
-          }
-          
-          var blob = mediaRes.getBlob();
-          blob.setName(job.filename);
-          driveFile = targetFolder.createFile(blob);
-        }
-        
-        var driveFileId = driveFile.getId();
-        
-        // Physical Re-Open Verification
-        var verifiedFile = DriveApp.getFileById(driveFileId);
-        if (!verifiedFile || verifiedFile.isTrashed()) {
-          throw new Error('Physical verification failed: File not found in Drive by ID');
-        }
-        
-        var fileSize = verifiedFile.getSize();
-        var mimeType = verifiedFile.getMimeType();
-        
-        if (fileSize <= 0) {
-          throw new Error('Physical verification failed: Drive file size is 0 bytes');
-        }
-        if (!mimeType || mimeType.indexOf('image/') !== 0) {
-          throw new Error('Physical verification failed: Invalid MIME type ' + mimeType);
-        }
-        
-        Logger.log('✅ Physical verification passed: ' + driveFileId + ' (' + fileSize + ' bytes)');
-        
-        // Notify backend
-        var verifyUrl = backendUrl + '/api/internal/archive/verify-item';
-        var verifyRes = UrlFetchApp.fetch(verifyUrl, {
+        claimRes = UrlFetchApp.fetch(claimUrl, {
           method: 'post',
           headers: {
             'Authorization': 'Bearer ' + workerSecret,
             'Content-Type': 'application/json'
           },
           payload: JSON.stringify({
-            jobId: job.jobId,
-            driveFileId: driveFileId,
-            driveFolderId: targetFolder.getId(),
-            fileSize: fileSize,
-            mimeType: mimeType
+            workerId: 'gas-auto-worker-' + userEmail.replace(/[^a-zA-Z0-9]/g, '_'),
+            limit: 12
           }),
           muteHttpExceptions: true
         });
-        
-        if (verifyRes.getResponseCode() === 200) {
-          succeeded++;
-        } else {
-          Logger.log('⚠️ Backend verify returned HTTP ' + verifyRes.getResponseCode() + ': ' + verifyRes.getContentText());
+      } catch (netErr) {
+        Logger.log('❌ [Automatic Worker] Network error connecting to backend: ' + netErr.toString());
+        break;
+      }
+      
+      if (claimRes.getResponseCode() !== 200) {
+        Logger.log('❌ [Automatic Worker] Backend returned HTTP ' + claimRes.getResponseCode() + ': ' + claimRes.getContentText());
+        break;
+      }
+      
+      var batchData = JSON.parse(claimRes.getContentText());
+      var activeEvent = batchData.activeEvent;
+      var jobs = batchData.jobs || [];
+      
+      if (!activeEvent || jobs.length === 0) {
+        Logger.log('ℹ️ [Automatic Worker] No remaining queued jobs for active event. Exiting.');
+        break;
+      }
+      
+      Logger.log('📦 [Automatic Worker] Active Event: ' + activeEvent.name + ' (' + activeEvent.id + ')');
+      Logger.log('🚀 [Automatic Worker] Claimed ' + jobs.length + ' job(s). Starting Cloudinary -> Google Drive transfer...');
+      
+      for (var i = 0; i < jobs.length; i++) {
+        if (new Date().getTime() - startTime > CONFIG.MAX_EXECUTION_TIME_MS) {
+          Logger.log('⏳ [Automatic Worker] Reached execution time budget. Pausing. Next recurring trigger will continue automatically.');
+          break;
         }
-      } catch (itemErr) {
-        failed++;
-        Logger.log('❌ Item failed: ' + itemErr.toString());
+        
+        var job = jobs[i];
+        Logger.log('\n--- [' + (i + 1) + '/' + jobs.length + '] Processing: ' + job.registrationId + ' (' + job.filename + ') ---');
+        
         try {
-          UrlFetchApp.fetch(backendUrl + '/api/internal/archive/fail-item', {
+          var targetFolder = getOrCreateFolderPath(job.folderPath);
+          
+          // Check for existing file by name to avoid duplicate copies
+          var existingFiles = targetFolder.getFilesByName(job.filename);
+          var driveFile = null;
+          
+          if (existingFiles.hasNext()) {
+            driveFile = existingFiles.next();
+            Logger.log('ℹ️ Existing file found in folder by name. Reusing: ' + driveFile.getId());
+          } else {
+            var mediaRes = UrlFetchApp.fetch(job.sourceUrl, { muteHttpExceptions: true });
+            if (mediaRes.getResponseCode() !== 200) {
+              throw new Error('Cloudinary fetch returned HTTP ' + mediaRes.getResponseCode());
+            }
+            
+            var blob = mediaRes.getBlob();
+            blob.setName(job.filename);
+            driveFile = targetFolder.createFile(blob);
+          }
+          
+          var driveFileId = driveFile.getId();
+          
+          // Physical Re-Open Verification
+          var verifiedFile = DriveApp.getFileById(driveFileId);
+          if (!verifiedFile || verifiedFile.isTrashed()) {
+            throw new Error('Physical verification failed: File not found in Drive by ID');
+          }
+          
+          var fileSize = verifiedFile.getSize();
+          var mimeType = verifiedFile.getMimeType();
+          
+          if (fileSize <= 0) {
+            throw new Error('Physical verification failed: Drive file size is 0 bytes');
+          }
+          if (!mimeType || mimeType.indexOf('image/') !== 0) {
+            throw new Error('Physical verification failed: Invalid MIME type ' + mimeType);
+          }
+          
+          Logger.log('✅ Physical verification passed: ' + driveFileId + ' (' + fileSize + ' bytes)');
+          
+          // Notify backend
+          var verifyUrl = backendUrl + '/api/internal/archive/verify-item';
+          var verifyRes = UrlFetchApp.fetch(verifyUrl, {
             method: 'post',
             headers: {
               'Authorization': 'Bearer ' + workerSecret,
               'Content-Type': 'application/json'
             },
-            payload: JSON.stringify({ jobId: job.jobId, error: itemErr.toString() }),
+            payload: JSON.stringify({
+              jobId: job.jobId,
+              driveFileId: driveFileId,
+              driveFolderId: targetFolder.getId(),
+              fileSize: fileSize,
+              mimeType: mimeType
+            }),
             muteHttpExceptions: true
           });
-        } catch (_) {}
+          
+          if (verifyRes.getResponseCode() === 200) {
+            totalSucceeded++;
+          } else {
+            Logger.log('⚠️ Backend verify returned HTTP ' + verifyRes.getResponseCode() + ': ' + verifyRes.getContentText());
+          }
+        } catch (itemErr) {
+          totalFailed++;
+          Logger.log('❌ Item failed: ' + itemErr.toString());
+          try {
+            UrlFetchApp.fetch(backendUrl + '/api/internal/archive/fail-item', {
+              method: 'post',
+              headers: {
+                'Authorization': 'Bearer ' + workerSecret,
+                'Content-Type': 'application/json'
+              },
+              payload: JSON.stringify({ jobId: job.jobId, error: itemErr.toString() }),
+              muteHttpExceptions: true
+            });
+          } catch (_) {}
+        }
+        
+        totalProcessed++;
+        Utilities.sleep(300);
       }
-      
-      processed++;
-      Utilities.sleep(300);
     }
     
     Logger.log('\n====================================================');
-    Logger.log('🎉 [Automatic Worker Batch Finished]');
-    Logger.log('- Event: ' + activeEvent.name);
-    Logger.log('- Processed: ' + processed + ' | Succeeded: ' + succeeded + ' | Failed: ' + failed);
+    Logger.log('🎉 [Automatic Worker Execution Finished]');
+    Logger.log('- Total Processed: ' + totalProcessed + ' | Succeeded: ' + totalSucceeded + ' | Failed: ' + totalFailed);
     Logger.log('====================================================');
   } finally {
     lock.releaseLock();
@@ -1119,39 +1120,170 @@ function runSingleBackupSync(targetBackupId) {
 
 /**
  * ============================================================================
- * DAILY BACKUP SYNC
+ * AUTOMATIC BACKUP ORCHESTRATOR (PRIMARY PRODUCTION SCHEDULER)
  * ============================================================================
+ * Triggered Once Daily (~11:00 PM IST) via Google Apps Script Trigger:
+ * 
+ * Flow:
+ * Acquire ScriptLock (prevent overlapping execution)
+ *   ↓
+ * Determine current time in Asia/Kolkata
+ *   ↓
+ * ensureAndSyncBackup('daily')
+ *   ↓
+ * Is today Sunday?
+ *   YES → ensureAndSyncBackup('weekly')
+ *   ↓
+ * Is today the 1st of the month?
+ *   YES → ensureAndSyncBackup('monthly')
+ *   ↓
+ * Release ScriptLock
+ */
+function runAutomaticBackupOrchestrator() {
+  var lock = LockService.getScriptLock();
+  var hasLock = false;
+  try {
+    hasLock = lock.tryLock(30000); // 30 second lock acquisition timeout
+    if (!hasLock) {
+      Logger.log('⚠️ [Backup Orchestrator] Another backup orchestrator run is currently active. Skipping overlapping execution.');
+      return;
+    }
+    
+    var props = PropertiesService.getScriptProperties().getProperties();
+    var backendUrl = props.BACKEND_URL;
+    var workerSecret = props.BACKUP_WORKER_SECRET;
+    
+    if (!backendUrl || !workerSecret) {
+      Logger.log('❌ ERROR: BACKEND_URL and BACKUP_WORKER_SECRET must be configured.');
+      return;
+    }
+    
+    var now = new Date();
+    // Format date in Asia/Kolkata timezone
+    var dateStr = Utilities.formatDate(now, 'Asia/Kolkata', 'yyyy-MM-dd HH:mm:ss');
+    var dayOfWeekStr = Utilities.formatDate(now, 'Asia/Kolkata', 'u'); // 1 = Mon, 7 = Sun
+    var dayOfMonthStr = Utilities.formatDate(now, 'Asia/Kolkata', 'd'); // 1..31
+    
+    var isSunday = (dayOfWeekStr === '7' || dayOfWeekStr === '0');
+    var isFirstOfMonth = (dayOfMonthStr === '1');
+    
+    Logger.log('====================================================');
+    Logger.log('      AUTOMATIC DATABASE BACKUP ORCHESTRATOR        ');
+    Logger.log('====================================================');
+    Logger.log('📅 Time (Asia/Kolkata): ' + dateStr + ' IST');
+    Logger.log('📆 Day of week: ' + dayOfWeekStr + (isSunday ? ' (Sunday - Weekly Backup Day!)' : ''));
+    Logger.log('📆 Day of month: ' + dayOfMonthStr + (isFirstOfMonth ? ' (1st - Monthly Backup Day!)' : ''));
+    
+    // 1. Every night -> Ensure & Sync DAILY backup
+    Logger.log('\n--- [STEP 1] ENSURING DAILY BACKUP ---');
+    ensureAndSyncBackup('daily', backendUrl, workerSecret);
+    
+    // 2. Is today Sunday? -> Also Ensure & Sync WEEKLY backup
+    if (isSunday) {
+      Logger.log('\n--- [STEP 2] TODAY IS SUNDAY -> ENSURING WEEKLY BACKUP ---');
+      ensureAndSyncBackup('weekly', backendUrl, workerSecret);
+    } else {
+      Logger.log('\n--- [STEP 2] Not Sunday -> Skipping Weekly backup ---');
+    }
+    
+    // 3. Is today the 1st? -> Also Ensure & Sync MONTHLY backup
+    if (isFirstOfMonth) {
+      Logger.log('\n--- [STEP 3] TODAY IS THE 1ST -> ENSURING MONTHLY BACKUP ---');
+      ensureAndSyncBackup('monthly', backendUrl, workerSecret);
+    } else {
+      Logger.log('\n--- [STEP 3] Not 1st of Month -> Skipping Monthly backup ---');
+    }
+    
+    Logger.log('\n====================================================');
+    Logger.log('🎉 [Automatic Backup Orchestrator Finished Successfully]');
+    Logger.log('====================================================');
+  } catch (err) {
+    Logger.log('❌ [Backup Orchestrator Error] ' + err.toString());
+  } finally {
+    if (hasLock) {
+      lock.releaseLock();
+    }
+  }
+}
+
+/**
+ * Backward compatibility alias for runAutomaticBackupOrchestrator
  */
 function runDailyBackupSync() {
-  var props = PropertiesService.getScriptProperties().getProperties();
-  var backendUrl = props.BACKEND_URL;
-  var workerSecret = props.BACKUP_WORKER_SECRET;
-  
-  if (!backendUrl || !workerSecret) {
-    Logger.log('ERROR: BACKEND_URL and BACKUP_WORKER_SECRET not configured.');
-    return;
+  runAutomaticBackupOrchestrator();
+}
+
+/**
+ * Idempotently ensures a backup tier exists on backend and syncs it to Google Drive
+ */
+function ensureAndSyncBackup(type, backendUrl, workerSecret) {
+  try {
+    var ensureUrl = backendUrl + '/api/internal/backups/ensure';
+    var payload = JSON.stringify({ type: type });
+    
+    Logger.log('📡 [Backup Ensure] Requesting ' + type.toUpperCase() + ' backup guarantee...');
+    
+    var res = fetchWithRetry(ensureUrl, {
+      method: 'post',
+      headers: {
+        'Authorization': 'Bearer ' + workerSecret,
+        'Content-Type': 'application/json'
+      },
+      payload: payload,
+      muteHttpExceptions: true
+    }, 3);
+    
+    if (!res || res.getResponseCode() !== 200) {
+      Logger.log('❌ [Backup Ensure] Backend returned HTTP ' + (res ? res.getResponseCode() : 'NO_RES') + ': ' + (res ? res.getContentText() : 'Network error'));
+      return;
+    }
+    
+    var data = JSON.parse(res.getContentText());
+    var backupId = data.backupId;
+    var periodKey = data.periodKey;
+    
+    if (data.alreadyCompleted) {
+      Logger.log('ℹ️ [Backup Ensure] ' + type.toUpperCase() + ' backup for period [' + periodKey + '] is ALREADY VERIFIED in Google Drive. Skipping duplicate upload.');
+      return;
+    }
+    
+    Logger.log('📦 [Backup Ensure] Guaranteed ' + type.toUpperCase() + ' backup ready (ID: ' + backupId + ', Period: ' + periodKey + ', Status: ' + data.status + ')');
+    
+    // Perform authentic Google Drive transfer and physical verification
+    processSingleBackupSync(backupId);
+  } catch (err) {
+    Logger.log('❌ [Backup Ensure Error] ' + err.toString());
   }
-  
-  Logger.log('[Backup Sync] Triggering database backup on backend...');
-  var backupRunUrl = backendUrl + '/api/super-admin/backups/run';
-  
-  var runRes = UrlFetchApp.fetch(backupRunUrl, {
-    method: 'post',
-    headers: {
-      'Authorization': 'Bearer ' + workerSecret,
-      'Content-Type': 'application/json'
-    },
-    payload: JSON.stringify({ type: 'daily' }),
-    muteHttpExceptions: true
-  });
-  
-  if (runRes.getResponseCode() !== 200) {
-    Logger.log('[Backup Sync] Backend backup run returned HTTP ' + runRes.getResponseCode() + ': ' + runRes.getContentText());
-    return;
+}
+
+/**
+ * HTTP fetch with conservative exponential backoff to handle Render cold-starts & transient 5xx
+ */
+function fetchWithRetry(url, options, maxAttempts) {
+  maxAttempts = maxAttempts || 3;
+  for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      var res = UrlFetchApp.fetch(url, options);
+      var code = res.getResponseCode();
+      // If server returned a transient 502, 503, 504 (e.g. Render waking up)
+      if ((code === 502 || code === 503 || code === 504) && attempt < maxAttempts) {
+        var waitSec = attempt * 3;
+        Logger.log('⏳ Render cold-start/transient HTTP ' + code + ' on attempt ' + attempt + '. Waiting ' + waitSec + 's for server to wake up...');
+        Utilities.sleep(waitSec * 1000);
+        continue;
+      }
+      return res;
+    } catch (netErr) {
+      if (attempt < maxAttempts) {
+        var waitSec = attempt * 3;
+        Logger.log('⏳ Network error on attempt ' + attempt + ' (' + netErr.toString() + '). Waiting ' + waitSec + 's...');
+        Utilities.sleep(waitSec * 1000);
+      } else {
+        throw netErr;
+      }
+    }
   }
-  
-  var data = JSON.parse(runRes.getContentText());
-  Logger.log('[Backup Sync] Database backup generated on backend. ID: ' + data.backupId + ' (Checksum: ' + (data.manifest ? data.manifest.checksum : 'N/A') + ')');
+  return null;
 }
 
 /**

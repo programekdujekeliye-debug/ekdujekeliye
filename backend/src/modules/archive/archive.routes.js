@@ -15,7 +15,10 @@ import {
   queueSingleAsset,
   queueEventArchive,
   getArchiveJobs,
-  retryFailedJobs
+  retryFailedJobs,
+  cleanupPreflightSingleAsset,
+  createOperationalThumbnailAsset,
+  cleanupOriginalAsset
 } from './archive.controller.js';
 import { requireSuperAuth, requireArchiveWorkerAuth } from '../../middleware/auth.js';
 
@@ -48,3 +51,9 @@ archiveRouter.post('/queue-single', requireSuperAuth, queueSingleAsset);
 archiveRouter.post('/queue-event', requireSuperAuth, queueEventArchive);
 archiveRouter.get('/jobs', requireSuperAuth, getArchiveJobs);
 archiveRouter.post('/retry-failed', requireSuperAuth, retryFailedJobs);
+
+// Cloudinary Cleanup & Operational Thumbnail Routes (Strictly requireSuperAuth)
+archiveRouter.post('/cleanup-preflight/:registrationId', requireSuperAuth, cleanupPreflightSingleAsset);
+archiveRouter.get('/cleanup-preflight/:registrationId', requireSuperAuth, cleanupPreflightSingleAsset);
+archiveRouter.post('/create-thumbnail/:registrationId', requireSuperAuth, createOperationalThumbnailAsset);
+archiveRouter.post('/cleanup-original/:registrationId', requireSuperAuth, cleanupOriginalAsset);

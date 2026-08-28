@@ -46,7 +46,22 @@ const MediaArchiveSchema = new mongoose.Schema({
   deleteAfter: { type: Date, default: null },
   archivedAt: { type: Date, default: null },
 
-  retainOperationalCopy: { type: Boolean, default: true }
+  retainOperationalCopy: { type: Boolean, default: true },
+  
+  // Independent Cloudinary Operational Thumbnail Metadata
+  operationalThumbnailUrl: { type: String, default: null },
+  operationalThumbnailPublicId: { type: String, default: null },
+  thumbnailSizeBytes: { type: Number, default: 0 },
+  thumbnailCreatedAt: { type: Date, default: null },
+
+  // Cloudinary Original Lifecycle State
+  cloudinaryOriginalStatus: {
+    type: String,
+    enum: ['ACTIVE', 'DELETE_READY', 'DELETED', 'DELETE_FAILED'],
+    default: 'ACTIVE',
+    index: true
+  },
+  cloudinaryOriginalDeletedAt: { type: Date, default: null }
 }, {
   collection: 'media_archives',
   timestamps: true

@@ -3,6 +3,7 @@ import { Registration } from '../../models/Registration.js';
 import { Event } from '../../models/Event.js';
 import { Counter, getNextSequence } from '../../models/Counter.js';
 import { storageService } from '../../services/storage.service.js';
+import { mediaService } from '../media/media.service.js';
 
 export class RegistrationService {
   /**
@@ -106,15 +107,20 @@ export class RegistrationService {
   }
 
   /**
-   * Get registration status by inquiry ID
+   * Get registration status by inquiry ID with central media resolution
    */
   async getStatus(inquiryId) {
     const submission = await Registration.findOne({ inquiryId, isDeleted: { $ne: true } }).lean();
     if (!submission) return null;
 
-    const program = await Event.findOne({ id: submission.programId }).lean();
+    const [program, mediaState] = await Promise.all([
+      Event.findOne({ id: submission.programId }).lean(),
+      mediaService.resolveRegistrationMedia(submission)
+    ]);
+
     return {
       ...submission,
+      ...mediaState,
       program: program || null
     };
   }

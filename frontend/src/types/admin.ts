@@ -66,6 +66,11 @@ export interface MediaArchiveJob {
   mimeType: string;
   originalSize: number;
   status: 'ACTIVE' | 'QUEUED' | 'COPYING' | 'COPIED' | 'VERIFIED' | 'DELETE_PENDING' | 'ARCHIVED' | 'FAILED';
+  operationalThumbnailUrl?: string;
+  operationalThumbnailPublicId?: string;
+  thumbnailSizeBytes?: number;
+  cloudinaryOriginalStatus?: 'ACTIVE' | 'DELETE_READY' | 'DELETED' | 'DELETE_FAILED';
+  cloudinaryOriginalDeletedAt?: string;
   attempts: number;
   lastError?: string;
   queuedAt?: string;
@@ -78,8 +83,10 @@ export interface BackupRecordItem {
   _id: string;
   backupId: string;
   type: 'daily' | 'weekly' | 'monthly' | 'manual' | 'event_final';
+  scheduled?: boolean;
+  periodKey?: string;
   eventId?: string;
-  status: 'pending' | 'created' | 'verified' | 'failed';
+  status: 'pending' | 'creating' | 'created' | 'syncing' | 'verified' | 'sync_failed' | 'failed';
   size: number;
   checksum: string;
   driveFileId?: string;

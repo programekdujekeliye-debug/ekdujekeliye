@@ -527,61 +527,92 @@ export const StoragePage = () => {
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-3">Token / File</th>
-                  <th className="px-4 py-3">Event</th>
-                  <th className="px-4 py-3">Source Provider</th>
-                  <th className="px-4 py-3">Drive File ID</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Attempts</th>
+                  <th className="px-4 py-3">Registration / File</th>
+                  <th className="px-4 py-3">Drive Original</th>
+                  <th className="px-4 py-3">Operational Thumbnail</th>
+                  <th className="px-4 py-3">Cloudinary Original</th>
+                  <th className="px-4 py-3">Archive Status</th>
                   <th className="px-4 py-3">Size</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
                 {loadingJobs && jobs.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-slate-400">Loading jobs...</td>
+                    <td colSpan={6} className="px-4 py-12 text-center text-slate-400">Loading jobs...</td>
                   </tr>
                 ) : jobs.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-slate-400">No archive jobs recorded.</td>
+                    <td colSpan={6} className="px-4 py-12 text-center text-slate-400">No archive jobs recorded.</td>
                   </tr>
                 ) : (
-                  jobs.map((job) => (
-                    <tr key={job._id} className="hover:bg-slate-50/60">
-                      <td className="px-4 py-3">
-                        <span className="font-bold text-slate-900 block">{job.filename}</span>
-                        <span className="text-[10px] text-purple-700 font-mono">{job.registrationId || 'N/A'}</span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">{job.eventId}</td>
-                      <td className="px-4 py-3 uppercase text-[10px] font-bold text-slate-500">{job.sourceProvider}</td>
-                      <td className="px-4 py-3 font-mono text-[10px] text-slate-600">
-                        {job.driveFileId ? (
-                          <span className="text-emerald-700 font-bold">✓ {job.driveFileId.slice(0, 16)}...</span>
-                        ) : (
-                          <span className="text-slate-400">Pending upload</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`px-2 py-0.5 text-[9px] font-bold rounded-md uppercase ${
-                            job.status === 'VERIFIED'
-                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                              : job.status === 'FAILED'
-                              ? 'bg-red-50 text-red-700 border border-red-200'
-                              : job.status === 'COPYING'
-                              ? 'bg-blue-50 text-blue-800 border border-blue-200'
-                              : 'bg-amber-50 text-amber-800 border border-amber-200'
-                          }`}
-                        >
-                          {job.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">{job.attempts}</td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {job.originalSize ? `${(job.originalSize / 1024).toFixed(1)} KB` : '...'}
-                      </td>
-                    </tr>
-                  ))
+                  jobs.map((job) => {
+                    const isVerifiedDrive = Boolean(job.driveFileId && (job.status === 'VERIFIED' || job.status === 'ARCHIVED'));
+                    const hasThumb = Boolean(job.operationalThumbnailUrl);
+                    const originalStatus = job.cloudinaryOriginalStatus || 'ACTIVE';
+
+                    return (
+                      <tr key={job._id} className="hover:bg-slate-50/60">
+                        <td className="px-4 py-3">
+                          <span className="font-bold text-slate-900 block">{job.filename}</span>
+                          <span className="text-[10px] text-purple-700 font-mono font-bold">{job.registrationId || 'N/A'}</span>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-[10px]">
+                          {isVerifiedDrive ? (
+                            <span className="text-emerald-700 font-bold flex items-center gap-1">
+                              ✓ Verified <span className="text-slate-400 font-normal">({job.driveFileId?.slice(0, 10)}...)</span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">Pending Drive archive</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {hasThumb ? (
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={job.operationalThumbnailUrl}
+                                alt="Thumb"
+                                className="w-8 h-8 rounded-lg object-cover border border-slate-200 shadow-2xs"
+                              />
+                              <span className="text-emerald-700 font-bold text-[10px]">✓ Cloudinary</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[10px]">Not generated</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2 py-0.5 text-[9px] font-bold rounded-md uppercase ${
+                              originalStatus === 'DELETED'
+                                ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                                : originalStatus === 'DELETE_READY'
+                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            }`}
+                          >
+                            {originalStatus}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2 py-0.5 text-[9px] font-bold rounded-md uppercase ${
+                              job.status === 'VERIFIED'
+                                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                : job.status === 'FAILED'
+                                ? 'bg-red-50 text-red-700 border border-red-200'
+                                : job.status === 'COPYING'
+                                ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                                : 'bg-amber-50 text-amber-800 border border-amber-200'
+                            }`}
+                          >
+                            {job.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 text-[11px]">
+                          {job.originalSize ? `${(job.originalSize / 1024).toFixed(1)} KB` : '...'}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -614,23 +645,130 @@ export const StoragePage = () => {
 
       {/* Tab 3: Database Backups Ledger */}
       {tab === 'backups' && (
-        <div className="bg-white border border-slate-200 shadow-xs rounded-2xl overflow-hidden space-y-4 p-6">
-          <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-            <div>
-              <h3 className="font-extrabold text-slate-900 text-sm">Database Snapshots &amp; Cryptographic Manifests</h3>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Every snapshot is compressed via gzip and verified with SHA-256 hashes before Drive archival.
-              </p>
+        <div className="space-y-6">
+          {/* Automation Dashboard Card */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-3xl p-6 shadow-xl border border-slate-700/50 space-y-5">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-700/60 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <h3 className="text-base font-extrabold tracking-wide">Production Backup Automation Architecture</h3>
+                </div>
+                <p className="text-xs text-slate-300 font-medium mt-1">
+                  Autonomous Google Apps Script cloud orchestrator with deterministic period idempotency.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2 text-[11px] font-bold">
+                <span className="px-3 py-1 bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 rounded-xl">
+                  Scheduler: Google Apps Script (11 PM IST)
+                </span>
+                <span className="px-3 py-1 bg-slate-700/60 border border-slate-600 text-slate-300 rounded-xl">
+                  Backend Cron: Disabled
+                </span>
+                <span className="px-3 py-1 bg-purple-500/20 border border-purple-400/40 text-purple-300 rounded-xl">
+                  Laptop Required: NO
+                </span>
+              </div>
             </div>
-            <button
-              onClick={fetchBackups}
-              className="p-2 text-slate-500 hover:text-slate-700 bg-slate-100 rounded-xl"
-            >
-              <RefreshCwIcon className={`w-4 h-4 ${loadingBackups ? 'animate-spin' : ''}`} />
-            </button>
+
+            {/* Tier Status Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Daily Tier */}
+              {(() => {
+                const daily = backups.find(b => b.type === 'daily');
+                const isV = daily?.status === 'verified';
+                return (
+                  <div className="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-4 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Daily Tier</span>
+                      <span className={`px-2 py-0.5 text-[9px] font-extrabold rounded-md uppercase ${isV ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}`}>
+                        {isV ? '✓ Drive Verified' : daily ? daily.status.toUpperCase() : 'Pending'}
+                      </span>
+                    </div>
+                    <div className="text-sm font-bold text-slate-100">
+                      Period: <span className="font-mono text-indigo-300">{daily?.periodKey || '2026-08-28'}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono truncate">
+                      {daily ? daily.backupId : 'No scheduled run yet'}
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Frequency: Every calendar night (Asia/Kolkata)
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Weekly Tier */}
+              {(() => {
+                const weekly = backups.find(b => b.type === 'weekly');
+                const isV = weekly?.status === 'verified';
+                return (
+                  <div className="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-4 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Weekly Tier</span>
+                      <span className={`px-2 py-0.5 text-[9px] font-extrabold rounded-md uppercase ${isV ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}`}>
+                        {isV ? '✓ Drive Verified' : weekly ? weekly.status.toUpperCase() : 'Pending'}
+                      </span>
+                    </div>
+                    <div className="text-sm font-bold text-slate-100">
+                      Period: <span className="font-mono text-indigo-300">{weekly?.periodKey || '2026-W35'}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono truncate">
+                      {weekly ? weekly.backupId : 'Sunday night cascade'}
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Frequency: Every Sunday night IST
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Monthly Tier */}
+              {(() => {
+                const monthly = backups.find(b => b.type === 'monthly');
+                const isV = monthly?.status === 'verified';
+                return (
+                  <div className="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-4 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Monthly Tier</span>
+                      <span className={`px-2 py-0.5 text-[9px] font-extrabold rounded-md uppercase ${isV ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}`}>
+                        {isV ? '✓ Drive Verified' : monthly ? monthly.status.toUpperCase() : 'Pending'}
+                      </span>
+                    </div>
+                    <div className="text-sm font-bold text-slate-100">
+                      Period: <span className="font-mono text-indigo-300">{monthly?.periodKey || '2026-08'}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono truncate">
+                      {monthly ? monthly.backupId : '1st of month cascade'}
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Frequency: 1st of every calendar month IST
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Database Backups Table */}
+          <div className="bg-white border border-slate-200 shadow-xs rounded-2xl overflow-hidden space-y-4 p-6">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-sm">Database Snapshots &amp; Cryptographic Manifests</h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Every snapshot is compressed via gzip and verified with SHA-256 hashes before Drive archival.
+                </p>
+              </div>
+              <button
+                onClick={fetchBackups}
+                className="p-2 text-slate-500 hover:text-slate-700 bg-slate-100 rounded-xl cursor-pointer"
+              >
+                <RefreshCwIcon className={`w-4 h-4 ${loadingBackups ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
                 <tr>
@@ -731,6 +869,7 @@ export const StoragePage = () => {
             </table>
           </div>
         </div>
+      </div>
       )}
     </div>
   );

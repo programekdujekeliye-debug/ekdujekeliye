@@ -8,10 +8,12 @@ const BackupRecordSchema = new mongoose.Schema({
     default: 'daily',
     index: true
   },
+  scheduled: { type: Boolean, default: false, index: true },
+  periodKey: { type: String, default: null, index: true },
   eventId: { type: String, default: null, index: true },
   status: {
     type: String,
-    enum: ['pending', 'created', 'verified', 'failed'],
+    enum: ['pending', 'creating', 'created', 'syncing', 'verified', 'sync_failed', 'failed'],
     default: 'pending',
     index: true
   },
@@ -32,5 +34,16 @@ const BackupRecordSchema = new mongoose.Schema({
 
 BackupRecordSchema.index({ type: 1, createdAt: -1 });
 BackupRecordSchema.index({ status: 1, createdAt: -1 });
+// Partial unique index to enforce deterministic idempotency for scheduled period backups
+BackupRecordSchema.index(
+  { type: 1, periodKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      scheduled: true,
+      periodKey: { $type: 'string' }
+    }
+  }
+);
 
 export const BackupRecord = mongoose.models.BackupRecord || mongoose.model('BackupRecord', BackupRecordSchema);

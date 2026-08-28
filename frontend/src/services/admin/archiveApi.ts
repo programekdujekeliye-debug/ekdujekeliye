@@ -82,5 +82,26 @@ export const archiveApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ eventId })
     });
+  },
+
+  async cleanupPreflight(registrationId: string): Promise<any> {
+    return apiClient(`/api/super-admin/archive/cleanup-preflight/${registrationId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  },
+
+  async createThumbnail(registrationId: string): Promise<any> {
+    return apiClient(`/api/super-admin/archive/create-thumbnail/${registrationId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  },
+
+  async cleanupOriginal(registrationId: string): Promise<any> {
+    return apiClient(`/api/super-admin/archive/cleanup-original/${registrationId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 };

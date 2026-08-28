@@ -3,6 +3,13 @@ import { Registration } from '../../models/Registration.js';
 import { MediaArchive } from '../../models/MediaArchive.js';
 import { Event } from '../../models/Event.js';
 import { env } from '../../config/env.js';
+import { v2 as cloudinary } from 'cloudinary';
+
+cloudinary.config({
+  cloud_name: env.CLOUDINARY_CLOUD_NAME,
+  api_key: env.CLOUDINARY_API_KEY,
+  api_secret: env.CLOUDINARY_API_SECRET
+});
 
 export class MediaService {
   /**
@@ -13,8 +20,60 @@ export class MediaService {
     if (!rawUrl.includes('cloudinary.com') || !rawUrl.includes('/upload/')) {
       return rawUrl;
     }
+    if (rawUrl.includes('/archive-thumbnails/')) {
+      return rawUrl;
+    }
     // Inject lightweight thumbnail transformation params: c_limit,w_400,q_auto,f_auto
     return rawUrl.replace('/upload/', '/upload/c_limit,w_400,q_auto,f_auto/');
+  }
+
+  /**
+   * Creates an independent operational thumbnail on Cloudinary (approx 400px, auto-format, ~20-80KB)
+   * Stored under folder: archive-thumbnails/{eventSlug}/{inquiryId}
+   * Never overwritten or derived solely from original.
+   */
+  async createOperationalThumbnail({ sourceUrl, eventSlug = 'general', inquiryId, publicId = null }) {
+    if (!sourceUrl) {
+      throw new Error('sourceUrl is required to create operational thumbnail.');
+    }
+    if (!inquiryId) {
+      throw new Error('inquiryId is required to create operational thumbnail.');
+    }
+
+    const safeSlug = String(eventSlug || 'general').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const targetFolder = `archive-thumbnails/${safeSlug}`;
+    const targetPublicId = `${targetFolder}/${inquiryId}`;
+
+    // Upload an independent transformed asset to Cloudinary
+    const uploadResult = await cloudinary.uploader.upload(sourceUrl, {
+      public_id: inquiryId,
+      folder: targetFolder,
+      overwrite: true,
+      resource_type: 'image',
+      transformation: [
+        { width: 400, crop: 'limit', quality: 'auto:good', fetch_format: 'auto' }
+      ]
+    });
+
+    const operationalThumbnailUrl = uploadResult.secure_url;
+    const operationalThumbnailPublicId = uploadResult.public_id;
+    const thumbnailSizeBytes = uploadResult.bytes || 0;
+
+    // Verify independent thumbnail returns HTTP 200
+    const headRes = await fetch(operationalThumbnailUrl, { method: 'HEAD' });
+    if (headRes.status !== 200) {
+      throw new Error(`Operational thumbnail verification failed: HTTP ${headRes.status}`);
+    }
+
+    return {
+      operationalThumbnailUrl,
+      operationalThumbnailPublicId,
+      thumbnailSizeBytes,
+      thumbnailCreatedAt: new Date(),
+      format: uploadResult.format,
+      width: uploadResult.width,
+      height: uploadResult.height
+    };
   }
 
   /**
@@ -22,23 +81,40 @@ export class MediaService {
    */
   async resolveRegistrationMedia(registration, archiveRecord = null) {
     const rawPhoto = registration.couplePhoto || '';
-    const thumbnailUrl = this.getThumbnailUrl(rawPhoto);
 
     let archive = archiveRecord;
     if (!archive && registration.inquiryId) {
       archive = await MediaArchive.findOne({
         registrationId: registration.inquiryId
-      }).select('status driveFileId filename verifiedAt').lean();
+      }).select('status driveFileId filename verifiedAt operationalThumbnailUrl operationalThumbnailPublicId cloudinaryOriginalStatus').lean();
     }
 
     const isArchived = archive && (archive.status === 'VERIFIED' || archive.status === 'ARCHIVED');
     const isQueued = archive && (archive.status === 'QUEUED' || archive.status === 'COPYING');
+    const isOriginalDeleted = archive && archive.cloudinaryOriginalStatus === 'DELETED';
+
+    // 1. Determine safe thumbnail URL (prioritize independent operational thumbnail)
+    let photoThumbnailUrl = '';
+    if (archive?.operationalThumbnailUrl) {
+      photoThumbnailUrl = archive.operationalThumbnailUrl;
+    } else if (rawPhoto) {
+      photoThumbnailUrl = this.getThumbnailUrl(rawPhoto);
+    }
+
+    // 2. Determine safe couple photo URL (fallback to operational thumbnail if original was deleted)
+    let couplePhoto = rawPhoto;
+    if (isOriginalDeleted && archive?.operationalThumbnailUrl) {
+      couplePhoto = archive.operationalThumbnailUrl;
+    }
 
     return {
-      photoThumbnailUrl: thumbnailUrl,
+      photoThumbnailUrl,
+      couplePhoto,
       photoStorageStatus: isArchived ? 'ARCHIVED' : (isQueued ? 'QUEUED' : 'ACTIVE'),
       hasArchivedOriginal: Boolean(isArchived && archive.driveFileId),
-      archiveStatus: archive ? archive.status : null
+      archiveStatus: archive ? archive.status : null,
+      cloudinaryOriginalStatus: archive?.cloudinaryOriginalStatus || 'ACTIVE',
+      operationalThumbnailUrl: archive?.operationalThumbnailUrl || null
     };
   }
 

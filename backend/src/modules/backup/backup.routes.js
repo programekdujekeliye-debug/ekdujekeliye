@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getBackupsList,
   runBackupNow,
+  ensureBackup,
   getBackupFile,
   getBackupManifest,
   recordBackupDriveSync
@@ -15,6 +16,7 @@ backupRouter.get('/', requireSuperAuth, getBackupsList);
 backupRouter.post('/run', requireSuperAuth, runBackupNow);
 
 // Worker Sync & Download Endpoints (Protected by BACKUP_WORKER_SECRET)
+backupRouter.post('/ensure', requireBackupWorkerAuth, ensureBackup);
 backupRouter.get('/:backupId/file', requireBackupWorkerAuth, getBackupFile);
 backupRouter.get('/:backupId/manifest', requireBackupWorkerAuth, getBackupManifest);
 backupRouter.post('/sync-drive', requireBackupWorkerAuth, recordBackupDriveSync);

@@ -1,8 +1,30 @@
 import fs from 'fs';
 import path from 'path';
 import { BackupRecord } from '../../models/BackupRecord.js';
-import { runDatabaseBackup } from '../../jobs/backup.job.js';
+import { runDatabaseBackup, runNightlyBackupRoutine, ensureScheduledBackup } from '../../jobs/backup.job.js';
 import { env } from '../../config/env.js';
+
+/**
+ * Idempotent ensure endpoint for Google Apps Script backup worker
+ * Accepts { type: 'daily' | 'weekly' | 'monthly' }
+ * Returns deterministic record, never duplicates.
+ */
+export const ensureBackup = async (req, res) => {
+  try {
+    const type = req.body.type || 'daily';
+    if (!['daily', 'weekly', 'monthly'].includes(type)) {
+      return res.status(400).json({ error: 'type must be one of: daily, weekly, monthly' });
+    }
+
+    const result = await ensureScheduledBackup(type);
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Ensure backup failed: ${err.message}` });
+  }
+};
 
 /**
  * Lists all database backup records for Super Admin
@@ -44,6 +66,15 @@ export const runBackupNow = async (req, res) => {
   try {
     const type = req.body.type || 'manual';
     const eventId = req.body.eventId || null;
+
+    if (type === 'nightly') {
+      const routineResults = await runNightlyBackupRoutine();
+      return res.json({
+        success: true,
+        message: 'Nightly backup routine (Daily -> Weekly on Sun -> Monthly on 1st) executed successfully.',
+        results: routineResults
+      });
+    }
 
     const result = await runDatabaseBackup(type, eventId);
     res.json({
