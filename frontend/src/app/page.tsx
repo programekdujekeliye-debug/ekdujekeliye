@@ -146,7 +146,19 @@ export default function HomePage() {
           });
 
           if (isMounted) {
-            setPrograms(sorted.length > 0 ? sorted : list);
+            const finalPrograms = sorted.length > 0 ? sorted : list;
+            setPrograms(finalPrograms);
+            try {
+              if (typeof window !== 'undefined') {
+                sessionStorage.setItem('edkl_events', JSON.stringify(finalPrograms));
+                finalPrograms.forEach(p => {
+                  if (p.slug) sessionStorage.setItem(`edkl_event_${p.slug.toLowerCase()}`, JSON.stringify(p));
+                  if (p.id) sessionStorage.setItem(`edkl_event_${p.id.toLowerCase()}`, JSON.stringify(p));
+                });
+              }
+            } catch (e) {
+              // Ignore session storage errors
+            }
           }
         }
       } catch (err: any) {

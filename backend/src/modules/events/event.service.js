@@ -58,11 +58,11 @@ export class EventService {
 
     // RULE 1: Return maximum 2 upcoming events
     if (futureDatedEvents.length > 0) {
-      return futureDatedEvents.slice(0, 2).map(prog => {
+      const results = futureDatedEvents.slice(0, 2).map(prog => {
         const capacity = prog.capacity || 1000;
         const bookedSeats = prog.bookedSeats || 0;
         const availableSeats = Math.max(0, capacity - bookedSeats);
-        return {
+        const mapped = {
           ...prog,
           capacity,
           bookedSeats,
@@ -70,7 +70,11 @@ export class EventService {
           isHousefull: prog.status === 'housefull',
           isClosed: prog.status === 'registration_closed' || prog.isInquiryClosed === true
         };
+        if (prog.slug) slugCache.set(prog.slug.toLowerCase(), mapped);
+        if (prog.id) slugCache.set(prog.id.toLowerCase(), mapped);
+        return mapped;
       });
+      return results;
     }
 
     // RULE 2: If future dated event count = 0, look for valid Date TBA / TBD event
@@ -79,14 +83,17 @@ export class EventService {
     });
 
     if (tbaEvent) {
-      return [{
+      const mapped = {
         ...tbaEvent,
         capacity: tbaEvent.capacity || 1000,
         bookedSeats: tbaEvent.bookedSeats || 0,
         availableSeats: tbaEvent.capacity || 1000,
         isHousefull: false,
         isClosed: false
-      }];
+      };
+      if (tbaEvent.slug) slugCache.set(tbaEvent.slug.toLowerCase(), mapped);
+      if (tbaEvent.id) slugCache.set(tbaEvent.id.toLowerCase(), mapped);
+      return [mapped];
     }
 
     // RULE 3: 0 future events and 0 TBA events
@@ -105,18 +112,37 @@ export class EventService {
    */
   async getEventBySlug(slug) {
     if (!slug) return null;
+    const normalizedSlug = slug.toLowerCase();
 
-    const event = await Event.findOne({
-      $or: [{ slug: slug.toLowerCase() }, { id: slug }]
-    }).lean();
+    // 1. Fast path: Memory Cache hit (0ms)
+    if (slugCache.has(normalizedSlug)) {
+      return slugCache.get(normalizedSlug);
+    }
+
+    // 2. Database lookup: Try direct indexed slug first, then ID
+    let event = await Event.findOne({ slug: normalizedSlug }).lean();
+    if (!event) {
+      event = await Event.findOne({ id: slug }).lean();
+    }
+    if (!event) {
+      event = await Event.findOne({
+        $or: [{ slug: normalizedSlug }, { id: slug }]
+      }).lean();
+    }
 
     if (!event) return null;
 
-    return {
+    const mapped = {
       ...event,
       isHousefull: event.status === 'housefull',
       isClosed: event.status === 'registration_closed' || event.isInquiryClosed === true
     };
+
+    // Cache result
+    if (event.slug) slugCache.set(event.slug.toLowerCase(), mapped);
+    if (event.id) slugCache.set(event.id.toLowerCase(), mapped);
+
+    return mapped;
   }
 
   /**

@@ -134,8 +134,41 @@ export default function EventDetailPage() {
   const router = useRouter();
   const slug = params?.slug as string;
 
-  const [event, setEvent] = useState<ProgramDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Instant SWR Cache Initialization
+  const [event, setEvent] = useState<ProgramDetail | null>(() => {
+    if (typeof window !== 'undefined' && slug) {
+      try {
+        const cached = sessionStorage.getItem(`edkl_event_${slug.toLowerCase()}`);
+        if (cached) return JSON.parse(cached);
+        const allCached = sessionStorage.getItem('edkl_events');
+        if (allCached) {
+          const list: ProgramDetail[] = JSON.parse(allCached);
+          const found = list.find((p) => (p.slug && p.slug.toLowerCase() === slug.toLowerCase()) || p.id === slug);
+          if (found) return found;
+        }
+      } catch (e) {
+        // Ignore cache parse error
+      }
+    }
+    return null;
+  });
+
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined' && slug) {
+      try {
+        const cached = sessionStorage.getItem(`edkl_event_${slug.toLowerCase()}`);
+        if (cached) return false;
+        const allCached = sessionStorage.getItem('edkl_events');
+        if (allCached) {
+          const list: ProgramDetail[] = JSON.parse(allCached);
+          const found = list.find((p) => (p.slug && p.slug.toLowerCase() === slug.toLowerCase()) || p.id === slug);
+          if (found) return false;
+        }
+      } catch (e) {}
+    }
+    return true;
+  });
+
   const [error, setError] = useState<string | null>(null);
 
   // Form State
@@ -162,8 +195,12 @@ export default function EventDetailPage() {
 
   const fetchEventDetails = async () => {
     try {
-      setLoading(true);
+      // Only set full-page loading if we don't already have the event cached
+      if (!event) {
+        setLoading(true);
+      }
       setError(null);
+
       // Try fetching by slug first
       let res = await fetch(`${API_BASE_URL}/api/programs/slug/${encodeURIComponent(slug)}`);
       if (!res.ok) {
@@ -171,18 +208,33 @@ export default function EventDetailPage() {
         const allRes = await fetch(`${API_BASE_URL}/api/programs`);
         if (allRes.ok) {
           const programs: ProgramDetail[] = await allRes.json();
-          const match = programs.find((p) => p.slug === slug || p.id === slug);
+          const match = programs.find((p) => (p.slug && p.slug.toLowerCase() === slug.toLowerCase()) || p.id === slug);
           if (match) {
             setEvent(match);
+            try {
+              if (typeof window !== 'undefined') {
+                sessionStorage.setItem(`edkl_event_${slug.toLowerCase()}`, JSON.stringify(match));
+              }
+            } catch (e) {}
             return;
           }
         }
-        throw new Error('Event not found or registration is closed.');
+        if (!event) {
+          throw new Error('Event not found or registration is closed.');
+        }
+        return;
       }
       const data = await res.json();
       setEvent(data);
+      try {
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem(`edkl_event_${slug.toLowerCase()}`, JSON.stringify(data));
+        }
+      } catch (e) {}
     } catch (err: any) {
-      setError(err.message || 'Failed to load event details.');
+      if (!event) {
+        setError(err.message || 'Failed to load event details.');
+      }
     } finally {
       setLoading(false);
     }
