@@ -6,7 +6,7 @@ import { Submission } from '../../../types';
 import { API_BASE_URL } from '../../../config';
 import { DuplicateSubmissionsView } from './DuplicateSubmissionsView';
 import { TrashSubmissionsView } from './TrashSubmissionsView';
-import { SearchIcon, CheckCircleIcon } from '../../../components/Icons';
+import { SearchIcon, CheckCircleIcon, TrashIcon, MapPinIcon, PhoneIcon, AlertTriangleIcon } from '../../../components/Icons';
 
 export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean }) => {
   const { selectedProgramId, programs } = useAdmin();
@@ -483,10 +483,10 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                               )}
                               <button
                                 onClick={() => handleDelete(sub.inquiryId)}
-                                className="p-1 text-slate-400 hover:text-red-600 rounded cursor-pointer"
+                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer transition-colors"
                                 title="Move to Trash"
                               >
-                                🗑️
+                                <TrashIcon className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           </td>
@@ -598,12 +598,14 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                           <p className="text-[11px] text-slate-500 font-medium truncate">{sub.surname}</p>
                           <a
                             href={`tel:${sub.phoneNumber}`}
-                            className="text-[11px] text-rose-600 font-mono font-bold block"
+                            className="text-[11px] text-rose-600 font-mono font-bold flex items-center gap-1"
                           >
-                            📞 {sub.phoneNumber}
+                            <PhoneIcon className="w-3 h-3 flex-shrink-0" />
+                            <span>{sub.phoneNumber}</span>
                           </a>
-                          <p className="text-[10px] text-slate-400 truncate">
-                            📍 {sub.programName || 'N/A'} ({sub.programDate})
+                          <p className="text-[10px] text-slate-400 truncate flex items-center gap-1">
+                            <MapPinIcon className="w-3 h-3 flex-shrink-0" />
+                            <span>{sub.programName || 'N/A'} ({sub.programDate})</span>
                           </p>
                         </div>
                       </div>
@@ -618,9 +620,9 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                             onChange={(e) => handleAttendance(sub.inquiryId, e.target.value as any)}
                             className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none w-full cursor-pointer min-h-[30px]"
                           >
-                            <option value="unmarked">⚪ Unmarked</option>
-                            <option value="present">🟢 Present</option>
-                            <option value="absent">🔴 Absent</option>
+                            <option value="unmarked">Unmarked</option>
+                            <option value="present">Present</option>
+                            <option value="absent">Absent</option>
                           </select>
                         </div>
 
@@ -636,7 +638,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                               </button>
                               <button
                                 onClick={() => handleReject(sub.inquiryId)}
-                                className="px-3 py-1.5 min-h-[36px] bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-bold text-xs rounded-xl cursor-pointer whitespace-nowrap"
+                                className="px-3 py-1.5 min-h-[36px] bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-xs rounded-xl cursor-pointer whitespace-nowrap"
                               >
                                 Reject
                               </button>
@@ -649,14 +651,14 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                             className="px-2.5 py-1.5 min-h-[36px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer"
                             title="View Pass"
                           >
-                            Pass ↗
+                            Pass
                           </a>
                           <button
                             onClick={() => handleDelete(sub.inquiryId)}
-                            className="p-2 min-h-[36px] min-w-[36px] text-slate-400 hover:text-red-600 rounded-xl hover:bg-red-50 cursor-pointer flex items-center justify-center"
+                            className="p-2 min-h-[36px] min-w-[36px] text-slate-400 hover:text-rose-600 rounded-xl hover:bg-rose-50 cursor-pointer flex items-center justify-center transition-colors"
                             title="Delete"
                           >
-                            🗑️
+                            <TrashIcon className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
@@ -741,10 +743,10 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                   <span>Generating secure signed session token...</span>
                 </div>
               ) : archivedViewer.error ? (
-                <div className="text-center p-6 bg-red-950/40 border border-red-800/60 rounded-xl text-red-300 max-w-md">
-                  <div className="text-2xl mb-2">⚠️</div>
-                  <h4 className="font-bold text-sm text-red-200 mb-1">Archived Original Unavailable</h4>
-                  <p className="text-xs text-red-400">{archivedViewer.error}</p>
+                <div className="text-center p-6 bg-rose-950/40 border border-rose-800/60 rounded-xl text-rose-300 max-w-md">
+                  <AlertTriangleIcon className="w-8 h-8 text-rose-400 mx-auto mb-2" />
+                  <h4 className="font-bold text-sm text-rose-200 mb-1">Archived Original Unavailable</h4>
+                  <p className="text-xs text-rose-400">{archivedViewer.error}</p>
                 </div>
               ) : (
                 <iframe

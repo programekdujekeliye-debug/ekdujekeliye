@@ -10,7 +10,8 @@ import {
   CheckCircleIcon,
   ClockIcon,
   CalendarIcon,
-  MapPinIcon
+  MapPinIcon,
+  AlertTriangleIcon
 } from '../../../components/Icons';
 
 interface PaymentStatusResponse {
@@ -286,8 +287,9 @@ export default function PaymentRetryPage() {
 
             {/* Non-Refundable Policy */}
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-center space-y-0.5">
-              <span className="text-[11px] font-bold text-amber-900 flex items-center justify-center gap-1">
-                <span>⚠️</span> Non-Refundable &amp; Non-Transferable
+              <span className="text-[11px] font-bold text-amber-900 flex items-center justify-center gap-1.5">
+                <AlertTriangleIcon className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                <span>Non-Refundable &amp; Non-Transferable</span>
               </span>
               <p className="text-[10px] text-amber-800 font-medium">
                 પાસ ફી કોઈપણ સંજોગોમાં રિફંડ કે ટ્રાન્સફર થશે નહીં.

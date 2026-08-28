@@ -5,6 +5,7 @@ import { useAdmin } from '../context/AdminContext';
 import { registrationsApi } from '../../../services/admin/registrationsApi';
 import { API_BASE_URL } from '../../../config';
 import { Submission } from '../../../types';
+import { DownloadIcon } from '../../../components/Icons';
 
 interface BatchExportModalProps {
   isOpen: boolean;
@@ -154,7 +155,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({ isOpen, onCl
       <div className="bg-white rounded-3xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-5 border border-slate-200 my-auto">
         <div className="flex justify-between items-center border-b border-slate-100 pb-3 sm:pb-4">
           <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
-            <span>📥</span>
+            <DownloadIcon className="w-5 h-5 text-rose-600 flex-shrink-0" />
             <span>Batch Export Center</span>
           </h2>
           <button

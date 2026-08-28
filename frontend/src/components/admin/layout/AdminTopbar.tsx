@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { useAdmin, getIndiaTodayString, computeDefaultUpcomingEvent } from '../../../features/admin/context/AdminContext';
+import { useAdmin, computeDefaultUpcomingEvent } from '../../../features/admin/context/AdminContext';
 import { DownloadIcon } from '../../Icons';
+import { EventSelectorDropdown } from './EventSelectorDropdown';
 
 interface AdminTopbarProps {
   isSuperAdmin?: boolean;
@@ -16,23 +17,7 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
   onClearDataClick
 }) => {
   const { role, selectedProgramId, setSelectedProgramId, programs } = useAdmin();
-
-  const todayStr = getIndiaTodayString();
   const defaultUpcoming = computeDefaultUpcomingEvent(programs);
-
-  const upcomingPrograms = programs.filter(
-    (p) =>
-      p.status === 'upcoming' ||
-      p.status === 'few_seats' ||
-      p.status === 'housefull' ||
-      p.status === 'date_tba' ||
-      p.date === 'TBD' ||
-      (p.date && p.date >= todayStr)
-  );
-
-  const completedPrograms = programs.filter(
-    (p) => p.status === 'completed' || p.status === 'archived' || (p.date && p.date < todayStr && p.date !== 'TBD')
-  );
 
   return (
     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-200 pb-5 w-full min-w-0">
@@ -62,41 +47,13 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
 
       {/* Context Event Switcher & Action Buttons */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto min-w-0">
-        {/* Event Selector */}
-        <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-xl px-3 py-2 shadow-xs w-full sm:w-auto min-w-0 max-w-full">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex-shrink-0">Event:</span>
-          <select
-            value={selectedProgramId}
-            onChange={(e) => setSelectedProgramId(e.target.value)}
-            className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer w-full truncate"
-          >
-            {upcomingPrograms.length > 0 && (
-              <optgroup label="Upcoming Active Events">
-                {upcomingPrograms.map((p) => {
-                  const isTbd = p.date === 'TBD' || p.status === 'date_tba' || !p.isDateFinal;
-                  const isNext = p.id === defaultUpcoming?.id && !isTbd;
-                  return (
-                    <option key={p.id} value={p.id}>
-                      {isNext ? '⚡ NEXT: ' : isTbd ? '🗓️ ' : '🌟 '}
-                      {p.city || 'Gujarat'} — {isTbd ? 'Date TBA' : p.date} ({p.name}) [₹{p.price ?? 1500}]
-                      {isNext ? ' [UPCOMING]' : ''}
-                    </option>
-                  );
-                })}
-              </optgroup>
-            )}
-            <option value="all">🌐 All Events (Global View)</option>
-            {completedPrograms.length > 0 && (
-              <optgroup label="Past & Completed Events">
-                {completedPrograms.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    📁 {p.city || 'Surat'} — {p.date} ({p.name}) [₹{p.price ?? 1000}]
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-        </div>
+        {/* Custom Formatted Event Dropdown */}
+        <EventSelectorDropdown
+          programs={programs}
+          selectedProgramId={selectedProgramId}
+          onSelectProgram={setSelectedProgramId}
+          defaultUpcoming={defaultUpcoming}
+        />
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 w-full sm:w-auto">

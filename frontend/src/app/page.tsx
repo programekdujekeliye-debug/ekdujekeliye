@@ -11,7 +11,8 @@ import {
   SparklesIcon,
   HeartHandshakeIcon,
   ShieldCheckIcon,
-  MessageSquareIcon
+  MessageSquareIcon,
+  AlertTriangleIcon
 } from '../components/Icons';
 
 interface Program {
@@ -496,8 +497,9 @@ export default function HomePage() {
 
                     <div className="space-y-3 pt-3 border-t border-stone-200">
                       <div className="flex items-center justify-between gap-2 text-[11px] text-stone-500 font-semibold bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5">
-                        <span className="text-amber-800 flex items-center gap-1 font-bold">
-                          <span>⚠️</span> Non-Refundable &amp; Non-Transferable
+                        <span className="text-amber-800 flex items-center gap-1.5 font-bold">
+                          <AlertTriangleIcon className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                          <span>Non-Refundable &amp; Non-Transferable</span>
                         </span>
                         <span className="text-stone-400 font-normal">(ફી રિફંડ કે ટ્રાન્સફર થશે નહીં)</span>
                       </div>

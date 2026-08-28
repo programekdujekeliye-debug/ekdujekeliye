@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { settingsApi } from '../../../services/admin/settingsApi';
 import { ManualInviteeModal } from './ManualInviteeModal';
+import { CreditCardIcon } from '../../../components/Icons';
 
 export const SettingsPage = () => {
   const [upiId, setUpiId] = useState('');
@@ -70,7 +71,7 @@ export const SettingsPage = () => {
       <div className="bg-white border border-slate-200/90 shadow-xs rounded-2xl p-4 sm:p-6 space-y-5">
         <div>
           <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-            <span>💳</span>
+            <CreditCardIcon className="w-5 h-5 text-rose-600 flex-shrink-0" />
             <span>Payment &amp; UPI Rotation Settings</span>
           </h2>
           <p className="text-slate-500 text-[11px] sm:text-xs mt-1 font-medium">

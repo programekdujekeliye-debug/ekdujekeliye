@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { AlertTriangleIcon } from '../../components/Icons';
 
 export const metadata: Metadata = {
   title: 'Terms & Refund Policy | Ek Duje Ke Liye',
@@ -49,7 +50,8 @@ export default function TermsPage() {
 
             <section className="space-y-3 bg-amber-50/80 border border-amber-200/90 rounded-2xl p-5">
               <h2 className="text-lg font-bold text-amber-900 flex items-center gap-2">
-                <span>⚠️</span> 2. Strict Non-Refundable &amp; Non-Transferable Policy
+                <AlertTriangleIcon className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                <span>2. Strict Non-Refundable &amp; Non-Transferable Policy</span>
               </h2>
               <p className="text-stone-800 font-semibold">
                 કોઈપણ સંજોગોમાં સેમિનાર નોંધણી ફી રિફંડ કે બીજા કોઈ વ્યક્તિને ટ્રાન્સફર થશે નહીં.

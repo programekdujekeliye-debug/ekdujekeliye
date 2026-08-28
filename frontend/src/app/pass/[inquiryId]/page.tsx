@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { API_BASE_URL } from '../../../config';
+import { AlertTriangleIcon, CheckCircleIcon, HourglassIcon, XIcon, PartyPopperIcon, FileTextIcon } from '../../../components/Icons';
 
 interface Submission {
   inquiryId: string;
@@ -480,10 +481,10 @@ export default function PassDownloadPage() {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center font-sans p-6">
         <div className="max-w-md w-full bg-slate-950/70 border border-slate-800/80 rounded-3xl p-8 text-center backdrop-blur-xl shadow-2xl">
-          <div className="text-4xl mb-4">⚠️</div>
+          <AlertTriangleIcon className="w-12 h-12 text-rose-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-slate-200">Error</h2>
           <p className="text-slate-400 text-sm mt-2">{error || 'Inquiry not found.'}</p>
-          <a href="/" className="mt-6 inline-block w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-sm transition-all">
+          <a href="/" className="mt-6 inline-block w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-sm transition-all shadow-md">
             Back to Home
           </a>
         </div>
@@ -504,13 +505,17 @@ export default function PassDownloadPage() {
 
       <main className="flex-grow flex items-center justify-center p-6 md:p-12">
         <div className="w-full max-w-xl bg-slate-950/70 border border-slate-800/80 rounded-3xl p-8 backdrop-blur-xl shadow-2xl relative overflow-hidden text-center">
-          <div className="absolute -top-40 -right-40 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -top-40 -right-40 w-96 h-96 bg-rose-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
           {submission.status === 'inquiry' && (
             <div className="space-y-6 py-6">
-              <div className="w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto text-3xl">
-                {submission.isDateFinal ? '🎉' : '📝'}
+              <div className="w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto">
+                {submission.isDateFinal ? (
+                  <PartyPopperIcon className="w-8 h-8 text-amber-500" />
+                ) : (
+                  <FileTextIcon className="w-8 h-8 text-amber-500" />
+                )}
               </div>
 
               {/* Slot Selection / Change Option */}
@@ -655,8 +660,8 @@ export default function PassDownloadPage() {
 
           {submission.status === 'pending' && (
             <div className="space-y-6 py-6">
-              <div className="w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto text-3xl animate-bounce">
-                ⏳
+              <div className="w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto animate-pulse">
+                <HourglassIcon className="w-8 h-8 text-amber-500" />
               </div>
               <h2 className="text-2xl font-bold text-slate-100">પેમેન્ટ વેરિફિકેશન ચાલુ છે</h2>
               <p className="text-slate-300 text-sm max-w-sm mx-auto leading-relaxed">
@@ -680,20 +685,20 @@ export default function PassDownloadPage() {
 
           {submission.status === 'rejected' && (
             <div className="space-y-6 py-6">
-              <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto text-3xl">
-                ❌
+              <div className="w-16 h-16 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto">
+                <XIcon className="w-8 h-8 text-rose-500" />
               </div>
               <h2 className="text-2xl font-bold text-slate-100">Verification Rejected</h2>
               <p className="text-slate-300 text-sm leading-relaxed">
                 Your card request was rejected by the administrator.
               </p>
-              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl max-w-md mx-auto text-red-400 text-sm">
+              <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl max-w-md mx-auto text-rose-400 text-sm">
                 <strong>Reason:</strong> {submission.rejectionReason || 'No reason provided.'}
               </div>
               <p className="text-xs text-slate-500">
                 Please register again or contact support to resolve the issue.
               </p>
-              <a href="/" className="inline-block w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-sm transition-all">
+              <a href="/" className="inline-block w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-sm transition-all shadow-md">
                 Try Again / Register New
               </a>
             </div>

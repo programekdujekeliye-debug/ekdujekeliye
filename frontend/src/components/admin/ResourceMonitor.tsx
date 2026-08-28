@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../../config';
-import { RefreshCwIcon, ActivityIcon, DownloadIcon, ShieldCheckIcon } from '../Icons';
+import { RefreshCwIcon, ActivityIcon, DownloadIcon, ShieldCheckIcon, AlertTriangleIcon } from '../Icons';
 
 interface ResourceData {
   memory: {
@@ -156,7 +156,7 @@ export const ResourceMonitor = ({ authPassword }: { authPassword: string }) => {
               }`}
             >
               <div className="flex items-start gap-2.5 min-w-0">
-                <span className="text-lg sm:text-xl flex-shrink-0">{w.level === 'CRITICAL' ? '🚨' : '⚠️'}</span>
+                <AlertTriangleIcon className={`w-5 h-5 flex-shrink-0 mt-0.5 ${w.level === 'CRITICAL' ? 'text-rose-600' : 'text-amber-600'}`} />
                 <div className="min-w-0 flex-1">
                   <h4 className="text-xs font-bold uppercase tracking-wider">{w.code}</h4>
                   <p className="text-xs mt-0.5 font-medium break-words leading-relaxed">{w.message}</p>

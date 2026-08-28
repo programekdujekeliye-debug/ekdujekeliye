@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { registrationsApi } from '../../../services/admin/registrationsApi';
 import { DuplicateGroup } from '../../../types';
 import { API_BASE_URL } from '../../../config';
+import { CheckCircleIcon, TrashIcon, AlertTriangleIcon } from '../../../components/Icons';
 
 export const DuplicateSubmissionsView = () => {
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
@@ -60,7 +61,7 @@ export const DuplicateSubmissionsView = () => {
       {/* Global Bulk Action Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white border border-slate-200 shadow-xs rounded-2xl p-4">
         <div className="text-xs font-bold text-slate-800 flex items-center gap-2">
-          <span>✅</span>
+          <CheckCircleIcon className="w-4 h-4 text-emerald-600 flex-shrink-0" />
           <span>{selectedInquiryIds.length} duplicate submissions selected.</span>
         </div>
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
@@ -68,9 +69,10 @@ export const DuplicateSubmissionsView = () => {
             <button
               onClick={handleBulkDelete}
               disabled={deleting}
-              className="flex-1 sm:flex-none px-4 py-2 min-h-[38px] bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer whitespace-nowrap"
+              className="flex-1 sm:flex-none px-4 py-2 min-h-[38px] bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5"
             >
-              🗑️ Delete ({selectedInquiryIds.length})
+              <TrashIcon className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>Delete ({selectedInquiryIds.length})</span>
             </button>
           )}
           <button
@@ -91,7 +93,7 @@ export const DuplicateSubmissionsView = () => {
         <div key={group.id} className="bg-white border border-slate-200 shadow-xs rounded-2xl p-4 sm:p-6 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div className="flex items-center gap-2.5">
-              <span className="text-xl">⚠️</span>
+              <AlertTriangleIcon className="w-5 h-5 text-amber-600 flex-shrink-0" />
               <div>
                 <h3 className="font-bold text-slate-900 text-sm">{group.label}</h3>
                 <p className="text-xs text-slate-500 mt-0.5 font-medium">

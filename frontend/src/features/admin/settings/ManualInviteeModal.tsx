@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useAdmin } from '../context/AdminContext';
 import { API_BASE_URL } from '../../../config';
+import { PencilIcon } from '../../../components/Icons';
 
 export const ManualInviteeModal = () => {
   const { programs, password } = useAdmin();
@@ -70,7 +71,7 @@ export const ManualInviteeModal = () => {
     <div className="bg-white border border-slate-200 shadow-xs rounded-2xl p-4 sm:p-6 space-y-5">
       <div>
         <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
-          <span>✍️</span>
+          <PencilIcon className="w-4 h-4 text-rose-600 flex-shrink-0" />
           <span>Manual Invitee Registration (VIP Passes)</span>
         </h3>
         <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-1">

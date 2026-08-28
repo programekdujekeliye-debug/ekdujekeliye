@@ -7,7 +7,7 @@ import { backupsApi } from '../../../services/admin/backupsApi';
 import { resourcesApi } from '../../../services/admin/resourcesApi';
 import { settingsApi } from '../../../services/admin/settingsApi';
 import { ArchiveCandidate, MediaArchiveJob, BackupRecordItem, DatabaseStats } from '../../../types';
-import { ArchiveIcon, RefreshCwIcon, ShieldCheckIcon } from '../../../components/Icons';
+import { ArchiveIcon, RefreshCwIcon, ShieldCheckIcon, HourglassIcon, CameraIcon, CheckIcon, CogIcon, XIcon, DatabaseIcon } from '../../../components/Icons';
 
 export const StoragePage = () => {
   const { selectedProgramId } = useAdmin();
@@ -229,7 +229,8 @@ export const StoragePage = () => {
           </p>
           {backupNotice && (
             <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-xs font-bold break-words">
-              <span>⏳ {backupNotice}</span>
+              <HourglassIcon className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 animate-spin" />
+              <span>{backupNotice}</span>
             </div>
           )}
         </div>
@@ -410,12 +411,12 @@ export const StoragePage = () => {
                       </div>
 
                       <div className="text-xs text-slate-500 flex items-center gap-4 flex-wrap">
-                        <span>📸 Eligible: <strong>{cand.eligibleCouplePhotos}</strong></span>
-                        <span>✓ Verified: <strong className="text-emerald-700">{cand.archivedAssets}</strong></span>
-                        <span>⏳ Queued: <strong className="text-amber-700">{cand.queuedAssets}</strong></span>
-                        <span>⚙️ Copying: <strong className="text-sky-700">{cand.copyingAssets || 0}</strong></span>
-                        <span>❌ Failed: <strong className="text-rose-700">{cand.failedAssets || 0}</strong></span>
-                        <span>💾 Est. Size: <strong>{cand.estimatedSizeMB} MB</strong></span>
+                        <span className="inline-flex items-center gap-1"><CameraIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" /> Eligible: <strong>{cand.eligibleCouplePhotos}</strong></span>
+                        <span className="inline-flex items-center gap-1"><CheckIcon className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" /> Verified: <strong className="text-emerald-700">{cand.archivedAssets}</strong></span>
+                        <span className="inline-flex items-center gap-1"><HourglassIcon className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" /> Queued: <strong className="text-amber-700">{cand.queuedAssets}</strong></span>
+                        <span className="inline-flex items-center gap-1"><CogIcon className="w-3.5 h-3.5 text-sky-600 flex-shrink-0" /> Copying: <strong className="text-sky-700">{cand.copyingAssets || 0}</strong></span>
+                        <span className="inline-flex items-center gap-1"><XIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" /> Failed: <strong className="text-rose-700">{cand.failedAssets || 0}</strong></span>
+                        <span className="inline-flex items-center gap-1"><DatabaseIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" /> Est. Size: <strong>{cand.estimatedSizeMB} MB</strong></span>
                       </div>
 
                       {cand.eligibleCouplePhotos > 0 && (

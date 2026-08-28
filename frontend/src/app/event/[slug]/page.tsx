@@ -12,7 +12,10 @@ import {
   TicketIcon,
   SparklesIcon,
   ShieldCheckIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  CameraIcon,
+  UploadIcon,
+  AlertTriangleIcon
 } from '../../../components/Icons';
 
 interface ProgramDetail {
@@ -681,7 +684,7 @@ export default function EventDetailPage() {
                         </div>
                       ) : (
                         <div className="space-y-1">
-                          <span className="text-2xl block">📸</span>
+                          <CameraIcon className="w-8 h-8 text-rose-500 mx-auto" />
                           <span className="text-xs font-bold text-stone-800 block">Click to select Couple Photo</span>
                           <span className="text-[11px] text-stone-500">JPG, PNG (Front facing couple photo)</span>
                         </div>
@@ -699,7 +702,8 @@ export default function EventDetailPage() {
                   {/* Non-Refundable & Non-Transferable Warning Box */}
                   <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-center space-y-1">
                     <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-amber-900">
-                      <span>⚠️</span> <span>Non-Refundable &amp; Non-Transferable Policy</span>
+                      <AlertTriangleIcon className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                      <span>Non-Refundable &amp; Non-Transferable Policy</span>
                     </div>
                     <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
                       સેમિનાર રજીસ્ટ્રેશન ફી કોઈપણ સંજોગોમાં રિફંડ થશે નહીં કે અન્ય કોઈ વ્યક્તિના નામે ટ્રાન્સફર થશે નહીં.
