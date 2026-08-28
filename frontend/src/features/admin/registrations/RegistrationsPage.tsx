@@ -6,7 +6,16 @@ import { Submission } from '../../../types';
 import { API_BASE_URL } from '../../../config';
 import { DuplicateSubmissionsView } from './DuplicateSubmissionsView';
 import { TrashSubmissionsView } from './TrashSubmissionsView';
-import { SearchIcon, CheckCircleIcon, TrashIcon, MapPinIcon, PhoneIcon, AlertTriangleIcon } from '../../../components/Icons';
+import {
+  SearchIcon,
+  CheckCircleIcon,
+  TrashIcon,
+  MapPinIcon,
+  PhoneIcon,
+  AlertTriangleIcon,
+  WhatsappIcon,
+  CreditCardIcon
+} from '../../../components/Icons';
 
 export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean }) => {
   const { selectedProgramId, programs } = useAdmin();
@@ -16,12 +25,14 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [paymentFilter, setPaymentFilter] = useState('all');
   const [attendanceFilter, setAttendanceFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalSubmissions, setTotalSubmissions] = useState(0);
   const [pageSize, setPageSize] = useState(50);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Archived Original Google Drive Viewer State
   const [archivedViewer, setArchivedViewer] = useState<{
@@ -88,6 +99,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
         limit: pageSize,
         search: searchQuery,
         status: statusFilter,
+        paymentStatus: paymentFilter,
         programId: selectedProgramId,
         attendance: attendanceFilter
       });
@@ -107,7 +119,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
     if (viewMode === 'all') {
       fetchList(1);
     }
-  }, [selectedProgramId, statusFilter, attendanceFilter, viewMode, pageSize]);
+  }, [selectedProgramId, statusFilter, paymentFilter, attendanceFilter, viewMode, pageSize]);
 
   // Debounced search
   useEffect(() => {
@@ -118,6 +130,36 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
     }, 400);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  const getCleanDigits = (phone?: string) => {
+    if (!phone) return '';
+    return phone.replace(/\D/g, '').slice(-10);
+  };
+
+  const getDirectWhatsAppUrl = (phone?: string) => {
+    const digits = getCleanDigits(phone);
+    if (!digits) return '#';
+    return `https://wa.me/91${digits}`;
+  };
+
+  const getWhatsAppMessageUrl = (sub: Submission) => {
+    const digits = getCleanDigits(sub.phoneNumber);
+    if (!digits) return '#';
+    const isPaid = sub.payment?.status === 'captured' || sub.status === 'approved';
+    const text = isPaid
+      ? `નમસ્તે ${sub.husbandName} & ${sub.wifeName}, એક દુજે કે લિયે સેમિનાર (${sub.inquiryId}) માટે તમારું કપલ રજીસ્ટ્રેશન કન્ફર્મ થયેલ છે. તમે તમારો ડિજિટલ પાસ અહીં જોઈ શકો છો: https://www.ekdujekeliye.in/pass/${sub.inquiryId}`
+      : `નમસ્તે ${sub.husbandName} & ${sub.wifeName}, એક દુજે કે લિયે સેમિનાર (${sub.inquiryId}) માટે તમારું રજીસ્ટ્રેશન પેન્ડિંગ છે. પેમેન્ટ પૂર્ણ કરવા માટે કૃપા કરીને આ લિંક પર ક્લિક કરો: https://www.ekdujekeliye.in/payment/${sub.inquiryId}`;
+    return `https://wa.me/91${digits}?text=${encodeURIComponent(text)}`;
+  };
+
+  const copyPaymentLink = (inquiryId: string) => {
+    const url = `https://www.ekdujekeliye.in/payment/${inquiryId}`;
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+      setCopiedId(inquiryId);
+      setTimeout(() => setCopiedId(null), 2500);
+    }
+  };
 
   const handleApprove = async (inquiryId: string) => {
     try {
@@ -241,18 +283,32 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
             </div>
 
             {/* Filter Dropdowns */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 flex flex-col gap-1">
-                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Status</label>
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Registration Status</label>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                   className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
                 >
-                  <option value="all">All Statuses</option>
+                  <option value="all">All Registrations</option>
                   <option value="pending">Pending</option>
                   <option value="approved">Approved</option>
                   <option value="rejected">Rejected</option>
+                </select>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 flex flex-col gap-1">
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Payment Status</label>
+                <select
+                  value={paymentFilter}
+                  onChange={(e) => setPaymentFilter(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
+                >
+                  <option value="all">All Payments</option>
+                  <option value="paid">✓ Paid (Captured)</option>
+                  <option value="pending">⏳ Pending Payment</option>
+                  <option value="failed">✕ Failed</option>
                 </select>
               </div>
 
@@ -339,8 +395,9 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                     </th>
                     <th className="px-4 py-3.5">Token ID</th>
                     <th className="px-4 py-3.5">Couple Name</th>
-                    <th className="px-4 py-3.5">Phone</th>
+                    <th className="px-4 py-3.5">Phone &amp; WhatsApp</th>
                     <th className="px-4 py-3.5">Program Slot</th>
+                    <th className="px-4 py-3.5">Payment</th>
                     <th className="px-4 py-3.5">Status</th>
                     <th className="px-4 py-3.5">Attendance</th>
                     <th className="px-4 py-3.5">Photos</th>
@@ -350,13 +407,13 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {loading && submissions.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
+                      <td colSpan={10} className="px-4 py-12 text-center text-slate-400">
                         Loading registrations...
                       </td>
                     </tr>
                   ) : submissions.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
+                      <td colSpan={10} className="px-4 py-12 text-center text-slate-400">
                         No registrations match the selected filters.
                       </td>
                     </tr>
@@ -366,6 +423,11 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                       const isApproved = sub.status === 'approved';
                       const isRejected = sub.status === 'rejected';
                       const isPending = !isApproved && !isRejected;
+                      const isPaid = sub.payment?.status === 'captured' || sub.status === 'approved';
+                      const isPaymentFailed = sub.payment?.status === 'failed';
+                      const cleanDigits = getCleanDigits(sub.phoneNumber);
+                      const isOldEvent = sub.programDate?.startsWith('2026-08') || sub.inquiryId?.startsWith('EK05') || sub.inquiryId?.startsWith('IP') || sub.inquiryId?.startsWith('EK01') || sub.inquiryId?.startsWith('EK02') || sub.inquiryId?.startsWith('EK03') || sub.inquiryId?.startsWith('EK04');
+                      const displayAmount = sub.payment?.amount !== undefined ? sub.payment.amount : (isOldEvent ? 1000 : 1500);
 
                       return (
                         <tr key={sub.inquiryId} className={`hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-rose-50/40' : ''}`}>
@@ -390,12 +452,84 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                             </span>
                             <span className="text-[11px] text-slate-500">{sub.surname}</span>
                           </td>
-                          <td className="px-4 py-3.5 font-mono">{sub.phoneNumber}</td>
                           <td className="px-4 py-3.5">
-                            <span className="text-slate-900 font-semibold truncate block max-w-[180px]">
+                            <div className="flex flex-col gap-1 items-start">
+                              <a
+                                href={`tel:+91${cleanDigits}`}
+                                className="font-mono font-bold text-slate-900 hover:text-rose-600 flex items-center gap-1 group transition-colors"
+                                title="Click to Call Mobile Number"
+                              >
+                                <PhoneIcon className="w-3.5 h-3.5 text-slate-400 group-hover:text-rose-600" />
+                                <span>{sub.phoneNumber}</span>
+                              </a>
+                              <div className="flex items-center gap-1">
+                                <a
+                                  href={getDirectWhatsAppUrl(sub.phoneNumber)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md text-[10px] font-bold transition-all shadow-2xs cursor-pointer hover:scale-105"
+                                  title="Open WhatsApp Chat directly"
+                                >
+                                  <WhatsappIcon className="w-3 h-3 text-emerald-600" />
+                                  <span>WhatsApp</span>
+                                </a>
+                                {!isPaid && (
+                                  <a
+                                    href={getWhatsAppMessageUrl(sub)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-md text-[9px] font-bold transition-all cursor-pointer"
+                                    title="Send payment link on WhatsApp"
+                                  >
+                                    <span>Remind</span>
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <span className="text-slate-900 font-semibold truncate block max-w-[170px]">
                               {sub.programName || 'N/A'}
                             </span>
                             <span className="text-[10px] text-slate-400">{sub.programDate}</span>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            {isPaid ? (
+                              <div className="space-y-0.5">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-50 border border-emerald-200 text-emerald-800 whitespace-nowrap">
+                                  <CheckCircleIcon className="w-3 h-3 text-emerald-600" />
+                                  PAID (₹{displayAmount})
+                                </span>
+                                <span className="text-[9px] text-slate-400 block font-mono">
+                                  {sub.payment?.provider ? sub.payment.provider.toUpperCase() : 'CONFIRMED'}
+                                  {sub.payment?.razorpayPaymentId ? ` • ${sub.payment.razorpayPaymentId.slice(-6)}` : ''}
+                                </span>
+                              </div>
+                            ) : isPaymentFailed ? (
+                              <div className="space-y-0.5">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-red-50 border border-red-200 text-red-700 whitespace-nowrap">
+                                  <AlertTriangleIcon className="w-3 h-3 text-red-600" />
+                                  FAILED
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="space-y-1">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-50 border border-amber-200 text-amber-800 whitespace-nowrap">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                  UNPAID (₹{displayAmount})
+                                </span>
+                                <div>
+                                  <button
+                                    type="button"
+                                    onClick={() => copyPaymentLink(sub.inquiryId)}
+                                    className="text-[10px] font-bold text-rose-600 hover:text-rose-800 underline cursor-pointer"
+                                    title="Copy payment link"
+                                  >
+                                    {copiedId === sub.inquiryId ? '✓ Copied Link' : 'Copy Pay Link'}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-3.5">
                             <span
@@ -470,6 +604,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                   <button
                                     onClick={() => handleApprove(sub.inquiryId)}
                                     className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg shadow-2xs cursor-pointer whitespace-nowrap"
+                                    title="Approve & Mark Paid"
                                   >
                                     Approve
                                   </button>
@@ -481,6 +616,15 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                   </button>
                                 </>
                               )}
+                              <a
+                                href={`/pass/${sub.inquiryId}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg cursor-pointer transition-colors"
+                                title="Open Digital Pass"
+                              >
+                                Pass ↗
+                              </a>
                               <button
                                 onClick={() => handleDelete(sub.inquiryId)}
                                 className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer transition-colors"
@@ -514,6 +658,11 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                   const isApproved = sub.status === 'approved';
                   const isRejected = sub.status === 'rejected';
                   const isPending = !isApproved && !isRejected;
+                  const isPaid = sub.payment?.status === 'captured' || sub.status === 'approved';
+                  const isPaymentFailed = sub.payment?.status === 'failed';
+                  const cleanDigits = getCleanDigits(sub.phoneNumber);
+                  const isOldEvent = sub.programDate?.startsWith('2026-08') || sub.inquiryId?.startsWith('EK05') || sub.inquiryId?.startsWith('IP') || sub.inquiryId?.startsWith('EK01') || sub.inquiryId?.startsWith('EK02') || sub.inquiryId?.startsWith('EK03') || sub.inquiryId?.startsWith('EK04');
+                  const displayAmount = sub.payment?.amount !== undefined ? sub.payment.amount : (isOldEvent ? 1000 : 1500);
 
                   return (
                     <div
@@ -522,8 +671,8 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                         isSelected ? 'border-rose-400 bg-rose-50/30 ring-1 ring-rose-400' : 'border-slate-200 shadow-xs'
                       }`}
                     >
-                      {/* Card Top: Checkbox, Token ID, Status */}
-                      <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                      {/* Card Top: Checkbox, Token ID, Status & Payment Badge */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
                         <div className="flex items-center gap-2 min-w-0">
                           <input
                             type="checkbox"
@@ -539,20 +688,38 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                           />
                           <span className="font-mono font-bold text-rose-700 text-xs sm:text-sm">{sub.inquiryId}</span>
                         </div>
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border whitespace-nowrap ${
-                            isApproved
-                              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                              : isRejected
-                              ? 'bg-red-50 border-red-200 text-red-700'
-                              : 'bg-amber-50 border-amber-200 text-amber-800'
-                          }`}
-                        >
-                          {sub.status || 'pending'}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {isPaid ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-1">
+                              <CheckCircleIcon className="w-3 h-3 text-emerald-600" />
+                              PAID (₹{displayAmount})
+                            </span>
+                          ) : isPaymentFailed ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-red-50 border border-red-200 text-red-700">
+                              PAYMENT FAILED
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-50 border border-amber-200 text-amber-800 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                              UNPAID (₹{displayAmount})
+                            </span>
+                          )}
+
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border whitespace-nowrap ${
+                              isApproved
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                : isRejected
+                                ? 'bg-red-50 border-red-200 text-red-700'
+                                : 'bg-amber-50 border-amber-200 text-amber-800'
+                            }`}
+                          >
+                            {sub.status || 'pending'}
+                          </span>
+                        </div>
                       </div>
 
-                      {/* Card Middle: Photo + Couple Details */}
+                      {/* Card Middle: Photo + Couple Details + WhatsApp/Call Actions */}
                       <div className="flex items-start gap-3">
                         {/* Thumbnail / Drive */}
                         <div className="flex flex-col items-center gap-1 flex-shrink-0">
@@ -590,23 +757,59 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                           )}
                         </div>
 
-                        {/* Text info */}
-                        <div className="flex-1 min-w-0 space-y-0.5">
+                        {/* Text info & Phone/WhatsApp Buttons */}
+                        <div className="flex-1 min-w-0 space-y-1">
                           <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm truncate">
                             {sub.husbandName} &amp; {sub.wifeName}
                           </h4>
                           <p className="text-[11px] text-slate-500 font-medium truncate">{sub.surname}</p>
-                          <a
-                            href={`tel:${sub.phoneNumber}`}
-                            className="text-[11px] text-rose-600 font-mono font-bold flex items-center gap-1"
-                          >
-                            <PhoneIcon className="w-3 h-3 flex-shrink-0" />
-                            <span>{sub.phoneNumber}</span>
-                          </a>
-                          <p className="text-[10px] text-slate-400 truncate flex items-center gap-1">
+                          
+                          {/* Direct Phone & WhatsApp Actions */}
+                          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                            <a
+                              href={`tel:+91${cleanDigits}`}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-900 font-mono font-bold text-xs rounded-lg transition-colors"
+                              title="Call Number"
+                            >
+                              <PhoneIcon className="w-3 h-3 text-slate-600" />
+                              <span>{sub.phoneNumber}</span>
+                            </a>
+                            <a
+                              href={getDirectWhatsAppUrl(sub.phoneNumber)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-xs transition-colors cursor-pointer"
+                              title="Chat on WhatsApp"
+                            >
+                              <WhatsappIcon className="w-3.5 h-3.5 text-white" />
+                              <span>WhatsApp</span>
+                            </a>
+                          </div>
+
+                          <p className="text-[10px] text-slate-400 truncate flex items-center gap-1 pt-0.5">
                             <MapPinIcon className="w-3 h-3 flex-shrink-0" />
                             <span>{sub.programName || 'N/A'} ({sub.programDate})</span>
                           </p>
+
+                          {!isPaid && (
+                            <div className="pt-1 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => copyPaymentLink(sub.inquiryId)}
+                                className="text-[11px] font-bold text-rose-600 hover:text-rose-800 underline cursor-pointer"
+                              >
+                                {copiedId === sub.inquiryId ? '✓ Copied Payment Link' : 'Copy Payment Link'}
+                              </button>
+                              <a
+                                href={getWhatsAppMessageUrl(sub)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 underline"
+                              >
+                                Send Link via WhatsApp →
+                              </a>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -633,6 +836,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                               <button
                                 onClick={() => handleApprove(sub.inquiryId)}
                                 className="px-3 py-1.5 min-h-[36px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer whitespace-nowrap"
+                                title="Approve & Confirm"
                               >
                                 Approve
                               </button>
@@ -651,7 +855,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                             className="px-2.5 py-1.5 min-h-[36px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer"
                             title="View Pass"
                           >
-                            Pass
+                            Pass ↗
                           </a>
                           <button
                             onClick={() => handleDelete(sub.inquiryId)}

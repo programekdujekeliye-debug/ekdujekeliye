@@ -244,7 +244,7 @@ export const manualInviteeRegistration = async (req, res) => {
 };
 
 export const getSubmissionsList = async (req, res) => {
-  const { programId, status, attendance, search, sortBy = 'createdAt', sortOrder = 'desc', page = 1, limit = 50 } = req.query;
+  const { programId, status, attendance, paymentStatus, search, sortBy = 'createdAt', sortOrder = 'desc', page = 1, limit = 50 } = req.query;
   const safeLimit = Math.min(Math.max(1, Number(limit) || 50), 200);
   const safePage = Math.max(1, Number(page) || 1);
 
@@ -252,6 +252,21 @@ export const getSubmissionsList = async (req, res) => {
 
   if (programId && programId !== 'all') query.programId = programId;
   if (status && status !== 'all') query.status = status;
+  if (paymentStatus && paymentStatus !== 'all') {
+    if (paymentStatus === 'paid' || paymentStatus === 'captured') {
+      query.$or = [
+        { 'payment.status': 'captured' },
+        { status: 'approved' }
+      ];
+    } else if (paymentStatus === 'pending') {
+      query.$and = [
+        { $or: [{ 'payment.status': 'pending' }, { 'payment.status': { $exists: false } }, { payment: null }] },
+        { status: { $ne: 'approved' } }
+      ];
+    } else if (paymentStatus === 'failed') {
+      query['payment.status'] = 'failed';
+    }
+  }
   if (attendance && attendance !== 'all') {
     if (attendance === 'unmarked') {
       query.$or = [{ attendance: 'unmarked' }, { attendance: { $exists: false } }, { attendance: null }];
@@ -261,13 +276,18 @@ export const getSubmissionsList = async (req, res) => {
   }
 
   if (search) {
-    query.$or = [
+    const searchConditions = [
       { inquiryId: { $regex: search, $options: 'i' } },
       { phoneNumber: { $regex: search, $options: 'i' } },
       { husbandName: { $regex: search, $options: 'i' } },
       { wifeName: { $regex: search, $options: 'i' } },
       { surname: { $regex: search, $options: 'i' } }
     ];
+    if (query.$or) {
+      query.$and = (query.$and || []).concat([{ $or: searchConditions }]);
+    } else {
+      query.$or = searchConditions;
+    }
   }
 
   try {
@@ -316,8 +336,22 @@ export const getSubmissionsList = async (req, res) => {
         couplePhoto = archive.operationalThumbnailUrl;
       }
 
+      const isOldEvent = sub.programDate?.startsWith('2026-08') || sub.inquiryId?.startsWith('EK05') || sub.inquiryId?.startsWith('IP') || sub.inquiryId?.startsWith('EK01') || sub.inquiryId?.startsWith('EK02') || sub.inquiryId?.startsWith('EK03') || sub.inquiryId?.startsWith('EK04');
+      const defaultAmount = isOldEvent ? 1000 : 1500;
+      const paymentObj = sub.payment ? {
+        ...sub.payment,
+        amount: sub.payment.amount !== undefined ? sub.payment.amount : defaultAmount
+      } : {
+        provider: 'legacy_upi',
+        status: sub.status === 'approved' ? 'captured' : 'pending',
+        amount: defaultAmount,
+        currency: 'INR'
+      };
+
       return {
         ...sub,
+        payment: paymentObj,
+        amount: paymentObj.amount,
         couplePhoto,
         photoThumbnailUrl,
         photoStorageStatus: isArchived ? 'ARCHIVED' : (isQueued ? 'QUEUED' : 'ACTIVE'),

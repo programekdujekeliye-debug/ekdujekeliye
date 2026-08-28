@@ -143,7 +143,7 @@ export default function PassDownloadPage() {
     const fetchPrograms = async () => {
       try {
         setLoadingPrograms(true);
-        const res = await fetch(`${API_BASE_URL}/api/programs`);
+        const res = await fetch(`${API_BASE_URL}/api/programs/public`);
         if (res.ok) {
           const data = await res.json();
           setPrograms(data);

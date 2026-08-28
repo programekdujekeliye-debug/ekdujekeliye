@@ -1,6 +1,7 @@
 import { paymentService } from './payment.service.js';
 import { Registration } from '../../models/Registration.js';
 import { Event } from '../../models/Event.js';
+import { eventService } from '../events/event.service.js';
 import { verifyWebhookSignature, getRazorpayKeyId } from '../../integrations/razorpay/razorpay.service.js';
 
 export const createOrder = async (req, res) => {
@@ -87,13 +88,27 @@ export const handleRazorpayWebhook = async (req, res) => {
 export const getPaymentStatus = async (req, res) => {
   const { inquiryId } = req.params;
   try {
-    const submission = await Registration.findOne({ inquiryId, isDeleted: { $ne: true } }).lean();
+    if (!inquiryId) return res.status(400).json({ error: 'Inquiry ID is required.' });
+    const formattedId = String(inquiryId).trim();
+    const submission = await Registration.findOne({
+      $or: [
+        { inquiryId: formattedId },
+        { inquiryId: formattedId.toUpperCase() }
+      ],
+      isDeleted: { $ne: true }
+    }).lean();
+
     if (!submission) return res.status(404).json({ error: 'Registration not found.' });
 
-    const program = await Event.findOne({ id: submission.programId }).lean();
+    const program = await eventService.getEventBySlug(submission.programId) || await Event.findOne({ id: submission.programId }).lean();
+    const isPaid = submission.payment?.status === 'captured' || submission.status === 'approved';
+    const coupleName = `${submission.husbandName || ''} & ${submission.wifeName || ''} ${submission.surname || ''}`.trim();
+
     res.json({
       inquiryId: submission.inquiryId,
       status: submission.status,
+      registrationStatus: submission.status,
+      paymentStatus: submission.payment?.status || (isPaid ? 'captured' : 'pending'),
       payment: submission.payment || {},
       amount: submission.payment?.amount || program?.price || 1500,
       price: submission.payment?.amount || program?.price || 1500,
@@ -101,10 +116,14 @@ export const getPaymentStatus = async (req, res) => {
       programDate: program?.date || submission.programDate,
       programTime: program?.time || submission.programTime,
       venue: program?.venue || '',
+      venueAddress: program?.venueAddress || '',
       husbandName: submission.husbandName,
       wifeName: submission.wifeName,
+      surname: submission.surname,
+      coupleName: coupleName || 'Valued Couple',
       phoneNumber: submission.phoneNumber,
-      isPaid: submission.payment?.status === 'captured' || submission.status === 'approved'
+      isPaid,
+      passAvailable: isPaid
     });
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching payment status.' });

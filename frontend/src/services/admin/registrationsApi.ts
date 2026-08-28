@@ -6,6 +6,7 @@ export interface GetSubmissionsParams {
   limit?: number;
   search?: string;
   status?: string;
+  paymentStatus?: string;
   programId?: string;
   attendance?: string;
   sortBy?: string;
@@ -19,6 +20,7 @@ export const registrationsApi = {
     if (params.limit) query.append('limit', String(params.limit));
     if (params.search) query.append('search', params.search);
     if (params.status && params.status !== 'all') query.append('status', params.status);
+    if (params.paymentStatus && params.paymentStatus !== 'all') query.append('paymentStatus', params.paymentStatus);
     if (params.programId && params.programId !== 'all') query.append('programId', params.programId);
     if (params.attendance && params.attendance !== 'all') query.append('attendance', params.attendance);
     if (params.sortBy) query.append('sortBy', params.sortBy);

@@ -11,7 +11,9 @@ import {
   ClockIcon,
   CalendarIcon,
   MapPinIcon,
-  AlertTriangleIcon
+  AlertTriangleIcon,
+  PhoneIcon,
+  UserIcon
 } from '../../../components/Icons';
 
 interface PaymentStatusResponse {
@@ -23,9 +25,16 @@ interface PaymentStatusResponse {
   price?: number;
   paidAt: string | null;
   passAvailable: boolean;
-  coupleName: string;
+  coupleName?: string;
+  husbandName?: string;
+  wifeName?: string;
+  surname?: string;
+  phoneNumber?: string;
   programName: string;
   programDate: string;
+  programTime?: string;
+  venue?: string;
+  venueAddress?: string;
 }
 
 export const formatIndianDate = (dateStr?: string): string => {
@@ -98,19 +107,25 @@ export default function PaymentRetryPage() {
         throw new Error(orderData.error || 'Failed to initialize payment.');
       }
 
+      const coupleDisplayName = statusData.husbandName && statusData.wifeName
+        ? `${statusData.husbandName} & ${statusData.wifeName} ${statusData.surname || ''}`.trim()
+        : statusData.coupleName || 'Registered Couple';
+
       await openRazorpayModal({
         keyId: orderData.keyId,
         orderId: orderData.orderId,
         amount: orderData.amount,
         currency: orderData.currency || 'INR',
         name: 'Ek Duje Ke Liye',
-        description: 'Registration fee for Ek Duje Ke Liye educational seminar/workshop',
+        description: 'Couple Seminar Registration Fee - Ek Duje Ke Liye',
         prefill: {
-          name: orderData.customerName,
-          contact: orderData.phoneNumber
+          name: coupleDisplayName,
+          contact: statusData.phoneNumber || orderData.phoneNumber
         },
         notes: {
-          inquiryId: statusData.inquiryId
+          inquiryId: statusData.inquiryId,
+          couple: coupleDisplayName,
+          phone: statusData.phoneNumber || ''
         },
         onSuccess: async (response) => {
           try {
@@ -149,7 +164,7 @@ export default function PaymentRetryPage() {
       <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-rose-600/20 border-t-rose-600 rounded-full animate-spin" />
-          <p className="text-sm font-semibold tracking-wide text-rose-700">Checking Payment Status...</p>
+          <p className="text-sm font-semibold tracking-wide text-rose-700">Checking Registration &amp; Payment Status...</p>
         </div>
       </div>
     );
@@ -177,6 +192,10 @@ export default function PaymentRetryPage() {
     );
   }
 
+  const coupleDisplayName = statusData.husbandName && statusData.wifeName
+    ? `${statusData.husbandName} & ${statusData.wifeName} ${statusData.surname || ''}`.trim()
+    : statusData.coupleName || 'Registered Couple';
+
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex flex-col justify-between font-sans">
       {/* Header */}
@@ -196,7 +215,7 @@ export default function PaymentRetryPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-grow max-w-xl mx-auto px-6 py-12 w-full z-10 flex flex-col justify-center">
+      <main className="flex-grow max-w-xl mx-auto px-6 py-10 w-full z-10 flex flex-col justify-center">
         
         {paySuccess || statusData.passAvailable ? (
           /* Payment Completed View */
@@ -205,10 +224,10 @@ export default function PaymentRetryPage() {
               <CheckCircleIcon className="w-8 h-8 text-emerald-600" />
             </div>
             <div>
-              <span className="text-xs font-bold text-emerald-700 uppercase tracking-widest block mb-1">Payment Completed</span>
+              <span className="text-xs font-bold text-emerald-700 uppercase tracking-widest block mb-1">Payment Captured</span>
               <h1 className="text-2xl md:text-3xl font-extrabold text-stone-900">Pass Confirmed!</h1>
               <p className="text-stone-600 text-sm mt-2 font-medium">
-                Your payment for <strong>{statusData.programName}</strong> has been successfully captured.
+                Your payment for <strong>{statusData.programName}</strong> is confirmed.
               </p>
             </div>
 
@@ -223,13 +242,28 @@ export default function PaymentRetryPage() {
               <span className="text-[10px] text-stone-600 block font-medium">Save this ID for reference &amp; venue check-in</span>
             </div>
 
-            <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 text-left text-xs space-y-2">
-              <div className="flex justify-between">
-                <span className="text-stone-500 font-medium">Couple:</span>
-                <span className="font-semibold text-stone-900">{statusData.coupleName}</span>
+            <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 text-left text-xs space-y-2.5">
+              <div className="flex justify-between items-center">
+                <span className="text-stone-500 font-medium flex items-center gap-1.5">
+                  <UserIcon className="w-3.5 h-3.5 text-stone-400" />
+                  <span>Couple Name:</span>
+                </span>
+                <span className="font-bold text-stone-900">{coupleDisplayName}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-stone-500 font-medium">Event Date:</span>
+              {statusData.phoneNumber && (
+                <div className="flex justify-between items-center">
+                  <span className="text-stone-500 font-medium flex items-center gap-1.5">
+                    <PhoneIcon className="w-3.5 h-3.5 text-stone-400" />
+                    <span>Mobile Number:</span>
+                  </span>
+                  <span className="font-bold font-mono text-stone-900">{statusData.phoneNumber}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-stone-500 font-medium flex items-center gap-1.5">
+                  <CalendarIcon className="w-3.5 h-3.5 text-stone-400" />
+                  <span>Event Date:</span>
+                </span>
                 <span className="font-semibold text-stone-900">{formatIndianDate(statusData.programDate)}</span>
               </div>
             </div>
@@ -244,13 +278,13 @@ export default function PaymentRetryPage() {
           </div>
         ) : (
           /* Payment Pending View */
-          <div className="bg-white border border-amber-300 rounded-3xl p-8 md:p-10 shadow-2xl space-y-6">
+          <div className="bg-white border border-amber-300 rounded-3xl p-6 sm:p-8 md:p-10 shadow-2xl space-y-5">
             <div className="text-center space-y-2">
               <div className="w-14 h-14 rounded-full bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center mx-auto">
                 <ClockIcon className="w-7 h-7 text-amber-600" />
               </div>
               <span className="text-xs font-bold text-amber-800 uppercase tracking-widest block">Complete Your Booking</span>
-              <h1 className="text-2xl font-extrabold text-stone-900">Payment Pending</h1>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-stone-900">Payment Pending</h1>
               <p className="text-xs text-stone-600 font-medium">
                 Please complete your payment to register and receive your official couple educational seminar pass.
               </p>
@@ -262,30 +296,74 @@ export default function PaymentRetryPage() {
               </div>
             )}
 
-            <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 text-xs space-y-2 text-stone-700">
-              <div className="flex justify-between">
-                <span className="text-stone-500 font-medium">Inquiry ID:</span>
-                <span className="font-bold text-stone-900">{statusData.inquiryId}</span>
+            {/* Verification Notice Badge */}
+            <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl text-center space-y-1">
+              <span className="text-[11px] font-bold text-amber-900 block">
+                🔍 કૃપા કરીને પેમેન્ટ કરતાં પહેલાં તમારી વિગતો (નામ અને મોબાઈલ નંબર) ચકાસી લો.
+              </span>
+              <span className="text-[10px] text-amber-800 font-medium block">
+                Please verify your registered couple name and mobile number below before proceeding.
+              </span>
+            </div>
+
+            {/* Couple Registration Details Card */}
+            <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 sm:p-5 text-xs space-y-3 text-stone-700">
+              <div className="flex justify-between items-center border-b border-stone-200/60 pb-2">
+                <span className="text-stone-500 font-medium">Inquiry / Token ID:</span>
+                <span className="font-mono font-extrabold text-sm text-rose-700">{statusData.inquiryId}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-stone-500 font-medium">Service / Event:</span>
-                <span className="font-semibold text-stone-900">{statusData.programName}</span>
+
+              {/* Couple Name Highlighted */}
+              <div className="flex justify-between items-center border-b border-stone-200/60 pb-2">
+                <span className="text-stone-500 font-medium flex items-center gap-1.5">
+                  <UserIcon className="w-3.5 h-3.5 text-stone-400" />
+                  <span>Couple Name:</span>
+                </span>
+                <span className="font-extrabold text-stone-900 text-right">{coupleDisplayName}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-stone-500 font-medium">Service Type:</span>
-                <span className="font-semibold text-stone-900">Educational Seminar / Workshop</span>
+
+              {/* Registered Phone Number */}
+              {statusData.phoneNumber && (
+                <div className="flex justify-between items-center border-b border-stone-200/60 pb-2">
+                  <span className="text-stone-500 font-medium flex items-center gap-1.5">
+                    <PhoneIcon className="w-3.5 h-3.5 text-stone-400" />
+                    <span>Mobile Number:</span>
+                  </span>
+                  <span className="font-extrabold font-mono text-stone-900">{statusData.phoneNumber}</span>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center border-b border-stone-200/60 pb-2">
+                <span className="text-stone-500 font-medium flex items-center gap-1.5">
+                  <CalendarIcon className="w-3.5 h-3.5 text-stone-400" />
+                  <span>Seminar Slot:</span>
+                </span>
+                <span className="font-semibold text-stone-900 text-right max-w-[220px] truncate">{statusData.programName}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-stone-500 font-medium">Date:</span>
-                <span className="font-semibold text-stone-900">{formatIndianDate(statusData.programDate)}</span>
+
+              <div className="flex justify-between items-center border-b border-stone-200/60 pb-2">
+                <span className="text-stone-500 font-medium">Date &amp; Time:</span>
+                <span className="font-semibold text-stone-900 text-right">
+                  {formatIndianDate(statusData.programDate)}
+                  {statusData.programTime ? ` • ${statusData.programTime}` : ''}
+                </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-stone-500 font-medium">Couple:</span>
-                <span className="font-semibold text-stone-900">{statusData.coupleName}</span>
-              </div>
-              <div className="flex justify-between pt-2 border-t border-stone-200">
-                <span className="text-stone-500 font-bold uppercase">Seminar Fee:</span>
-                <span className="text-base font-extrabold text-stone-900">₹{statusData.price !== undefined ? statusData.price : (statusData.amount || 1500)}</span>
+
+              {statusData.venue && (
+                <div className="flex justify-between items-center border-b border-stone-200/60 pb-2">
+                  <span className="text-stone-500 font-medium flex items-center gap-1.5">
+                    <MapPinIcon className="w-3.5 h-3.5 text-stone-400" />
+                    <span>Venue:</span>
+                  </span>
+                  <span className="font-semibold text-stone-900 text-right max-w-[220px] truncate">{statusData.venue}</span>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-stone-500 font-bold uppercase tracking-wider">Couple Seminar Fee:</span>
+                <span className="text-lg font-extrabold text-stone-900 font-mono">
+                  ₹{statusData.price !== undefined ? statusData.price : (statusData.amount || 1500)}
+                </span>
               </div>
             </div>
 
@@ -313,7 +391,7 @@ export default function PaymentRetryPage() {
               ) : (
                 <>
                   <TicketIcon className="w-4 h-4" />
-                  <span>Pay ₹{statusData.price !== undefined ? statusData.price : (statusData.amount || 1500)} Now</span>
+                  <span>Pay ₹{statusData.price !== undefined ? statusData.price : (statusData.amount || 1500)} via Razorpay</span>
                 </>
               )}
             </button>

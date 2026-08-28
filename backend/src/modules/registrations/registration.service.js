@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Registration } from '../../models/Registration.js';
 import { Event } from '../../models/Event.js';
+import { eventService } from '../events/event.service.js';
 import { Counter, getNextSequence } from '../../models/Counter.js';
 import { storageService } from '../../services/storage.service.js';
 import { mediaService } from '../media/media.service.js';
@@ -11,7 +12,7 @@ export class RegistrationService {
    */
   async createRegistration({ husbandName, wifeName, surname, phoneNumber, programId, couplePhotoFile }) {
     // 1. Fetch Program & verify capacity
-    const program = await Event.findOne({ id: programId });
+    const program = await eventService.getEventBySlug(programId) || await Event.findOne({ id: programId }).lean();
     if (!program) {
       const err = new Error('Invalid program/slot selected.');
       err.status = 400;
@@ -110,11 +111,20 @@ export class RegistrationService {
    * Get registration status by inquiry ID with central media resolution
    */
   async getStatus(inquiryId) {
-    const submission = await Registration.findOne({ inquiryId, isDeleted: { $ne: true } }).lean();
+    if (!inquiryId) return null;
+    const formattedId = String(inquiryId).trim();
+    const submission = await Registration.findOne({
+      $or: [
+        { inquiryId: formattedId },
+        { inquiryId: formattedId.toUpperCase() }
+      ],
+      isDeleted: { $ne: true }
+    }).lean();
+
     if (!submission) return null;
 
     const [program, mediaState] = await Promise.all([
-      Event.findOne({ id: submission.programId }).lean(),
+      eventService.getEventBySlug(submission.programId),
       mediaService.resolveRegistrationMedia(submission)
     ]);
 
