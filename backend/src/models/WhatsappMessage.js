@@ -17,7 +17,7 @@ export const WHATSAPP_MESSAGE_STATUSES = {
 const WhatsappMessageSchema = new mongoose.Schema({
   messageId: { type: String, unique: true, index: true },
   eventId: { type: String, index: true },
-  registrationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Registration', index: true },
+  registrationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Submission', index: true },
   paymentId: { type: String, index: true },
   passId: { type: String, index: true },
   inquiryId: { type: String, index: true },

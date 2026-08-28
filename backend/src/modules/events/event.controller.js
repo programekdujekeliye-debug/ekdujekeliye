@@ -167,11 +167,18 @@ export const createEvent = async (req, res) => {
   }
 };
 
+import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
+
 export const updateEvent = async (req, res) => {
   const { id } = req.params;
   try {
     const event = await Event.findOne({ id });
     if (!event) return res.status(404).json({ error: 'Event program not found.' });
+
+    const previousDate = event.date;
+    const previousTime = event.time;
+    const previousVenue = event.venue;
+    const previousStatus = event.status;
 
     const updates = { ...req.body };
     delete updates.id;
@@ -192,6 +199,16 @@ export const updateEvent = async (req, res) => {
     Object.assign(event, updates);
     await event.save();
     eventService.invalidateCache();
+
+    // Trigger schedule updates if meaningful details changed
+    const scheduleChanged = previousDate !== event.date || previousTime !== event.time || previousVenue !== event.venue;
+    if (scheduleChanged) {
+      await communicationSchedulerService.handleEventDetailsUpdated(event);
+    }
+
+    if (event.status === 'cancelled' && previousStatus !== 'cancelled') {
+      await communicationSchedulerService.handleEventCancelled(event, { notifyAttendees: Boolean(req.body.notifyAttendees) });
+    }
 
     res.json({ success: true, message: 'Event program updated successfully.', program: event });
   } catch (err) {

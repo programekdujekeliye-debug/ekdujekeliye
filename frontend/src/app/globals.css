@@ -53,12 +53,14 @@ body {
 .text-gradient-gold {
   background: linear-gradient(135deg, #B45309 0%, #D97706 40%, #E11D48 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .text-gradient-royal {
   background: linear-gradient(135deg, #9F1239 0%, #BE123C 50%, #D97706 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -207,6 +209,3 @@ select option:checked {
   color: #9F1239 !important;
   font-weight: 700;
 }
-
-
-

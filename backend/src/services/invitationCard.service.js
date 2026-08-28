@@ -1,19 +1,38 @@
-import { createRequire } from 'module';
+import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { Registration } from '../models/Registration.js';
 import { Event } from '../models/Event.js';
 import { eventService } from '../modules/events/event.service.js';
-
-const require = createRequire(import.meta.url);
-const { Jimp } = require('jimp');
+import { storageService } from './storage.service.js';
 
 /**
  * Service to generate high-resolution, premium 1080x1350 personalized invitation cards
  */
 export class InvitationCardService {
   /**
-   * Generate an SVG/Jimp composed invitation card buffer
+   * Compute deterministic fingerprint for invitation card
+   */
+  calculateInvitationHash(registration, event) {
+    const husband = registration.husbandName || '';
+    const wife = registration.wifeName || '';
+    const surname = registration.surname || '';
+    const coupleTitle = `${husband} & ${wife} ${surname}`.trim();
+    const photo = registration.couplePhoto || '';
+    const eventName = event?.name || registration.programName || '';
+    const eventDate = event?.date || registration.programDate || '';
+    const eventTime = event?.time || registration.programTime || '';
+    const venue = event?.venue || '';
+    const designVersion = 'v1_rose_gold_luxury';
+
+    return crypto
+      .createHash('sha256')
+      .update(`${coupleTitle}|${photo}|${eventName}|${eventDate}|${eventTime}|${venue}|${designVersion}`)
+      .digest('hex');
+  }
+
+  /**
+   * Generate an SVG composed 1080x1350 invitation card buffer
    */
   async generateCardBuffer(registration, event) {
     const width = 1080;
@@ -30,7 +49,6 @@ export class InvitationCardService {
     const venue = event?.venue || 'Sardar Smruti Bhavan, Surat';
     const inquiryId = registration.inquiryId;
 
-    // Build rich SVG template
     // Escape XML characters
     const escapeXml = (unsafe = '') => String(unsafe).replace(/[<>&'"]/g, (c) => {
       switch (c) {
@@ -172,9 +190,41 @@ export class InvitationCardService {
     if (!reg) return null;
 
     const event = await eventService.getEventBySlug(reg.programId);
+    const hash = this.calculateInvitationHash(reg, event);
+
+    if (!reg.invitationHash || reg.invitationHash !== hash) {
+      reg.invitationHash = hash;
+      reg.invitationVersion = (reg.invitationVersion || 0) + 1;
+      reg.invitationGeneratedAt = new Date();
+      await reg.save();
+    }
+
     const buffer = await this.generateCardBuffer(reg, event);
-    return { buffer, registration: reg, event };
+    return {
+      buffer,
+      registration: reg,
+      event,
+      version: reg.invitationVersion || 1,
+      hash: reg.invitationHash
+    };
+  }
+
+  /**
+   * Invalidate invitation if event details changed
+   */
+  async invalidateInvitationIfNeeded(inquiryId, event) {
+    const reg = await Registration.findOne({ inquiryId: { $regex: new RegExp(`^${inquiryId}$`, 'i') } });
+    if (!reg) return false;
+
+    const currentHash = this.calculateInvitationHash(reg, event);
+    if (reg.invitationHash && reg.invitationHash !== currentHash) {
+      reg.invitationHash = null; // Forces regeneration on next fetch
+      await reg.save();
+      return true;
+    }
+    return false;
   }
 }
 
 export const invitationCardService = new InvitationCardService();
+

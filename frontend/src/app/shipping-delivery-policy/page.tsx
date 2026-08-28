@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { API_BASE_URL } from '../../config';
-import { SparklesIcon, CheckCircleIcon, ShieldCheckIcon } from '../../components/Icons';
+import { CheckCircleIcon, ShieldCheckIcon } from '../../components/Icons';
 
 export default function ShippingDeliveryPolicyPage() {
   const [config, setConfig] = useState<{

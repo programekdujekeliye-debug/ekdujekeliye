@@ -353,6 +353,196 @@ export const CORE_TEMPLATES = {
         ]
       }
     ]
+  },
+
+  // 8. Payment Confirmed v2 (Separate message without pass link)
+  edkl_payment_confirmed_v2: {
+    key: 'edkl_payment_confirmed_v2',
+    metaName: 'edkl_payment_confirmed_v2',
+    category: 'UTILITY',
+    language: 'en_US',
+    purpose: 'Sent immediately after payment confirmation to confirm transaction (Digital pass sent separately)',
+    trigger: 'payment_verified',
+    bodyVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
+    buttonVariables: [],
+    requiredVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
+    components: [
+      {
+        type: 'BODY',
+        text: 'Hello {{1}},\n\nYour payment for {{2}} has been successfully confirmed.\n\nDate: {{3}}\nTime: {{4}}\nVenue: {{5}}\nRegistration ID: {{6}}\n\nYour digital entry pass will be sent separately.\n\nEk Duje Ke Liye',
+        example: {
+          body_text: [
+            [
+              'Jaynesh & Pooja',
+              'Ek Duje Ke Liye Seminar',
+              '15 September 2026',
+              '8:30 PM',
+              'Sardar Smruti Bhavan, Surat',
+              'EK06-02'
+            ]
+          ]
+        }
+      }
+    ]
+  },
+
+  // 9. Digital Pass Ready v1 (Separate pass delivery message)
+  edkl_digital_pass_ready_v1: {
+    key: 'edkl_digital_pass_ready_v1',
+    metaName: 'edkl_digital_pass_ready_v1',
+    category: 'UTILITY',
+    language: 'en_US',
+    purpose: 'Sent once pass is signed and active with direct URL button to digital entry pass',
+    trigger: 'pass_ready',
+    bodyVariables: ['customerName', 'eventName', 'registrationId'],
+    buttonVariables: ['inquiryId'],
+    requiredVariables: ['customerName', 'eventName', 'registrationId', 'inquiryId'],
+    components: [
+      {
+        type: 'BODY',
+        text: 'Hello {{1}},\n\nYour digital entry pass for {{2}} is ready.\n\nRegistration ID: {{3}}\n\nPlease keep your QR pass ready at the event entrance.\n\nEk Duje Ke Liye',
+        example: {
+          body_text: [
+            [
+              'Jaynesh & Pooja',
+              'Ek Duje Ke Liye Seminar',
+              'EK06-02'
+            ]
+          ]
+        }
+      },
+      {
+        type: 'BUTTONS',
+        buttons: [
+          {
+            type: 'URL',
+            text: 'View Digital Pass',
+            url: 'https://www.ekdujekeliye.in/pass/{{1}}',
+            example: ['EK06-02']
+          }
+        ]
+      }
+    ]
+  },
+
+  // 9b. Digital Pass Ready v2 (Meta active version)
+  edkl_digital_pass_ready_v2: {
+    key: 'edkl_digital_pass_ready_v2',
+    metaName: 'edkl_digital_pass_ready_v2',
+    category: 'UTILITY',
+    language: 'en_US',
+    purpose: 'Sent once pass is signed and active with direct URL button to digital entry pass',
+    trigger: 'pass_ready',
+    bodyVariables: ['customerName', 'eventName', 'registrationId'],
+    buttonVariables: ['inquiryId'],
+    requiredVariables: ['customerName', 'eventName', 'registrationId', 'inquiryId'],
+    components: [
+      {
+        type: 'BODY',
+        text: 'Hello {{1}},\n\nYour digital entry pass for {{2}} is ready.\n\nRegistration ID: {{3}}\n\nPlease keep your QR pass ready at the event entrance.\n\nEk Duje Ke Liye',
+        example: {
+          body_text: [
+            [
+              'Jaynesh & Pooja',
+              'Ek Duje Ke Liye Seminar',
+              'EK06-02'
+            ]
+          ]
+        }
+      },
+      {
+        type: 'BUTTONS',
+        buttons: [
+          {
+            type: 'URL',
+            text: 'View Digital Pass',
+            url: 'https://www.ekdujekeliye.in/pass/{{1}}',
+            example: ['EK06-02']
+          }
+        ]
+      }
+    ]
+  },
+
+  // 10. 48-Hour Personalized Couple Invitation
+  edkl_personal_invitation_48h_v1: {
+    key: 'edkl_personal_invitation_48h_v1',
+    metaName: 'edkl_personal_invitation_48h_v1',
+    category: 'UTILITY',
+    language: 'en_US',
+    purpose: 'Sent approximately 48 hours before event with personalized couple invitation card attached as header image',
+    trigger: 'invitation_48h',
+    headerType: 'IMAGE',
+    bodyVariables: ['customerName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
+    buttonVariables: ['inquiryId'],
+    requiredVariables: ['customerName', 'eventDate', 'eventTime', 'venue', 'registrationId', 'inquiryId'],
+    components: [
+      {
+        type: 'BODY',
+        text: 'Hello {{1}},\n\nWe look forward to welcoming you to your registered Ek Duje Ke Liye event.\n\nDate: {{2}}\nTime: {{3}}\nVenue: {{4}}\nRegistration ID: {{5}}\n\nYour personalized invitation is attached.\n\nEk Duje Ke Liye',
+        example: {
+          body_text: [
+            [
+              'Jaynesh & Pooja',
+              '15 September 2026',
+              '8:30 PM',
+              'Sardar Smruti Bhavan, Surat',
+              'EK06-02'
+            ]
+          ]
+        }
+      },
+      {
+        type: 'BUTTONS',
+        buttons: [
+          {
+            type: 'URL',
+            text: 'View Digital Pass',
+            url: 'https://www.ekdujekeliye.in/pass/{{1}}',
+            example: ['EK06-02']
+          }
+        ]
+      }
+    ]
+  },
+
+  // 11. Post-Event Feedback Request (Attended Only)
+  edkl_event_feedback_v1: {
+    key: 'edkl_event_feedback_v1',
+    metaName: 'edkl_event_feedback_v1',
+    category: 'UTILITY',
+    language: 'en_US',
+    purpose: 'Sent 3 hours post-event to attendees who were present for feedback and review',
+    trigger: 'event_feedback',
+    bodyVariables: ['customerName', 'eventName', 'registrationId'],
+    buttonVariables: ['feedbackToken'],
+    requiredVariables: ['customerName', 'eventName', 'registrationId', 'feedbackToken'],
+    components: [
+      {
+        type: 'BODY',
+        text: 'Hello {{1}},\n\nThank you for attending {{2}}.\n\nWe would appreciate your feedback about your experience.\n\nRegistration ID: {{3}}\n\nEk Duje Ke Liye',
+        example: {
+          body_text: [
+            [
+              'Jaynesh & Pooja',
+              'Ek Duje Ke Liye Seminar',
+              'EK06-02'
+            ]
+          ]
+        }
+      },
+      {
+        type: 'BUTTONS',
+        buttons: [
+          {
+            type: 'URL',
+            text: 'Share Feedback',
+            url: 'https://www.ekdujekeliye.in/feedback/{{1}}',
+            example: ['fb-789a6b12']
+          }
+        ]
+      }
+    ]
   }
 };
 

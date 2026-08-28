@@ -5,6 +5,7 @@ import { WebhookEvent } from '../../models/WebhookEvent.js';
 import { eventService } from '../events/event.service.js';
 import { qrPassService } from '../passes/qrPass.service.js';
 import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
+import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
 
 export class PaymentService {
   /**
@@ -172,6 +173,9 @@ export class PaymentService {
         inquiryId: submission.inquiryId,
         trigger: 'payment_verified'
       });
+
+      // Schedule Future Lifecycle: 48h Invitation, 24h Reminder, Post-Event Feedback
+      await communicationSchedulerService.scheduleRegistrationLifecycle(submission, event);
     } catch (err) {
       console.error('[PaymentService] Error ensuring pass/whatsapp on verify:', err);
     }
@@ -281,6 +285,9 @@ export class PaymentService {
           inquiryId: submission.inquiryId,
           trigger: 'pass_issued'
         });
+
+        // Schedule Future Lifecycle: 48h Invitation, 24h Reminder, Post-Event Feedback
+        await communicationSchedulerService.scheduleRegistrationLifecycle(submission, event);
       } catch (err) {
         console.error('[PaymentService] Error ensuring pass/whatsapp on webhook:', err);
       }

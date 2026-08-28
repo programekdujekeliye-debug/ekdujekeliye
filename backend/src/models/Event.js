@@ -33,7 +33,7 @@ const EventSchema = new mongoose.Schema({
   seoDescription: { type: String, default: '' },
   status: {
     type: String,
-    enum: ['upcoming', 'few_seats', 'housefull', 'registration_closed', 'completed', 'archived', 'date_tba'],
+    enum: ['upcoming', 'few_seats', 'housefull', 'registration_closed', 'completed', 'archived', 'date_tba', 'cancelled'],
     default: 'upcoming'
   },
   featured: { type: Boolean, default: false },

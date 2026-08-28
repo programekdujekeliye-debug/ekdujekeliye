@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { API_BASE_URL } from '../../config';
-import { ShieldCheckIcon, PhoneIcon, MapPinIcon } from '../../components/Icons';
+import { ShieldCheckIcon } from '../../components/Icons';
 
 export default function PrivacyPolicyPage() {
   const [config, setConfig] = useState<{

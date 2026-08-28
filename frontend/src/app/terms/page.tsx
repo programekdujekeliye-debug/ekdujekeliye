@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { API_BASE_URL } from '../../config';
-import { AlertTriangleIcon, ShieldCheckIcon } from '../../components/Icons';
+import { ShieldCheckIcon, AlertTriangleIcon } from '../../components/Icons';
 
 export default function TermsPage() {
   const [config, setConfig] = useState<{

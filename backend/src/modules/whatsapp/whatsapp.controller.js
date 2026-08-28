@@ -195,18 +195,126 @@ export const activateTemplate = async (req, res) => {
   }
 };
 
-export const getActiveTemplate = async (req, res) => {
-  const activeType = req.query.type || 'pass_delivery';
+/**
+ * Get complete communication timeline for a specific registration
+ */
+export const getRegistrationTimeline = async (req, res) => {
+  const { inquiryId } = req.params;
+  if (!inquiryId) return res.status(400).json({ error: 'Inquiry ID is required.' });
+
   try {
-    const activeTemplate = await WhatsappTemplate.findOne({ type: activeType, isActive: true });
-    if (!activeTemplate) {
-      if (activeType === 'payment_request') {
-        return res.json({ text: 'Hello! I have registered for {programName}. My Inquiry ID is {inquiryId}. Please verify my pass.' });
-      }
-      return res.json({ text: 'Hello! Your pass for {programName} is ready: {passUrl}' });
-    }
-    res.json(activeTemplate);
+    const reg = await Registration.findOne({ inquiryId: { $regex: new RegExp(`^${inquiryId.trim()}$`, 'i') } }).lean();
+    if (!reg) return res.status(404).json({ error: 'Registration not found.' });
+
+    const messages = await WhatsappMessage.find({
+      $or: [
+        { inquiryId: reg.inquiryId },
+        { registrationId: reg._id }
+      ]
+    }).sort({ createdAt: 1 }).lean();
+
+    const timeline = messages.map(m => ({
+      id: m._id,
+      messageId: m.messageId,
+      templateName: m.templateName,
+      messageType: m.messageType,
+      trigger: m.trigger,
+      status: m.status,
+      scheduledFor: m.scheduledFor,
+      sentAt: m.sentAt,
+      deliveredAt: m.deliveredAt,
+      readAt: m.readAt,
+      failedAt: m.failedAt,
+      lastErrorMessage: m.lastErrorMessage,
+      providerMessageId: m.providerMessageId,
+      createdAt: m.createdAt
+    }));
+
+    res.json({
+      success: true,
+      inquiryId: reg.inquiryId,
+      customerName: `${reg.husbandName || ''} & ${reg.wifeName || ''}`.trim(),
+      attendance: reg.attendance,
+      invitationVersion: reg.invitationVersion || 1,
+      timeline
+    });
   } catch (err) {
-    res.status(500).json({ error: 'Server error fetching active template.' });
+    res.status(500).json({ error: 'Error fetching communication timeline.', details: err.message });
   }
 };
+
+/**
+ * Get Event Communication Dashboard with aggregate counts (No N+1)
+ */
+export const getEventCommunicationDashboard = async (req, res) => {
+  const { eventId } = req.params;
+  if (!eventId) return res.status(400).json({ error: 'Event ID is required.' });
+
+  try {
+    const confirmedRegistrations = await Registration.countDocuments({
+      programId: eventId,
+      status: 'approved',
+      isDeleted: false
+    });
+
+    const attendedRegistrations = await Registration.countDocuments({
+      programId: eventId,
+      status: 'approved',
+      $or: [{ attendance: 'PRESENT' }, { attendance: 'present' }, { attendance: true }]
+    });
+
+    // Grouped aggregation by messageType and status
+    const breakdown = await WhatsappMessage.aggregate([
+      { $match: { eventId } },
+      {
+        $group: {
+          _id: { messageType: '$messageType', status: '$status' },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const stats = {
+      confirmedRegistrations,
+      attendedRegistrations,
+      messageTypes: {
+        registration_received: { queued: 0, sent: 0, delivered: 0, read: 0, failed: 0 },
+        payment_confirmation: { queued: 0, sent: 0, delivered: 0, read: 0, failed: 0 },
+        pass_delivery: { queued: 0, sent: 0, delivered: 0, read: 0, failed: 0 },
+        invitation: { queued: 0, sent: 0, delivered: 0, read: 0, failed: 0 },
+        reminder: { queued: 0, sent: 0, delivered: 0, read: 0, failed: 0 },
+        feedback_request: { queued: 0, sent: 0, delivered: 0, read: 0, failed: 0 }
+      }
+    };
+
+    breakdown.forEach(item => {
+      const type = item._id?.messageType;
+      const status = (item._id?.status || '').toLowerCase();
+      if (stats.messageTypes[type]) {
+        if (stats.messageTypes[type][status] !== undefined) {
+          stats.messageTypes[type][status] += item.count;
+        }
+      }
+    });
+
+    res.json({ success: true, eventId, dashboard: stats });
+  } catch (err) {
+    res.status(500).json({ error: 'Error generating communication dashboard.', details: err.message });
+  }
+};
+
+/**
+ * Trigger scheduler worker execution manually or via simulated clock
+ */
+export const runSchedulerWorker = async (req, res) => {
+  try {
+    const { simulatedNow } = req.body || {};
+    const summary = await communicationSchedulerService.processScheduledJobs({ simulatedNow });
+    res.json({ success: true, summary });
+  } catch (err) {
+    res.status(500).json({ error: 'Error running scheduler worker.', details: err.message });
+  }
+};
+
+import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
+import { invitationCardService } from '../../services/invitationCard.service.js';

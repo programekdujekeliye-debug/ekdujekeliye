@@ -5,10 +5,12 @@ import {
   getMetaTemplates,
   sendTestMessage,
   getWhatsappLogs,
+  getRegistrationTimeline,
+  getEventCommunicationDashboard,
+  runSchedulerWorker,
   getTemplates,
   createTemplate,
-  activateTemplate,
-  getActiveTemplate
+  activateTemplate
 } from './whatsapp.controller.js';
 import { requireAuth } from '../../middleware/auth.js';
 
@@ -23,8 +25,12 @@ whatsappRouter.get('/meta-templates', requireAuth, getMetaTemplates);
 whatsappRouter.post('/send-test', requireAuth, sendTestMessage);
 whatsappRouter.get('/logs', requireAuth, getWhatsappLogs);
 
+// Communication Timeline & Dashboard
+whatsappRouter.get('/timeline/:inquiryId', requireAuth, getRegistrationTimeline);
+whatsappRouter.get('/dashboard/events/:eventId', requireAuth, getEventCommunicationDashboard);
+whatsappRouter.post('/run-worker', requireAuth, runSchedulerWorker);
+
 // Template Management (Custom DB Templates)
 whatsappRouter.get('/templates', requireAuth, getTemplates);
 whatsappRouter.post('/templates', requireAuth, createTemplate);
 whatsappRouter.post('/templates/:id/use', requireAuth, activateTemplate);
-whatsappRouter.get('/templates/active', getActiveTemplate);

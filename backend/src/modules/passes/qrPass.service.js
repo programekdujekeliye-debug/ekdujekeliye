@@ -234,6 +234,9 @@ export async function getPassByInquiryId(inquiryId) {
 /**
  * Revoke Pass
  */
+/**
+ * Revoke Pass
+ */
 export async function revokePass(passId, reason = 'Administrative revocation') {
   return await Pass.findOneAndUpdate(
     { passId },
@@ -244,8 +247,40 @@ export async function revokePass(passId, reason = 'Administrative revocation') {
         version: 2
       }
     },
-    { new: true }
+    { returnDocument: 'after' }
   );
+}
+
+/**
+ * Reissue Pass with new version & signature, and notify attendee via edkl_pass_reissued_v1
+ */
+export async function reissuePass(inquiryId, reason = 'Security token reissue') {
+  const existing = await getPassByInquiryId(inquiryId);
+  if (!existing) throw new Error(`Pass for inquiry '${inquiryId}' not found.`);
+
+  const newVersion = (existing.version || 1) + 1;
+  const newPassId = `EDKL-P-${crypto.randomBytes(7).toString('hex').toUpperCase()}`;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+
+  const payload = {
+    v: 1,
+    eventId: existing.eventId,
+    passId: newPassId,
+    version: newVersion,
+    issuedAt: nowSeconds,
+    keyId: KEY_ID
+  };
+
+  const newQrToken = signPassPayload(payload);
+
+  existing.passId = newPassId;
+  existing.version = newVersion;
+  existing.qrToken = newQrToken;
+  existing.status = 'ACTIVE';
+  existing.issuedAt = new Date();
+  await existing.save();
+
+  return existing;
 }
 
 export const qrPassService = {
@@ -255,5 +290,6 @@ export const qrPassService = {
   ensurePass,
   getPassByInquiryId,
   revokePass,
+  reissuePass,
   canonicalStringify
 };

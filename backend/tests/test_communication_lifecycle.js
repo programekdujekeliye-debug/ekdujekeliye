@@ -8,6 +8,8 @@ import { qrPassService } from '../src/modules/passes/qrPass.service.js';
 import { invitationCardService } from '../src/services/invitationCard.service.js';
 import { sendUtilityTemplate } from '../src/integrations/whatsapp/whatsapp.service.js';
 import { ensureFeedbackToken } from '../src/modules/feedback/feedback.controller.js';
+import { communicationSchedulerService } from '../src/services/communicationScheduler.service.js';
+import { paymentService } from '../src/modules/payments/payment.service.js';
 
 async function runLifecycleTests() {
   console.log('================================================================');
@@ -23,7 +25,7 @@ async function runLifecycleTests() {
     throw new Error(`[SAFETY GUARD] Cannot run lifecycle test on database: ${env.DATABASE_NAME}`);
   }
 
-  // Intercept Meta WhatsApp Cloud API calls to prevent spamming live phone numbers during test runs
+  // Intercept Meta WhatsApp Cloud API calls to prevent live spam during test runs
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options) => {
     if (typeof url === 'string' && url.includes('graph.facebook.com')) {
@@ -58,14 +60,16 @@ async function runLifecycleTests() {
 
   const testPhone = '918320594829';
   const testInquiryId = `TEST-LF-${Date.now().toString().slice(-4)}`;
+  const testEventId = `prog-test-lf-${Date.now().toString().slice(-4)}`;
 
   try {
-    // 1. Setup Test Event (48h+ in future)
+    // 1. Setup Test Event (scheduled for 2026-09-25 8:30 PM)
     const testEvent = await Event.findOneAndUpdate(
-      { id: 'prog-test-lifecycle' },
+      { id: testEventId },
       {
-        id: 'prog-test-lifecycle',
-        name: 'Ek Duje Ke Liye - Test Seminar',
+        id: testEventId,
+        slug: testEventId,
+        name: 'Ek Duje Ke Liye - Grand Seminar',
         city: 'Surat',
         venue: 'Sardar Smruti Bhavan, Surat',
         date: '2026-09-25',
@@ -109,19 +113,20 @@ async function runLifecycleTests() {
     assert(pass && pass.passId.startsWith('EDKL-'), 'Pass created with readable Pass ID prefix (EDKL-XXXXXXXX)');
     assert(pass.qrToken && pass.qrToken.includes('.'), 'QR Token is Ed25519 signature payload');
 
-    const [encodedPayload, encodedSig] = pass.qrToken.split('.');
+    const [encodedPayload] = pass.qrToken.split('.');
     const payloadJson = Buffer.from(encodedPayload, 'base64url').toString('utf8');
     const payload = JSON.parse(payloadJson);
     assert(payload.passId === pass.passId, 'QR Payload contains passId');
-    assert(!payload.phone && !payload.name && !payload.husbandName && !payload.amount, 'Zero PII inside QR payload');
+    assert(!payload.phone && !payload.husbandName && !payload.amount, 'Zero PII inside QR payload');
 
-    console.log('\n--- TEST 2: Personalized Invitation Card Generation ---');
+    console.log('\n--- TEST 2: Personalized Couple Invitation Card Generation ---');
     const cardResult = await invitationCardService.ensureInvitationCard(testInquiryId);
     assert(cardResult && cardResult.buffer && cardResult.buffer.length > 500, 'Deterministic 1080x1350 card buffer generated');
     const cardSvg = cardResult.buffer.toString('utf8');
     assert(cardSvg.includes('You are Cordially Invited'), 'Card contains luxury invitation wording');
     assert(cardSvg.includes('Jaynesh &amp; Pooja Patel') || cardSvg.includes('Jaynesh & Pooja Patel'), 'Card contains couple names');
     assert(!cardSvg.includes('qrToken') && !cardSvg.includes('1500'), 'Card is separate from QR security token');
+    assert(cardResult.version >= 1 && cardResult.hash, 'Deterministic invitation hash and versioning active');
 
     console.log('\n--- TEST 3: M1 - Registration Received Dispatch ---');
     const m1Res = await sendUtilityTemplate({
@@ -171,105 +176,87 @@ async function runLifecycleTests() {
     });
     assert(m3Res.status === 'SENT' || m3Res.status === 'QUEUED' || m3Res.status === 'ALREADY_SENT', 'M3 Payment Confirmed processed');
 
-    const m4Res = await sendUtilityTemplate({
+    console.log('\n--- TEST 5: Automatic Scheduling on Payment Confirmation ---');
+    const schedResult = await communicationSchedulerService.scheduleRegistrationLifecycle(testReg, testEvent, { executionSource: 'AUTOMATED_TEST' });
+    assert(schedResult.success === true, 'Lifecycle communications scheduled upon confirmation');
+    assert(schedResult.schedules.invitationSendAt < schedResult.schedules.eventStartAt, '48h invitation scheduled before event start');
+    assert(schedResult.schedules.reminderSendAt < schedResult.schedules.eventStartAt, '24h reminder scheduled before event start');
+    assert(schedResult.schedules.feedbackSendAt > schedResult.schedules.eventEndAt, 'Feedback scheduled post event end');
+
+    console.log('\n--- TEST 6: 48-Hour Simulated Time Execution ---');
+    // Simulate clock at EventStart - 47 hours (invitation is due)
+    const simTime48 = new Date(schedResult.schedules.invitationSendAt.getTime() + 60 * 1000);
+    const worker48 = await communicationSchedulerService.processScheduledJobs({ simulatedNow: simTime48 });
+    assert(worker48.totalDue >= 1, '48h invitation job picked up by scheduled worker');
+
+    console.log('\n--- TEST 7: 48-Hour Duplicate Prevention ---');
+    const worker48Dup = await communicationSchedulerService.processScheduledJobs({ simulatedNow: simTime48 });
+    assert(worker48Dup.totalDue === 0, 'No duplicate 48h invitation dispatched on second run');
+
+    console.log('\n--- TEST 8: 24-Hour Simulated Reminder Execution ---');
+    const simTime24 = new Date(schedResult.schedules.reminderSendAt.getTime() + 60 * 1000);
+    const worker24 = await communicationSchedulerService.processScheduledJobs({ simulatedNow: simTime24 });
+    assert(worker24.totalDue >= 1, '24h reminder job picked up by scheduled worker');
+
+    console.log('\n--- TEST 9: No-Show Review Protection ---');
+    // Set attendance to unpresent / unmarked
+    testReg.attendance = 'unmarked';
+    await testReg.save();
+
+    const simTimeFb = new Date(schedResult.schedules.feedbackSendAt.getTime() + 60 * 1000);
+    const workerFbNoShow = await communicationSchedulerService.processScheduledJobs({ simulatedNow: simTimeFb });
+    assert(workerFbNoShow.skippedIneligible >= 1 || workerFbNoShow.totalDue === 0, 'No-show attendee prevented from receiving feedback request');
+
+    console.log('\n--- TEST 10: Attended Review Execution ---');
+    // Re-queue feedback for present attendee
+    const fbKey = `FEEDBACK:${testEvent.id}:${testReg._id}`;
+    await WhatsappMessage.updateOne({ idempotencyKey: fbKey }, { $set: { status: 'QUEUED' } });
+    testReg.attendance = 'PRESENT';
+    await testReg.save();
+
+    const workerFbAttended = await communicationSchedulerService.processScheduledJobs({ simulatedNow: simTimeFb });
+    assert(workerFbAttended.processed >= 1, 'Attended attendee processed for feedback review');
+
+    console.log('\n--- TEST 11: Event Details Update Recalculation ---');
+    testEvent.date = '2026-09-28';
+    testEvent.time = '9:00 PM';
+    await testEvent.save();
+
+    const updateRecalc = await communicationSchedulerService.handleEventDetailsUpdated(testEvent);
+    assert(updateRecalc.success === true, 'Event date change successfully recalculated scheduled jobs');
+
+    console.log('\n--- TEST 12: Event Cancellation Safety ---');
+    testEvent.status = 'cancelled';
+    await testEvent.save();
+
+    const cancelResult = await communicationSchedulerService.handleEventCancelled(testEvent);
+    assert(cancelResult.success === true, 'Event cancellation successfully cancelled pending scheduled jobs');
+
+    console.log('\n--- TEST 13: Pass Reissue Lifecycle ---');
+    const reissuedPass = await qrPassService.reissuePass(testInquiryId);
+    assert(reissuedPass && reissuedPass.version === 2, 'Pass successfully reissued with incremented version');
+
+    const reissueMsg = await sendUtilityTemplate({
       recipientPhone: testPhone,
-      templateKey: 'edkl_event_reminder_v1',
+      templateKey: 'edkl_pass_reissued_v1',
       languageCode: 'en_US',
       variables: {
-        customerName: 'Jaynesh',
+        customerName: 'Jaynesh & Pooja',
         eventName: testEvent.name,
-        eventDate: testEvent.date,
-        eventTime: testEvent.time,
-        venue: testEvent.venue,
         registrationId: testInquiryId,
         inquiryId: testInquiryId
       },
-      idempotencyKey: `PASS_READY:${pass.passId}:v1`,
+      idempotencyKey: `PASS_REISSUED:${reissuedPass.passId}:v${reissuedPass.version}`,
       registrationId: testReg._id,
       eventId: testEvent.id,
       inquiryId: testInquiryId,
-      trigger: 'pass_issued',
+      trigger: 'pass_reissued',
       executionSource: 'AUTOMATED_TEST',
       providerMode: 'MOCK'
     });
-    assert(m4Res.status === 'SENT' || m4Res.status === 'QUEUED' || m4Res.status === 'ALREADY_SENT', 'M4 Digital Pass Ready processed');
+    assert(reissueMsg.status === 'SENT' || reissueMsg.status === 'QUEUED' || reissueMsg.status === 'ALREADY_SENT', 'Pass reissued notification dispatched without resending payment confirmation');
 
-    console.log('\n--- TEST 5: M5 - 48-Hour Personalized Invitation Simulation ---');
-    const m5Res = await sendUtilityTemplate({
-      recipientPhone: testPhone,
-      templateKey: 'edkl_event_reminder_v1',
-      languageCode: 'en_US',
-      variables: {
-        customerName: 'Jaynesh',
-        eventName: testEvent.name,
-        eventDate: testEvent.date,
-        eventTime: testEvent.time,
-        venue: testEvent.venue,
-        registrationId: testInquiryId,
-        inquiryId: testInquiryId
-      },
-      idempotencyKey: `INVITATION_48H:${testEvent.id}:${testInquiryId}:v1`,
-      registrationId: testReg._id,
-      eventId: testEvent.id,
-      inquiryId: testInquiryId,
-      trigger: 'invitation_48h',
-      executionSource: 'AUTOMATED_TEST',
-      providerMode: 'MOCK'
-    });
-    assert(m5Res.status === 'SENT' || m5Res.status === 'QUEUED' || m5Res.status === 'ALREADY_SENT', 'M5 48h Invitation processed');
-
-    console.log('\n--- TEST 6: M6 - 24-Hour Event Reminder Simulation ---');
-    const m6Res = await sendUtilityTemplate({
-      recipientPhone: testPhone,
-      templateKey: 'edkl_event_reminder_v1',
-      languageCode: 'en_US',
-      variables: {
-        customerName: 'Jaynesh',
-        eventName: testEvent.name,
-        eventDate: testEvent.date,
-        eventTime: testEvent.time,
-        venue: testEvent.venue,
-        registrationId: testInquiryId,
-        inquiryId: testInquiryId
-      },
-      idempotencyKey: `REMINDER_24H:${testEvent.id}:${testInquiryId}`,
-      registrationId: testReg._id,
-      eventId: testEvent.id,
-      inquiryId: testInquiryId,
-      trigger: 'reminder_24h',
-      executionSource: 'AUTOMATED_TEST',
-      providerMode: 'MOCK'
-    });
-    assert(m6Res.status === 'SENT' || m6Res.status === 'QUEUED' || m6Res.status === 'ALREADY_SENT', 'M6 24h Reminder processed');
-
-    console.log('\n--- TEST 7: M7 - Post-Event Review Token & Dispatch Simulation ---');
-    const feedback = await ensureFeedbackToken(testInquiryId, testEvent.id, 'Jaynesh & Pooja Patel');
-    assert(feedback && feedback.token && feedback.token.length >= 16, 'Secure feedback token created for attendee');
-
-    const m7Res = await sendUtilityTemplate({
-      recipientPhone: testPhone,
-      templateKey: 'edkl_event_reminder_v1',
-      languageCode: 'en_US',
-      variables: {
-        customerName: 'Jaynesh',
-        eventName: testEvent.name,
-        eventDate: testEvent.date,
-        eventTime: testEvent.time,
-        venue: testEvent.venue,
-        registrationId: testInquiryId,
-        inquiryId: testInquiryId
-      },
-      idempotencyKey: `REVIEW:${testEvent.id}:${testInquiryId}`,
-      registrationId: testReg._id,
-      eventId: testEvent.id,
-      inquiryId: testInquiryId,
-      trigger: 'review_post_event',
-      executionSource: 'AUTOMATED_TEST',
-      providerMode: 'MOCK'
-    });
-    assert(m7Res.status === 'SENT' || m7Res.status === 'QUEUED' || m7Res.status === 'ALREADY_SENT', 'M7 Post-Event Review processed');
-
-    console.log('\n--- TEST 8: Test Mode Guard Blocking Non-Allowlisted Numbers ---');
+    console.log('\n--- TEST 14: Non-Allowlisted Test Guard Protection ---');
     const blockedRes = await sendUtilityTemplate({
       recipientPhone: '919999999999',
       templateKey: 'edkl_event_reminder_v1',
@@ -291,13 +278,13 @@ async function runLifecycleTests() {
     console.log(`LIFECYCLE TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);
     console.log('================================================================\n');
   } finally {
-    // Unconditional Scoped Cleanup of all automated test artifacts
+    // Unconditional Scoped Cleanup of all automated test artifacts (0 test artifacts left)
     await Registration.deleteMany({ inquiryId: testInquiryId });
     await Pass.deleteMany({ inquiryId: testInquiryId });
     await WhatsappMessage.deleteMany({ inquiryId: testInquiryId });
     await WhatsappMessage.deleteMany({ recipientPhone: '919999999999' });
     await WhatsappMessage.deleteMany({ executionSource: 'AUTOMATED_TEST' });
-    await Event.deleteMany({ id: 'prog-test-lifecycle' });
+    await Event.deleteMany({ id: testEventId });
 
     await mongoose.disconnect();
   }

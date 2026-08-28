@@ -1,7 +1,6 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
 import { corsMiddleware } from './config/cors.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -48,8 +47,6 @@ import { getRazorpayKeyId } from './integrations/razorpay/razorpay.service.js';
 import { Setting } from './models/Setting.js';
 import multer from 'multer';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const upload = multer({ storage: multer.memoryStorage() });
 
 export const app = express();
