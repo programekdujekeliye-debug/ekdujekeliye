@@ -313,7 +313,28 @@ export const getEventCommunicationDashboard = async (req, res) => {
   if (!eventId) return res.status(400).json({ error: 'Event ID is required.' });
 
   try {
-    const event = await Event.findOne({ $or: [{ id: eventId }, { slug: eventId }] }).lean();
+    const event = await Event.findOne({ $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] }).lean();
+
+    const matchedIds = [eventId];
+    if (event) {
+      if (event.id && !matchedIds.includes(event.id)) matchedIds.push(event.id);
+      if (event.slug && !matchedIds.includes(event.slug)) matchedIds.push(event.slug);
+    }
+
+    const eventRegMatch = {
+      $or: [
+        { programId: { $in: matchedIds } },
+        ...(event?.date ? [{ programDate: event.date }] : [])
+      ],
+      isDeleted: false
+    };
+
+    const eventMsgMatch = {
+      $or: [
+        { eventId: { $in: matchedIds } },
+        ...(event?.date ? [{ eventDate: event.date }] : [])
+      ]
+    };
 
     const [
       totalRegistrations,
@@ -323,13 +344,13 @@ export const getEventCommunicationDashboard = async (req, res) => {
       whatsappOptOutRegistrations,
       attendedRegistrations
     ] = await Promise.all([
-      Registration.countDocuments({ programId: eventId, isDeleted: false }),
-      Registration.countDocuments({ programId: eventId, status: 'approved', isDeleted: false }),
-      Registration.countDocuments({ programId: eventId, status: { $in: ['pending', 'inquiry'] }, isDeleted: false }),
-      Registration.countDocuments({ programId: eventId, whatsappOptIn: true, isDeleted: false }),
-      Registration.countDocuments({ programId: eventId, whatsappOptIn: false, isDeleted: false }),
+      Registration.countDocuments(eventRegMatch),
+      Registration.countDocuments({ ...eventRegMatch, status: 'approved' }),
+      Registration.countDocuments({ ...eventRegMatch, status: { $in: ['pending', 'inquiry'] } }),
+      Registration.countDocuments({ ...eventRegMatch, whatsappOptIn: true }),
+      Registration.countDocuments({ ...eventRegMatch, whatsappOptIn: false }),
       Registration.countDocuments({
-        programId: eventId,
+        ...eventRegMatch,
         status: 'approved',
         $or: [{ attendance: 'PRESENT' }, { attendance: 'present' }, { attendance: true }]
       })
@@ -337,7 +358,7 @@ export const getEventCommunicationDashboard = async (req, res) => {
 
     // Aggregate message counts grouped by messageType and status
     const breakdown = await WhatsappMessage.aggregate([
-      { $match: { eventId } },
+      { $match: eventMsgMatch },
       {
         $group: {
           _id: { messageType: '$messageType', status: '$status' },
@@ -477,36 +498,55 @@ export const getEventRegistrationsCommunication = async (req, res) => {
     const messageTypeFilter = req.query.messageType ? String(req.query.messageType).toLowerCase() : 'ALL';
     const healthFilter = req.query.health ? String(req.query.health).toUpperCase() : 'ALL';
 
-    const event = await Event.findOne({ $or: [{ id: eventId }, { slug: eventId }] }).lean();
+    const event = await Event.findOne({ $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] }).lean();
 
-    const matchQuery = {
-      programId: eventId,
-      isDeleted: false
-    };
+    const matchedIds = [eventId];
+    if (event) {
+      if (event.id && !matchedIds.includes(event.id)) matchedIds.push(event.id);
+      if (event.slug && !matchedIds.includes(event.slug)) matchedIds.push(event.slug);
+    }
+
+    const eventMatchOr = [
+      { programId: { $in: matchedIds } },
+      ...(event?.date ? [{ programDate: event.date }] : [])
+    ];
+
+    const andConditions = [
+      { $or: eventMatchOr },
+      { isDeleted: false }
+    ];
 
     if (search) {
-      matchQuery.$or = [
-        { husbandName: { $regex: search, $options: 'i' } },
-        { wifeName: { $regex: search, $options: 'i' } },
-        { surname: { $regex: search, $options: 'i' } },
-        { inquiryId: { $regex: search, $options: 'i' } },
-        { phoneNumber: { $regex: search, $options: 'i' } }
-      ];
+      andConditions.push({
+        $or: [
+          { husbandName: { $regex: search, $options: 'i' } },
+          { wifeName: { $regex: search, $options: 'i' } },
+          { surname: { $regex: search, $options: 'i' } },
+          { inquiryId: { $regex: search, $options: 'i' } },
+          { phoneNumber: { $regex: search, $options: 'i' } }
+        ]
+      });
     }
 
     if (paymentFilter === 'PAID') {
-      matchQuery.status = 'approved';
+      andConditions.push({ status: 'approved' });
     } else if (paymentFilter === 'PENDING') {
-      matchQuery.status = { $in: ['pending', 'inquiry'] };
+      andConditions.push({ status: { $in: ['pending', 'inquiry'] } });
     } else if (paymentFilter === 'FAILED') {
-      matchQuery['payment.status'] = 'failed';
+      andConditions.push({ 'payment.status': 'failed' });
     }
 
     if (attendanceFilter === 'PRESENT') {
-      matchQuery.$or = [{ attendance: 'PRESENT' }, { attendance: 'present' }, { attendance: true }];
+      andConditions.push({
+        $or: [{ attendance: 'PRESENT' }, { attendance: 'present' }, { attendance: true }]
+      });
     } else if (attendanceFilter === 'ABSENT') {
-      matchQuery.$or = [{ attendance: 'ABSENT' }, { attendance: 'absent' }, { attendance: false }, { attendance: 'unmarked' }];
+      andConditions.push({
+        $or: [{ attendance: 'ABSENT' }, { attendance: 'absent' }, { attendance: false }, { attendance: 'unmarked' }]
+      });
     }
+
+    const matchQuery = { $and: andConditions };
 
     const totalRegistrations = await Registration.countDocuments(matchQuery);
     const totalPages = Math.ceil(totalRegistrations / limit) || 1;

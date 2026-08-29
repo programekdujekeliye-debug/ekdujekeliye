@@ -299,7 +299,32 @@ export const getSubmissionsList = async (req, res) => {
     query.inquiryId = { $not: /^IP-/i };
   }
 
-  if (programId && programId !== 'all') query.programId = programId;
+  if (programId && programId !== 'all') {
+    const eventObj = await Event.findOne({
+      $or: [
+        { id: programId },
+        { slug: programId },
+        { date: programId }
+      ]
+    }).lean();
+
+    const matchedIds = [programId];
+    if (eventObj) {
+      if (eventObj.id && !matchedIds.includes(eventObj.id)) matchedIds.push(eventObj.id);
+      if (eventObj.slug && !matchedIds.includes(eventObj.slug)) matchedIds.push(eventObj.slug);
+    }
+
+    const eventOr = [
+      { programId: { $in: matchedIds } },
+      ...(eventObj?.date ? [{ programDate: eventObj.date }] : [])
+    ];
+
+    if (query.$and) {
+      query.$and.push({ $or: eventOr });
+    } else {
+      query.$and = [{ $or: eventOr }];
+    }
+  }
   if (status && status !== 'all') query.status = status;
   if (paymentStatus && paymentStatus !== 'all') {
     if (paymentStatus === 'paid' || paymentStatus === 'captured') {
