@@ -28,6 +28,7 @@ export async function ensureEarlyRegistrationEvents() {
       {
         $set: {
           id: 'prog-2026-09-07',
+          sequenceNumber: 1,
           name: PROGRAM_NAME,
           slug: 'surat-7-september-2026',
           city: 'Surat',
@@ -55,6 +56,7 @@ export async function ensureEarlyRegistrationEvents() {
       {
         $set: {
           id: 'prog-2026-09-11',
+          sequenceNumber: 2,
           name: PROGRAM_NAME,
           slug: 'surat-11-september-2026',
           city: 'Surat',

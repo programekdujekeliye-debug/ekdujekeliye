@@ -49,17 +49,29 @@ export class RegistrationService {
       throw err;
     }
 
-    // 3. Generate Inquiry ID (EK<ProgramSeq>-<CounterSeq>)
-    let inquiryId;
-    if (program.sequenceNumber) {
-      const seqPad = String(program.sequenceNumber).padStart(2, '0');
-      const counterVal = await getNextSequence(`inquiryNumber_${program.id}`);
-      const numPad = String(counterVal).padStart(2, '0');
-      inquiryId = `EK${seqPad}-${numPad}`;
-    } else {
-      const counterVal = await getNextSequence('inquiryNumber');
-      inquiryId = `CPL-${counterVal}`;
-    }
+    // 3. Generate Guaranteed Unique Inquiry ID
+    const generateUniqueInquiryId = async () => {
+      const seqPad = String(program.sequenceNumber || 1).padStart(2, '0');
+      const counterKey = program.sequenceNumber ? `inquiryNumber_${program.id}` : 'inquiryNumber';
+
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const counterVal = await getNextSequence(counterKey);
+        const candidateId = program.sequenceNumber
+          ? `EK${seqPad}-${String(counterVal).padStart(2, '0')}`
+          : `CPL-${counterVal}`;
+
+        const exists = await Registration.findOne({ inquiryId: candidateId }).select('_id').lean();
+        if (!exists) {
+          return candidateId;
+        }
+      }
+
+      // High entropy fallback
+      const rand = crypto.randomBytes(3).toString('hex').toUpperCase();
+      return `EK${seqPad}-${rand}`;
+    };
+
+    let inquiryId = await generateUniqueInquiryId();
 
     // 4. Upload photo to Cloudinary/Storage
     let couplePhotoUrl = '/sample_couple.png';
@@ -101,7 +113,23 @@ export class RegistrationService {
       }
     });
 
-    await newRegistration.save();
+    // Save with duplicate key retry protection
+    let saved = false;
+    let retries = 0;
+    while (!saved && retries < 5) {
+      try {
+        await newRegistration.save();
+        saved = true;
+      } catch (saveErr) {
+        if (saveErr.code === 11000 && String(saveErr.message).includes('inquiryId')) {
+          retries++;
+          inquiryId = await generateUniqueInquiryId();
+          newRegistration.inquiryId = inquiryId;
+          continue;
+        }
+        throw saveErr;
+      }
+    }
 
     const isEarlyRegistration = Boolean(program.isPaymentEnabled === false || program.earlyRegistrationMode === true);
 
