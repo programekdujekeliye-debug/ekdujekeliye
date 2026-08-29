@@ -1,9 +1,10 @@
 import { Event } from '../models/Event.js';
 import { Counter } from '../models/Counter.js';
+import { Registration } from '../models/Registration.js';
 
 /**
  * Startup Event Config Initializer
- * Automatically ensures 7 September 2026 and 11 September 2026 events exist
+ * Automatically ensures 7 September 2026 (EK06) and 11 September 2026 (EK07) events exist
  * with Early Registration Mode active (isPaymentEnabled: false, earlyRegistrationMode: true).
  */
 export async function ensureEarlyRegistrationEvents() {
@@ -22,13 +23,13 @@ export async function ensureEarlyRegistrationEvents() {
     const VENUE_NAME = 'Sardar Patel Smruti Bhavan, Varachha, Surat';
     const MAP_URL = 'https://share.google/y1jtFAZXuKusYTiUD';
 
-    // 1. Ensure 7 September 2026 Program
+    // 1. Ensure 7 September 2026 Program (Sequence 6 -> EK06-XX)
     await Event.findOneAndUpdate(
       { date: '2026-09-07' },
       {
         $set: {
           id: 'prog-2026-09-07',
-          sequenceNumber: 1,
+          sequenceNumber: 6,
           name: PROGRAM_NAME,
           slug: 'surat-7-september-2026',
           city: 'Surat',
@@ -50,13 +51,13 @@ export async function ensureEarlyRegistrationEvents() {
       { upsert: true, returnDocument: 'after' }
     );
 
-    // 2. Ensure 11 September 2026 Program
+    // 2. Ensure 11 September 2026 Program (Sequence 7 -> EK07-XX)
     await Event.findOneAndUpdate(
       { date: '2026-09-11' },
       {
         $set: {
           id: 'prog-2026-09-11',
-          sequenceNumber: 2,
+          sequenceNumber: 7,
           name: PROGRAM_NAME,
           slug: 'surat-11-september-2026',
           city: 'Surat',
@@ -78,7 +79,65 @@ export async function ensureEarlyRegistrationEvents() {
       { upsert: true, returnDocument: 'after' }
     );
 
-    console.log('[EventInit] Ensured 7 & 11 September 2026 Early Registration Mode in DB.');
+    // 3. Migrate any inadvertent EK01-XX for 7 September 2026 to EK06-XX
+    try {
+      const ek01Regs = await Registration.find({
+        programDate: '2026-09-07',
+        inquiryId: { $regex: '^EK01-' }
+      });
+
+      for (const reg of ek01Regs) {
+        const targetInquiryId = reg.inquiryId.replace('EK01-', 'EK06-');
+        const conflict = await Registration.findOne({ inquiryId: targetInquiryId });
+        if (!conflict) {
+          await Registration.updateOne({ _id: reg._id }, { $set: { inquiryId: targetInquiryId } });
+          console.log(`[EventInit] Auto-migrated ${reg.inquiryId} -> ${targetInquiryId}`);
+        }
+      }
+    } catch (migErr) {
+      console.warn('[EventInit] Migration notice:', migErr.message);
+    }
+
+    // 4. Synchronize counters to avoid any collision
+    try {
+      const ek06Regs = await Registration.find({ inquiryId: { $regex: '^EK06-' } }).lean();
+      let maxEk06 = 0;
+      for (const r of ek06Regs) {
+        const match = r.inquiryId.match(/^EK06-(\d+)/);
+        if (match) {
+          const n = parseInt(match[1], 10);
+          if (n > maxEk06) maxEk06 = n;
+        }
+      }
+      if (maxEk06 > 0) {
+        await Counter.findOneAndUpdate(
+          { $or: [{ _id: 'inquiryNumber_prog-2026-09-07' }, { name: 'inquiryNumber_prog-2026-09-07' }] },
+          { $max: { seq: maxEk06 }, $set: { name: 'inquiryNumber_prog-2026-09-07' } },
+          { upsert: true }
+        );
+      }
+
+      const ek07Regs = await Registration.find({ inquiryId: { $regex: '^EK07-' } }).lean();
+      let maxEk07 = 0;
+      for (const r of ek07Regs) {
+        const match = r.inquiryId.match(/^EK07-(\d+)/);
+        if (match) {
+          const n = parseInt(match[1], 10);
+          if (n > maxEk07) maxEk07 = n;
+        }
+      }
+      if (maxEk07 > 0) {
+        await Counter.findOneAndUpdate(
+          { $or: [{ _id: 'inquiryNumber_prog-2026-09-11' }, { name: 'inquiryNumber_prog-2026-09-11' }] },
+          { $max: { seq: maxEk07 }, $set: { name: 'inquiryNumber_prog-2026-09-11' } },
+          { upsert: true }
+        );
+      }
+    } catch (cntErr) {
+      console.warn('[EventInit] Counter sync notice:', cntErr.message);
+    }
+
+    console.log('[EventInit] Ensured 7 Sep (EK06) & 11 Sep (EK07) Early Registration Mode in DB.');
   } catch (err) {
     console.error('[EventInit] Failed to ensure early registration events:', err.message);
   }

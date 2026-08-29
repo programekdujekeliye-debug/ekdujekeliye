@@ -72,6 +72,7 @@ async function run() {
     {
       $set: {
         id: 'prog-2026-09-07',
+        sequenceNumber: 6,
         name: PROGRAM_NAME,
         slug: 'surat-7-september-2026',
         city: 'Surat',
@@ -100,6 +101,7 @@ async function run() {
     {
       $set: {
         id: 'prog-2026-09-11',
+        sequenceNumber: 7,
         name: PROGRAM_NAME,
         slug: 'surat-11-september-2026',
         city: 'Surat',
