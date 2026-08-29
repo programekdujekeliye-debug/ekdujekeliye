@@ -292,6 +292,23 @@ export async function sendWhatsAppMessage({
   }
 
   const componentsPayload = [];
+
+  const headerComponent = templateDef.components?.find(c => c.type === 'HEADER');
+  if (headerComponent && headerComponent.format === 'IMAGE') {
+    const mediaUrl = variables.headerImageUrl || variables.imageUrl || variables.invitationImageUrl || 'https://www.ekdujekeliye.in/sample_couple.png';
+    componentsPayload.push({
+      type: 'header',
+      parameters: [
+        {
+          type: 'image',
+          image: {
+            link: mediaUrl
+          }
+        }
+      ]
+    });
+  }
+
   if (bodyParameters.length > 0) {
     componentsPayload.push({
       type: 'body',

@@ -72,6 +72,7 @@ const WhatsappMessageSchema = new mongoose.Schema({
   lastErrorCode: { type: String },
   lastErrorMessage: { type: String },
   lastAttemptAt: { type: Date },
+  lockedAt: { type: Date, default: null, index: true },
   scheduledFor: { type: Date, default: null, index: true },
   templateParameters: { type: mongoose.Schema.Types.Mixed, default: {} },
   rawProviderResponse: { type: mongoose.Schema.Types.Mixed },

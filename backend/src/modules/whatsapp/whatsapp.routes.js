@@ -8,11 +8,12 @@ import {
   getRegistrationTimeline,
   getEventCommunicationDashboard,
   runSchedulerWorker,
+  resendMessage,
   getTemplates,
   createTemplate,
   activateTemplate
 } from './whatsapp.controller.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, requireSuperAuth, requireCronAuth } from '../../middleware/auth.js';
 
 export const whatsappRouter = Router();
 
@@ -25,10 +26,12 @@ whatsappRouter.get('/meta-templates', requireAuth, getMetaTemplates);
 whatsappRouter.post('/send-test', requireAuth, sendTestMessage);
 whatsappRouter.get('/logs', requireAuth, getWhatsappLogs);
 
-// Communication Timeline & Dashboard
+// Communication Timeline, Dashboard & Manual Operations
 whatsappRouter.get('/timeline/:inquiryId', requireAuth, getRegistrationTimeline);
 whatsappRouter.get('/dashboard/events/:eventId', requireAuth, getEventCommunicationDashboard);
-whatsappRouter.post('/run-worker', requireAuth, runSchedulerWorker);
+whatsappRouter.post('/resend', requireAuth, resendMessage);
+whatsappRouter.post('/run-worker', requireCronAuth, runSchedulerWorker);
+whatsappRouter.post('/run-worker-admin', requireSuperAuth, runSchedulerWorker);
 
 // Template Management (Custom DB Templates)
 whatsappRouter.get('/templates', requireAuth, getTemplates);

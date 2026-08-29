@@ -9,6 +9,8 @@ import { getCachedMetaTemplateStatus } from '../integrations/whatsapp/whatsapp.s
 import { ensureFeedbackToken } from '../modules/feedback/feedback.controller.js';
 import { invitationCardService } from './invitationCard.service.js';
 
+let isWorkerRunning = false;
+
 export class CommunicationSchedulerService {
   /**
    * Parse event date and time string into timezone-aware IST Date
@@ -206,36 +208,81 @@ export class CommunicationSchedulerService {
   }
 
   /**
-   * Process all due scheduled communications with strict eligibility revalidation
+   * Process all due scheduled communications with strict eligibility revalidation, concurrency locking, and batch limits
    */
   async processScheduledJobs(options = {}) {
-    // Determine canonical NOW timestamp (supports TEST simulated clock)
-    let currentNow = new Date();
-    if (options.simulatedNow) {
-      if (env.APP_ENV !== 'production' && env.DATABASE_ENV === 'TEST') {
-        currentNow = new Date(options.simulatedNow);
-        console.log(`[CommunicationScheduler] Using TEST SIMULATED CLOCK: ${currentNow.toISOString()}`);
-      } else {
-        console.warn('[CommunicationScheduler] SIMULATED CLOCK IGNORED: Only allowed in non-production TEST database.');
-      }
+    if (isWorkerRunning && !options.ignoreLock) {
+      console.warn('[CommunicationScheduler] Worker run skipped: Previous worker invocation is still active.');
+      return { success: false, reason: 'CONCURRENCY_LOCK_ACTIVE' };
     }
 
-    const dueJobs = await WhatsappMessage.find({
-      status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
-      scheduledFor: { $lte: currentNow }
-    }).populate('registrationId');
+    isWorkerRunning = true;
+    try {
+      // Determine canonical NOW timestamp (supports TEST simulated clock)
+      let currentNow = new Date();
+      if (options.simulatedNow) {
+        if (env.APP_ENV !== 'production' && env.DATABASE_ENV === 'TEST') {
+          currentNow = new Date(options.simulatedNow);
+          console.log(`[CommunicationScheduler] Using TEST SIMULATED CLOCK: ${currentNow.toISOString()}`);
+        } else {
+          console.warn('[CommunicationScheduler] SIMULATED CLOCK IGNORED: Only allowed in non-production TEST database.');
+        }
+      }
 
-    const summary = {
-      totalDue: dueJobs.length,
-      processed: 0,
-      sent: 0,
-      blockedPendingTemplate: 0,
-      skippedIneligible: 0,
-      failed: 0
-    };
+      const batchLimit = options.batchSize || 25;
 
-    for (const job of dueJobs) {
-      summary.processed++;
+      // 1. Stale Lease Recovery: Reclaim jobs locked > 5 minutes ago if worker crashed
+      const staleThreshold = new Date(Date.now() - 5 * 60 * 1000);
+      await WhatsappMessage.updateMany(
+        {
+          status: 'SENDING',
+          lockedAt: { $lte: staleThreshold },
+          attemptCount: { $lt: 3 }
+        },
+        {
+          $set: { status: WHATSAPP_MESSAGE_STATUSES.QUEUED, lockedAt: null }
+        }
+      );
+
+      // 2. Fetch candidates for current window
+      const candidateJobs = await WhatsappMessage.find({
+        status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
+        scheduledFor: { $lte: currentNow }
+      })
+        .sort({ scheduledFor: 1 })
+        .limit(batchLimit);
+
+      const summary = {
+        totalDue: candidateJobs.length,
+        processed: 0,
+        sent: 0,
+        blockedPendingTemplate: 0,
+        skippedIneligible: 0,
+        failed: 0
+      };
+
+      for (const candidate of candidateJobs) {
+        // Atomic Lease Claim: Ensures only one worker process handles this message
+        const job = await WhatsappMessage.findOneAndUpdate(
+          {
+            _id: candidate._id,
+            status: WHATSAPP_MESSAGE_STATUSES.QUEUED
+          },
+          {
+            $set: {
+              status: 'SENDING',
+              lockedAt: new Date()
+            }
+          },
+          { returnDocument: 'after' }
+        ).populate('registrationId');
+
+        if (!job) {
+          // Claimed by another concurrent process
+          continue;
+        }
+
+        summary.processed++;
 
       const registration = job.registrationId;
       if (!registration || registration.isDeleted) {
@@ -331,6 +378,9 @@ export class CommunicationSchedulerService {
     }
 
     return summary;
+  } finally {
+    isWorkerRunning = false;
+  }
   }
 
   /**

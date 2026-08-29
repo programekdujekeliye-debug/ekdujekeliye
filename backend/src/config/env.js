@@ -181,6 +181,7 @@ export const env = {
   WHATSAPP_WEBHOOK_VERIFY_TOKEN,
   WHATSAPP_BATCH_SIZE: Number(process.env.WHATSAPP_BATCH_SIZE) || 25,
   WHATSAPP_BATCH_DELAY_MS: Number(process.env.WHATSAPP_BATCH_DELAY_MS) || 200,
+  PAYMENT_COMMUNICATION_MODE: (process.env.PAYMENT_COMMUNICATION_MODE || 'COMBINED').toUpperCase(),
 
   // Worker Security Secrets
   CRON_SECRET: readOptionalEnv('CRON_SECRET'),

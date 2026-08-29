@@ -195,6 +195,22 @@ export const activateTemplate = async (req, res) => {
   }
 };
 
+export const getActiveTemplate = async (req, res) => {
+  const activeType = req.query.type || 'pass_delivery';
+  try {
+    const activeTemplate = await WhatsappTemplate.findOne({ type: activeType, isActive: true });
+    if (!activeTemplate) {
+      if (activeType === 'payment_request') {
+        return res.json({ text: 'Hello! I have registered for {programName}. My Inquiry ID is {inquiryId}. Please verify my pass.' });
+      }
+      return res.json({ text: 'Hello! Your pass for {programName} is ready: {passUrl}' });
+    }
+    res.json(activeTemplate);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error fetching active template.' });
+  }
+};
+
 /**
  * Get complete communication timeline for a specific registration
  */
@@ -316,5 +332,68 @@ export const runSchedulerWorker = async (req, res) => {
   }
 };
 
+/**
+ * Manual Admin Resend with cooldown and audit logging
+ */
+export const resendMessage = async (req, res) => {
+  const { inquiryId, templateKey } = req.body;
+  if (!inquiryId || !templateKey) {
+    return res.status(400).json({ error: 'inquiryId and templateKey are required.' });
+  }
+
+  try {
+    const reg = await Registration.findOne({ inquiryId: { $regex: new RegExp(`^${inquiryId.trim()}$`, 'i') } });
+    if (!reg) return res.status(404).json({ error: 'Registration record not found.' });
+
+    // Cooldown check: 2 minutes cooldown between manual resends for same template & inquiry
+    const recentSent = await WhatsappMessage.findOne({
+      inquiryId: reg.inquiryId,
+      templateName: templateKey,
+      sentAt: { $gte: new Date(Date.now() - 2 * 60 * 1000) }
+    });
+
+    if (recentSent) {
+      return res.status(429).json({
+        error: 'COOLDOWN_ACTIVE',
+        message: 'A message of this type was sent within the last 2 minutes. Please wait before resending.'
+      });
+    }
+
+    const event = await Event.findOne({ $or: [{ id: reg.programId }, { slug: reg.programId }] });
+    const customerName = `${reg.husbandName || ''} & ${reg.wifeName || ''}`.trim() || 'Respected Couple';
+
+    const sendRes = await sendUtilityTemplate({
+      recipientPhone: reg.phoneNumber,
+      templateKey,
+      languageCode: 'en_US',
+      variables: {
+        customerName,
+        eventName: event?.name || reg.programName || 'Ek Duje Ke Liye Seminar',
+        eventDate: event?.date || reg.programDate || '',
+        eventTime: event?.time || reg.programTime || '8:30 PM',
+        venue: event?.venue || 'Sardar Smruti Bhavan, Surat',
+        registrationId: reg.inquiryId,
+        inquiryId: reg.inquiryId
+      },
+      idempotencyKey: `MANUAL_RESEND:${templateKey}:${reg.inquiryId}:${Date.now()}`,
+      registrationId: reg._id,
+      eventId: reg.programId,
+      inquiryId: reg.inquiryId,
+      trigger: 'admin_manual_resend',
+      executionSource: 'MANUAL_ADMIN'
+    });
+
+    res.json({
+      success: sendRes.success,
+      status: sendRes.status,
+      providerMessageId: sendRes.providerMessageId,
+      message: sendRes.success ? 'Message successfully resent.' : (sendRes.message || 'Could not resend message.')
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error during message resend.', details: err.message });
+  }
+};
+
 import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
 import { invitationCardService } from '../../services/invitationCard.service.js';
+import { Event } from '../../models/Event.js';
