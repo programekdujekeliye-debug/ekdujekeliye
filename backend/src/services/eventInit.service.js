@@ -79,21 +79,24 @@ export async function ensureEarlyRegistrationEvents() {
       { upsert: true, returnDocument: 'after' }
     );
 
-    // 3. Link and standardize all 7 September registrations (EK06-02, EK06-03, EK06-04, EK06-05)
+    // 3. Link and standardize all 7 September registrations to EK06
     try {
-      // Migrate EK01-05 (Divyesh & Snehal Varsani) -> EK06-05
       const ek01Regs = await Registration.find({
         $or: [
-          { inquiryId: 'EK01-05' },
-          { phoneNumber: '9974446563' },
-          { inquiryId: { $regex: '^EK01-' }, programDate: '2026-09-07' }
+          { inquiryId: { $regex: '^EK01-' } },
+          { phoneNumber: { $in: ['9974446563', '9909150367'] } }
         ]
       });
 
       for (const reg of ek01Regs) {
-        const targetInquiryId = reg.inquiryId.startsWith('EK01-')
-          ? reg.inquiryId.replace('EK01-', 'EK06-')
-          : 'EK06-05';
+        let targetInquiryId = reg.inquiryId;
+        if (targetInquiryId.startsWith('EK01-')) {
+          targetInquiryId = targetInquiryId.replace('EK01-', 'EK06-');
+        } else if (reg.phoneNumber === '9974446563') {
+          targetInquiryId = 'EK06-05';
+        } else if (reg.phoneNumber === '9909150367') {
+          targetInquiryId = 'EK06-06';
+        }
 
         await Registration.updateOne(
           { _id: reg._id },
