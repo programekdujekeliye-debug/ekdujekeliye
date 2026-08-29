@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import { registrationService } from './registration.service.js';
 import { Registration } from '../../models/Registration.js';
 import { Event } from '../../models/Event.js';
+import { MediaArchive } from '../../models/MediaArchive.js';
+import { eventService } from '../events/event.service.js';
 import { Counter, getNextSequence } from '../../models/Counter.js';
 import { storageService } from '../../services/storage.service.js';
 import { qrPassService } from '../passes/qrPass.service.js';
@@ -286,26 +288,28 @@ export const getSubmissionsList = async (req, res) => {
   const safeLimit = Math.min(Math.max(1, Number(limit) || 50), 200);
   const safePage = Math.max(1, Number(page) || 1);
 
-  const query = { isDeleted: { $ne: true } };
+  const andConditions = [
+    { isDeleted: { $ne: true } }
+  ];
 
   if (isVip === 'true') {
-    query.$or = [
-      { isVip: true },
-      { inquiryId: { $regex: '^IP-', $options: 'i' } },
-      { 'payment.provider': 'manual_invite' }
-    ];
+    andConditions.push({
+      $or: [
+        { isVip: true },
+        { inquiryId: { $regex: '^IP-', $options: 'i' } },
+        { 'payment.provider': 'manual_invite' }
+      ]
+    });
   } else if (isVip === 'false') {
-    query.isVip = { $ne: true };
-    query.inquiryId = { $not: /^IP-/i };
+    andConditions.push({
+      isVip: { $ne: true },
+      inquiryId: { $not: /^IP-/i }
+    });
   }
 
   if (programId && programId !== 'all') {
-    const eventObj = await Event.findOne({
-      $or: [
-        { id: programId },
-        { slug: programId },
-        { date: programId }
-      ]
+    const eventObj = await eventService.getEventBySlug(programId) || await Event.findOne({
+      $or: [{ id: programId }, { slug: programId }, { date: programId }]
     }).lean();
 
     const matchedIds = [programId];
@@ -314,55 +318,59 @@ export const getSubmissionsList = async (req, res) => {
       if (eventObj.slug && !matchedIds.includes(eventObj.slug)) matchedIds.push(eventObj.slug);
     }
 
-    const eventOr = [
-      { programId: { $in: matchedIds } },
-      ...(eventObj?.date ? [{ programDate: eventObj.date }] : [])
-    ];
-
-    if (query.$and) {
-      query.$and.push({ $or: eventOr });
-    } else {
-      query.$and = [{ $or: eventOr }];
-    }
+    andConditions.push({
+      $or: [
+        { programId: { $in: matchedIds } },
+        ...(eventObj?.date ? [{ programDate: eventObj.date }] : [])
+      ]
+    });
   }
-  if (status && status !== 'all') query.status = status;
+
+  if (status && status !== 'all') {
+    andConditions.push({ status });
+  }
+
   if (paymentStatus && paymentStatus !== 'all') {
     if (paymentStatus === 'paid' || paymentStatus === 'captured') {
-      query.$or = [
-        { 'payment.status': 'captured' },
-        { status: 'approved' }
-      ];
+      andConditions.push({
+        $or: [
+          { 'payment.status': 'captured' },
+          { status: 'approved' }
+        ]
+      });
     } else if (paymentStatus === 'pending') {
-      query.$and = [
-        { $or: [{ 'payment.status': 'pending' }, { 'payment.status': { $exists: false } }, { payment: null }] },
-        { status: { $ne: 'approved' } }
-      ];
+      andConditions.push({
+        'payment.status': { $in: ['pending', null, undefined] },
+        status: { $ne: 'approved' }
+      });
     } else if (paymentStatus === 'failed') {
-      query['payment.status'] = 'failed';
+      andConditions.push({ 'payment.status': 'failed' });
     }
   }
+
   if (attendance && attendance !== 'all') {
     if (attendance === 'unmarked') {
-      query.$or = [{ attendance: 'unmarked' }, { attendance: { $exists: false } }, { attendance: null }];
+      andConditions.push({
+        $or: [{ attendance: 'unmarked' }, { attendance: { $exists: false } }, { attendance: null }]
+      });
     } else {
-      query.attendance = attendance;
+      andConditions.push({ attendance });
     }
   }
 
   if (search) {
-    const searchConditions = [
-      { inquiryId: { $regex: search, $options: 'i' } },
-      { phoneNumber: { $regex: search, $options: 'i' } },
-      { husbandName: { $regex: search, $options: 'i' } },
-      { wifeName: { $regex: search, $options: 'i' } },
-      { surname: { $regex: search, $options: 'i' } }
-    ];
-    if (query.$or) {
-      query.$and = (query.$and || []).concat([{ $or: searchConditions }]);
-    } else {
-      query.$or = searchConditions;
-    }
+    andConditions.push({
+      $or: [
+        { inquiryId: { $regex: search, $options: 'i' } },
+        { phoneNumber: { $regex: search, $options: 'i' } },
+        { husbandName: { $regex: search, $options: 'i' } },
+        { wifeName: { $regex: search, $options: 'i' } },
+        { surname: { $regex: search, $options: 'i' } }
+      ]
+    });
   }
+
+  const query = andConditions.length === 1 ? andConditions[0] : { $and: andConditions };
 
   try {
     const skip = (safePage - 1) * safeLimit;
@@ -380,11 +388,10 @@ export const getSubmissionsList = async (req, res) => {
 
     // Batch resolve media storage status for fast Admin UI rendering
     const inquiryIds = submissions.map(s => s.inquiryId);
-    const { MediaArchive } = await import('../../models/MediaArchive.js');
-    const archives = await MediaArchive.find({
+    const archives = inquiryIds.length > 0 ? await MediaArchive.find({
       registrationId: { $in: inquiryIds },
       status: { $in: ['VERIFIED', 'ARCHIVED', 'QUEUED', 'COPYING'] }
-    }).select('registrationId status driveFileId filename operationalThumbnailUrl operationalThumbnailPublicId cloudinaryOriginalStatus').lean();
+    }).select('registrationId status driveFileId filename operationalThumbnailUrl operationalThumbnailPublicId cloudinaryOriginalStatus').lean() : [];
 
     const archiveMap = new Map();
     archives.forEach(a => archiveMap.set(a.registrationId, a));

@@ -87,6 +87,7 @@ const EventSchema = new mongoose.Schema({
 
 EventSchema.index({ id: 1 }, { unique: true });
 EventSchema.index({ slug: 1 }, { unique: true, sparse: true });
+EventSchema.index({ date: 1 });
 EventSchema.index({ status: 1, date: 1 });
 
 export const Event = mongoose.models.Program || mongoose.model('Program', EventSchema);

@@ -164,11 +164,13 @@ export async function ensureEarlyRegistrationEvents() {
           { upsert: true }
         );
       }
-    } catch (cntErr) {
-      console.warn('[EventInit] Counter sync notice:', cntErr.message);
-    }
+    // 5. Ensure critical database indexes for high-speed sub-millisecond queries
+    try {
+      await Registration.createIndexes();
+      await Event.createIndexes();
+    } catch (_) {}
 
-    console.log('[EventInit] Ensured 7 Sep (EK06) & 11 Sep (EK07) Early Registration Mode in DB.');
+    console.log('[EventInit] Ensured 7 Sep (EK06) & 11 Sep (EK07) Early Registration Mode and DB indexes.');
   } catch (err) {
     console.error('[EventInit] Failed to ensure early registration events:', err.message);
   }
