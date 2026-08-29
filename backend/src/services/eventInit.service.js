@@ -1,4 +1,5 @@
 import { Event } from '../models/Event.js';
+import { Counter } from '../models/Counter.js';
 
 /**
  * Startup Event Config Initializer
@@ -7,6 +8,16 @@ import { Event } from '../models/Event.js';
  */
 export async function ensureEarlyRegistrationEvents() {
   try {
+    // 0. Auto-Heal Counter Collection: Drop legacy name_1 unique index if present
+    try {
+      const indexes = await Counter.collection.indexes();
+      const legacyIdx = indexes.find(i => i.name === 'name_1');
+      if (legacyIdx) {
+        await Counter.collection.dropIndex('name_1');
+        console.log('[EventInit] Successfully dropped legacy counter unique index: name_1');
+      }
+    } catch (_) {}
+
     const PROGRAM_NAME = 'Ek Duje Ke Liye - Sardar Patel Smruti Bhavan';
     const VENUE_NAME = 'Sardar Patel Smruti Bhavan, Varachha, Surat';
     const MAP_URL = 'https://share.google/y1jtFAZXuKusYTiUD';
