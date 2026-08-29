@@ -19,6 +19,7 @@ import {
   CreditCardIcon,
   DownloadIcon
 } from '../../../components/Icons';
+import toast from 'react-hot-toast';
 
 export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean }) => {
   const { selectedProgramId, programs } = useAdmin();
@@ -161,6 +162,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(url);
       setCopiedId(inquiryId);
+      toast.success(`Payment link copied for ${inquiryId}!`);
       setTimeout(() => setCopiedId(null), 2500);
     }
   };
@@ -171,8 +173,9 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
       setSubmissions((prev) =>
         prev.map((s) => (s.inquiryId === inquiryId ? { ...s, status: 'approved' } : s))
       );
-    } catch (err) {
-      alert('Failed to approve submission.');
+      toast.success(`Registration ${inquiryId} approved!`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to approve submission.');
     }
   };
 
@@ -184,8 +187,9 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
       setSubmissions((prev) =>
         prev.map((s) => (s.inquiryId === inquiryId ? { ...s, status: 'rejected' } : s))
       );
-    } catch (err) {
-      alert('Failed to reject submission.');
+      toast.success(`Registration ${inquiryId} marked as rejected.`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to reject submission.');
     }
   };
 
@@ -195,8 +199,9 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
       setSubmissions((prev) =>
         prev.map((s) => (s.inquiryId === inquiryId ? { ...s, attendance: att } : s))
       );
-    } catch (err) {
-      alert('Failed to update attendance.');
+      toast.success(`Attendance marked as ${att.toUpperCase()} for ${inquiryId}`);
+    } catch (err: any) {
+      toast.error('Failed to update attendance.');
     }
   };
 
@@ -204,26 +209,28 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
     if (!confirm('Move submission to trash?')) return;
     try {
       await registrationsApi.softDelete(inquiryId);
+      toast.success(`Registration ${inquiryId} moved to trash.`);
       fetchList(currentPage);
-    } catch (err) {
-      alert('Failed to delete submission.');
+    } catch (err: any) {
+      toast.error('Failed to delete submission.');
     }
   };
 
   const handleBulkMove = async () => {
     if (selectedIds.length === 0 || !targetProgramId) {
-      alert('Please select registrations and a target program slot.');
+      toast.error('Please select registrations and a target program slot.');
       return;
     }
     if (!confirm(`Move ${selectedIds.length} registrations to selected event?`)) return;
 
     try {
       await registrationsApi.bulkMove(selectedIds, targetProgramId);
+      toast.success(`Successfully moved ${selectedIds.length} registrations.`);
       setSelectedIds([]);
       setTargetProgramId('');
       fetchList(currentPage);
-    } catch (err) {
-      alert('Failed to move registrations.');
+    } catch (err: any) {
+      toast.error('Failed to move registrations.');
     }
   };
 

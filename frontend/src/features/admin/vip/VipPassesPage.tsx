@@ -23,6 +23,7 @@ import {
 } from '../../../components/Icons';
 import { BatchExportModal } from '../reports/BatchExportModal';
 import { LuxurySelect } from '../../../components/LuxurySelect';
+import toast from 'react-hot-toast';
 
 export const VipPassesPage = () => {
   const { programs, password } = useAdmin();
@@ -153,12 +154,14 @@ export const VipPassesPage = () => {
         message: res.message || 'Pass resent to WhatsApp!',
         success: true
       });
+      toast.success(`VIP pass resent to ${guest.phoneNumber}!`);
     } catch (err: any) {
       setResendStatus({
         id: guest.inquiryId,
         message: err.message || 'Failed to resend pass.',
         success: false
       });
+      toast.error(err.message || 'Failed to resend VIP pass.');
     } finally {
       setResendingId(null);
     }
@@ -169,9 +172,10 @@ export const VipPassesPage = () => {
     if (!confirm(`Are you sure you want to revoke / delete VIP pass for ${name}?`)) return;
     try {
       await apiClient(`/api/submissions/${id}`, { method: 'DELETE' });
+      toast.success(`VIP pass for ${name} deleted.`);
       fetchVipGuests();
-    } catch (err) {
-      alert('Failed to delete VIP pass.');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete VIP pass.');
     }
   };
 
@@ -193,7 +197,7 @@ export const VipPassesPage = () => {
 
   const exportVipCsv = () => {
     if (filteredGuests.length === 0) {
-      alert('No VIP guests to export.');
+      toast.error('No VIP guests to export.');
       return;
     }
     const headers = ['Pass ID', 'Husband Name', 'Wife Name', 'Surname', 'Phone Number', 'Event Slot', 'Attendance', 'Pass URL'];
@@ -216,17 +220,18 @@ export const VipPassesPage = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    toast.success('VIP CSV exported successfully!');
   };
 
   const exportVipPdf = () => {
     if (filteredGuests.length === 0) {
-      alert('No VIP guests to export.');
+      toast.error('No VIP guests to export.');
       return;
     }
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Pop-up blocked. Please allow pop-ups for this site to view the PDF report.');
+      toast.error('Pop-up blocked. Please allow pop-ups for this site to view the PDF report.');
       return;
     }
 
@@ -729,7 +734,7 @@ export const VipPassesPage = () => {
                         type="button"
                         onClick={() => {
                           navigator.clipboard.writeText(newPassUrl);
-                          alert('VIP Pass URL copied!');
+                          toast.success('VIP Pass URL copied!');
                         }}
                         className="flex-1 py-2 bg-emerald-200 hover:bg-emerald-300 text-emerald-950 text-xs font-bold rounded-xl"
                       >

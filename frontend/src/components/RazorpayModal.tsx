@@ -42,13 +42,15 @@ export interface RazorpayOptions {
   onDismiss?: () => void;
 }
 
+import toast from 'react-hot-toast';
+
 /**
  * Open Razorpay Standard Checkout modal
  */
 export const openRazorpayModal = async (options: RazorpayOptions): Promise<boolean> => {
   const isLoaded = await loadRazorpayScript();
   if (!isLoaded || !(window as any).Razorpay) {
-    alert('Failed to load Razorpay Checkout SDK. Please check your internet connection and try again.');
+    toast.error('Failed to load Razorpay Checkout SDK. Please check your internet connection.');
     return false;
   }
 

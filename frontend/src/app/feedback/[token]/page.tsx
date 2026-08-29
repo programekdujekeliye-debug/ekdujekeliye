@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { API_BASE_URL } from '../../../config';
 import { CheckCircleIcon, AlertTriangleIcon, HeartIcon, StarIcon, CheckIcon } from '../../../components/Icons';
+import toast from 'react-hot-toast';
 
 interface FeedbackData {
   token: string;
@@ -84,8 +85,9 @@ export default function FeedbackPage() {
       if (!res.ok) throw new Error(result.error || 'Failed to submit feedback');
 
       setSubmitted(true);
+      toast.success('Thank you for your feedback!');
     } catch (err: any) {
-      alert(err.message || 'Error submitting feedback.');
+      toast.error(err.message || 'Error submitting feedback.');
     } finally {
       setSubmitting(false);
     }

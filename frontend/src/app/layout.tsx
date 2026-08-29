@@ -47,6 +47,8 @@ export const metadata: Metadata = {
   }
 };
 
+import { ToastProvider } from "@/components/ui/ToastProvider";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -59,6 +61,7 @@ export default function RootLayout({
       className={`${plusJakartaSans.variable} ${cinzel.variable} ${notoSansGujarati.variable} h-full antialiased light`}
     >
       <body className="min-h-full flex flex-col font-sans bg-[#FAF9F6] text-stone-900 selection:bg-rose-500/20 selection:text-rose-900" style={{ colorScheme: 'light' }}>
+        <ToastProvider />
         {children}
       </body>
     </html>

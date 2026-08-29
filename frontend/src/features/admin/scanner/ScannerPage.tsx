@@ -31,6 +31,7 @@ import {
   CheckIcon,
   UsersIcon
 } from '../../../components/Icons';
+import toast from 'react-hot-toast';
 
 interface ScanDisplayResult {
   type: 'VALID' | 'VALID_OFFLINE' | 'ALREADY_SCANNED' | 'WRONG_EVENT' | 'INVALID_SIGNATURE' | 'REVOKED' | 'CONFLICT';
@@ -413,14 +414,14 @@ export const ScannerPage: React.FC = () => {
           if (code && code.data) {
             handleQrDetected(code.data.trim());
           } else {
-            alert('No readable QR code found in the selected image.');
+            toast.error('No readable QR code found in the selected image.');
           }
         };
         img.src = event.target?.result as string;
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
-      alert(`Error reading image: ${err.message}`);
+      toast.error(`Error reading image: ${err.message}`);
     }
   };
 
@@ -618,9 +619,10 @@ export const ScannerPage: React.FC = () => {
       await savePreparedEvent(data);
       setPreparedEvent(data);
       setPrepSuccessMessage(`Offline ready for ${data.eventName} (${data.eventDate})`);
+      toast.success(`Offline database ready for ${data.eventName}!`);
       setTimeout(() => setPrepSuccessMessage(null), 4000);
     } catch (err: any) {
-      alert(`Offline preparation error: ${err.message}`);
+      toast.error(`Offline preparation error: ${err.message}`);
     } finally {
       setIsPrepping(false);
     }
@@ -634,7 +636,7 @@ export const ScannerPage: React.FC = () => {
     try {
       const pendingScans = await getPendingOfflineScans(activeEventId);
       if (pendingScans.length === 0) {
-        alert('No pending offline scans to sync.');
+        toast('No pending offline scans to sync.', { icon: 'ℹ️' });
         setIsSyncing(false);
         return;
       }
@@ -662,9 +664,9 @@ export const ScannerPage: React.FC = () => {
 
       await refreshLocalStats();
       await fetchServerStats();
-      alert(`Sync complete: ${data.processedCount || pendingScans.length} scan(s) synced to MongoDB.`);
+      toast.success(`Sync complete: ${data.processedCount || pendingScans.length} scan(s) synced.`);
     } catch (err: any) {
-      alert(`Sync failed: ${err.message}`);
+      toast.error(`Sync failed: ${err.message}`);
     } finally {
       setIsSyncing(false);
     }
@@ -734,7 +736,7 @@ export const ScannerPage: React.FC = () => {
         });
       }
     } catch (err: any) {
-      alert(`Manual entry error: ${err.message}`);
+      toast.error(`Manual entry error: ${err.message}`);
     } finally {
       setManualLoading(false);
     }

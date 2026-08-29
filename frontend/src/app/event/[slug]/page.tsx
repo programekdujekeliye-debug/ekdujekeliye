@@ -17,6 +17,7 @@ import {
   UploadIcon,
   AlertTriangleIcon
 } from '../../../components/Icons';
+import toast from 'react-hot-toast';
 
 interface ProgramDetail {
   id: string;
@@ -340,17 +341,17 @@ export default function EventDetailPage() {
     if (!event) return;
 
     if (!husbandName.trim() || !wifeName.trim() || !surname.trim()) {
-      alert('કૃપા કરીને પતિ, પત્ની અને અટકનું નામ દાખલ કરો!');
+      toast.error('કૃપા કરીને પતિ, પત્ની અને અટકનું નામ દાખલ કરો!');
       return;
     }
 
     if (!/^[6-9]\d{9}$/.test(phoneNumber.trim())) {
-      alert('કૃપા કરીને સાચો 10-આંકડાનો મોબાઇલ નંબર દાખલ કરો!');
+      toast.error('કૃપા કરીને સાચો 10-આંકડાનો મોબાઇલ નંબર દાખલ કરો!');
       return;
     }
 
     if (!couplePhoto) {
-      alert('કૃપા કરીને તમારો કપલ ફોટો અપલોડ કરો!');
+      toast.error('કૃપા કરીને તમારો કપલ ફોટો અપલોડ કરો!');
       return;
     }
 

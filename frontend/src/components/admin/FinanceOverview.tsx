@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../../config';
 import { DollarSignIcon, DownloadIcon, RefreshCwIcon } from '../Icons';
+import toast from 'react-hot-toast';
 
 interface FinanceData {
   grossRevenue: number;
@@ -95,6 +96,7 @@ export const FinanceOverview = ({ authPassword, selectedProgramId }: { authPassw
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    toast.success('Financial summary CSV downloaded!');
   };
 
   const handleExportPDF = () => {
@@ -102,7 +104,7 @@ export const FinanceOverview = ({ authPassword, selectedProgramId }: { authPassw
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Pop-up blocked. Please allow pop-ups for this site to view the financial statement.');
+      toast.error('Pop-up blocked. Please allow pop-ups for this site to view the financial statement.');
       return;
     }
 

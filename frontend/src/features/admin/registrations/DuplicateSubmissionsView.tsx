@@ -5,6 +5,7 @@ import { registrationsApi } from '../../../services/admin/registrationsApi';
 import { DuplicateGroup } from '../../../types';
 import { API_BASE_URL } from '../../../config';
 import { CheckCircleIcon, TrashIcon, AlertTriangleIcon } from '../../../components/Icons';
+import toast from 'react-hot-toast';
 
 export const DuplicateSubmissionsView = () => {
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
@@ -35,10 +36,11 @@ export const DuplicateSubmissionsView = () => {
     try {
       setDeleting(true);
       await registrationsApi.bulkDelete(selectedInquiryIds);
+      toast.success(`${selectedInquiryIds.length} duplicate submissions moved to trash.`);
       setSelectedInquiryIds([]);
       fetchDuplicates();
-    } catch (err) {
-      alert('Failed to delete selected submissions.');
+    } catch (err: any) {
+      toast.error('Failed to delete selected submissions.');
     } finally {
       setDeleting(false);
     }

@@ -16,6 +16,7 @@ import {
   AlertTriangleIcon,
   XIcon
 } from '../../../components/Icons';
+import toast from 'react-hot-toast';
 
 type EventTab = 'general' | 'location' | 'pricing' | 'content' | 'speaker' | 'pass_seo';
 
@@ -153,9 +154,9 @@ export const EventsPage = () => {
       setDuplicatingId(prog.id);
       await eventsApi.duplicateEvent(prog.id);
       await refreshPrograms();
-      setSuccess(`Event "${prog.name}" duplicated successfully.`);
+      toast.success(`Event "${prog.name}" duplicated successfully.`);
     } catch (err: any) {
-      alert(err.message || 'Failed to duplicate event.');
+      toast.error(err.message || 'Failed to duplicate event.');
     } finally {
       setDuplicatingId(null);
     }
@@ -166,16 +167,16 @@ export const EventsPage = () => {
     try {
       await eventsApi.deleteEvent(id);
       await refreshPrograms();
-      setSuccess(`Event "${name}" deleted.`);
+      toast.success(`Event "${name}" deleted.`);
     } catch (err: any) {
-      alert(err.message || 'Failed to delete event.');
+      toast.error(err.message || 'Failed to delete event.');
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || (formData.isDateFinal && !formData.date) || !formData.capacity) {
-      setError('Please fill in required fields: Name, Date (or set Date TBA), and Capacity.');
+      toast.error('Please fill in required fields: Name, Date, and Capacity.');
       return;
     }
 
@@ -186,17 +187,17 @@ export const EventsPage = () => {
 
       if (editingProgram) {
         await eventsApi.updateEvent(editingProgram.id, formData);
-        setSuccess(`Event "${formData.name}" updated successfully.`);
+        toast.success(`Event "${formData.name}" updated successfully.`);
       } else {
         await eventsApi.createEvent(formData);
-        setSuccess(`Event "${formData.name}" created successfully.`);
+        toast.success(`Event "${formData.name}" created successfully.`);
       }
 
       setIsModalOpen(false);
       resetForm();
       await refreshPrograms();
     } catch (err: any) {
-      setError(err.message || 'Failed to save event.');
+      toast.error(err.message || 'Failed to save event.');
     } finally {
       setSubmitting(false);
     }

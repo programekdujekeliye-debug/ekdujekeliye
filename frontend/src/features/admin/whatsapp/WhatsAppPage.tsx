@@ -27,6 +27,7 @@ import {
   EyeIcon
 } from '../../../components/Icons';
 import { LuxurySelect } from '../../../components/LuxurySelect';
+import toast from 'react-hot-toast';
 
 export const WhatsAppPage = () => {
   // Navigation Sub-tabs: 'dashboard' | 'templates' | 'logs'
@@ -235,12 +236,12 @@ export const WhatsAppPage = () => {
         templateKey: broadcastTemplateKey,
         customMessage: broadcastCustomMsg
       });
-      alert(`Broadcast queued successfully! (${res.queuedCount} messages scheduled)`);
+      toast.success(`Broadcast queued! (${res.queuedCount} messages scheduled)`);
       setShowBroadcastModal(false);
       fetchDashboardData(selectedEventId);
       fetchRegistrations(selectedEventId, pagination.page);
     } catch (err: any) {
-      alert(`Broadcast failed: ${err.message || 'Error'}`);
+      toast.error(`Broadcast failed: ${err.message || 'Error'}`);
     } finally {
       setSendingBroadcast(false);
     }
@@ -253,12 +254,12 @@ export const WhatsAppPage = () => {
     try {
       setSendingGallery(true);
       const res = await whatsappApi.triggerGallery(selectedEventId, galleryUrl);
-      alert(`Gallery link queued for ${res.queuedCount} participants!`);
+      toast.success(`Gallery link queued for ${res.queuedCount} participants!`);
       setShowGalleryModal(false);
       fetchDashboardData(selectedEventId);
       fetchRegistrations(selectedEventId, pagination.page);
     } catch (err: any) {
-      alert(`Failed to trigger gallery notifications: ${err.message}`);
+      toast.error(`Failed to trigger gallery: ${err.message}`);
     } finally {
       setSendingGallery(false);
     }

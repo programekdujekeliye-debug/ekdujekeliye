@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../../config';
 import { RefreshCwIcon, ActivityIcon, DownloadIcon, ShieldCheckIcon, AlertTriangleIcon } from '../Icons';
+import toast from 'react-hot-toast';
 
 interface ResourceData {
   memory: {
@@ -86,12 +87,13 @@ export const ResourceMonitor = ({ authPassword }: { authPassword: string }) => {
       const result = await res.json();
       if (res.ok) {
         setBackupResult(result.manifest || result);
+        toast.success('Backup archive created successfully!');
         fetchResources();
       } else {
-        alert(result.error || 'Backup creation failed.');
+        toast.error(result.error || 'Backup creation failed.');
       }
     } catch (err: any) {
-      alert(`Error running backup: ${err.message}`);
+      toast.error(`Error running backup: ${err.message}`);
     } finally {
       setBackingUp(false);
     }

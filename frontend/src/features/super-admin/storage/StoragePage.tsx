@@ -8,6 +8,7 @@ import { resourcesApi } from '../../../services/admin/resourcesApi';
 import { settingsApi } from '../../../services/admin/settingsApi';
 import { ArchiveCandidate, MediaArchiveJob, BackupRecordItem, DatabaseStats } from '../../../types';
 import { ArchiveIcon, RefreshCwIcon, ShieldCheckIcon, HourglassIcon, CameraIcon, CheckIcon, CogIcon, XIcon, DatabaseIcon, ExternalLinkIcon } from '../../../components/Icons';
+import toast from 'react-hot-toast';
 
 export const StoragePage = () => {
   const { selectedProgramId } = useAdmin();
@@ -122,11 +123,11 @@ export const StoragePage = () => {
     try {
       setOperatingEventId(eventId);
       const res = await archiveApi.startEventArchive(eventId);
-      alert(res.message);
+      toast.success(res.message);
       fetchCandidates();
       fetchJobs(1);
     } catch (err: any) {
-      alert(err.message || 'Failed to start archive.');
+      toast.error(err.message || 'Failed to start archive.');
     } finally {
       setOperatingEventId(null);
     }
@@ -136,10 +137,10 @@ export const StoragePage = () => {
     try {
       setOperatingEventId(eventId);
       const res = await archiveApi.pauseEventArchive(eventId);
-      alert(res.message);
+      toast.success(res.message);
       fetchCandidates();
     } catch (err: any) {
-      alert(err.message || 'Failed to pause archive.');
+      toast.error(err.message || 'Failed to pause archive.');
     } finally {
       setOperatingEventId(null);
     }
@@ -149,10 +150,10 @@ export const StoragePage = () => {
     try {
       setOperatingEventId(eventId);
       const res = await archiveApi.resumeEventArchive(eventId);
-      alert(res.message);
+      toast.success(res.message);
       fetchCandidates();
     } catch (err: any) {
-      alert(err.message || 'Failed to resume archive.');
+      toast.error(err.message || 'Failed to resume archive.');
     } finally {
       setOperatingEventId(null);
     }
@@ -162,11 +163,11 @@ export const StoragePage = () => {
     try {
       setOperatingEventId(eventId);
       const res = await archiveApi.retryEventFailed(eventId);
-      alert(res.message);
+      toast.success(res.message);
       fetchCandidates();
       fetchJobs(1);
     } catch (err: any) {
-      alert(err.message || 'Failed to retry failed jobs.');
+      toast.error(err.message || 'Failed to retry failed jobs.');
     } finally {
       setOperatingEventId(null);
     }
@@ -177,11 +178,11 @@ export const StoragePage = () => {
     try {
       setQueuingEventId(eventId);
       const res = await archiveApi.queueEventArchive(eventId);
-      alert(res.message);
+      toast.success(res.message);
       fetchCandidates();
       fetchJobs(1);
     } catch (err: any) {
-      alert(err.message || 'Failed to queue event for archive.');
+      toast.error(err.message || 'Failed to queue event for archive.');
     } finally {
       setQueuingEventId(null);
     }
@@ -190,10 +191,10 @@ export const StoragePage = () => {
   const handleRetryFailed = async () => {
     try {
       const res = await archiveApi.retryFailed(selectedProgramId !== 'all' ? selectedProgramId : undefined);
-      alert(res.message);
+      toast.success(res.message);
       fetchJobs(1);
     } catch (err: any) {
-      alert(err.message || 'Failed to retry jobs.');
+      toast.error(err.message || 'Failed to retry jobs.');
     }
   };
 
@@ -207,9 +208,10 @@ export const StoragePage = () => {
       setBackupNotice(null);
       const res = await backupsApi.runBackupNow('manual');
       setBackupNotice('Created — waiting for Drive sync');
+      toast.success('Database backup created successfully!');
       fetchBackups();
     } catch (err: any) {
-      alert(err.message || 'Backup failed.');
+      toast.error(err.message || 'Backup failed.');
     } finally {
       setRunningBackup(false);
     }

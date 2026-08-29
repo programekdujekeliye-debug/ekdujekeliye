@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { registrationsApi } from '../../../services/admin/registrationsApi';
 import { Submission } from '../../../types';
+import toast from 'react-hot-toast';
 
 export const TrashSubmissionsView = () => {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -33,9 +34,10 @@ export const TrashSubmissionsView = () => {
   const handleRestore = async (inquiryId: string) => {
     try {
       await registrationsApi.restoreSubmission(inquiryId);
+      toast.success(`Registration ${inquiryId} restored!`);
       fetchTrash(page);
-    } catch (err) {
-      alert('Failed to restore submission.');
+    } catch (err: any) {
+      toast.error('Failed to restore submission.');
     }
   };
 
@@ -43,9 +45,10 @@ export const TrashSubmissionsView = () => {
     if (!confirm('Are you sure you want to permanently delete this submission? This cannot be undone.')) return;
     try {
       await registrationsApi.permanentDelete(inquiryId);
+      toast.success(`Registration ${inquiryId} permanently deleted.`);
       fetchTrash(page);
-    } catch (err) {
-      alert('Failed to delete permanently.');
+    } catch (err: any) {
+      toast.error('Failed to delete permanently.');
     }
   };
 

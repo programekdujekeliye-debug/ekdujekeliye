@@ -8,6 +8,7 @@ import { Submission } from '../../../types';
 import { API_BASE_URL } from '../../../config';
 import { DownloadIcon, CheckCircleIcon, SparklesIcon, XIcon, SearchIcon, CameraIcon } from '../../../components/Icons';
 import { LuxurySelect } from '../../../components/LuxurySelect';
+import toast from 'react-hot-toast';
 
 interface BatchExportModalProps {
   isOpen: boolean;
@@ -155,7 +156,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
   const handleDownloadFramedZip = async (list: Submission[], progName: string) => {
     const photosList = list.filter((sub) => sub.couplePhoto);
     if (photosList.length === 0) {
-      alert('No registrations with couple photos found for the selected filters.');
+      toast.error('No registrations with couple photos found for the selected filters.');
       return;
     }
 
@@ -261,7 +262,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
   const handleDownloadRawZip = async (list: Submission[], progName: string) => {
     const photosList = list.filter((sub) => sub.couplePhoto);
     if (photosList.length === 0) {
-      alert('No registrations with couple photos found for the selected filters.');
+      toast.error('No registrations with couple photos found for the selected filters.');
       return;
     }
 
@@ -305,6 +306,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast.success('Raw photos ZIP downloaded!');
     onClose();
   };
 
@@ -315,7 +317,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
       const list = await fetchFilteredRecords();
 
       if (list.length === 0) {
-        alert('No registration records found for the selected filter combinations.');
+        toast.error('No registration records found for the selected filter combinations.');
         return;
       }
 
@@ -334,7 +336,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
         await handleDownloadRawZip(list, progName);
       }
     } catch (err: any) {
-      alert('Export failed: ' + (err.message || 'Unknown error'));
+      toast.error('Export failed: ' + (err.message || 'Unknown error'));
     } finally {
       setIsExporting(false);
       setZipProgress('');
@@ -405,7 +407,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
   const generatePdfPrintView = (list: Submission[]) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Pop-up blocked. Please allow pop-ups for this site to generate the PDF report.');
+      toast.error('Pop-up blocked. Please allow pop-ups for this site to generate the PDF report.');
       return;
     }
 

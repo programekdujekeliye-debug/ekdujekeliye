@@ -18,6 +18,7 @@ import { StoragePage } from './storage/StoragePage';
 import { BatchExportModal } from '../admin/reports/BatchExportModal';
 import { settingsApi } from '../../services/admin/settingsApi';
 import { apiClient } from '../../services/apiClient';
+import toast from 'react-hot-toast';
 
 const SuperAdminAppContent = () => {
   const {
@@ -64,14 +65,14 @@ const SuperAdminAppContent = () => {
     }
     const confirmText = prompt('Type DELETE to confirm complete database clear:');
     if (confirmText !== 'DELETE') {
-      alert('Action cancelled.');
+      toast('Action cancelled.', { icon: 'ℹ️' });
     } else {
       try {
         await settingsApi.clearAllData();
-        alert('All submissions data cleared successfully.');
+        toast.success('All submissions data cleared successfully.');
         window.location.reload();
       } catch (err: any) {
-        alert(err.message || 'Failed to clear data.');
+        toast.error(err.message || 'Failed to clear data.');
       }
     }
   };
