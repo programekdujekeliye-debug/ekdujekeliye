@@ -8,6 +8,7 @@ import { app } from './app.js';
 import { env } from './config/env.js';
 import { connectDatabase } from './config/database.js';
 import { initializeBackupCron } from './jobs/backup.job.js';
+import { ensureEarlyRegistrationEvents } from './services/eventInit.service.js';
 
 process.on('uncaughtException', (err) => {
   console.error('[Uncaught Exception]:', err);
@@ -22,7 +23,10 @@ const startServer = async () => {
     // 1. Connect to MongoDB Atlas
     await connectDatabase();
 
-    // 2. Initialize scheduled cron tasks
+    // 2. Ensure Early Registration Events in Database
+    await ensureEarlyRegistrationEvents();
+
+    // 3. Initialize scheduled cron tasks
     initializeBackupCron();
 
     // 3. Start HTTP server
