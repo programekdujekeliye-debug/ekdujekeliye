@@ -79,21 +79,49 @@ export async function ensureEarlyRegistrationEvents() {
       { upsert: true, returnDocument: 'after' }
     );
 
-    // 3. Migrate any inadvertent EK01-XX for 7 September 2026 to EK06-XX
+    // 3. Link and standardize all 7 September registrations (EK06-02, EK06-03, EK06-04, EK06-05)
     try {
+      // Migrate EK01-05 (Divyesh & Snehal Varsani) -> EK06-05
       const ek01Regs = await Registration.find({
-        programDate: '2026-09-07',
-        inquiryId: { $regex: '^EK01-' }
+        $or: [
+          { inquiryId: 'EK01-05' },
+          { phoneNumber: '9974446563' },
+          { inquiryId: { $regex: '^EK01-' }, programDate: '2026-09-07' }
+        ]
       });
 
       for (const reg of ek01Regs) {
-        const targetInquiryId = reg.inquiryId.replace('EK01-', 'EK06-');
-        const conflict = await Registration.findOne({ inquiryId: targetInquiryId });
-        if (!conflict) {
-          await Registration.updateOne({ _id: reg._id }, { $set: { inquiryId: targetInquiryId } });
-          console.log(`[EventInit] Auto-migrated ${reg.inquiryId} -> ${targetInquiryId}`);
-        }
+        const targetInquiryId = reg.inquiryId.startsWith('EK01-')
+          ? reg.inquiryId.replace('EK01-', 'EK06-')
+          : 'EK06-05';
+
+        await Registration.updateOne(
+          { _id: reg._id },
+          {
+            $set: {
+              inquiryId: targetInquiryId,
+              programId: 'prog-2026-09-07',
+              programDate: '2026-09-07',
+              programName: PROGRAM_NAME,
+              isDeleted: false
+            }
+          }
+        );
+        console.log(`[EventInit] Linked and renamed registration ${reg.inquiryId} -> ${targetInquiryId}`);
       }
+
+      // Ensure all EK06 registrations are mapped to 7 September 2026
+      await Registration.updateMany(
+        { inquiryId: { $regex: '^EK06-' } },
+        {
+          $set: {
+            programId: 'prog-2026-09-07',
+            programDate: '2026-09-07',
+            programName: PROGRAM_NAME,
+            isDeleted: false
+          }
+        }
+      );
     } catch (migErr) {
       console.warn('[EventInit] Migration notice:', migErr.message);
     }
