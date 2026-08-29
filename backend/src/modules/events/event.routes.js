@@ -7,7 +7,9 @@ import {
   createEvent,
   updateEvent,
   duplicateEvent,
-  deleteEvent
+  deleteEvent,
+  getEnablePaymentPreview,
+  enablePaymentAndCommunications
 } from './event.controller.js';
 import { requireAuth } from '../../middleware/auth.js';
 
@@ -22,6 +24,8 @@ eventRouter.get('/slug/:slug', getEventBySlug);
 // Admin Management Endpoints
 eventRouter.get('/', getAdminEvents);
 eventRouter.post('/', requireAuth, createEvent);
+eventRouter.get('/:id/enable-payment-preview', requireAuth, getEnablePaymentPreview);
+eventRouter.post('/:id/enable-payment', requireAuth, enablePaymentAndCommunications);
 eventRouter.post('/:id/duplicate', requireAuth, duplicateEvent);
 eventRouter.put('/:id', requireAuth, updateEvent);
 eventRouter.delete('/:id', requireAuth, deleteEvent);

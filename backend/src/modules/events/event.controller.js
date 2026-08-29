@@ -276,3 +276,23 @@ export const deleteEvent = async (req, res) => {
   }
 };
 
+export const getEnablePaymentPreview = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const preview = await eventService.getEnablePaymentPreview(id);
+    res.json({ success: true, preview });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Error fetching payment activation preview.' });
+  }
+};
+
+export const enablePaymentAndCommunications = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await eventService.enablePaymentAndCommunications(id);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Error activating payment & communications.' });
+  }
+};
+

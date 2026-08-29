@@ -56,6 +56,7 @@ const EventSchema = new mongoose.Schema({
   isInquiryClosed: { type: Boolean, default: false },
   isRegistrationOpen: { type: Boolean, default: true },
   isPaymentEnabled: { type: Boolean, default: true },
+  communicationsEnabled: { type: Boolean, default: true },
   earlyRegistrationMode: { type: Boolean, default: false },
   paymentOpenedAt: { type: Date, default: null },
   paymentOpeningNote: { type: String, default: '' },

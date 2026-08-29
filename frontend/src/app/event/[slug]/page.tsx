@@ -489,21 +489,21 @@ export default function EventDetailPage() {
             <div className="space-y-4 text-left">
               <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl text-xs text-stone-700 leading-relaxed space-y-2">
                 <p className="font-bold text-stone-900 text-sm">English Notice:</p>
-                <p>Thank you. Your early registration has been received successfully.</p>
-                <p>Payment is not required at this stage.</p>
-                <p>We will send the payment link to your registered WhatsApp number once online payment becomes available.</p>
+                <p>Thank you. Your registration has been received successfully.</p>
+                <p>Online payment will open shortly.</p>
+                <p>We will notify you when payment becomes available.</p>
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 font-semibold">
-                  <strong>Important:</strong> Your seat is not confirmed yet. Your seat and Digital Entry Pass will be confirmed only after successful payment.
+                  <strong>Important:</strong> Your seat is not confirmed yet. Your seat will be confirmed only after successful payment.
                 </div>
               </div>
 
               <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl text-xs text-stone-700 leading-relaxed space-y-2">
                 <p className="font-bold text-stone-900 text-sm">ગુજરાતી વિગત:</p>
-                <p>આભાર. તમારી વહેલી નોંધણી સફળતાપૂર્વક મળી ગઈ છે.</p>
-                <p>હાલમાં પેમેન્ટ કરવાની જરૂર નથી.</p>
-                <p>ઓનલાઈન પેમેન્ટ શરૂ થયા પછી તમારા નોંધાયેલા WhatsApp નંબર પર પેમેન્ટ લિંક મોકલવામાં આવશે.</p>
+                <p>આભાર. તમારી નોંધણી સફળતાપૂર્વક મળી ગઈ છે.</p>
+                <p>ઓનલાઈન પેમેન્ટ થોડા સમયમાં શરૂ થશે.</p>
+                <p>પેમેન્ટ શરૂ થયા બાદ તમને જાણ કરવામાં આવશે.</p>
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 font-semibold">
-                  <strong>મહત્વપૂર્ણ:</strong> હાલ તમારી સીટ કન્ફર્મ નથી. સફળ પેમેન્ટ થયા બાદ જ તમારી સીટ અને Digital Entry Pass કન્ફર્મ થશે.
+                  <strong>મહત્વપૂર્ણ:</strong> હાલ તમારી સીટ કન્ફર્મ નથી. સફળ પેમેન્ટ થયા બાદ જ તમારી સીટ કન્ફર્મ થશે.
                 </div>
               </div>
             </div>

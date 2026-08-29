@@ -3,6 +3,7 @@ import { Registration } from '../../models/Registration.js';
 import { Event } from '../../models/Event.js';
 import { Payment } from '../../models/Payment.js';
 import { WebhookEvent } from '../../models/WebhookEvent.js';
+import { WhatsappMessage } from '../../models/WhatsappMessage.js';
 import { eventService } from '../events/event.service.js';
 import { qrPassService } from '../passes/qrPass.service.js';
 import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
@@ -166,6 +167,25 @@ export class PaymentService {
       );
     } catch (e) {}
 
+    // Cancel all pending/queued payment reminder messages for this registration
+    try {
+      await WhatsappMessage.updateMany(
+        {
+          registrationId: submission._id,
+          messageType: 'payment_pending',
+          status: { $in: ['QUEUED', 'SENDING'] }
+        },
+        {
+          $set: {
+            status: 'CANCELLED',
+            lastErrorMessage: 'Payment captured successfully. Payment reminders cancelled.'
+          }
+        }
+      );
+    } catch (e) {
+      console.warn('[PaymentService] Error cancelling pending payment reminders:', e.message);
+    }
+
     // 1. Authoritative Ensure Digital Pass with Asymmetric Ed25519 Signatures
     try {
       const event = await eventService.getEventBySlug(submission.programId);
@@ -257,6 +277,25 @@ export class PaymentService {
         );
       } catch (e) {}
 
+      // Cancel all pending/queued payment reminder messages for this registration
+      try {
+        await WhatsappMessage.updateMany(
+          {
+            registrationId: submission._id,
+            messageType: 'payment_pending',
+            status: { $in: ['QUEUED', 'SENDING'] }
+          },
+          {
+            $set: {
+              status: 'CANCELLED',
+              lastErrorMessage: 'Payment captured successfully. Payment reminders cancelled.'
+            }
+          }
+        );
+      } catch (e) {
+        console.warn('[PaymentService] Error cancelling pending payment reminders on webhook:', e.message);
+      }
+
       // Authoritative Captured Finalization: Ensure Pass & Queue WhatsApp Confirmation
       try {
         const event = await eventService.getEventBySlug(submission.programId);
@@ -268,7 +307,7 @@ export class PaymentService {
         const eventTime = event?.time || submission.programTime || '8:30 PM';
         const venue = event?.venue || 'Sardar Smruti Bhavan, Surat';
 
-        // Dispatch M3: Payment Confirmation
+        // Dispatch M3: Payment Confirmation & Pass
         await sendUtilityTemplate({
           recipientPhone: submission.phoneNumber,
           templateKey: 'edkl_payment_confirmed_pass_v1',
@@ -287,27 +326,6 @@ export class PaymentService {
           eventId: submission.programId,
           inquiryId: submission.inquiryId,
           trigger: 'payment_webhook_captured'
-        });
-
-        // Dispatch M4: Digital Pass Ready
-        await sendUtilityTemplate({
-          recipientPhone: submission.phoneNumber,
-          templateKey: 'edkl_event_reminder_v1',
-          languageCode: 'en_US',
-          variables: {
-            customerName,
-            eventName,
-            eventDate,
-            eventTime,
-            venue,
-            registrationId: submission.inquiryId,
-            inquiryId: submission.inquiryId
-          },
-          idempotencyKey: `PASS_READY:${pass.passId}:v${pass.version || 1}`,
-          registrationId: submission._id,
-          eventId: submission.programId,
-          inquiryId: submission.inquiryId,
-          trigger: 'pass_issued'
         });
 
         // Schedule Future Lifecycle: 48h Invitation, 24h Reminder, Post-Event Feedback

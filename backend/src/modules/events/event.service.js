@@ -1,5 +1,9 @@
+import crypto from 'crypto';
 import { Event } from '../../models/Event.js';
 import { Registration } from '../../models/Registration.js';
+import { WhatsappMessage, WHATSAPP_MESSAGE_STATUSES } from '../../models/WhatsappMessage.js';
+import { normalizePhoneNumber, env } from '../../config/env.js';
+import { maskPhoneNumber } from '../../integrations/whatsapp/whatsapp.service.js';
 import { generateEventSlug } from '../../utils/slug.js';
 
 // In-Memory Short TTL Cache for Zero-Cost Reads
@@ -297,6 +301,212 @@ export class EventService {
         presentCount: s.present
       };
     });
+  }
+
+  /**
+   * Get preview before owner enables payment & communication for an event
+   */
+  async getEnablePaymentPreview(eventId) {
+    const event = await Event.findOne({
+      $or: [{ id: eventId }, { slug: eventId }]
+    }).lean();
+
+    if (!event) {
+      const err = new Error('Event not found.');
+      err.status = 404;
+      throw err;
+    }
+
+    if (event.status === 'archived' || event.status === 'completed' || event.status === 'cancelled') {
+      const err = new Error(`Cannot enable payment for an event that is ${event.status}. Only upcoming published events can be activated.`);
+      err.status = 400;
+      throw err;
+    }
+
+    // Count confirmed attendees (paid or approved)
+    const confirmedCount = await Registration.countDocuments({
+      programId: event.id,
+      $or: [{ status: 'approved' }, { 'payment.status': 'captured' }],
+      isDeleted: { $ne: true }
+    });
+
+    // Count existing early registrations (active, unpaid, not cancelled)
+    const earlyRegistrations = await Registration.find({
+      programId: event.id,
+      status: 'pending',
+      'payment.status': { $ne: 'captured' },
+      isDeleted: { $ne: true }
+    }).select('phoneNumber inquiryId husbandName wifeName').lean();
+
+    const eligibleRecipients = earlyRegistrations.filter(r => r.phoneNumber && String(r.phoneNumber).trim().length >= 10);
+
+    const capacity = event.capacity || 1184;
+    const confirmedSeats = confirmedCount * 2;
+    const remainingCapacity = Math.max(0, capacity - confirmedSeats);
+
+    return {
+      eventId: event.id,
+      eventName: event.name,
+      eventDate: event.date,
+      eventTime: event.time,
+      venue: event.venue,
+      capacity,
+      confirmedRegistrations: confirmedCount,
+      confirmedSeats,
+      remainingCapacity,
+      existingEarlyRegistrationsCount: earlyRegistrations.length,
+      eligibleRecipientsCount: eligibleRecipients.length,
+      isPaymentEnabled: Boolean(event.isPaymentEnabled),
+      earlyRegistrationMode: Boolean(event.earlyRegistrationMode),
+      communicationsEnabled: Boolean(event.communicationsEnabled),
+      paymentOpenedAt: event.paymentOpenedAt || null
+    };
+  }
+
+  /**
+   * Authoritative activation of Payment and WhatsApp communications for an upcoming event
+   */
+  async enablePaymentAndCommunications(eventId) {
+    const event = await Event.findOne({
+      $or: [{ id: eventId }, { slug: eventId }]
+    });
+
+    if (!event) {
+      const err = new Error('Event not found.');
+      err.status = 404;
+      throw err;
+    }
+
+    if (event.status === 'archived' || event.status === 'completed' || event.status === 'cancelled') {
+      const err = new Error(`Cannot activate payment for an event that is ${event.status}. Only active upcoming events are allowed.`);
+      err.status = 400;
+      throw err;
+    }
+
+    const activationTimestamp = event.paymentOpenedAt || new Date();
+
+    event.isPaymentEnabled = true;
+    event.communicationsEnabled = true;
+    event.earlyRegistrationMode = false;
+    if (!event.paymentOpenedAt) {
+      event.paymentOpenedAt = activationTimestamp;
+    }
+    await event.save();
+    this.invalidateCache();
+
+    // Query eligible existing early registrations
+    const earlyRegistrations = await Registration.find({
+      programId: event.id,
+      status: 'pending',
+      'payment.status': { $ne: 'captured' },
+      isDeleted: { $ne: true }
+    });
+
+    const feeAmount = `₹${event.price || 1500}`;
+    let queuedOpenMessages = 0;
+    let scheduledReminders = 0;
+
+    for (const reg of earlyRegistrations) {
+      if (!reg.phoneNumber || String(reg.phoneNumber).trim().length < 10) continue;
+
+      const customerName = `${reg.husbandName || ''} & ${reg.wifeName || ''}`.trim() || 'Valued Couple';
+      const eventName = event.name || 'Ek Duje Ke Liye Seminar';
+      const eventDate = event.date || '';
+      const eventTime = event.time || '8:30 PM';
+      const venue = event.venue || 'Sardar Patel Smruti Bhavan, Surat';
+      const inquiryId = reg.inquiryId;
+
+      // 1. Idempotent Payment Open Message (Queued immediately)
+      const openIdempotencyKey = `PAYMENT_OPEN:${event.id}:${reg._id}:${event.paymentOpenedAt.getTime()}`;
+
+      const openMsg = await WhatsappMessage.findOneAndUpdate(
+        { idempotencyKey: openIdempotencyKey },
+        {
+          $setOnInsert: {
+            messageId: `WA-OPEN-${crypto.randomBytes(8).toString('hex')}`,
+            eventId: event.id,
+            registrationId: reg._id,
+            inquiryId,
+            recipientPhone: normalizePhoneNumber(reg.phoneNumber),
+            recipientMasked: maskPhoneNumber(reg.phoneNumber),
+            templateName: 'edkl_payment_pending_v1',
+            templateLanguage: 'en_US',
+            templateCategory: 'UTILITY',
+            messageType: 'payment_pending',
+            trigger: 'payment_activation_open',
+            executionSource: 'NORMAL',
+            providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
+            idempotencyKey: openIdempotencyKey,
+            status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
+            scheduledFor: new Date(),
+            templateParameters: {
+              customerName,
+              eventName,
+              registrationId: inquiryId,
+              eventDate,
+              eventTime,
+              venue,
+              feeAmount,
+              inquiryId
+            }
+          }
+        },
+        { upsert: true, returnDocument: 'after' }
+      );
+
+      if (openMsg) queuedOpenMessages++;
+
+      // 2. Schedule Follow-up Reminder at paymentOpenedAt + 24 hours (if still unpaid)
+      const reminder24hTime = new Date(event.paymentOpenedAt.getTime() + 24 * 60 * 60 * 1000);
+      const remIdempotencyKey = `PAYMENT_REMINDER_24H:${event.id}:${reg._id}`;
+
+      const remMsg = await WhatsappMessage.findOneAndUpdate(
+        { idempotencyKey: remIdempotencyKey },
+        {
+          $setOnInsert: {
+            messageId: `WA-REM24-${crypto.randomBytes(8).toString('hex')}`,
+            eventId: event.id,
+            registrationId: reg._id,
+            inquiryId,
+            recipientPhone: normalizePhoneNumber(reg.phoneNumber),
+            recipientMasked: maskPhoneNumber(reg.phoneNumber),
+            templateName: 'edkl_payment_pending_v1',
+            templateLanguage: 'en_US',
+            templateCategory: 'UTILITY',
+            messageType: 'payment_pending',
+            trigger: 'payment_reminder_24h',
+            executionSource: 'NORMAL',
+            providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
+            idempotencyKey: remIdempotencyKey,
+            status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
+            scheduledFor: reminder24hTime,
+            templateParameters: {
+              customerName,
+              eventName,
+              registrationId: inquiryId,
+              eventDate,
+              eventTime,
+              venue,
+              feeAmount,
+              inquiryId
+            }
+          }
+        },
+        { upsert: true, returnDocument: 'after' }
+      );
+
+      if (remMsg) scheduledReminders++;
+    }
+
+    return {
+      success: true,
+      message: `Payment & WhatsApp communication activated for ${event.name}.`,
+      eventId: event.id,
+      paymentOpenedAt: event.paymentOpenedAt,
+      existingEarlyRegistrationsCount: earlyRegistrations.length,
+      queuedOpenMessages,
+      scheduledReminders
+    };
   }
 }
 

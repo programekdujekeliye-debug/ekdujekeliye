@@ -94,80 +94,89 @@ export class CommunicationSchedulerService {
     const executionSource = options.executionSource || 'NORMAL';
 
     const results = {};
+    const now = new Date();
 
-    // 1. Schedule 48h Personalized Invitation
-    const invitationVersion = registration.invitationVersion || 1;
-    const invIdempotencyKey = `INVITATION_48H:${event.id || event.slug}:${registration._id}:v${invitationVersion}`;
+    // 1. Schedule 48h Personalized Invitation (Only if invitationSendAt is in the future)
+    if (invitationSendAt > now) {
+      const invitationVersion = registration.invitationVersion || 1;
+      const invIdempotencyKey = `INVITATION_48H:${event.id || event.slug}:${registration._id}:v${invitationVersion}`;
 
-    results.invitation = await WhatsappMessage.findOneAndUpdate(
-      { idempotencyKey: invIdempotencyKey },
-      {
-        $setOnInsert: {
-          messageId: `WA-SCH-${crypto.randomBytes(8).toString('hex')}`,
-          eventId: event.id || event.slug,
-          registrationId: registration._id,
-          inquiryId,
-          recipientPhone: normalizePhoneNumber(phone),
-          recipientMasked: maskPhoneNumber(phone),
-          templateName: 'edkl_personal_invitation_48h_v1',
-          templateLanguage: 'en_US',
-          templateCategory: 'UTILITY',
-          messageType: 'invitation',
-          trigger: 'scheduled_48h_invitation',
-          executionSource,
-          providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
-          idempotencyKey: invIdempotencyKey,
-          status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
-          scheduledFor: invitationSendAt,
-          templateParameters: {
-            customerName,
-            eventDate,
-            eventTime,
-            venue,
-            registrationId: inquiryId,
-            inquiryId
+      results.invitation = await WhatsappMessage.findOneAndUpdate(
+        { idempotencyKey: invIdempotencyKey },
+        {
+          $setOnInsert: {
+            messageId: `WA-SCH-${crypto.randomBytes(8).toString('hex')}`,
+            eventId: event.id || event.slug,
+            registrationId: registration._id,
+            inquiryId,
+            recipientPhone: normalizePhoneNumber(phone),
+            recipientMasked: maskPhoneNumber(phone),
+            templateName: 'edkl_personal_invitation_48h_v1',
+            templateLanguage: 'en_US',
+            templateCategory: 'UTILITY',
+            messageType: 'invitation',
+            trigger: 'scheduled_48h_invitation',
+            executionSource,
+            providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
+            idempotencyKey: invIdempotencyKey,
+            status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
+            scheduledFor: invitationSendAt,
+            templateParameters: {
+              customerName,
+              eventDate,
+              eventTime,
+              venue,
+              registrationId: inquiryId,
+              inquiryId
+            }
           }
-        }
-      },
-      { upsert: true, returnDocument: 'after' }
-    );
+        },
+        { upsert: true, returnDocument: 'after' }
+      );
+    } else {
+      console.log(`[CommunicationScheduler] Skipping expired 48h invitation for ${inquiryId} (scheduled time was ${invitationSendAt.toISOString()})`);
+    }
 
-    // 2. Schedule 24h Event Reminder
-    const remIdempotencyKey = `REMINDER_24H:${event.id || event.slug}:${registration._id}`;
+    // 2. Schedule 24h Event Reminder (Only if reminderSendAt is in the future)
+    if (reminderSendAt > now) {
+      const remIdempotencyKey = `REMINDER_24H:${event.id || event.slug}:${registration._id}`;
 
-    results.reminder = await WhatsappMessage.findOneAndUpdate(
-      { idempotencyKey: remIdempotencyKey },
-      {
-        $setOnInsert: {
-          messageId: `WA-SCH-${crypto.randomBytes(8).toString('hex')}`,
-          eventId: event.id || event.slug,
-          registrationId: registration._id,
-          inquiryId,
-          recipientPhone: normalizePhoneNumber(phone),
-          recipientMasked: maskPhoneNumber(phone),
-          templateName: 'edkl_event_reminder_v1',
-          templateLanguage: 'en_US',
-          templateCategory: 'UTILITY',
-          messageType: 'reminder',
-          trigger: 'scheduled_24h_reminder',
-          executionSource,
-          providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
-          idempotencyKey: remIdempotencyKey,
-          status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
-          scheduledFor: reminderSendAt,
-          templateParameters: {
-            customerName,
-            eventName,
-            eventDate,
-            eventTime,
-            venue,
-            registrationId: inquiryId,
-            inquiryId
+      results.reminder = await WhatsappMessage.findOneAndUpdate(
+        { idempotencyKey: remIdempotencyKey },
+        {
+          $setOnInsert: {
+            messageId: `WA-SCH-${crypto.randomBytes(8).toString('hex')}`,
+            eventId: event.id || event.slug,
+            registrationId: registration._id,
+            inquiryId,
+            recipientPhone: normalizePhoneNumber(phone),
+            recipientMasked: maskPhoneNumber(phone),
+            templateName: 'edkl_event_reminder_v1',
+            templateLanguage: 'en_US',
+            templateCategory: 'UTILITY',
+            messageType: 'reminder',
+            trigger: 'scheduled_24h_reminder',
+            executionSource,
+            providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
+            idempotencyKey: remIdempotencyKey,
+            status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
+            scheduledFor: reminderSendAt,
+            templateParameters: {
+              customerName,
+              eventName,
+              eventDate,
+              eventTime,
+              venue,
+              registrationId: inquiryId,
+              inquiryId
+            }
           }
-        }
-      },
-      { upsert: true, returnDocument: 'after' }
-    );
+        },
+        { upsert: true, returnDocument: 'after' }
+      );
+    } else {
+      console.log(`[CommunicationScheduler] Skipping expired 24h reminder for ${inquiryId} (scheduled time was ${reminderSendAt.toISOString()})`);
+    }
 
     // 3. Schedule Post-Event Feedback (Requires attendance check at execution time)
     const fbFeedback = await ensureFeedbackToken(inquiryId, event.id || event.slug, customerName);
@@ -315,14 +324,34 @@ export class CommunicationSchedulerService {
         continue;
       }
 
-      // Revalidate: Pass status
-      const pass = await qrPassService.getPassByInquiryId(registration.inquiryId);
-      if (!pass || pass.status !== 'ACTIVE') {
-        job.status = WHATSAPP_MESSAGE_STATUSES.CANCELLED;
-        job.lastErrorMessage = 'Digital Entry Pass is not ACTIVE.';
-        await job.save();
-        summary.skippedIneligible++;
-        continue;
+      // Revalidate: Payment Pending messages
+      if (job.messageType === 'payment_pending') {
+        const isPaid = registration.status === 'approved' || registration.payment?.status === 'captured';
+        if (isPaid) {
+          job.status = WHATSAPP_MESSAGE_STATUSES.CANCELLED;
+          job.lastErrorMessage = 'Registration already paid. Payment reminder cancelled.';
+          await job.save();
+          summary.skippedIneligible++;
+          continue;
+        }
+
+        if (event.isPaymentEnabled === false || event.earlyRegistrationMode === true || event.communicationsEnabled === false) {
+          job.status = WHATSAPP_MESSAGE_STATUSES.CANCELLED;
+          job.lastErrorMessage = 'Event payment/communications are currently disabled.';
+          await job.save();
+          summary.skippedIneligible++;
+          continue;
+        }
+      } else {
+        // Revalidate: Pass status for post-payment lifecycle communications
+        const pass = await qrPassService.getPassByInquiryId(registration.inquiryId);
+        if (!pass || pass.status !== 'ACTIVE') {
+          job.status = WHATSAPP_MESSAGE_STATUSES.CANCELLED;
+          job.lastErrorMessage = 'Digital Entry Pass is not ACTIVE.';
+          await job.save();
+          summary.skippedIneligible++;
+          continue;
+        }
       }
 
       // Revalidate: Feedback message requires attendance === 'PRESENT'
