@@ -164,6 +164,10 @@ export async function ensureEarlyRegistrationEvents() {
           { upsert: true }
         );
       }
+    } catch (cntErr) {
+      console.warn('[EventInit] Counter sync notice:', cntErr.message);
+    }
+
     // 5. Ensure critical database indexes for high-speed sub-millisecond queries
     try {
       await Registration.createIndexes();
