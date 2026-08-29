@@ -28,11 +28,15 @@ export const submitRegistration = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Registration created successfully. Please proceed with payment.',
+      message: result.earlyRegistration
+        ? 'Early registration received successfully. Online payment will open shortly.'
+        : 'Registration created successfully. Please proceed with payment.',
       inquiryId: result.inquiryId,
       customerToken: result.customerToken,
       amount: result.amount,
-      programName: result.programName
+      programName: result.programName,
+      earlyRegistration: Boolean(result.earlyRegistration),
+      isPaymentEnabled: Boolean(result.isPaymentEnabled)
     });
   } catch (err) {
     if (err.alreadyRegistered) {

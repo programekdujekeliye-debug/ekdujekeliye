@@ -7,6 +7,10 @@ import {
   getWhatsappLogs,
   getRegistrationTimeline,
   getEventCommunicationDashboard,
+  getEventRegistrationsCommunication,
+  previewBroadcastAudience,
+  createEventBroadcast,
+  triggerGalleryReady,
   runSchedulerWorker,
   resendMessage,
   getTemplates,
@@ -29,6 +33,10 @@ whatsappRouter.get('/logs', requireAuth, getWhatsappLogs);
 // Communication Timeline, Dashboard & Manual Operations
 whatsappRouter.get('/timeline/:inquiryId', requireAuth, getRegistrationTimeline);
 whatsappRouter.get('/dashboard/events/:eventId', requireAuth, getEventCommunicationDashboard);
+whatsappRouter.get('/dashboard/events/:eventId/registrations', requireAuth, getEventRegistrationsCommunication);
+whatsappRouter.post('/broadcasts/preview', requireAuth, previewBroadcastAudience);
+whatsappRouter.post('/broadcasts', requireAuth, createEventBroadcast);
+whatsappRouter.post('/events/:eventId/gallery-ready', requireAuth, triggerGalleryReady);
 whatsappRouter.post('/resend', requireAuth, resendMessage);
 whatsappRouter.post('/run-worker', requireCronAuth, runSchedulerWorker);
 whatsappRouter.post('/run-worker-admin', requireSuperAuth, runSchedulerWorker);

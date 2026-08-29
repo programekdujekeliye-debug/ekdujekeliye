@@ -52,6 +52,11 @@ interface Program {
   availableSeats?: number;
   isDateFinal?: boolean;
   isInquiryClosed?: boolean;
+  isRegistrationOpen?: boolean;
+  isPaymentEnabled?: boolean;
+  earlyRegistrationMode?: boolean;
+  paymentOpenedAt?: string | null;
+  paymentOpeningNote?: string;
 }
 
 const FAQ_ITEMS = [
@@ -518,6 +523,7 @@ export default function HomePage() {
                 const isHousefull = prog.status === 'housefull';
                 const isClosed = prog.status === 'registration_closed';
                 const isTba = prog.status === 'date_tba';
+                const isEarlyReg = Boolean(prog.earlyRegistrationMode || prog.isPaymentEnabled === false);
                 const eventPrice = prog.price !== undefined ? prog.price : 1500;
 
                 let statusLabel = 'UPCOMING';
@@ -525,6 +531,9 @@ export default function HomePage() {
                 if (isCompleted) {
                   statusLabel = 'COMPLETED';
                   statusClass = 'bg-stone-100 text-stone-600 border-stone-200';
+                } else if (isEarlyReg) {
+                  statusLabel = 'EARLY REGISTRATION OPEN';
+                  statusClass = 'bg-rose-50 text-rose-800 border-rose-300 font-extrabold';
                 } else if (prog.status === 'few_seats') {
                   statusLabel = 'FEW SEATS LEFT';
                   statusClass = 'bg-amber-50 text-amber-800 border-amber-200';
@@ -580,6 +589,18 @@ export default function HomePage() {
                           </span>
                         </div>
                       </div>
+
+                      {isEarlyReg && (
+                        <div className="p-3 bg-rose-50/70 border border-rose-200/90 rounded-2xl text-[11px] text-rose-900 space-y-1">
+                          <div className="font-bold flex items-center gap-1.5">
+                            <SparklesIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
+                            <span>Early Registration Open (વહેલી નોંધણી શરૂ)</span>
+                          </div>
+                          <p className="text-stone-600 leading-relaxed font-medium">
+                            Register now without immediate payment. Online payment link will be sent on your WhatsApp shortly.
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-3 pt-3 border-t border-stone-200">
@@ -619,7 +640,7 @@ export default function HomePage() {
                             className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-rose-600/20 text-center transform hover:scale-105 active:scale-95"
                           >
                             <TicketIcon className="w-4 h-4" />
-                            <span>Register for Seminar</span>
+                            <span>{isEarlyReg ? 'Register Now' : 'Register for Seminar'}</span>
                           </Link>
                         )}
                       </div>

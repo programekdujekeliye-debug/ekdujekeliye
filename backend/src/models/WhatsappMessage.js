@@ -31,6 +31,7 @@ const WhatsappMessageSchema = new mongoose.Schema({
     type: String,
     enum: [
       'registration_received',
+      'payment_pending',
       'payment_confirmation',
       'payment_failed',
       'pass_delivery',
@@ -40,6 +41,7 @@ const WhatsappMessageSchema = new mongoose.Schema({
       'event_cancelled',
       'pass_reissued',
       'feedback_request',
+      'gallery_ready',
       'custom'
     ],
     default: 'payment_confirmation'
@@ -91,6 +93,9 @@ WhatsappMessageSchema.index({ status: 1, createdAt: 1 });
 WhatsappMessageSchema.index({ idempotencyKey: 1 }, { unique: true });
 WhatsappMessageSchema.index({ providerMessageId: 1 }, { sparse: true });
 WhatsappMessageSchema.index({ eventId: 1, status: 1 });
+WhatsappMessageSchema.index({ eventId: 1, messageType: 1, status: 1 });
+WhatsappMessageSchema.index({ registrationId: 1, createdAt: 1 });
+WhatsappMessageSchema.index({ inquiryId: 1, createdAt: 1 });
 WhatsappMessageSchema.index({ scheduledFor: 1, status: 1 });
 
 export const WhatsappMessage = mongoose.models.WhatsappMessage || mongoose.model('WhatsappMessage', WhatsappMessageSchema);

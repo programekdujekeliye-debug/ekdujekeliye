@@ -79,7 +79,9 @@ async function runPhaseATests() {
     },
     idempotencyKey: testIdempotencyKey,
     inquiryId: testInquiryId,
-    trigger: 'test_phase_a'
+    trigger: 'test_phase_a',
+    executionSource: 'AUTOMATED_TEST',
+    providerMode: 'MOCK'
   });
 
   console.log(`✓ First Call Result: Status ${res1.status}, Provider Message ID: ${res1.providerMessageId || 'N/A'}`);
@@ -100,7 +102,9 @@ async function runPhaseATests() {
     },
     idempotencyKey: testIdempotencyKey,
     inquiryId: testInquiryId,
-    trigger: 'test_phase_a'
+    trigger: 'test_phase_a',
+    executionSource: 'AUTOMATED_TEST',
+    providerMode: 'MOCK'
   });
 
   console.log(`✓ Second Call Result: Status ${res2.status}, Deduplicated: ${res2.deduplicated ? 'YES' : 'NO'}`);

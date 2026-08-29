@@ -36,6 +36,9 @@ interface PaymentStatusResponse {
   programTime?: string;
   venue?: string;
   venueAddress?: string;
+  isPaymentEnabled?: boolean;
+  earlyRegistrationMode?: boolean;
+  paymentOpeningNote?: string;
 }
 
 export const formatIndianDate = (dateStr?: string): string => {
@@ -380,23 +383,48 @@ export default function PaymentRetryPage() {
               </p>
             </div>
 
-            <button
-              onClick={handlePayNow}
-              disabled={paying}
-              className="w-full py-4 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 disabled:opacity-50 text-white font-extrabold rounded-2xl transition-all shadow-xl shadow-rose-600/25 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
-            >
-              {paying ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Opening Razorpay Gateway...</span>
-                </>
-              ) : (
-                <>
-                  <TicketIcon className="w-4 h-4" />
-                  <span>Pay ₹{statusData.price !== undefined ? statusData.price : (statusData.amount || 1500)} via Razorpay</span>
-                </>
-              )}
-            </button>
+            {/* Early Registration Mode: Online Payment Disabled Notice */}
+            {statusData.isPaymentEnabled === false || statusData.earlyRegistrationMode ? (
+              <div className="space-y-3">
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-left text-xs space-y-2 text-stone-800">
+                  <div className="font-extrabold text-rose-900 text-xs flex items-center gap-1.5">
+                    <ShieldCheckIcon className="w-4 h-4 text-rose-700 flex-shrink-0" />
+                    <span>Online Payment Opening Soon &bull; ઓનલાઇન પેમેન્ટ ટૂંક સમયમાં શરૂ થશે</span>
+                  </div>
+                  <p className="text-stone-700 leading-relaxed">
+                    <strong>English:</strong> Registration is accepted. Online payment for this event will be enabled shortly. You will receive a direct payment link on your registered WhatsApp number once payment opens. Your seat will be confirmed after successful payment.
+                  </p>
+                  <p className="text-stone-700 leading-relaxed">
+                    <strong>ગુજરાતી:</strong> તમારી નોંધણી સ્વીકારાઈ ગઈ છે. આ કાર્યક્રમ માટે ઓનલાઈન પેમેન્ટની સુવિધા ટૂંક સમયમાં શરૂ કરવામાં આવશે. પેમેન્ટ શરૂ થયા પછી તમારા WhatsApp પર લિંક મોકલવામાં આવશે.
+                  </p>
+                </div>
+
+                <button
+                  disabled
+                  className="w-full py-4 bg-stone-200 text-stone-500 font-bold rounded-2xl cursor-not-allowed text-xs uppercase tracking-wider"
+                >
+                  Online Payment Opening Soon (ઓનલાઈન પેમેન્ટ ટૂંક સમયમાં શરૂ થશે)
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handlePayNow}
+                disabled={paying}
+                className="w-full py-4 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 disabled:opacity-50 text-white font-extrabold rounded-2xl transition-all shadow-xl shadow-rose-600/25 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+              >
+                {paying ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Opening Razorpay Gateway...</span>
+                  </>
+                ) : (
+                  <>
+                    <TicketIcon className="w-4 h-4" />
+                    <span>Pay ₹{statusData.price !== undefined ? statusData.price : (statusData.amount || 1500)} via Razorpay</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
         )}
 

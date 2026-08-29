@@ -48,10 +48,15 @@ const ProgramSchema = new mongoose.Schema({
   photoZoom: { type: Number, default: 0.55 },
   photoOffsetY: { type: Number, default: 0 },
   photoLink: { type: String, default: '' },
-  isInquiryClosed: { type: Boolean, default: false }
+  isInquiryClosed: { type: Boolean, default: false },
+  isRegistrationOpen: { type: Boolean, default: true },
+  isPaymentEnabled: { type: Boolean, default: true },
+  earlyRegistrationMode: { type: Boolean, default: false },
+  paymentOpenedAt: { type: Date, default: null },
+  paymentOpeningNote: { type: String, default: '' }
 }, { collection: 'program' });
 
-const Program = mongoose.model('Program', ProgramSchema);
+const Program = mongoose.models.Program || mongoose.model('Program', ProgramSchema);
 
 async function run() {
   await mongoose.connect(process.env.MONGO_URI || MONGO_URI);
@@ -66,6 +71,7 @@ async function run() {
     { date: '2026-09-07' },
     {
       $set: {
+        id: 'prog-2026-09-07',
         name: PROGRAM_NAME,
         slug: 'surat-7-september-2026',
         city: 'Surat',
@@ -74,20 +80,26 @@ async function run() {
         price: 1500,
         status: 'upcoming',
         isInquiryClosed: false,
+        isRegistrationOpen: true,
+        isPaymentEnabled: false,
+        earlyRegistrationMode: true,
+        paymentOpenedAt: null,
+        paymentOpeningNote: 'Online payment will open shortly. Payment link will be sent on your registered WhatsApp number.',
         isDateFinal: true,
         capacity: 1184,
         time: '8:30 PM'
       }
     },
-    { new: true }
+    { new: true, upsert: true }
   );
-  console.log('✅ Updated 7 September 2026 event (Price ₹1500):', res7?.slug, 'Price:', res7?.price);
+  console.log('✅ Updated 7 September 2026 event (Early Registration Mode):', res7?.slug, 'isPaymentEnabled:', res7?.isPaymentEnabled);
 
   // 2. Update 11 September 2026 Program
   const res11 = await Program.findOneAndUpdate(
     { date: '2026-09-11' },
     {
       $set: {
+        id: 'prog-2026-09-11',
         name: PROGRAM_NAME,
         slug: 'surat-11-september-2026',
         city: 'Surat',
@@ -96,14 +108,19 @@ async function run() {
         price: 1500,
         status: 'upcoming',
         isInquiryClosed: false,
+        isRegistrationOpen: true,
+        isPaymentEnabled: false,
+        earlyRegistrationMode: true,
+        paymentOpenedAt: null,
+        paymentOpeningNote: 'Online payment will open shortly. Payment link will be sent on your registered WhatsApp number.',
         isDateFinal: true,
         capacity: 1184,
         time: '8:30 PM'
       }
     },
-    { new: true }
+    { new: true, upsert: true }
   );
-  console.log('✅ Updated 11 September 2026 event (Price ₹1500):', res11?.slug, 'Price:', res11?.price);
+  console.log('✅ Updated 11 September 2026 event (Early Registration Mode):', res11?.slug, 'isPaymentEnabled:', res11?.isPaymentEnabled);
 
   // 3. Mark all previous test dates / TBD as completed with price ₹1000
   await Program.updateMany(

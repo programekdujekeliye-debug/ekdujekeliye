@@ -1,5 +1,6 @@
 import { razorpayService } from '../../integrations/razorpay/razorpay.service.js';
 import { Registration } from '../../models/Registration.js';
+import { Event } from '../../models/Event.js';
 import { Payment } from '../../models/Payment.js';
 import { WebhookEvent } from '../../models/WebhookEvent.js';
 import { eventService } from '../events/event.service.js';
@@ -11,13 +12,20 @@ export class PaymentService {
   /**
    * Create Razorpay Standard Checkout Order
    */
-  async createCheckoutOrder({ inquiryId, customerToken }) {
-    const submission = await Registration.findOne({
-      $or: [
-        { inquiryId: inquiryId?.trim() },
-        { customerToken: customerToken?.trim() }
-      ]
-    });
+  async createCheckoutOrder({ inquiryId, customerToken } = {}) {
+    const query = [];
+    if (inquiryId && typeof inquiryId === 'string' && inquiryId.trim()) {
+      query.push({ inquiryId: inquiryId.trim() });
+    }
+    if (customerToken && typeof customerToken === 'string' && customerToken.trim()) {
+      query.push({ customerToken: customerToken.trim() });
+    }
+
+    if (query.length === 0) {
+      throw new Error('Inquiry ID or Customer Token is required.');
+    }
+
+    const submission = await Registration.findOne({ $or: query });
 
     if (!submission) {
       throw new Error('Registration record not found.');
@@ -31,7 +39,23 @@ export class PaymentService {
       };
     }
 
-    const event = await eventService.getEventBySlug(submission.programId);
+    const event = await Event.findOne({
+      $or: [
+        { id: submission.programId },
+        { slug: submission.programId },
+        { date: submission.programDate }
+      ]
+    }).lean() || await eventService.getEventBySlug(submission.programId);
+    
+    // Guard: Temporary Early Registration Mode (Payment Disabled at Event Level)
+    if (event && (event.isPaymentEnabled === false || event.earlyRegistrationMode === true)) {
+      const err = new Error('PAYMENT_NOT_OPEN');
+      err.status = 400;
+      err.code = 'PAYMENT_NOT_OPEN';
+      err.message = 'Online payment for this event is not open yet. Registration is recorded, and you will receive a payment link on WhatsApp when payment opens.';
+      throw err;
+    }
+
     const amountInr = event?.price || submission.payment?.amount || 1500;
 
     const receipt = `RCPT_${submission.inquiryId}_${Date.now()}`.substring(0, 40);

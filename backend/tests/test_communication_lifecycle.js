@@ -269,8 +269,7 @@ async function runLifecycleTests() {
         registrationId: 'RAND-999',
         inquiryId: 'RAND-999'
       },
-      executionSource: 'AUTOMATED_TEST',
-      providerMode: 'MOCK'
+      providerMode: 'META'
     });
     assert(blockedRes.status === 'BLOCKED_TEST_MODE', 'Blocked dispatch to non-allowlisted number in test mode');
 

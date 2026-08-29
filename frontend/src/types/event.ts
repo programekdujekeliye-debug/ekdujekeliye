@@ -46,6 +46,11 @@ export interface Program {
   photoOffsetY?: number;
   photoLink?: string;
   isInquiryClosed?: boolean;
+  isRegistrationOpen?: boolean;
+  isPaymentEnabled?: boolean;
+  earlyRegistrationMode?: boolean;
+  paymentOpenedAt?: string | null;
+  paymentOpeningNote?: string;
   bookingsCount: number;
   activeBookings?: number;
   availableSeats?: number;

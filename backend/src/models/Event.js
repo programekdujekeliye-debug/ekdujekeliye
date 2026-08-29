@@ -54,6 +54,11 @@ const EventSchema = new mongoose.Schema({
   photoOffsetY: { type: Number, default: 0 },
   photoLink: { type: String, default: '' },
   isInquiryClosed: { type: Boolean, default: false },
+  isRegistrationOpen: { type: Boolean, default: true },
+  isPaymentEnabled: { type: Boolean, default: true },
+  earlyRegistrationMode: { type: Boolean, default: false },
+  paymentOpenedAt: { type: Date, default: null },
+  paymentOpeningNote: { type: String, default: '' },
   archiveStatus: {
     type: String,
     enum: ['NOT_REQUIRED', 'WAITING', 'QUEUED', 'ARCHIVING', 'PAUSED', 'VERIFYING', 'COMPLETED', 'ARCHIVED', 'PARTIAL', 'FAILED'],

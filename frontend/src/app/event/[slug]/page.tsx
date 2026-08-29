@@ -42,6 +42,11 @@ interface ProgramDetail {
   isDateFinal?: boolean;
   cardTemplate?: string;
   isInquiryClosed?: boolean;
+  isRegistrationOpen?: boolean;
+  isPaymentEnabled?: boolean;
+  earlyRegistrationMode?: boolean;
+  paymentOpenedAt?: string | null;
+  paymentOpeningNote?: string;
 }
 
 export const formatIndianDate = (dateStr?: string): string => {
@@ -182,7 +187,7 @@ export default function EventDetailPage() {
 
   // Submission & Payment State
   const [submitting, setSubmitting] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'created' | 'verifying' | 'success' | 'pending' | 'failed'>('idle');
+  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'created' | 'verifying' | 'success' | 'pending' | 'failed' | 'early_received'>('idle');
   const [createdInquiryId, setCreatedInquiryId] = useState<string | null>(null);
   const [createdCustomerToken, setCreatedCustomerToken] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -379,8 +384,16 @@ export default function EventDetailPage() {
       setCreatedInquiryId(data.inquiryId);
       setCreatedCustomerToken(data.customerToken);
 
-      // Immediately launch Razorpay Standard Checkout
-      await initiatePaymentForInquiry(data.inquiryId, data.customerToken);
+      const isEarlyReg = Boolean(data.earlyRegistration || event.earlyRegistrationMode || event.isPaymentEnabled === false);
+
+      if (isEarlyReg) {
+        // Early registration mode: Do not launch Razorpay checkout
+        setPaymentStatus('early_received');
+        setSubmitting(false);
+      } else {
+        // Standard mode: Immediately launch Razorpay Standard Checkout
+        await initiatePaymentForInquiry(data.inquiryId, data.customerToken);
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'An error occurred during registration.');
       setSubmitting(false);
@@ -421,6 +434,7 @@ export default function EventDetailPage() {
   }
 
   const isClosed = event.status === 'housefull' || event.status === 'registration_closed' || event.isInquiryClosed;
+  const isEarlyReg = Boolean(event.earlyRegistrationMode || event.isPaymentEnabled === false);
   const price = event.price !== undefined ? event.price : 1500;
 
   return (
@@ -444,7 +458,82 @@ export default function EventDetailPage() {
       {/* Main Content */}
       <main className="flex-grow max-w-5xl mx-auto px-6 py-10 w-full z-10">
 
-        {/* Success State */}
+        {/* Early Registration Success State */}
+        {paymentStatus === 'early_received' && createdInquiryId && (
+          <div className="bg-white border border-rose-200 rounded-3xl p-8 md:p-12 shadow-2xl text-center space-y-6 max-w-2xl mx-auto animate-fade-in">
+            <div className="w-16 h-16 rounded-full bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto text-3xl font-bold">
+              <CheckCircleIcon className="w-8 h-8 text-rose-600" />
+            </div>
+            <div>
+              <span className="text-xs font-extrabold text-rose-700 uppercase tracking-widest block mb-1">
+                Early Registration Received &bull; વહેલી નોંધણી મળી ગઈ છે
+              </span>
+              <h2 className="text-2xl md:text-3xl font-extrabold text-stone-900">Registration Received</h2>
+            </div>
+
+            {/* Prominent Registration Number Badge */}
+            <div className="bg-rose-50/80 border border-rose-300 rounded-2xl p-5 text-center space-y-1 shadow-inner">
+              <span className="text-[11px] font-bold text-rose-900 uppercase tracking-widest block">
+                Registration ID (નોંધણી નંબર)
+              </span>
+              <span className="text-3xl md:text-4xl font-extrabold text-rose-700 font-mono tracking-wider block select-all">
+                {createdInquiryId}
+              </span>
+              <span className="text-xs text-stone-600 block font-medium">
+                Payment is not required at this stage. (હાલમાં પેમેન્ટ કરવાની જરૂર નથી.)
+              </span>
+            </div>
+
+            {/* English & Gujarati Success Messages */}
+            <div className="space-y-4 text-left">
+              <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl text-xs text-stone-700 leading-relaxed space-y-2">
+                <p className="font-bold text-stone-900 text-sm">English Notice:</p>
+                <p>Thank you. Your early registration has been received successfully.</p>
+                <p>Payment is not required at this stage.</p>
+                <p>We will send the payment link to your registered WhatsApp number once online payment becomes available.</p>
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 font-semibold">
+                  <strong>Important:</strong> Your seat is not confirmed yet. Your seat and Digital Entry Pass will be confirmed only after successful payment.
+                </div>
+              </div>
+
+              <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl text-xs text-stone-700 leading-relaxed space-y-2">
+                <p className="font-bold text-stone-900 text-sm">ગુજરાતી વિગત:</p>
+                <p>આભાર. તમારી વહેલી નોંધણી સફળતાપૂર્વક મળી ગઈ છે.</p>
+                <p>હાલમાં પેમેન્ટ કરવાની જરૂર નથી.</p>
+                <p>ઓનલાઈન પેમેન્ટ શરૂ થયા પછી તમારા નોંધાયેલા WhatsApp નંબર પર પેમેન્ટ લિંક મોકલવામાં આવશે.</p>
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 font-semibold">
+                  <strong>મહત્વપૂર્ણ:</strong> હાલ તમારી સીટ કન્ફર્મ નથી. સફળ પેમેન્ટ થયા બાદ જ તમારી સીટ અને Digital Entry Pass કન્ફર્મ થશે.
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-stone-50 border border-stone-200 rounded-2xl p-5 text-left space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-stone-500 font-medium">Event:</span>
+                <span className="font-bold text-stone-900">{event.name}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-stone-500 font-medium">Date &amp; Time:</span>
+                <span className="font-semibold text-stone-900">{formatIndianDate(event.date)} at {event.time}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-stone-500 font-medium">Couple:</span>
+                <span className="font-semibold text-stone-900">{husbandName} &amp; {wifeName} {surname}</span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row gap-4">
+              <Link
+                href="/"
+                className="flex-1 py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl transition-all text-center text-sm shadow-md"
+              >
+                Back to Home Page
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Success State (Paid) */}
         {paymentStatus === 'success' && createdInquiryId && (
           <div className="bg-white border border-emerald-200 rounded-3xl p-8 md:p-12 shadow-2xl text-center space-y-6 max-w-2xl mx-auto animate-fade-in">
             <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto text-3xl font-bold">
@@ -542,7 +631,7 @@ export default function EventDetailPage() {
         )}
 
         {/* Normal Registration Form View */}
-        {paymentStatus !== 'success' && paymentStatus !== 'pending' && (
+        {paymentStatus !== 'success' && paymentStatus !== 'pending' && paymentStatus !== 'early_received' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
             {/* Left: Event Details Card */}
@@ -561,6 +650,45 @@ export default function EventDetailPage() {
                 </h1>
                 <p className="text-xs text-stone-500 mt-1 font-medium">A Special Program for Couples led by Manish Vaghasiya</p>
               </div>
+
+              {/* Prominent Early Registration Notice Box */}
+              {isEarlyReg && (
+                <div className="bg-rose-50/90 border border-rose-300 rounded-3xl p-5 shadow-xs space-y-4 text-stone-800">
+                  <div className="flex items-center gap-2 border-b border-rose-200 pb-2.5">
+                    <SparklesIcon className="w-4 h-4 text-rose-700 flex-shrink-0" />
+                    <div>
+                      <span className="text-xs font-extrabold uppercase tracking-wider text-rose-900 block">
+                        Early Registration Open &bull; વહેલી નોંધણી શરૂ
+                      </span>
+                      <span className="text-[10px] text-stone-500 font-medium">Online payment will open shortly</span>
+                    </div>
+                  </div>
+
+                  {/* English Notice */}
+                  <div className="space-y-1 text-xs text-stone-700 leading-relaxed bg-white/90 p-3.5 rounded-2xl border border-rose-100">
+                    <h4 className="font-extrabold text-stone-900 text-xs">Early Registration Open</h4>
+                    <p>Registration for this event is now open.</p>
+                    <p>At present, only registration is being accepted. Online payment will be enabled shortly.</p>
+                    <p className="font-semibold text-rose-900">
+                      Your registration will be recorded now, but your seat will be confirmed only after the payment link is shared and your payment is successfully completed.
+                    </p>
+                    <p>Once payment opens, we will send the payment link to your registered WhatsApp number.</p>
+                    <p>After successful payment, you will receive your confirmation and Digital Entry Pass.</p>
+                  </div>
+
+                  {/* Gujarati Notice */}
+                  <div className="space-y-1 text-xs text-stone-700 leading-relaxed bg-white/90 p-3.5 rounded-2xl border border-rose-100">
+                    <h4 className="font-extrabold text-stone-900 text-xs">વહેલી નોંધણી શરૂ</h4>
+                    <p>આ કાર્યક્રમ માટે નોંધણી શરૂ થઈ ગઈ છે.</p>
+                    <p>હાલમાં માત્ર નોંધણી સ્વીકારવામાં આવી રહી છે. ઓનલાઈન પેમેન્ટની સુવિધા થોડા દિવસોમાં શરૂ કરવામાં આવશે.</p>
+                    <p className="font-semibold text-rose-900">
+                      હમણાં તમારી નોંધણી નોંધાઈ જશે, પરંતુ તમારી સીટ પેમેન્ટ લિંક મળ્યા બાદ અને સફળ પેમેન્ટ પૂર્ણ થયા પછી જ કન્ફર્મ થશે.
+                    </p>
+                    <p>પેમેન્ટ શરૂ થયા પછી તમારા નોંધાયેલા WhatsApp નંબર પર પેમેન્ટ લિંક મોકલવામાં આવશે.</p>
+                    <p>સફળ પેમેન્ટ થયા બાદ તમને કન્ફર્મેશન અને Digital Entry Pass મળશે.</p>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-3.5 pt-2 text-sm">
                 <div className="flex items-center gap-3 text-stone-700">
@@ -602,7 +730,9 @@ export default function EventDetailPage() {
                   <div>
                     <span className="text-xs text-stone-500 block font-medium">Couple Pass Fee</span>
                     <span className="font-extrabold text-stone-900 text-2xl">₹{price}</span>
-                    <span className="text-xs text-stone-500 ml-1.5 font-medium">(Per Married Couple)</span>
+                    <span className="text-xs text-stone-500 ml-1.5 font-medium">
+                      {isEarlyReg ? '(Payment opens shortly)' : '(Per Married Couple)'}
+                    </span>
                   </div>
                 </div>
 
@@ -627,7 +757,7 @@ export default function EventDetailPage() {
                   <li>Program format exclusively for married couples (2 persons per pass).</li>
                   <li>Children are strictly not permitted inside the seminar hall.</li>
                   <li><strong className="text-amber-900 font-bold">Non-Refundable &amp; Non-Transferable:</strong> સેમિનાર ફી કોઈપણ સંજોગોમાં રિફંડ કે ટ્રાન્સફર થશે નહીં.</li>
-                  <li>Instant digital pass issued immediately upon Razorpay payment.</li>
+                  <li>{isEarlyReg ? 'Digital pass issued after online payment opens and is completed.' : 'Instant digital pass issued immediately upon Razorpay payment.'}</li>
                 </ul>
               </div>
             </div>
@@ -636,9 +766,13 @@ export default function EventDetailPage() {
             <div className="lg:col-span-7 bg-white border border-stone-200/90 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
 
               <div>
-                <h2 className="text-xl md:text-2xl font-extrabold text-stone-900">Couple Seminar Registration</h2>
+                <h2 className="text-xl md:text-2xl font-extrabold text-stone-900">
+                  {isEarlyReg ? 'Early Registration' : 'Couple Seminar Registration'}
+                </h2>
                 <p className="text-xs text-stone-600 mt-1 font-medium">
-                  Fill in your details to register and reserve your official couple pass.
+                  {isEarlyReg
+                    ? 'Fill in your details now. Payment link will be sent to your WhatsApp once online payment opens.'
+                    : 'Fill in your details to register and reserve your official couple pass.'}
                 </p>
                 <div className="mt-3 p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-700 font-medium">
                   You are registering for Ek Duje Ke Liye couple program conducted by Manish Vaghasiya.
@@ -778,6 +912,22 @@ export default function EventDetailPage() {
                     </span>
                   </label>
 
+                  {/* Early Registration Clarification Box */}
+                  {isEarlyReg && (
+                    <div className="p-3.5 bg-rose-50/80 border border-rose-200 rounded-2xl text-xs text-stone-800 space-y-1.5">
+                      <div className="font-extrabold text-rose-900 flex items-center gap-1.5">
+                        <SparklesIcon className="w-4 h-4 text-rose-700 flex-shrink-0" />
+                        <span>Early Registration Clarification:</span>
+                      </div>
+                      <p className="text-[11px] text-stone-700 leading-relaxed font-medium">
+                        <strong>English:</strong> By registering now, I understand that this is an early registration and my seat will be confirmed only after successful payment.
+                      </p>
+                      <p className="text-[11px] text-stone-700 leading-relaxed font-medium">
+                        <strong>ગુજરાતી:</strong> હું સમજું છું કે આ વહેલી નોંધણી છે અને સફળ પેમેન્ટ થયા પછી જ મારી સીટ કન્ફર્મ થશે.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Non-Refundable & Non-Transferable Warning Box */}
                   <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-center space-y-1">
                     <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-amber-900">
@@ -789,7 +939,7 @@ export default function EventDetailPage() {
                     </p>
                   </div>
 
-                  {/* Payment CTA */}
+                  {/* Submit CTA */}
                   <div className="pt-2 space-y-3">
                     <button
                       type="submit"
@@ -799,11 +949,11 @@ export default function EventDetailPage() {
                       {submitting ? (
                         <>
                           <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          <span>Processing Order...</span>
+                          <span>{isEarlyReg ? 'Submitting Registration...' : 'Processing Order...'}</span>
                         </>
                       ) : (
                         <>
-                          <span>Pay ₹{price} &amp; Register for Seminar</span>
+                          <span>{isEarlyReg ? 'Complete Registration (હમણાં નોંધણી કરો)' : `Pay ₹${price} & Register for Seminar`}</span>
                           <TicketIcon className="w-4 h-4" />
                         </>
                       )}
@@ -813,9 +963,9 @@ export default function EventDetailPage() {
                       <ShieldCheckIcon className="w-3.5 h-3.5 text-stone-500" />
                       <span>256-Bit SSL Encrypted</span>
                       <span>&bull;</span>
-                      <span>Powered by Razorpay</span>
+                      <span>{isEarlyReg ? 'Payment Opens Shortly' : 'Powered by Razorpay'}</span>
                       <span>&bull;</span>
-                      <span>Instant Digital Pass</span>
+                      <span>{isEarlyReg ? 'WhatsApp Updates' : 'Instant Digital Pass'}</span>
                     </div>
                   </div>
 

@@ -112,8 +112,9 @@ export async function sendWhatsAppMessage({
   const maskedPhone = maskPhoneNumber(normalizedPhone);
   const phoneHash = hashPhoneNumber(normalizedPhone);
 
-  // 3. Test Mode Allowlist Guard
-  if (env.WHATSAPP_MODE === 'test' || env.APP_ENV !== 'production') {
+  // 3. Test Mode Allowlist Guard (Only applies when calling real Meta API in non-prod)
+  const isMock = providerMode === 'MOCK' || executionSource === 'AUTOMATED_TEST' || env.WHATSAPP_MODE === 'mock' || process.env.WHATSAPP_MODE === 'mock';
+  if (!isMock && (env.WHATSAPP_MODE === 'test' || env.APP_ENV !== 'production')) {
     const isAllowed = env.WHATSAPP_TEST_RECIPIENTS.includes(normalizedPhone);
     if (!isAllowed) {
       console.warn(`[WhatsApp Master Guard] Blocked test dispatch to non-allowlisted number: ${maskedPhone}`);
@@ -344,6 +345,31 @@ export async function sendWhatsAppMessage({
       ...(componentsPayload.length > 0 ? { components: componentsPayload } : {})
     }
   };
+
+  // 10.5. Mock Provider Interceptor for Automated Tests and Local Testing
+  if (providerMode === 'MOCK' || executionSource === 'AUTOMATED_TEST' || env.WHATSAPP_MODE === 'mock') {
+    const mockWamid = `wamid.MOCK_TEST_${Date.now()}`;
+    messageRecord.status = 'SENT';
+    messageRecord.providerMessageId = mockWamid;
+    messageRecord.providerMode = 'MOCK';
+    messageRecord.providerAcceptedAt = new Date();
+    messageRecord.sentAt = new Date();
+    messageRecord.rawProviderResponse = {
+      messaging_product: 'whatsapp',
+      contacts: [{ input: normalizedPhone, wa_id: normalizedPhone }],
+      messages: [{ id: mockWamid, message_status: 'accepted' }]
+    };
+    await messageRecord.save();
+
+    console.log(`[WhatsApp Mock Dispatch] Simulated message '${templateDef.metaName}' for ${maskedPhone} -> ${mockWamid}`);
+
+    return {
+      success: true,
+      status: 'SENT',
+      providerMessageId: mockWamid,
+      messageRecord: messageRecord.toObject ? messageRecord.toObject() : messageRecord
+    };
+  }
 
   const metaUrl = getMetaGraphApiUrl(`${env.WHATSAPP_PHONE_NUMBER_ID}/messages`);
 

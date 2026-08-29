@@ -123,7 +123,10 @@ export const getPaymentStatus = async (req, res) => {
       coupleName: coupleName || 'Valued Couple',
       phoneNumber: submission.phoneNumber,
       isPaid,
-      passAvailable: isPaid
+      passAvailable: isPaid,
+      isPaymentEnabled: program?.isPaymentEnabled !== false,
+      earlyRegistrationMode: Boolean(program?.earlyRegistrationMode || program?.isPaymentEnabled === false),
+      paymentOpeningNote: program?.paymentOpeningNote || ''
     });
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching payment status.' });
