@@ -75,7 +75,9 @@ export class EventService {
         id: 1, sequenceNumber: 1, name: 1, shortName: 1, slug: 1, city: 1,
         venue: 1, venueAddress: 1, mapUrl: 1, description: 1, price: 1,
         status: 1, date: 1, time: 1, capacity: 1, bookedSeats: 1, isDateFinal: 1,
-        isInquiryClosed: 1, registrationMode: 1, externalRegistrationUrl: 1,
+        isInquiryClosed: 1, isRegistrationOpen: 1, isPaymentEnabled: 1,
+        earlyRegistrationMode: 1, paymentOpenedAt: 1, paymentOpeningNote: 1,
+        registrationMode: 1, externalRegistrationUrl: 1,
         heroImage: 1, posterImage: 1, isActive: 1
       }
     ).lean();
@@ -189,7 +191,7 @@ export class EventService {
   async getEventOptions() {
     const events = await Event.find(
       { status: { $ne: 'archived' } },
-      { id: 1, name: 1, shortName: 1, date: 1, time: 1, status: 1, city: 1, venue: 1, sequenceNumber: 1, isDateFinal: 1 }
+      { id: 1, name: 1, shortName: 1, date: 1, time: 1, status: 1, city: 1, venue: 1, sequenceNumber: 1, isDateFinal: 1, isRegistrationOpen: 1, isPaymentEnabled: 1, earlyRegistrationMode: 1 }
     ).lean();
 
     return this.sortEventsCategorized(events);
