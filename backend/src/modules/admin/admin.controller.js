@@ -421,7 +421,20 @@ export const getAdminDashboardSummary = async (req, res) => {
 
     const matchFilter = { isDeleted: { $ne: true } };
     if (eventId && eventId !== 'all') {
-      matchFilter.programId = eventId;
+      const eventObj = await Event.findOne({
+        $or: [{ id: eventId }, { slug: eventId }, { date: eventId }]
+      }).lean();
+
+      const matchedIds = [eventId];
+      if (eventObj) {
+        if (eventObj.id && !matchedIds.includes(eventObj.id)) matchedIds.push(eventObj.id);
+        if (eventObj.slug && !matchedIds.includes(eventObj.slug)) matchedIds.push(eventObj.slug);
+      }
+
+      matchFilter.$or = [
+        { programId: { $in: matchedIds } },
+        ...(eventObj?.date ? [{ programDate: eventObj.date }] : [])
+      ];
     }
 
     const [statsList, recentSubmissions, activeEvents] = await Promise.all([

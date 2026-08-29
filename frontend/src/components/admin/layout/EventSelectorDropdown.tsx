@@ -66,7 +66,9 @@ export const EventSelectorDropdown: React.FC<EventSelectorDropdownProps> = ({
       !completedPrograms.some((c) => c.id === p.id)
   );
 
-  const currentProgram = programs.find((p) => p.id === selectedProgramId);
+  const currentProgram = programs.find(
+    (p) => p.id === selectedProgramId || p.slug === selectedProgramId || p.date === selectedProgramId
+  );
   const isGlobalView = selectedProgramId === 'all';
 
   return (
@@ -97,10 +99,12 @@ export const EventSelectorDropdown: React.FC<EventSelectorDropdownProps> = ({
               <span className="text-xs font-bold text-slate-900 truncate">
                 {isGlobalView ? (
                   'All Events (Global View)'
-                ) : (
+                ) : currentProgram ? (
                   <>
-                    {currentProgram?.city || 'Gujarat'} &bull; {currentProgram?.date === 'TBD' ? 'Date TBA' : currentProgram?.date} ({currentProgram?.name})
+                    {currentProgram.city || 'Surat'} &bull; {currentProgram.date === 'TBD' ? 'Date TBA' : currentProgram.date} ({currentProgram.name || currentProgram.shortName})
                   </>
+                ) : (
+                  'Select Event Workspace'
                 )}
               </span>
             </div>
@@ -169,7 +173,7 @@ export const EventSelectorDropdown: React.FC<EventSelectorDropdownProps> = ({
                   <span>Upcoming &amp; Active Events</span>
                 </div>
                 {upcomingPrograms.map((p) => {
-                  const isSelected = selectedProgramId === p.id;
+                  const isSelected = selectedProgramId === p.id || selectedProgramId === p.slug || selectedProgramId === p.date;
                   const isTbd = p.date === 'TBD' || p.status === 'date_tba' || !p.isDateFinal;
                   const isNext = p.id === defaultUpcoming?.id && !isTbd;
 
@@ -183,7 +187,7 @@ export const EventSelectorDropdown: React.FC<EventSelectorDropdownProps> = ({
                       }}
                       className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center justify-between gap-3 cursor-pointer ${
                         isSelected
-                          ? 'bg-rose-50/80 border border-rose-200/80 text-rose-900'
+                          ? 'bg-rose-50/80 border border-rose-200/80 text-rose-900 font-bold'
                           : 'hover:bg-slate-50 text-slate-800'
                       }`}
                     >
@@ -196,7 +200,7 @@ export const EventSelectorDropdown: React.FC<EventSelectorDropdownProps> = ({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-xs font-bold text-slate-900 truncate">
-                              {p.city || 'Gujarat'} &bull; {p.name}
+                              {p.city || 'Surat'} &bull; {p.name}
                             </span>
                             {isNext && (
                               <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -237,7 +241,7 @@ export const EventSelectorDropdown: React.FC<EventSelectorDropdownProps> = ({
                   <span>Date To Be Announced</span>
                 </div>
                 {tbaPrograms.map((p) => {
-                  const isSelected = selectedProgramId === p.id;
+                  const isSelected = selectedProgramId === p.id || selectedProgramId === p.slug || selectedProgramId === p.date;
 
                   return (
                     <button
@@ -262,7 +266,7 @@ export const EventSelectorDropdown: React.FC<EventSelectorDropdownProps> = ({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-xs font-bold text-slate-900 truncate">
-                              {p.city || 'Gujarat'} &bull; {p.name}
+                              {p.city || 'Surat'} &bull; {p.name}
                             </span>
                             <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-sky-100 text-sky-800 border border-sky-200">
                               Date TBA
@@ -290,7 +294,7 @@ export const EventSelectorDropdown: React.FC<EventSelectorDropdownProps> = ({
                   <span>Past &amp; Completed Events</span>
                 </div>
                 {completedPrograms.map((p) => {
-                  const isSelected = selectedProgramId === p.id;
+                  const isSelected = selectedProgramId === p.id || selectedProgramId === p.slug || selectedProgramId === p.date;
 
                   return (
                     <button

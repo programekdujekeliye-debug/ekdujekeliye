@@ -105,10 +105,22 @@ export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
   const [password, setPassword] = useState<string>('');
   const [role, setRole] = useState<AdminRole>('admin');
   const [activeSection, setActiveSection] = useState<AdminSection>('dashboard');
-  const [selectedProgramId, setSelectedProgramId] = useState<string>('all');
+  const [selectedProgramId, setSelectedProgramIdState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('admin_selected_program_id') || '';
+    }
+    return '';
+  });
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loadingPrograms, setLoadingPrograms] = useState<boolean>(false);
   const isFetchingRef = React.useRef(false);
+
+  const setSelectedProgramId = (id: string) => {
+    setSelectedProgramIdState(id);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('admin_selected_program_id', id);
+    }
+  };
 
   const refreshPrograms = async () => {
     if (isFetchingRef.current) return;
@@ -121,13 +133,17 @@ export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
 
       // Automatically default to the nearest upcoming event
       const defaultEvent = computeDefaultUpcomingEvent(list);
+      const savedId = typeof window !== 'undefined' ? sessionStorage.getItem('admin_selected_program_id') : null;
 
-      if (defaultEvent) {
-        setSelectedProgramId((prev) =>
-          prev === 'all' || !list.some((p) => p.id === prev) ? defaultEvent.id : prev
-        );
-      } else if (list.length > 0 && selectedProgramId === 'all') {
-        setSelectedProgramId(list[0].id);
+      if (savedId && (savedId === 'all' || list.some((p) => p.id === savedId || p.slug === savedId))) {
+        setSelectedProgramIdState(savedId);
+      } else if (defaultEvent) {
+        setSelectedProgramIdState(defaultEvent.id);
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('admin_selected_program_id', defaultEvent.id);
+        }
+      } else if (list.length > 0) {
+        setSelectedProgramIdState(list[0].id);
       }
     } catch (err) {
       console.error('Failed to fetch events in context:', err);
