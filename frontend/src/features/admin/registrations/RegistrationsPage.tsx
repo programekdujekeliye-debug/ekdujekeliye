@@ -109,8 +109,10 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
         status: statusFilter,
         paymentStatus: paymentFilter,
         programId: selectedProgramId,
-        attendance: attendanceFilter
+        attendance: attendanceFilter,
+        isVip: 'false'
       });
+
 
       setSubmissions(res.submissions || []);
       setTotalPages(res.totalPages || 1);

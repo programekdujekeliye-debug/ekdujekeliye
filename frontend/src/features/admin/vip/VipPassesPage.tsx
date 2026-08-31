@@ -57,18 +57,18 @@ export const VipPassesPage = () => {
   const fetchVipGuests = async () => {
     try {
       setLoading(true);
-      const res = await apiClient<{ success: boolean; data: Submission[] }>(
-        `/api/submissions?isVip=true&programId=${selectedProgramId}&limit=200`
+      const res: any = await apiClient(
+        `/api/submissions?isVip=true&programId=${selectedProgramId}&limit=500`
       );
-      if (res && res.data) {
-        setVipGuests(res.data);
-      }
+      const list = res?.submissions || res?.data || (Array.isArray(res) ? res : []);
+      setVipGuests(list);
     } catch (err) {
       console.error('Failed to fetch VIP guests:', err);
     } finally {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     fetchVipGuests();
@@ -495,19 +495,28 @@ export const VipPassesPage = () => {
                             href={`/pass/${g.inquiryId}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-1.5 text-slate-600 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all border border-slate-200 hover:border-amber-300"
-                            title="Open Digital Pass"
+                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap"
+                            title="Open Gate Entry Pass"
                           >
-                            <ExternalLinkIcon className="w-4 h-4" />
+                            Pass ↗
+                          </a>
+                          <a
+                            href={`/invitation/${g.inquiryId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap"
+                            title="Open Personalized Invitation Card"
+                          >
+                            Card ↗
                           </a>
                           <button
                             onClick={() => handleResendWhatsApp(g)}
                             disabled={resendingId === g.inquiryId}
                             className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1 whitespace-nowrap"
-                            title="Resend Pass via WhatsApp"
+                            title="Send Pass via WhatsApp"
                           >
                             <WhatsappIcon className="w-3.5 h-3.5 text-emerald-700 flex-shrink-0" />
-                            <span>{resendingId === g.inquiryId ? 'Sending...' : 'Resend'}</span>
+                            <span>{resendingId === g.inquiryId ? 'Sending...' : 'Send'}</span>
                           </button>
                           <button
                             onClick={() => handleDeleteVip(g._id || '', `${g.husbandName} & ${g.wifeName}`)}
@@ -654,21 +663,30 @@ export const VipPassesPage = () => {
                         href={`/pass/${g.inquiryId}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl flex items-center justify-center gap-1 transition-colors min-h-[38px]"
-                        title="Open Digital Pass"
+                        className="flex-1 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1 transition-colors min-h-[36px]"
+                        title="Open Gate Entry Pass"
                       >
-                        <ExternalLinkIcon className="w-3.5 h-3.5" />
-                        <span>Open Pass ↗</span>
+                        <span>Pass ↗</span>
+                      </a>
+
+                      <a
+                        href={`/invitation/${g.inquiryId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1 transition-colors min-h-[36px]"
+                        title="Open Personalized Invitation Card"
+                      >
+                        <span>Card ↗</span>
                       </a>
 
                       <button
                         onClick={() => handleResendWhatsApp(g)}
                         disabled={resendingId === g.inquiryId}
-                        className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer min-h-[38px]"
-                        title="Resend Pass on WhatsApp"
+                        className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1 cursor-pointer min-h-[36px] shadow-xs"
+                        title="Send Pass on WhatsApp"
                       >
-                        <WhatsappIcon className="w-3.5 h-3.5 text-emerald-700 flex-shrink-0" />
-                        <span>{resendingId === g.inquiryId ? 'Sending...' : 'Resend WhatsApp'}</span>
+                        <WhatsappIcon className="w-3.5 h-3.5 text-white flex-shrink-0" />
+                        <span>{resendingId === g.inquiryId ? 'Sending...' : 'Send'}</span>
                       </button>
                     </div>
 

@@ -443,6 +443,8 @@ export const getSubmissionsList = async (req, res) => {
     });
 
     res.json({
+      success: true,
+      data: enrichedSubmissions,
       submissions: enrichedSubmissions,
       totalSubmissions: total,
       total,
@@ -450,6 +452,7 @@ export const getSubmissionsList = async (req, res) => {
       page: safePage,
       totalPages: Math.ceil(total / safeLimit) || 1
     });
+
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching submissions.' });
   }
