@@ -473,8 +473,9 @@ export const failArchivedItem = async (req, res) => {
           lastError: error || 'Unknown Google Drive upload error'
         }
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
+
 
     if (job) {
       await updateEventArchiveProgress(job.eventId);

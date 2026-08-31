@@ -20,7 +20,7 @@ export const getNextSequence = async (name) => {
         $inc: { seq: 1 },
         $set: { name: cleanName }
       },
-      { new: true, returnDocument: 'after', upsert: true }
+      { returnDocument: 'after', upsert: true }
     );
     return result.seq;
   } catch (err) {
@@ -36,10 +36,11 @@ export const getNextSequence = async (name) => {
           $inc: { seq: 1 },
           $set: { name: cleanName }
         },
-        { new: true, returnDocument: 'after', upsert: true }
+        { returnDocument: 'after', upsert: true }
       );
       return retryResult.seq;
     }
+
     throw err;
   }
 };

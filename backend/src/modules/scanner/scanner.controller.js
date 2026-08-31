@@ -88,7 +88,7 @@ export async function handleOnlineScan(req, res) {
         },
         $inc: { scanCount: 1 }
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (updatedPass) {
@@ -104,7 +104,7 @@ export async function handleOnlineScan(req, res) {
               attendanceMethod: 'QR'
             }
           },
-          { new: true }
+          { returnDocument: 'after' }
         );
         if (reg) {
           coupleName = `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim();
@@ -364,7 +364,7 @@ export async function handleOfflineSync(req, res) {
           },
           $inc: { scanCount: 1 }
         },
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       if (updatedPass) {

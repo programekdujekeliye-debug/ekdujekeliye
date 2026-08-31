@@ -608,8 +608,9 @@ export const updateSubmission = async (req, res) => {
     const updated = await Registration.findOneAndUpdate(
       { _id: existing._id },
       { $set: updateData },
-      { new: true }
+      { returnDocument: 'after' }
     );
+
 
     res.json({ success: true, submission: updated });
   } catch (err) {
