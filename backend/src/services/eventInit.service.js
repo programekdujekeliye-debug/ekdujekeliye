@@ -25,7 +25,7 @@ export async function ensureEarlyRegistrationEvents() {
 
     // 1. Ensure 7 September 2026 Program (Sequence 6 -> EK06-XX)
     await Event.findOneAndUpdate(
-      { date: '2026-09-07' },
+      { $or: [{ sequenceNumber: 6 }, { id: 'prog-2026-09-07' }, { date: '2026-09-07' }] },
       {
         $set: {
           id: 'prog-2026-09-07',
@@ -45,21 +45,22 @@ export async function ensureEarlyRegistrationEvents() {
           paymentOpeningNote: 'Online payment will open shortly. Payment link will be sent on your registered WhatsApp number.',
           isDateFinal: true,
           capacity: 1184,
-          time: '8:30 PM'
+          time: '8:30 PM',
+          date: '2026-09-07'
         }
       },
       { upsert: true, returnDocument: 'after' }
     );
 
-    // 2. Ensure 11 September 2026 Program (Sequence 7 -> EK07-XX)
+    // 2. Ensure 12 September 2026 Program (Sequence 7 -> EK07-XX)
     await Event.findOneAndUpdate(
-      { date: '2026-09-11' },
+      { $or: [{ sequenceNumber: 7 }, { id: 'prog-2026-09-11' }, { id: 'prog-2026-09-12' }, { date: '2026-09-11' }, { date: '2026-09-12' }] },
       {
         $set: {
-          id: 'prog-2026-09-11',
+          id: 'prog-2026-09-12',
           sequenceNumber: 7,
           name: PROGRAM_NAME,
-          slug: 'surat-11-september-2026',
+          slug: 'surat-12-september-2026',
           city: 'Surat',
           venue: VENUE_NAME,
           mapUrl: MAP_URL,
@@ -73,7 +74,8 @@ export async function ensureEarlyRegistrationEvents() {
           paymentOpeningNote: 'Online payment will open shortly. Payment link will be sent on your registered WhatsApp number.',
           isDateFinal: true,
           capacity: 1184,
-          time: '8:30 PM'
+          time: '8:30 PM',
+          date: '2026-09-12'
         }
       },
       { upsert: true, returnDocument: 'after' }
@@ -125,6 +127,19 @@ export async function ensureEarlyRegistrationEvents() {
           }
         }
       );
+
+      // Ensure all EK07 registrations are mapped to 12 September 2026
+      await Registration.updateMany(
+        { inquiryId: { $regex: '^EK07-' } },
+        {
+          $set: {
+            programId: 'prog-2026-09-12',
+            programDate: '2026-09-12',
+            programName: PROGRAM_NAME,
+            isDeleted: false
+          }
+        }
+      );
     } catch (migErr) {
       console.warn('[EventInit] Migration notice:', migErr.message);
     }
@@ -159,8 +174,8 @@ export async function ensureEarlyRegistrationEvents() {
       }
       if (maxEk07 > 0) {
         await Counter.findOneAndUpdate(
-          { $or: [{ _id: 'inquiryNumber_prog-2026-09-11' }, { name: 'inquiryNumber_prog-2026-09-11' }] },
-          { $max: { seq: maxEk07 }, $set: { name: 'inquiryNumber_prog-2026-09-11' } },
+          { $or: [{ _id: 'inquiryNumber_prog-2026-09-12' }, { name: 'inquiryNumber_prog-2026-09-12' }, { _id: 'inquiryNumber_prog-2026-09-11' }, { name: 'inquiryNumber_prog-2026-09-11' }] },
+          { $max: { seq: maxEk07 }, $set: { name: 'inquiryNumber_prog-2026-09-12' } },
           { upsert: true }
         );
       }
@@ -174,7 +189,7 @@ export async function ensureEarlyRegistrationEvents() {
       await Event.createIndexes();
     } catch (_) {}
 
-    console.log('[EventInit] Ensured 7 Sep (EK06) & 11 Sep (EK07) Early Registration Mode and DB indexes.');
+    console.log('[EventInit] Ensured 7 Sep (EK06) & 12 Sep (EK07) Early Registration Mode and DB indexes.');
   } catch (err) {
     console.error('[EventInit] Failed to ensure early registration events:', err.message);
   }
