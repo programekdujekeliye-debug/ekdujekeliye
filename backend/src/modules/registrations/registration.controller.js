@@ -554,15 +554,70 @@ export const softDeleteSubmission = async (req, res) => {
 
 export const updateSubmission = async (req, res) => {
   const { inquiryId } = req.params;
-  const updateData = req.body;
+  const updateData = { ...req.body };
   try {
-    const updated = await Registration.findOneAndUpdate({ inquiryId }, { $set: updateData }, { new: true });
-    if (!updated) return res.status(404).json({ error: 'Submission not found.' });
+    const cleanInquiryId = inquiryId.trim().toUpperCase();
+    const existing = await Registration.findOne({
+      inquiryId: { $regex: new RegExp(`^${cleanInquiryId}$`, 'i') },
+      isDeleted: { $ne: true }
+    });
+    if (!existing) return res.status(404).json({ error: 'Submission not found.' });
+
+    // If transferring event, automatically cascade event name, date, and timing
+    if (updateData.programId && updateData.programId !== existing.programId) {
+      const eventObj = await eventService.getEventBySlug(updateData.programId) || await Event.findOne({
+        $or: [{ id: updateData.programId }, { slug: updateData.programId }, { date: updateData.programId }]
+      }).lean();
+
+      if (eventObj) {
+        updateData.programId = eventObj.id || updateData.programId;
+        updateData.programName = eventObj.name;
+        updateData.programDate = eventObj.date;
+        updateData.programTime = eventObj.time;
+      }
+    }
+
+    // Handle payment status adjustments
+    if (updateData.paymentStatus === 'captured' || updateData.status === 'approved') {
+      if (!existing.payment) {
+        updateData.payment = {
+          provider: 'manual',
+          status: 'captured',
+          amount: updateData.paymentAmount || existing.payment?.amount || 1500,
+          currency: 'INR',
+          paidAt: new Date()
+        };
+      } else {
+        updateData['payment.status'] = 'captured';
+        if (updateData.paymentAmount) {
+          updateData['payment.amount'] = Number(updateData.paymentAmount);
+        }
+        if (!existing.payment.paidAt) {
+          updateData['payment.paidAt'] = new Date();
+        }
+      }
+    } else if (updateData.paymentStatus === 'pending' || updateData.paymentStatus === 'unpaid') {
+      if (existing.payment) {
+        updateData['payment.status'] = 'created';
+      }
+    }
+
+    delete updateData.paymentStatus;
+    delete updateData.paymentAmount;
+
+    const updated = await Registration.findOneAndUpdate(
+      { _id: existing._id },
+      { $set: updateData },
+      { new: true }
+    );
+
     res.json({ success: true, submission: updated });
   } catch (err) {
+    console.error('[Registration Controller] Error updating submission:', err);
     res.status(500).json({ error: 'Server error updating submission.' });
   }
 };
+
 
 export const bulkDeleteSubmissions = async (req, res) => {
   const { inquiryIds } = req.body;

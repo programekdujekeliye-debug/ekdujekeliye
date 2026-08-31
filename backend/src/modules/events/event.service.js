@@ -255,50 +255,86 @@ export class EventService {
 
     const sortedPrograms = this.sortEventsCategorized(programs);
 
-    const statsMap = new Map();
-    try {
-      const statsList = await Registration.aggregate([
-        { $match: { isDeleted: { $ne: true } } },
-        {
-          $group: {
-            _id: '$programId',
-            approved: { $sum: { $cond: [{ $eq: ['$status', 'approved'] }, 1, 0] } },
-            pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
-            inquiry: { $sum: { $cond: [{ $eq: ['$status', 'inquiry'] }, 1, 0] } },
-            rejected: { $sum: { $cond: [{ $eq: ['$status', 'rejected'] }, 1, 0] } },
-            present: { $sum: { $cond: [{ $eq: ['$attendance', true] }, 1, 0] } }
-          }
-        }
-      ]);
-      statsList.forEach(s => {
-        if (s && s._id) statsMap.set(s._id, s);
-      });
-    } catch (e) {
-      console.warn('[eventService] Stats aggregation fallback:', e.message);
-    }
+    // Fetch all active registrations to accurately aggregate stats
+    const registrations = await Registration.find(
+      { isDeleted: { $ne: true } },
+      { programId: 1, programDate: 1, status: 1, payment: 1, attendance: 1 }
+    ).lean();
 
     return sortedPrograms.map(prog => {
-      const s = statsMap.get(prog.id) || { approved: 0, pending: 0, inquiry: 0, rejected: 0, present: 0 };
-      const activeBookings = (s.approved + s.pending) * 2;
-      const availableSeats = Math.max(0, prog.capacity - activeBookings);
+      const progIdentifiers = new Set([
+        prog.id,
+        prog.slug,
+        prog.date,
+        `prog-${prog.date}`,
+        prog.id ? String(prog.id).toLowerCase() : '',
+        prog.slug ? String(prog.slug).toLowerCase() : ''
+      ].filter(Boolean));
+
+      // Match all registrations for this specific event
+      const matchingRegs = registrations.filter(r => {
+        if (r.programId && progIdentifiers.has(r.programId)) return true;
+        if (r.programId && progIdentifiers.has(String(r.programId).toLowerCase())) return true;
+        if (r.programDate && (r.programDate === prog.date || progIdentifiers.has(r.programDate))) return true;
+        return false;
+      });
+
+      let approved = 0;
+      let pending = 0;
+      let inquiry = 0;
+      let rejected = 0;
+      let present = 0;
+
+      for (const reg of matchingRegs) {
+        if (reg.status === 'approved' || reg.payment?.status === 'captured') {
+          approved++;
+        } else if (reg.status === 'rejected') {
+          rejected++;
+        } else if (reg.status === 'inquiry') {
+          inquiry++;
+        } else {
+          pending++;
+        }
+
+        if (reg.attendance === 'present' || reg.attendance === true) {
+          present++;
+        }
+      }
+
+      const capacity = prog.capacity && prog.capacity > 0 ? prog.capacity : 1184;
+      const isCapacityReached = approved >= capacity;
+      const availableSlots = Math.max(0, capacity - approved);
+      const totalBooked = approved + pending;
+
+      // Auto housefull when capacity is reached
+      let eventStatus = prog.status;
+      if (isCapacityReached && eventStatus !== 'completed' && eventStatus !== 'archived') {
+        eventStatus = 'housefull';
+      }
 
       return {
         ...prog,
-        activeBookings,
-        availableSeats,
-        approvedCount: s.approved,
-        pendingCount: s.pending,
-        inquiryCount: s.inquiry,
-        rejectedCount: s.rejected,
-        cplApproved: s.approved,
-        cplPending: s.pending,
-        cplInquiry: s.inquiry,
-        cplRejected: s.rejected,
-        ipApproved: s.approved,
-        ipPending: s.pending,
-        ipInquiry: s.inquiry,
-        ipRejected: s.rejected,
-        presentCount: s.present
+        capacity,
+        status: eventStatus,
+        isHousefull: isCapacityReached,
+        totalBooked,
+        bookingsCount: approved,
+        approvedCount: approved,
+        pendingCount: pending,
+        inquiryCount: inquiry,
+        rejectedCount: rejected,
+        presentCount: present,
+        availableSlots,
+        availableSeats: availableSlots * 2,
+        activeBookings: approved * 2,
+        cplApproved: approved,
+        cplPending: pending,
+        cplInquiry: inquiry,
+        cplRejected: rejected,
+        ipApproved: approved,
+        ipPending: pending,
+        ipInquiry: inquiry,
+        ipRejected: rejected
       };
     });
   }

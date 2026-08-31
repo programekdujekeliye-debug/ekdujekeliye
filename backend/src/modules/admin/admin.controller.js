@@ -437,7 +437,7 @@ export const getAdminDashboardSummary = async (req, res) => {
       ];
     }
 
-    const [statsList, recentSubmissions, activeEvents] = await Promise.all([
+    const [statsList, recentSubmissions, activeEvents, selectedEventObj] = await Promise.all([
       Registration.aggregate([
         { $match: matchFilter },
         {
@@ -461,10 +461,17 @@ export const getAdminDashboardSummary = async (req, res) => {
         .sort({ date: 1 })
         .limit(3)
         .select('id name shortName date time status city venue capacity')
-        .lean()
+        .lean(),
+      eventId && eventId !== 'all'
+        ? Event.findOne({ $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] }).lean()
+        : null
     ]);
 
     const s = statsList[0] || { total: 0, approved: 0, pending: 0, inquiry: 0, rejected: 0, present: 0 };
+    const eventCapacity = selectedEventObj?.capacity || 1184;
+    const isHousefull = s.approved >= eventCapacity;
+    const availableSlots = Math.max(0, eventCapacity - s.approved);
+
     const result = {
       stats: {
         total: s.total,
@@ -473,11 +480,24 @@ export const getAdminDashboardSummary = async (req, res) => {
         inquiry: s.inquiry,
         rejected: s.rejected,
         present: s.present,
+        capacity: eventCapacity,
+        availableSlots,
+        isHousefull,
         attendanceRate: s.approved > 0 ? parseFloat(((s.present / s.approved) * 100).toFixed(1)) : 0
       },
+      selectedEvent: selectedEventObj ? {
+        id: selectedEventObj.id,
+        name: selectedEventObj.name,
+        date: selectedEventObj.date,
+        time: selectedEventObj.time,
+        venue: selectedEventObj.venue,
+        capacity: eventCapacity,
+        isHousefull
+      } : null,
       recentSubmissions,
       activeEvents
     };
+
 
     if (!eventId) {
       adminDashboardCache = result;

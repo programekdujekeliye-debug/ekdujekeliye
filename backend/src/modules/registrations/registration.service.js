@@ -13,23 +13,39 @@ export class RegistrationService {
    */
   async createRegistration({ husbandName, wifeName, surname, phoneNumber, programId, couplePhotoFile, whatsappOptIn = true }) {
     // 1. Fetch Program & verify capacity
-    const program = await eventService.getEventBySlug(programId) || await Event.findOne({ id: programId }).lean();
+    const program = await eventService.getEventBySlug(programId) || await Event.findOne({
+      $or: [{ id: programId }, { slug: programId }, { date: programId }]
+    }).lean();
     if (!program) {
       const err = new Error('Invalid program/slot selected.');
       err.status = 400;
       throw err;
     }
 
-    const activeCount = await Registration.countDocuments({
-      programId,
-      status: { $in: ['approved', 'pending'] },
-      isDeleted: { $ne: true }
-    });
-    if ((activeCount * 2) + 2 > program.capacity) {
-      const err = new Error('This program slot is completely full.');
+    if (program.status === 'housefull' || program.status === 'registration_closed' || program.isRegistrationOpen === false) {
+      const err = new Error('Registrations for this seminar date are currently full/closed (Housefull).');
       err.status = 400;
       throw err;
     }
+
+    const progIdentifiers = [program.id, program.slug, program.date].filter(Boolean);
+    const capacity = program.capacity && program.capacity > 0 ? program.capacity : 1184;
+
+    const activeCount = await Registration.countDocuments({
+      $or: [
+        { programId: { $in: progIdentifiers } },
+        ...(program.date ? [{ programDate: program.date }] : [])
+      ],
+      status: { $in: ['approved', 'pending'] },
+      isDeleted: { $ne: true }
+    });
+
+    if (activeCount >= capacity) {
+      const err = new Error('Housefull: This program slot has reached maximum seating capacity.');
+      err.status = 400;
+      throw err;
+    }
+
 
     // 2. Per-event duplicate phone check
     const existingRegistration = await Registration.findOne({

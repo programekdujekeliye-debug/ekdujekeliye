@@ -322,13 +322,24 @@ export const EventsPage = () => {
         {filteredPrograms.map((prog) => {
           const isTbd = prog.date === 'TBD' || prog.date === 'TBA' || prog.status === 'date_tba' || !prog.isDateFinal;
           const isCompleted = prog.status === 'completed' || prog.status === 'archived' || (prog.date < todayStr && !isTbd);
-          const coupleBookings = prog.approvedCount !== undefined ? prog.approvedCount : (prog.bookingsCount || 0);
+          const capacity = prog.capacity && prog.capacity > 0 ? prog.capacity : 1184;
+          const approved = prog.approvedCount ?? prog.bookingsCount ?? 0;
+          const pending = prog.pendingCount ?? 0;
+          const rejected = prog.rejectedCount ?? 0;
+          const totalBooked = approved + pending;
+          const isHousefull = prog.isHousefull || approved >= capacity;
+          const availableSlots = Math.max(0, capacity - approved);
+          const fillPercentage = Math.min(100, Math.round((approved / capacity) * 100));
 
           return (
             <div
               key={prog.id}
               className={`bg-white border ${
-                isCompleted ? 'border-slate-200 bg-slate-50/60' : 'border-slate-300 hover:border-rose-300'
+                isHousefull
+                  ? 'border-rose-300 bg-rose-50/10 ring-1 ring-rose-300/40'
+                  : isCompleted
+                  ? 'border-slate-200 bg-slate-50/60'
+                  : 'border-slate-300 hover:border-rose-300'
               } rounded-2xl p-5 shadow-xs transition-all flex flex-col justify-between space-y-4`}
             >
               <div className="space-y-3">
@@ -342,23 +353,31 @@ export const EventsPage = () => {
                     </h3>
                   </div>
                   <span
-                    className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md border flex-shrink-0 ${
-                      prog.status === 'upcoming'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : prog.status === 'few_seats'
-                        ? 'bg-amber-50 text-amber-700 border-amber-200'
-                        : prog.status === 'housefull' || prog.status === 'registration_closed'
-                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    className={`text-[9px] font-extrabold uppercase px-2.5 py-1 rounded-lg border flex-shrink-0 whitespace-nowrap ${
+                      isHousefull
+                        ? 'bg-rose-600 text-white border-rose-700 shadow-xs animate-pulse'
+                        : isCompleted
+                        ? 'bg-slate-100 text-slate-600 border-slate-200'
                         : isTbd
                         ? 'bg-sky-50 text-sky-700 border-sky-200'
-                        : 'bg-slate-100 text-slate-600 border-slate-200'
+                        : prog.status === 'few_seats' || fillPercentage >= 85
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     }`}
                   >
-                    {isCompleted ? 'COMPLETED' : isTbd ? 'Date TBA' : prog.status}
+                    {isHousefull
+                      ? 'HOUSEFULL'
+                      : isCompleted
+                      ? 'COMPLETED'
+                      : isTbd
+                      ? 'Date TBA'
+                      : prog.status === 'few_seats' || fillPercentage >= 85
+                      ? 'FEW SEATS LEFT'
+                      : 'UPCOMING'}
                   </span>
                 </div>
 
-                <div className="space-y-1.5 text-xs text-slate-600">
+                <div className="space-y-2 text-xs text-slate-600">
                   <div className="flex items-center gap-2">
                     <CalendarIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                     <span className="font-medium">{isTbd ? 'Date to be announced' : `${prog.date} (${prog.time || '8:30 PM'})`}</span>
@@ -367,14 +386,43 @@ export const EventsPage = () => {
                     <BuildingIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                     <span className="font-medium truncate">{prog.venue || 'Venue to be announced'}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <UsersIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                    <span>
-                      <strong className="text-slate-800 font-bold">{coupleBookings}</strong> / {prog.capacity} couples booked
-                    </span>
+                  
+                  {/* Capacity & Booking Stats Box */}
+                  <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-700">Capacity &amp; Bookings:</span>
+                      <span className="font-mono font-bold text-slate-900">
+                        {approved} / {capacity} couples
+                      </span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          fillPercentage >= 100
+                            ? 'bg-rose-600'
+                            : fillPercentage >= 85
+                            ? 'bg-amber-500'
+                            : 'bg-emerald-500'
+                        }`}
+                        style={{ width: `${fillPercentage}%` }}
+                      />
+                    </div>
+
+                    {/* Sub-counts breakdown */}
+                    <div className="flex items-center justify-between text-[10px] pt-0.5 border-t border-slate-200/60 font-semibold">
+                      <span className="text-emerald-700 font-bold">✓ Approved: {approved}</span>
+                      <span className="text-amber-700 font-bold">⏳ Pending: {pending}</span>
+                      <span className="text-slate-500">Available: {availableSlots}</span>
+                    </div>
                   </div>
-                  <div className="text-[11px] font-bold text-rose-700 pt-0.5">
-                    Registration Fee: ₹{prog.price ?? 1500} {prog.currency || 'INR'}
+
+                  <div className="flex items-center justify-between text-[11px] font-bold text-rose-700 pt-0.5">
+                    <span>Fee: ₹{prog.price ?? 1500} {prog.currency || 'INR'}</span>
+                    <span className="text-[10px] text-slate-500 font-medium font-mono">
+                      Total Inquiries: {totalBooked}
+                    </span>
                   </div>
                 </div>
               </div>

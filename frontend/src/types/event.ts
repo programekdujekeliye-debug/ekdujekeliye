@@ -55,10 +55,12 @@ export interface Program {
   activeBookings?: number;
   availableSeats?: number;
   isSoldOut?: boolean;
+  isHousefull?: boolean;
   inquiryCount?: number;
   pendingCount?: number;
   approvedCount?: number;
   rejectedCount?: number;
+  availableSlots?: number;
   cplApproved?: number;
   cplPending?: number;
   cplInquiry?: number;
