@@ -89,8 +89,9 @@ export default function DigitalPassPage() {
 
   const handleDownloadInvitation = () => {
     if (!inquiryId) return;
-    window.open(`${API_BASE_URL}/api/invitations/${encodeURIComponent(inquiryId)}/download`, '_blank');
+    window.location.href = `/invitation/${encodeURIComponent(inquiryId)}`;
   };
+
 
   if (loading) {
     return (
@@ -127,10 +128,10 @@ export default function DigitalPassPage() {
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex flex-col items-center justify-center p-3 sm:p-6 select-none print:bg-white print:text-black">
-      
+
       {/* Mobile-First Digital Pass Card */}
       <div className="w-full max-w-sm bg-white text-stone-900 rounded-3xl shadow-2xl overflow-hidden border border-stone-200/90 flex flex-col print:shadow-none print:border-stone-400">
-        
+
         {/* Pass Header Banner */}
         <div className="bg-gradient-to-r from-rose-700 via-rose-600 to-amber-700 text-white p-5 text-center relative">
           <div className="flex items-center justify-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-rose-200 mb-1">
@@ -151,7 +152,7 @@ export default function DigitalPassPage() {
 
         {/* Pass Body */}
         <div className="p-5 sm:p-6 flex flex-col items-center text-center space-y-4">
-          
+
           {/* HUGE HERO REGISTRATION NUMBER BOX */}
           <div className="w-full bg-amber-50 border-2 border-amber-300 rounded-2xl p-3.5 text-center shadow-xs">
             <span className="text-[11px] font-black text-amber-900 uppercase tracking-widest block">

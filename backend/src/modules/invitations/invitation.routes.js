@@ -4,4 +4,5 @@ import { getInvitationCard, downloadInvitationCard } from './invitation.controll
 export const invitationRouter = Router();
 
 invitationRouter.get('/:inquiryId', getInvitationCard);
+invitationRouter.get('/:inquiryId/preview', getInvitationCard);
 invitationRouter.get('/:inquiryId/download', downloadInvitationCard);

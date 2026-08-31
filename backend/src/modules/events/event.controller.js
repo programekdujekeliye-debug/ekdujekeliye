@@ -1,5 +1,6 @@
 import { eventService } from './event.service.js';
 import { Event } from '../../models/Event.js';
+import { Registration } from '../../models/Registration.js';
 import { generateEventSlug } from '../../utils/slug.js';
 
 export const getPublicEvents = async (req, res) => {
@@ -178,6 +179,7 @@ export const updateEvent = async (req, res) => {
     const previousDate = event.date;
     const previousTime = event.time;
     const previousVenue = event.venue;
+    const previousName = event.name;
     const previousStatus = event.status;
 
     const updates = { ...req.body };
@@ -200,9 +202,20 @@ export const updateEvent = async (req, res) => {
     await event.save();
     eventService.invalidateCache();
 
-    // Trigger schedule updates if meaningful details changed
-    const scheduleChanged = previousDate !== event.date || previousTime !== event.time || previousVenue !== event.venue;
-    if (scheduleChanged) {
+    // Trigger schedule & registration cascades if details changed
+    const scheduleOrDetailsChanged = previousDate !== event.date || previousTime !== event.time || previousVenue !== event.venue || previousName !== event.name;
+    if (scheduleOrDetailsChanged) {
+      await Registration.updateMany(
+        { programId: { $in: [event.id, event.slug, id].filter(Boolean) } },
+        {
+          $set: {
+            programDate: event.date,
+            programTime: event.time,
+            programVenue: event.venue,
+            programName: event.name
+          }
+        }
+      );
       await communicationSchedulerService.handleEventDetailsUpdated(event);
     }
 
