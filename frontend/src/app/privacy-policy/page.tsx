@@ -113,7 +113,7 @@ export default function PrivacyPolicyPage() {
               </h2>
               <p>When you register for a couple seminar, we collect the following details:</p>
               <ul className="list-disc pl-5 space-y-1.5 text-stone-600">
-                <li><strong>Couple Names:</strong> Husband&apos;s Name, Wife&apos;s Name, and Family Surname for generating personalized digital passes and hall attendance rosters.</li>
+                <li><strong>Couple Names:</strong> Partner 1 / Husband&apos;s Name, Partner 2 / Wife&apos;s Name, and Surname for generating personalized digital passes and hall attendance rosters.</li>
                 <li><strong>Contact Phone:</strong> 10-digit Mobile Number for booking confirmation, pass delivery, and seminar updates.</li>
                 <li><strong>Couple Photograph:</strong> An uploaded photograph used strictly to personalize your official souvenir seminar entry badge.</li>
                 <li><strong>Payment Transaction Data:</strong> Gateway order identifiers, payment status, and verification timestamps processed through Razorpay. We do not collect or store card CVVs, PINs, or net banking passwords.</li>

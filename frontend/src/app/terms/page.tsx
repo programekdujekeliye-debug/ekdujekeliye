@@ -119,7 +119,7 @@ export default function TermsPage() {
                   <strong>No Refunds:</strong> All payments made for couple seminar registration fees are <strong>100% Non-Refundable</strong> under any personal circumstances, absenteeism, schedule conflicts, or late arrival.
                 </li>
                 <li>
-                  <strong>No Transfers:</strong> Entry passes are personalized and issued exclusively to the registered married couple named and pictured on the digital pass. Passes cannot be transferred, resold, or assigned to other couples or individuals.
+                  <strong>No Transfers:</strong> Entry passes are personalized and issued exclusively to the registered couple named and pictured on the digital pass. Passes cannot be transferred, resold, or assigned to other couples or individuals.
                 </li>
                 <li>
                   <strong>Advance Logistic Commitments:</strong> Seminar auditorium seats, event kits, and seating arrangements are reserved and pre-funded in advance based on confirmed registrations.
@@ -133,7 +133,7 @@ export default function TermsPage() {
                 3. Admission &amp; Seminar Code of Conduct
               </h2>
               <ul className="list-disc pl-5 space-y-1.5 text-stone-600">
-                <li>Each pass admits exactly one married couple (2 adults).</li>
+                <li>Each pass admits exactly one couple (2 adults — married, engaged, or committed).</li>
                 <li>Children and non-registered guests are strictly not permitted inside the seminar hall to ensure a focused, comfortable environment for all couples.</li>
                 <li>Attendees must present their verified digital or printed pass with QR code at the seminar reception desk upon arrival.</li>
               </ul>

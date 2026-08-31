@@ -758,27 +758,27 @@ export const VipPassesPage = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
                   <label className="block text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
-                    Husband Name *
+                    Partner 1 / Husband Name *
                   </label>
                   <input
                     type="text"
                     required
                     value={husbandName}
                     onChange={(e) => setHusbandName(e.target.value)}
-                    placeholder="Husband's full name"
+                    placeholder="Partner 1 name"
                     className="w-full px-3.5 py-3 bg-slate-50 border border-slate-300 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl text-base text-slate-900 font-medium outline-none transition-all"
                   />
                 </div>
                 <div>
                   <label className="block text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
-                    Wife Name *
+                    Partner 2 / Wife Name *
                   </label>
                   <input
                     type="text"
                     required
                     value={wifeName}
                     onChange={(e) => setWifeName(e.target.value)}
-                    placeholder="Wife's full name"
+                    placeholder="Partner 2 name"
                     className="w-full px-3.5 py-3 bg-slate-50 border border-slate-300 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl text-base text-slate-900 font-medium outline-none transition-all"
                   />
                 </div>

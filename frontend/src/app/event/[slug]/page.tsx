@@ -732,7 +732,7 @@ export default function EventDetailPage() {
                     <span className="text-xs text-stone-500 block font-medium">Couple Pass Fee</span>
                     <span className="font-extrabold text-stone-900 text-2xl">₹{price}</span>
                     <span className="text-xs text-stone-500 ml-1.5 font-medium">
-                      {isEarlyReg ? '(Payment opens shortly)' : '(Per Married Couple)'}
+                      {isEarlyReg ? '(Payment opens shortly)' : '(Per Couple)'}
                     </span>
                   </div>
                 </div>
@@ -755,7 +755,7 @@ export default function EventDetailPage() {
                   <span>Important Seminar Guidelines:</span>
                 </p>
                 <ul className="list-disc pl-4 space-y-1 text-stone-700">
-                  <li>Program format exclusively for married couples (2 persons per pass).</li>
+                  <li>Program format exclusively for couples (2 persons per pass — married, engaged, or committed).</li>
                   <li>Children are strictly not permitted inside the seminar hall.</li>
                   <li><strong className="text-amber-900 font-bold">Non-Refundable &amp; Non-Transferable:</strong> સેમિનાર ફી કોઈપણ સંજોગોમાં રિફંડ કે ટ્રાન્સફર થશે નહીં.</li>
                   <li>{isEarlyReg ? 'Digital pass issued after online payment opens and is completed.' : 'Instant digital pass issued immediately upon Razorpay payment.'}</li>
@@ -805,7 +805,7 @@ export default function EventDetailPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
                     <div>
                       <label className="text-xs font-bold text-stone-700 block mb-1.5">
-                        પતિનું નામ (Husband&apos;s Name) *
+                        પાર્ટનર ૧ / પતિનું નામ (Partner 1 / Husband&apos;s Name) *
                       </label>
                       <input
                         type="text"
@@ -819,7 +819,7 @@ export default function EventDetailPage() {
 
                     <div>
                       <label className="text-xs font-bold text-stone-700 block mb-1.5">
-                        પત્નીનું નામ (Wife&apos;s Name) *
+                        પાર્ટનર ૨ / પત્નીનું નામ (Partner 2 / Wife&apos;s Name) *
                       </label>
                       <input
                         type="text"

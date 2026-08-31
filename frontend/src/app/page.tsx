@@ -62,7 +62,7 @@ interface Program {
 const FAQ_ITEMS = [
   {
     question: "કોણ આ સેમિનારમાં ભાગ લઈ શકે છે? (Who can attend?)",
-    answer: "આ સેમિનાર ફક્ત અને ફક્ત પરણેલા દંપતીઓ (Married Couples) માટે જ છે. સિંગલ વ્યક્તિઓ કે બાળકોને પ્રવેશ મળશે નહીં."
+    answer: "આ સેમિનાર તમામ કપલ્સ (Married, Engaged અને Committed Couples) માટે છે. કપલ તરીકે બંને પાર્ટનર્સનું સાથે આવવું ફરજિયાત છે. સિંગલ વ્યક્તિઓ કે બાળકોને પ્રવેશ મળશે નહીં."
   },
   {
     question: "સેમિનારનો સમયગાળો કેટલો રહેશે? (What is the duration?)",
@@ -70,7 +70,7 @@ const FAQ_ITEMS = [
   },
   {
     question: "શું બાળકોને સાથે લાવી શકાય? (Are children allowed?)",
-    answer: "ના, પતિ-પત્ની સંપૂર્ણ ધ્યાન એકબીજા પર અને સેમિનારના વિષય પર કેન્દ્રિત કરી શકે તે માટે બાળકોને લાવવાની સખત મનાઈ છે."
+    answer: "ના, બંને પાર્ટનર્સ સંપૂર્ણ ધ્યાન એકબીજા પર અને સેમિનારના વિષય પર કેન્દ્રિત કરી શકે તે માટે બાળકોને લાવવાની સખત મનાઈ છે."
   },
   {
     question: "પાસ બુક કર્યા પછી કેવી રીતે મળશે? (How will I receive the pass?)",
@@ -426,7 +426,7 @@ export default function HomePage() {
             <div className="pt-6 border-t border-stone-200 flex flex-wrap items-center justify-center lg:justify-start gap-6 text-xs font-semibold text-stone-600">
               <div className="flex items-center gap-2">
                 <CheckIcon className="w-4 h-4 text-rose-600 flex-shrink-0" />
-                <span>A Special Program (Married Couples Only)</span>
+                <span>A Special Program for Couples (Married &amp; Committed)</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckIcon className="w-4 h-4 text-rose-600 flex-shrink-0" />
@@ -848,10 +848,10 @@ export default function HomePage() {
             <span className="text-xs font-bold text-rose-700 uppercase tracking-widest block">About the Program</span>
             <h2 className="text-3xl font-extrabold text-stone-900">Manish Vaghasiya</h2>
             <p className="text-sm text-stone-700 leading-relaxed font-medium">
-              Ek Duje Ke Liye is a special seminar and interactive program initiative created for married couples, led by Manish Vaghasiya. The program focuses on strengthening relationships, deep communication, mutual trust, and understanding through engaging and meaningful sessions.
+              Ek Duje Ke Liye is a special seminar and interactive program initiative created for couples (married, engaged &amp; committed), led by Manish Vaghasiya. The program focuses on strengthening relationships, deep communication, mutual trust, and understanding through engaging and meaningful sessions.
             </p>
             <p className="text-xs text-stone-600 leading-relaxed font-normal">
-              ગુજરાતભરમાં સેંકડો પરિવારો અને હજારો દંપતીઓને વૈવાહિક સુખ, આંતરિક જોડાણ અને પારિવારિક શાંતિ તરફ દોરવા માટે વ્યવહારુ સંવાદ અને જીવનશૈલીની પ્રેરણા આપવામાં આવે છે.
+              ગુજરાતભરમાં સેંકડો પરિવારો અને હજારો કપલ્સને જીવનભરના સ્નેહ, આંતરિક જોડાણ અને સંબંધોમાં ખુશી તરફ દોરવા માટે વ્યવહારુ સંવાદ અને જીવનશૈલીની પ્રેરણા આપવામાં આવે છે.
             </p>
             <div className="pt-2">
               <a
@@ -1070,7 +1070,7 @@ export default function HomePage() {
               </div>
             </div>
             <p className="text-stone-600 text-xs leading-relaxed font-normal">
-              Ek Duje Ke Liye is an interactive seminar initiative led by Manish Vaghasiya, designed for married couples to cultivate lifelong love, unbreakable trust, communication, and lasting marital happiness.
+              Ek Duje Ke Liye is an interactive seminar initiative led by Manish Vaghasiya, designed for couples (married, engaged &amp; committed) to cultivate lifelong love, unbreakable trust, communication, and lasting relationship happiness.
             </p>
 
             {/* Direct Contact / Helpline */}
@@ -1319,7 +1319,7 @@ export default function HomePage() {
             "@context": "https://schema.org",
             "@type": "Organization",
             "name": "Ek Duje Ke Liye",
-            "description": "A special interactive program for married couples led by Manish Vaghasiya.",
+            "description": "A special interactive program for couples led by Manish Vaghasiya.",
             "url": "https://www.ekdujekeliye.in",
             "areaServed": "IN"
           })

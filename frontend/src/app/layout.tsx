@@ -38,7 +38,7 @@ export const metadata: Metadata = {
   keywords: ["Ek Duje Ke Liye", "Couple Seminar", "Couple Program", "Relationship Event", "Couple Experience", "Manish Vaghasiya"],
   openGraph: {
     title: "Ek Duje Ke Liye | A Special Program for Couples",
-    description: "A special interactive experience created for married couples led by Manish Vaghasiya.",
+    description: "A special interactive experience created for couples led by Manish Vaghasiya.",
     type: "website",
     locale: "gu_IN",
   },
