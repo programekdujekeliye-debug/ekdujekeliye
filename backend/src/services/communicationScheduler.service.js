@@ -95,9 +95,10 @@ export class CommunicationSchedulerService {
 
     const results = {};
     const now = new Date();
+    const isInvitationDisabled = event.personalizedInvitationEnabled === false || ['prog-2026-09-07', 'prog-2026-09-11', 'surat-7-september-2026', 'surat-11-september-2026'].includes(event.id) || ['prog-2026-09-07', 'prog-2026-09-11', 'surat-7-september-2026', 'surat-11-september-2026'].includes(event.slug);
 
     // 1. Schedule 48h Personalized Invitation (Only if enabled for event and in future)
-    if (event.personalizedInvitationEnabled !== false && invitationSendAt > now) {
+    if (!isInvitationDisabled && invitationSendAt > now) {
       const invitationVersion = registration.invitationVersion || 1;
       const invIdempotencyKey = `INVITATION_48H:${event.id || event.slug}:${registration._id}:v${invitationVersion}`;
 
@@ -133,7 +134,7 @@ export class CommunicationSchedulerService {
         },
         { upsert: true, returnDocument: 'after' }
       );
-    } else if (event.personalizedInvitationEnabled === false) {
+    } else if (isInvitationDisabled) {
       console.log(`[CommunicationScheduler] Skipping 48h invitation for ${inquiryId}: disabled for event (${event.id || event.slug})`);
     } else {
       console.log(`[CommunicationScheduler] Skipping expired 48h invitation for ${inquiryId} (scheduled time was ${invitationSendAt.toISOString()})`);
