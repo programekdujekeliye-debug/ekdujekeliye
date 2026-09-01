@@ -2,6 +2,7 @@ import { eventService } from './event.service.js';
 import { Event } from '../../models/Event.js';
 import { Registration } from '../../models/Registration.js';
 import { generateEventSlug } from '../../utils/slug.js';
+import { storageService } from '../../services/storage.service.js';
 
 export const getPublicEvents = async (req, res) => {
   try {
@@ -314,6 +315,49 @@ export const enablePaymentAndCommunications = async (req, res) => {
     res.json({ success: true, ...result });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'Error activating payment & communications.' });
+  }
+};
+
+export const uploadCardTemplate = async (req, res) => {
+  const { id } = req.params;
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No template image file provided.' });
+    }
+
+    const event = await Event.findOne({
+      $or: [
+        { id },
+        { slug: id },
+        { date: id },
+        ...(typeof id === 'string' && id.match(/^[0-9a-fA-F]{24}$/) ? [{ _id: id }] : [])
+      ]
+    });
+    if (!event) return res.status(404).json({ error: 'Event program not found.' });
+
+    // Upload to Cloudinary / storage service
+    const base64Data = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    const uploadedUrl = await storageService.upload({
+      data: base64Data,
+      folder: 'event-templates',
+      filename: `card_template_${event.id || event.slug}_${Date.now()}`
+    });
+
+    event.cardTemplate = uploadedUrl;
+    event.cardTemplateUrl = uploadedUrl;
+    await event.save();
+    eventService.invalidateCache();
+
+    res.json({
+      success: true,
+      message: 'Invitation card template uploaded successfully.',
+      cardTemplate: uploadedUrl,
+      cardTemplateUrl: uploadedUrl,
+      program: event
+    });
+  } catch (err) {
+    console.error('[uploadCardTemplate Error]:', err);
+    res.status(500).json({ error: err.message || 'Failed to upload card template.' });
   }
 };
 

@@ -14,11 +14,13 @@ import {
   LayersIcon,
   CheckIcon,
   AlertTriangleIcon,
-  XIcon
+  XIcon,
+  ImageIcon,
+  SparklesIcon
 } from '../../../components/Icons';
 import toast from 'react-hot-toast';
 
-type EventTab = 'general' | 'location' | 'pricing' | 'content' | 'speaker' | 'pass_seo';
+type EventTab = 'general' | 'location' | 'pricing' | 'content' | 'invitation' | 'speaker' | 'pass_seo';
 
 export const EventsPage = () => {
   const { programs, refreshPrograms, loadingPrograms, role } = useAdmin();
@@ -28,6 +30,7 @@ export const EventsPage = () => {
   const [activeTab, setActiveTab] = useState<EventTab>('general');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProgram, setEditingProgram] = useState<Program | null>(null);
+  const [uploadingTemplate, setUploadingTemplate] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState<Partial<Program>>({
@@ -170,6 +173,40 @@ export const EventsPage = () => {
       toast.success(`Event "${name}" deleted.`);
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete event.');
+    }
+  };
+
+  const handleTemplateUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.includes('png') && !file.type.includes('jpeg') && !file.type.includes('jpg')) {
+      toast.error('Please upload a valid PNG or JPEG image file.');
+      return;
+    }
+
+    if (editingProgram?.id) {
+      try {
+        setUploadingTemplate(true);
+        const res = await eventsApi.uploadCardTemplate(editingProgram.id, file);
+        if (res.success && res.cardTemplate) {
+          setFormData(prev => ({ ...prev, cardTemplate: res.cardTemplate }));
+          toast.success('Invitation card PNG uploaded and saved to event slot!');
+          await refreshPrograms();
+        }
+      } catch (err: any) {
+        toast.error(err.message || 'Failed to upload invitation card template.');
+      } finally {
+        setUploadingTemplate(false);
+      }
+    } else {
+      const reader = new FileReader();
+      reader.onload = (uploadEvt) => {
+        const base64 = uploadEvt.target?.result as string;
+        setFormData(prev => ({ ...prev, cardTemplate: base64 }));
+        toast.success('Card template attached. Will be saved when you create the event.');
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -495,8 +532,9 @@ export const EventsPage = () => {
                 { id: 'location', label: '2. Location & Capacity' },
                 { id: 'pricing', label: '3. Pricing & Registration' },
                 { id: 'content', label: '4. Media & Content' },
-                { id: 'speaker', label: '5. Host & Speaker' },
-                { id: 'pass_seo', label: '6. Pass & SEO' }
+                { id: 'invitation', label: '5. Invitation Card PNG' },
+                { id: 'speaker', label: '6. Host & Speaker' },
+                { id: 'pass_seo', label: '7. Pass & SEO' }
               ].map((t) => (
                 <button
                   key={t.id}
@@ -794,7 +832,167 @@ export const EventsPage = () => {
                 </div>
               )}
 
-              {/* Tab 5: Host & Speaker */}
+              {/* Tab 5: Invitation Card PNG */}
+              {activeTab === 'invitation' && (
+                <div className="space-y-5">
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <div className="flex items-center gap-2 text-rose-600 font-extrabold text-xs mb-1">
+                      <SparklesIcon className="w-4 h-4" />
+                      <span>Event-Specific Invitation Card PNG Template</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Upload the official personalized invitation background PNG for this specific seminar. Couples registered for this event will receive this exact card on their personalized invitation page and WhatsApp.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {/* Left: Upload & URL */}
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          Upload Event Invitation PNG
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <label className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all">
+                            <ImageIcon className="w-4 h-4" />
+                            <span>{uploadingTemplate ? 'Uploading PNG...' : 'Choose PNG File'}</span>
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/jpg"
+                              className="hidden"
+                              disabled={uploadingTemplate}
+                              onChange={handleTemplateUpload}
+                            />
+                          </label>
+                          {formData.cardTemplate && (
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, cardTemplate: null })}
+                              className="text-xs text-red-600 hover:underline font-bold cursor-pointer"
+                            >
+                              Reset to Default
+                            </button>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-400 mt-1 block">
+                          Recommended: 576×1024 px PNG with white/transparent heart window.
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Or Direct Template URL / Path
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.cardTemplate || ''}
+                          onChange={(e) => setFormData({ ...formData, cardTemplate: e.target.value })}
+                          placeholder="e.g. /images/ek06_card.png or https://res.cloudinary.com/..."
+                          className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500 font-mono"
+                        />
+                      </div>
+
+                      {/* Heart Coordinate Controls */}
+                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-800">Heart Cutout Photo Window (px)</span>
+                          <button
+                            type="button"
+                            onClick={() => setFormData({
+                              ...formData,
+                              heartX: 157,
+                              heartY: 91,
+                              heartWidth: 260,
+                              heartHeight: 312,
+                              photoZoom: 0.55,
+                              photoOffsetY: 0
+                            })}
+                            className="text-[10px] text-rose-600 font-bold hover:underline cursor-pointer"
+                          >
+                            Reset Coordinates
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Heart X (px)</label>
+                            <input
+                              type="number"
+                              value={formData.heartX ?? 157}
+                              onChange={(e) => setFormData({ ...formData, heartX: Number(e.target.value) })}
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Heart Y (px)</label>
+                            <input
+                              type="number"
+                              value={formData.heartY ?? 91}
+                              onChange={(e) => setFormData({ ...formData, heartY: Number(e.target.value) })}
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Heart Width (px)</label>
+                            <input
+                              type="number"
+                              value={formData.heartWidth ?? 260}
+                              onChange={(e) => setFormData({ ...formData, heartWidth: Number(e.target.value) })}
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Heart Height (px)</label>
+                            <input
+                              type="number"
+                              value={formData.heartHeight ?? 312}
+                              onChange={(e) => setFormData({ ...formData, heartHeight: Number(e.target.value) })}
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Live Preview */}
+                    <div className="flex flex-col items-center justify-center p-4 bg-slate-100 rounded-2xl border border-slate-200">
+                      <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-2">
+                        Card Template Preview
+                      </span>
+                      <div className="relative w-[180px] h-[320px] rounded-xl overflow-hidden border border-slate-300 shadow-md bg-white">
+                        <img
+                          src={formData.cardTemplate || '/card_template.png'}
+                          alt="Template Preview"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/card_template.png';
+                          }}
+                        />
+                        {/* Heart window guide */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: `${((formData.heartX ?? 157) / 576) * 100}%`,
+                            top: `${((formData.heartY ?? 91) / 1024) * 100}%`,
+                            width: `${((formData.heartWidth ?? 260) / 576) * 100}%`,
+                            height: `${((formData.heartHeight ?? 312) / 1024) * 100}%`
+                          }}
+                          className="border-2 border-dashed border-rose-500/80 bg-rose-500/10 rounded-full pointer-events-none flex items-center justify-center"
+                        >
+                          <span className="text-[8px] font-bold text-rose-700 bg-white/90 px-1 py-0.5 rounded shadow-xs">
+                            Photo Window
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-slate-500 mt-2 text-center font-medium">
+                        {formData.cardTemplate ? '✓ Custom Event PNG Attached' : 'Using Default Template (/card_template.png)'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 6: Host & Speaker */}
               {activeTab === 'speaker' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

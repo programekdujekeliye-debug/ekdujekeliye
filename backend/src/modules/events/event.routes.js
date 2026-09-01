@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import {
   getPublicEvents,
   getEventBySlug,
@@ -9,9 +10,15 @@ import {
   duplicateEvent,
   deleteEvent,
   getEnablePaymentPreview,
-  enablePaymentAndCommunications
+  enablePaymentAndCommunications,
+  uploadCardTemplate
 } from './event.controller.js';
 import { requireAuth } from '../../middleware/auth.js';
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 } // 15MB limit
+});
 
 export const eventRouter = Router();
 
@@ -27,5 +34,6 @@ eventRouter.post('/', requireAuth, createEvent);
 eventRouter.get('/:id/enable-payment-preview', requireAuth, getEnablePaymentPreview);
 eventRouter.post('/:id/enable-payment', requireAuth, enablePaymentAndCommunications);
 eventRouter.post('/:id/duplicate', requireAuth, duplicateEvent);
+eventRouter.post('/:id/upload-template', requireAuth, upload.single('templateFile'), uploadCardTemplate);
 eventRouter.put('/:id', requireAuth, updateEvent);
 eventRouter.delete('/:id', requireAuth, deleteEvent);

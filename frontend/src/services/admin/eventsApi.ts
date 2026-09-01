@@ -36,6 +36,15 @@ export const eventsApi = {
     });
   },
 
+  async uploadCardTemplate(id: string, file: File): Promise<{ success: boolean; message: string; cardTemplate: string; program: Program }> {
+    const formData = new FormData();
+    formData.append('templateFile', file);
+    return apiClient<{ success: boolean; message: string; cardTemplate: string; program: Program }>(`/api/programs/${id}/upload-template`, {
+      method: 'POST',
+      body: formData
+    });
+  },
+
   async deleteEvent(id: string): Promise<{ success: boolean; message: string }> {
     return apiClient<{ success: boolean; message: string }>(`/api/programs/${id}`, {
       method: 'DELETE'
