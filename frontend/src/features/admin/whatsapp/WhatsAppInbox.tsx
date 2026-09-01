@@ -103,10 +103,10 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
     } catch (_) {}
   }, []);
 
-  // Fetch Conversations
-  const fetchConversations = useCallback(async (pageToLoad = 1) => {
+  // Fetch Conversations (Silent mode prevents UI flicker during fast background live polling)
+  const fetchConversations = useCallback(async (pageToLoad = 1, silent = false) => {
     try {
-      setLoadingConversations(true);
+      if (!silent) setLoadingConversations(true);
       const res = await whatsappApi.getConversations({
         page: pageToLoad,
         limit: 25,
@@ -120,16 +120,18 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
         setPagination(res.pagination || { total: 0, page: 1, limit: 25, totalPages: 1 });
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to fetch conversations.');
+      if (!silent) {
+        toast.error(err.message || 'Failed to fetch conversations.');
+      }
     } finally {
-      setLoadingConversations(false);
+      if (!silent) setLoadingConversations(false);
     }
   }, [search, filter, selectedEventId]);
 
-  // Fetch Active Thread Details
-  const fetchThreadDetails = useCallback(async (convId: string, markRead = true) => {
+  // Fetch Active Thread Details (Silent mode prevents UI flicker)
+  const fetchThreadDetails = useCallback(async (convId: string, markRead = true, silent = false) => {
     try {
-      setLoadingDetails(true);
+      if (!silent) setLoadingDetails(true);
       const res = await whatsappApi.getConversationDetails(convId);
       if (res.success) {
         setActiveConv(res.conversation);
@@ -143,16 +145,18 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
         }
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to load conversation thread.');
+      if (!silent) {
+        toast.error(err.message || 'Failed to load conversation thread.');
+      }
     } finally {
-      setLoadingDetails(false);
+      if (!silent) setLoadingDetails(false);
     }
   }, [fetchStats]);
 
   // Initial load
   useEffect(() => {
     fetchStats();
-    fetchConversations(1);
+    fetchConversations(1, false);
   }, [fetchStats, fetchConversations]);
 
   // Auto-scroll on new messages
@@ -160,15 +164,15 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
     scrollToBottom();
   }, [messages]);
 
-  // Periodic Refresh (15s)
+  // Live Auto-Refresh (Every 3.5 seconds) - Updates without page reloading!
   useEffect(() => {
     const interval = setInterval(() => {
       fetchStats();
-      fetchConversations(pagination.page);
+      fetchConversations(pagination.page, true);
       if (selectedConvId) {
-        fetchThreadDetails(selectedConvId, false);
+        fetchThreadDetails(selectedConvId, false, true);
       }
-    }, 15000);
+    }, 3500);
     return () => clearInterval(interval);
   }, [fetchStats, fetchConversations, fetchThreadDetails, pagination.page, selectedConvId]);
 

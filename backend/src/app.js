@@ -166,7 +166,11 @@ app.use('/api/passes', passRouter);
 app.use('/api/invitations', invitationRouter);
 app.use('/api/feedback', feedbackRouter);
 
-// 4. WhatsApp
+// 4. WhatsApp Webhooks & Messaging
+app.get('/webhook', handleVerification);
+app.post('/webhook', handleEvents);
+app.get('/api/webhook', handleVerification);
+app.post('/api/webhook', handleEvents);
 app.get('/api/webhooks/whatsapp', handleVerification);
 app.post('/api/webhooks/whatsapp', handleEvents);
 app.get('/api/whatsapp-templates/active', getActiveTemplate);

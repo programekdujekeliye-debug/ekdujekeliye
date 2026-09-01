@@ -774,20 +774,33 @@ export const handleWebhookEvent = async (req, res) => {
               }
 
               // Match Customer to Registration (Prefer active/upcoming, then latest)
+              const clean10Phone = senderPhone.replace(/^91/, '');
               const registrations = await Registration.find({
-                phoneNumber: senderPhone,
+                $or: [
+                  { phoneNumber: senderPhone },
+                  { phoneNumber: clean10Phone },
+                  { phoneNumber: `+91${clean10Phone}` },
+                  { phoneNumber: `+${senderPhone}` },
+                  { phoneNumber: { $regex: clean10Phone + '$' } }
+                ],
                 isDeleted: { $ne: true }
               }).sort({ createdAt: -1 });
 
               const activeReg = registrations.find(r => r.status === 'approved' || r.status === 'pending') || registrations[0] || null;
 
               const customerName = activeReg
-                ? `${activeReg.husbandName || ''} & ${activeReg.wifeName || ''}`.trim() || activeReg.coupleName || 'Respected Couple'
-                : (value.contacts?.[0]?.profile?.name || 'WhatsApp Guest');
+                ? `${activeReg.husbandName || ''} & ${activeReg.wifeName || ''} ${activeReg.surname || ''}`.trim() || activeReg.coupleName || 'Respected Couple'
+                : (value.contacts?.[0]?.profile?.name || maskPhoneNumber(senderPhone));
 
               // Find or create Conversation and set 24h Customer Service Window
               const windowExpiry = new Date(timestamp.getTime() + 24 * 60 * 60 * 1000);
-              let conversation = await WhatsappConversation.findOne({ phone: senderPhone });
+              let conversation = await WhatsappConversation.findOne({
+                $or: [
+                  { phone: senderPhone },
+                  { phone: clean10Phone },
+                  { phone: `+91${clean10Phone}` }
+                ]
+              });
 
               if (!conversation) {
                 conversation = await WhatsappConversation.create({
