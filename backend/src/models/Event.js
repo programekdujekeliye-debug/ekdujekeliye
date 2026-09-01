@@ -45,7 +45,7 @@ const EventSchema = new mongoose.Schema({
   capacity: { type: Number, required: true },
   bookingsCount: { type: Number, default: 0 },
   isDateFinal: { type: Boolean, default: true },
-  cardTemplate: { type: String, default: null },
+  cardTemplate: { type: String, default: null, select: false },
   heartX: { type: Number, default: 157 },
   heartY: { type: Number, default: 91 },
   heartWidth: { type: Number, default: 260 },
@@ -58,6 +58,7 @@ const EventSchema = new mongoose.Schema({
   isPaymentEnabled: { type: Boolean, default: true },
   communicationsEnabled: { type: Boolean, default: true },
   earlyRegistrationMode: { type: Boolean, default: false },
+  personalizedInvitationEnabled: { type: Boolean, default: true },
   paymentOpenedAt: { type: Date, default: null },
   paymentOpeningNote: { type: String, default: '' },
   archiveStatus: {

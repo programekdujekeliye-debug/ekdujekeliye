@@ -427,9 +427,10 @@ export const getAdminDashboardSummary = async (req, res) => {
     const matchFilter = { isDeleted: { $ne: true } };
 
     if (eventId && eventId !== 'all') {
-      selectedEventObj = await Event.findOne({
-        $or: [{ id: eventId }, { slug: eventId }, { date: eventId }]
-      }).lean();
+      selectedEventObj = await Event.findOne(
+        { $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] },
+        'id name slug date time venue city capacity status price isPaymentEnabled earlyRegistrationMode'
+      ).lean();
 
       const matchedIds = [eventId];
       if (selectedEventObj) {

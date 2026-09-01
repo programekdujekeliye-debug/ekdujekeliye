@@ -5,7 +5,7 @@ import { Registration } from '../models/Registration.js';
 /**
  * Startup Event Config Initializer
  * Automatically ensures 7 September 2026 (EK06) and 11 September 2026 (EK07) events exist
- * with Early Registration Mode active (isPaymentEnabled: false, earlyRegistrationMode: true).
+ * with normal registration & payment enabled (EK06 & EK07 active upcoming paid events).
  */
 export async function ensureEarlyRegistrationEvents() {
   try {
@@ -28,6 +28,9 @@ export async function ensureEarlyRegistrationEvents() {
       $or: [{ sequenceNumber: 6 }, { id: 'prog-2026-09-07' }, { date: '2026-09-07' }]
     });
 
+    const isEarlyMode6 = existingEvent7 ? Boolean(existingEvent7.earlyRegistrationMode) : false;
+    const isPaymentEnabled6 = existingEvent7 ? Boolean(existingEvent7.isPaymentEnabled) : true;
+
     await Event.findOneAndUpdate(
       { $or: [{ sequenceNumber: 6 }, { id: 'prog-2026-09-07' }, { date: '2026-09-07' }] },
       {
@@ -43,12 +46,12 @@ export async function ensureEarlyRegistrationEvents() {
           status: 'upcoming',
           isInquiryClosed: false,
           isRegistrationOpen: true,
-          isPaymentEnabled: false,
-          earlyRegistrationMode: true,
-          paymentOpenedAt: null,
-          paymentOpeningNote: 'Online payment will open shortly. Payment link will be sent on your registered WhatsApp number.',
+          isPaymentEnabled: isPaymentEnabled6,
+          earlyRegistrationMode: isEarlyMode6,
+          personalizedInvitationEnabled: false,
+          communicationsEnabled: true,
           isDateFinal: true,
-          capacity: existingEvent7?.capacity || 1000,
+          capacity: existingEvent7?.capacity || 500,
           time: '8:30 PM',
           date: '2026-09-07'
         }
@@ -56,19 +59,22 @@ export async function ensureEarlyRegistrationEvents() {
       { upsert: true, returnDocument: 'after' }
     );
 
-    // 2. Ensure 12 September 2026 Program (Sequence 7 -> EK07-XX)
-    const existingEvent12 = await Event.findOne({
+    // 2. Ensure 11 September 2026 Program (Sequence 7 -> EK07-XX)
+    const existingEvent11 = await Event.findOne({
       $or: [{ sequenceNumber: 7 }, { id: 'prog-2026-09-11' }, { id: 'prog-2026-09-12' }, { date: '2026-09-11' }, { date: '2026-09-12' }]
     });
+
+    const isEarlyMode7 = existingEvent11 ? Boolean(existingEvent11.earlyRegistrationMode) : false;
+    const isPaymentEnabled7 = existingEvent11 ? Boolean(existingEvent11.isPaymentEnabled) : true;
 
     await Event.findOneAndUpdate(
       { $or: [{ sequenceNumber: 7 }, { id: 'prog-2026-09-11' }, { id: 'prog-2026-09-12' }, { date: '2026-09-11' }, { date: '2026-09-12' }] },
       {
         $set: {
-          id: 'prog-2026-09-12',
+          id: 'prog-2026-09-11',
           sequenceNumber: 7,
           name: PROGRAM_NAME,
-          slug: 'surat-12-september-2026',
+          slug: 'surat-11-september-2026',
           city: 'Surat',
           venue: VENUE_NAME,
           mapUrl: MAP_URL,
@@ -76,19 +82,23 @@ export async function ensureEarlyRegistrationEvents() {
           status: 'upcoming',
           isInquiryClosed: false,
           isRegistrationOpen: true,
-          isPaymentEnabled: false,
-          earlyRegistrationMode: true,
-          paymentOpenedAt: null,
-          paymentOpeningNote: 'Online payment will open shortly. Payment link will be sent on your registered WhatsApp number.',
+          isPaymentEnabled: isPaymentEnabled7,
+          earlyRegistrationMode: isEarlyMode7,
+          personalizedInvitationEnabled: false,
+          communicationsEnabled: true,
           isDateFinal: true,
-          capacity: existingEvent12?.capacity || 1000,
+          capacity: existingEvent11?.capacity || 500,
           time: '8:30 PM',
-          date: '2026-09-12'
+          date: '2026-09-11'
         }
       },
       { upsert: true, returnDocument: 'after' }
     );
 
+    // Clean up any stale legacy prog-2026-09-12 record if it exists as duplicate
+    try {
+      await Event.deleteMany({ id: 'prog-2026-09-12', sequenceNumber: { $ne: 7 } });
+    } catch (_) {}
 
     // 3. Link and standardize all 7 September registrations to EK06
     try {
@@ -137,13 +147,20 @@ export async function ensureEarlyRegistrationEvents() {
         }
       );
 
-      // Ensure all EK07 registrations are mapped to 12 September 2026
+      // Ensure all EK07 registrations are mapped to 11 September 2026
       await Registration.updateMany(
-        { inquiryId: { $regex: '^EK07-' } },
+        {
+          $or: [
+            { inquiryId: { $regex: '^EK07-' } },
+            { programId: 'prog-2026-09-12' },
+            { programId: 'prog-1787844313509-02' },
+            { programDate: '2026-09-12' }
+          ]
+        },
         {
           $set: {
-            programId: 'prog-2026-09-12',
-            programDate: '2026-09-12',
+            programId: 'prog-2026-09-11',
+            programDate: '2026-09-11',
             programName: PROGRAM_NAME,
             isDeleted: false
           }
@@ -183,10 +200,14 @@ export async function ensureEarlyRegistrationEvents() {
       }
       if (maxEk07 > 0) {
         await Counter.findOneAndUpdate(
-          { $or: [{ _id: 'inquiryNumber_prog-2026-09-12' }, { name: 'inquiryNumber_prog-2026-09-12' }, { _id: 'inquiryNumber_prog-2026-09-11' }, { name: 'inquiryNumber_prog-2026-09-11' }] },
-          { $max: { seq: maxEk07 }, $set: { name: 'inquiryNumber_prog-2026-09-12' } },
+          { $or: [{ _id: 'inquiryNumber_prog-2026-09-11' }, { name: 'inquiryNumber_prog-2026-09-11' }] },
+          { $max: { seq: maxEk07 }, $set: { name: 'inquiryNumber_prog-2026-09-11' } },
           { upsert: true }
         );
+        // Clean up legacy counter
+        await Counter.deleteMany({
+          $or: [{ _id: 'inquiryNumber_prog-2026-09-12' }, { name: 'inquiryNumber_prog-2026-09-12' }]
+        });
       }
     } catch (cntErr) {
       console.warn('[EventInit] Counter sync notice:', cntErr.message);
@@ -198,8 +219,8 @@ export async function ensureEarlyRegistrationEvents() {
       await Event.createIndexes();
     } catch (_) {}
 
-    console.log('[EventInit] Ensured 7 Sep (EK06) & 12 Sep (EK07) Early Registration Mode and DB indexes.');
+    console.log('[EventInit] Ensured 7 Sep (EK06) & 11 Sep (EK07) event configurations and DB indexes.');
   } catch (err) {
-    console.error('[EventInit] Failed to ensure early registration events:', err.message);
+    console.error('[EventInit] Failed to ensure event initialization:', err.message);
   }
 }

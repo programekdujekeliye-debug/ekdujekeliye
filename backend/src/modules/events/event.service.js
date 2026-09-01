@@ -444,6 +444,24 @@ export class EventService {
     event.isPaymentEnabled = true;
     event.communicationsEnabled = true;
     event.earlyRegistrationMode = false;
+    if (event.sequenceNumber === 6 || event.sequenceNumber === 7 || event.id === 'prog-2026-09-07' || event.id === 'prog-2026-09-11' || event.id === 'prog-2026-09-12') {
+      event.personalizedInvitationEnabled = false;
+
+      // Cancel any future queued invitation jobs for this event
+      await WhatsappMessage.updateMany(
+        {
+          eventId: { $in: [event.id, event.slug, 'prog-2026-09-07', 'prog-2026-09-11', 'prog-2026-09-12'] },
+          messageType: 'invitation',
+          status: { $in: ['QUEUED', 'SENDING'] }
+        },
+        {
+          $set: {
+            status: 'CANCELLED',
+            lastErrorMessage: 'DISABLED_FOR_EVENT'
+          }
+        }
+      );
+    }
     if (!event.paymentOpenedAt) {
       event.paymentOpenedAt = activationTimestamp;
     }

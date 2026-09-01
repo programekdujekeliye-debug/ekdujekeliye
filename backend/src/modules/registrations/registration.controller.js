@@ -307,9 +307,10 @@ export const getSubmissionsList = async (req, res) => {
   }
 
   if (programId && programId !== 'all') {
-    const eventObj = await eventService.getEventBySlug(programId) || await Event.findOne({
-      $or: [{ id: programId }, { slug: programId }, { date: programId }]
-    }).lean();
+    const eventObj = await eventService.getEventBySlug(programId) || await Event.findOne(
+      { $or: [{ id: programId }, { slug: programId }, { date: programId }] },
+      'id slug date'
+    ).lean();
 
     const matchedIds = [programId];
     if (eventObj) {
@@ -381,6 +382,7 @@ export const getSubmissionsList = async (req, res) => {
         .sort({ [sortField]: sortDirection })
         .skip(skip)
         .limit(safeLimit)
+        .select('-paymentScreenshot')
         .lean(),
       Registration.countDocuments(query)
     ]);

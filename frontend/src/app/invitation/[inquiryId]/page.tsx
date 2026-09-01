@@ -329,7 +329,7 @@ export default function PersonalizedInvitationPage() {
       `Couple: ${coupleName}\n` +
       `Registration ID: ${submission.inquiryId}\n` +
       `Event: ${submission.program?.name || submission.programName || 'Ek Duje Ke Liye'}\n` +
-      `Date: ${submission.program?.date || submission.programDate || '12 September 2026'}\n\n` +
+      `Date: ${submission.program?.date || submission.programDate || '11 September 2026'}\n\n` +
       `કાર્ડ જોવા અને ડાઉનલોડ કરવા માટે આ લિંક ઓપન કરો:\n` +
       `https://www.ekdujekeliye.in/invitation/${submission.inquiryId}`
     );
@@ -498,7 +498,7 @@ export default function PersonalizedInvitationPage() {
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-stone-600">
             <CalendarIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
-            <span>{submission.program?.date || submission.programDate || '12 September 2026'}</span>
+            <span>{submission.program?.date || submission.programDate || '11 September 2026'}</span>
             <span className="text-stone-300">&bull;</span>
             <ClockIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
             <span>{submission.program?.time || submission.programTime || '8:30 PM'}</span>

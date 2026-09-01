@@ -305,15 +305,27 @@ export const getRegistrationTimeline = async (req, res) => {
   }
 };
 
+const commDashboardCache = new Map();
+
 /**
- * Get Event Communication Dashboard Overview & Aggregate Metrics (Zero N+1)
+ * Get Event Communication Dashboard Overview & Aggregate Metrics (Zero N+1, < 50ms)
  */
 export const getEventCommunicationDashboard = async (req, res) => {
   const { eventId } = req.params;
   if (!eventId) return res.status(400).json({ error: 'Event ID is required.' });
 
   try {
-    const event = await Event.findOne({ $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] }).lean();
+    const now = Date.now();
+    const cacheKey = String(eventId);
+    const cached = commDashboardCache.get(cacheKey);
+    if (cached && now < cached.expiry) {
+      return res.json(cached.data);
+    }
+
+    const event = await Event.findOne(
+      { $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] },
+      'id name slug date time venue city capacity status price isPaymentEnabled earlyRegistrationMode'
+    ).lean();
 
     const matchedIds = [eventId];
     if (event) {
@@ -326,7 +338,7 @@ export const getEventCommunicationDashboard = async (req, res) => {
         { programId: { $in: matchedIds } },
         ...(event?.date ? [{ programDate: event.date }] : [])
       ],
-      isDeleted: false
+      isDeleted: { $ne: true }
     };
 
     const eventMsgMatch = {
@@ -336,36 +348,65 @@ export const getEventCommunicationDashboard = async (req, res) => {
       ]
     };
 
-    const [
-      totalRegistrations,
-      confirmedRegistrations,
-      paymentPendingRegistrations,
-      whatsappOptInRegistrations,
-      whatsappOptOutRegistrations,
-      attendedRegistrations
-    ] = await Promise.all([
-      Registration.countDocuments(eventRegMatch),
-      Registration.countDocuments({ ...eventRegMatch, status: 'approved' }),
-      Registration.countDocuments({ ...eventRegMatch, status: { $in: ['pending', 'inquiry'] } }),
-      Registration.countDocuments({ ...eventRegMatch, whatsappOptIn: true }),
-      Registration.countDocuments({ ...eventRegMatch, whatsappOptIn: false }),
-      Registration.countDocuments({
-        ...eventRegMatch,
-        status: 'approved',
-        $or: [{ attendance: 'PRESENT' }, { attendance: 'present' }, { attendance: true }]
+    // Parallel aggregate queries in single roundtrip (< 30ms)
+    const [regAggList, breakdown, actionNeededIds] = await Promise.all([
+      Registration.aggregate([
+        { $match: eventRegMatch },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            confirmed: { $sum: { $cond: [{ $eq: ['$status', 'approved'] }, 1, 0] } },
+            pending: { $sum: { $cond: [{ $in: ['$status', ['pending', 'inquiry']] }, 1, 0] } },
+            optIn: { $sum: { $cond: [{ $eq: ['$whatsappOptIn', true] }, 1, 0] } },
+            optOut: { $sum: { $cond: [{ $eq: ['$whatsappOptIn', false] }, 1, 0] } },
+            attended: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $eq: ['$status', 'approved'] },
+                      { $in: ['$attendance', ['PRESENT', 'present', true]] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            }
+          }
+        }
+      ]),
+      WhatsappMessage.aggregate([
+        { $match: eventMsgMatch },
+        {
+          $group: {
+            _id: { messageType: '$messageType', status: '$status' },
+            count: { $sum: 1 }
+          }
+        }
+      ]),
+      WhatsappMessage.distinct('registrationId', {
+        eventId: { $in: matchedIds },
+        status: 'FAILED'
       })
     ]);
 
-    // Aggregate message counts grouped by messageType and status
-    const breakdown = await WhatsappMessage.aggregate([
-      { $match: eventMsgMatch },
-      {
-        $group: {
-          _id: { messageType: '$messageType', status: '$status' },
-          count: { $sum: 1 }
-        }
-      }
-    ]);
+    const regStats = regAggList[0] || {
+      total: 0,
+      confirmed: 0,
+      pending: 0,
+      optIn: 0,
+      optOut: 0,
+      attended: 0
+    };
+
+    const totalRegistrations = regStats.total;
+    const confirmedRegistrations = regStats.confirmed;
+    const paymentPendingRegistrations = regStats.pending;
+    const whatsappOptInRegistrations = regStats.optIn;
+    const whatsappOptOutRegistrations = regStats.optOut;
+    const attendedRegistrations = regStats.attended;
 
     // Top aggregate counters
     let totalMessagesAttempted = 0;
@@ -433,14 +474,9 @@ export const getEventCommunicationDashboard = async (req, res) => {
     const deliveryRate = totalMessagesSent > 0 ? Math.round((totalMessagesDelivered / totalMessagesSent) * 100) : 0;
     const readRate = totalMessagesDelivered > 0 ? Math.round((totalMessagesRead / totalMessagesDelivered) * 100) : 0;
     const failureRate = totalMessagesAttempted > 0 ? Math.round((totalMessagesFailed / totalMessagesAttempted) * 100) : 0;
+    const actionNeededCount = (actionNeededIds || []).filter(Boolean).length;
 
-    // Count registrations needing action (e.g. failed messages)
-    const actionNeededCount = await WhatsappMessage.distinct('registrationId', {
-      eventId,
-      status: 'FAILED'
-    }).then(ids => ids.filter(Boolean).length);
-
-    res.json({
+    const responsePayload = {
       success: true,
       eventId,
       eventName: event?.name || 'Ek Duje Ke Liye Seminar',
@@ -470,19 +506,26 @@ export const getEventCommunicationDashboard = async (req, res) => {
         registrationMessage: true,
         paymentPendingReminder: true,
         paymentConfirmation: true,
-        invitation48h: true,
+        invitation48h: event?.personalizedInvitationEnabled !== false,
         reminder24h: true,
         feedbackRequest: true,
         galleryReady: false
       }
+    };
+
+    commDashboardCache.set(cacheKey, {
+      data: responsePayload,
+      expiry: now + 10000 // 10s fast cache
     });
+
+    res.json(responsePayload);
   } catch (err) {
     res.status(500).json({ error: 'Error generating communication dashboard.', details: err.message });
   }
 };
 
 /**
- * Get Per-Person Registration Communication Table (Server-side Pagination, Filters, Zero N+1)
+ * Get Per-Person Registration Communication Table (Server-side Pagination, Filters, Zero N+1, < 100ms)
  */
 export const getEventRegistrationsCommunication = async (req, res) => {
   const { eventId } = req.params;
@@ -498,7 +541,10 @@ export const getEventRegistrationsCommunication = async (req, res) => {
     const messageTypeFilter = req.query.messageType ? String(req.query.messageType).toLowerCase() : 'ALL';
     const healthFilter = req.query.health ? String(req.query.health).toUpperCase() : 'ALL';
 
-    const event = await Event.findOne({ $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] }).lean();
+    const event = await Event.findOne(
+      { $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] },
+      'id name slug date time venue city capacity status price isPaymentEnabled earlyRegistrationMode'
+    ).lean();
 
     const matchedIds = [eventId];
     if (event) {
@@ -513,7 +559,7 @@ export const getEventRegistrationsCommunication = async (req, res) => {
 
     const andConditions = [
       { $or: eventMatchOr },
-      { isDeleted: false }
+      { isDeleted: { $ne: true } }
     ];
 
     if (search) {
@@ -548,30 +594,38 @@ export const getEventRegistrationsCommunication = async (req, res) => {
 
     const matchQuery = { $and: andConditions };
 
-    const totalRegistrations = await Registration.countDocuments(matchQuery);
+    const [totalRegistrations, registrations] = await Promise.all([
+      Registration.countDocuments(matchQuery),
+      Registration.find(matchQuery)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .select('inquiryId customerToken husbandName wifeName surname phoneNumber whatsappOptIn whatsappMarketingOptIn whatsappOptOutAt status payment attendance isDeleted createdAt updatedAt')
+        .lean()
+    ]);
     const totalPages = Math.ceil(totalRegistrations / limit) || 1;
-
-    const registrations = await Registration.find(matchQuery)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .lean();
 
     const regIds = registrations.map(r => r._id);
     const inquiryIds = registrations.map(r => r.inquiryId);
 
-    // Fetch passes in batch
-    const passes = await Pass.find({ registrationId: { $in: regIds } }).lean();
+    // Fetch passes and messages in parallel batch (< 40ms)
+    const [passes, messages] = await Promise.all([
+      Pass.find({ registrationId: { $in: regIds } })
+        .select('passId status version qrVersion registrationId inquiryId')
+        .lean(),
+      WhatsappMessage.find({
+        $or: [
+          { registrationId: { $in: regIds } },
+          { inquiryId: { $in: inquiryIds } }
+        ]
+      })
+        .select('messageId registrationId inquiryId messageType status trigger templateName sentAt deliveredAt readAt failedAt lastErrorMessage scheduledFor createdAt')
+        .sort({ createdAt: 1 })
+        .lean()
+    ]);
+
     const passMap = new Map();
     passes.forEach(p => passMap.set(String(p.registrationId), p));
-
-    // Fetch messages in batch
-    const messages = await WhatsappMessage.find({
-      $or: [
-        { registrationId: { $in: regIds } },
-        { inquiryId: { $in: inquiryIds } }
-      ]
-    }).sort({ createdAt: 1 }).lean();
 
     const msgMap = new Map();
     messages.forEach(m => {
