@@ -9,6 +9,8 @@ import { env } from './config/env.js';
 import { connectDatabase } from './config/database.js';
 import { initializeBackupCron } from './jobs/backup.job.js';
 import { ensureEarlyRegistrationEvents } from './services/eventInit.service.js';
+import { communicationSchedulerService } from './services/communicationScheduler.service.js';
+import { runPaymentReminders } from './jobs/paymentReminders.job.js';
 
 process.on('uncaughtException', (err) => {
   console.error('[Uncaught Exception]:', err);
@@ -17,6 +19,8 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   console.error('[Unhandled Rejection]:', reason);
 });
+
+let workerInterval = null;
 
 const startServer = async () => {
   try {
@@ -29,7 +33,17 @@ const startServer = async () => {
     // 3. Initialize scheduled cron tasks
     initializeBackupCron();
 
-    // 3. Start HTTP server
+    // 4. Initialize in-process WhatsApp Communication Worker (Every 60s)
+    workerInterval = setInterval(async () => {
+      try {
+        await communicationSchedulerService.processScheduledJobs({ batchSize: 25 });
+        await runPaymentReminders();
+      } catch (err) {
+        console.warn('[WhatsApp Worker Cron] Error processing jobs:', err.message);
+      }
+    }, 60 * 1000);
+
+    // 5. Start HTTP server
     const server = app.listen(env.PORT, '0.0.0.0', () => {
       console.log(`[Ek Duje Ke Liye] V2 Platform Server running on port ${env.PORT} (${env.NODE_ENV})`);
     });
@@ -42,6 +56,7 @@ const startServer = async () => {
     // Graceful shutdown handlers
     const shutdown = () => {
       console.log('\n[Server] Graceful shutdown initiated...');
+      if (workerInterval) clearInterval(workerInterval);
       server.close(() => {
         console.log('[Server] HTTP server closed.');
         process.exit(0);

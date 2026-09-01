@@ -224,6 +224,14 @@ export const whatsappApi = {
     });
   },
 
+  async runWorker(simulatedNow?: string): Promise<{ success: boolean; summary?: any; error?: string }> {
+    return apiClient('/api/whatsapp/run-worker-admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ simulatedNow })
+    });
+  },
+
   async sendTestMessage(
     recipientPhone: string,
     templateKey: string,

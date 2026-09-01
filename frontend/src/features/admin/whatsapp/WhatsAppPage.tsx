@@ -85,6 +85,28 @@ export const WhatsAppPage = () => {
   // Logs Tab State
   const [logs, setLogs] = useState<WhatsappLogItem[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [runningWorker, setRunningWorker] = useState(false);
+
+  const handleRunWorker = async () => {
+    setRunningWorker(true);
+    try {
+      const res = await whatsappApi.runWorker();
+      if (res?.success) {
+        const summary = res.summary || {};
+        toast.success(`Worker run complete: Sent ${summary.sent ?? 0}, Processed ${summary.processed ?? 0}`);
+        await Promise.all([
+          fetchDashboardData(selectedEventId),
+          fetchRegistrations(selectedEventId, pagination.page)
+        ]);
+      } else {
+        toast.error(res?.error || 'Worker execution failed');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to trigger worker');
+    } finally {
+      setRunningWorker(false);
+    }
+  };
 
   // 1. Initial Load: Events & Meta Templates
   useEffect(() => {
@@ -435,6 +457,16 @@ export const WhatsAppPage = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleRunWorker}
+                disabled={runningWorker}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                title="Dispatch all due queued messages immediately to WhatsApp"
+              >
+                <RefreshCwIcon className={`w-3.5 h-3.5 ${runningWorker ? 'animate-spin' : ''}`} />
+                <span>{runningWorker ? 'Dispatching Queue...' : 'Dispatch Due Queue (Run Worker)'}</span>
+              </button>
+
               <button
                 onClick={() => {
                   fetchDashboardData(selectedEventId);
