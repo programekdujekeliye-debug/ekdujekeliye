@@ -11,6 +11,7 @@ import { MetaTemplate } from '../../../types/whatsapp';
 import { Program } from '../../../types/event';
 import {
   MessageSquareIcon,
+  MessageCircleIcon,
   SearchIcon,
   ClockIcon,
   RefreshCwIcon,
@@ -23,9 +24,13 @@ import {
   ExternalLinkIcon,
   UsersIcon,
   ChevronDownIcon,
-  SparklesIcon
+  CheckCircleIcon,
+  ShieldCheckIcon,
+  MapPinIcon,
+  CalendarIcon,
+  AwardIcon
 } from '../../../components/Icons';
-import { LuxurySelect, SelectOption } from '../../../components/LuxurySelect';
+import { LuxurySelect } from '../../../components/LuxurySelect';
 import toast from 'react-hot-toast';
 
 interface WhatsAppInboxProps {
@@ -48,7 +53,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
   metaTemplates,
   onOpenTimeline
 }) => {
-  // Stats
+  // 1. Stats Counter
   const [stats, setStats] = useState({
     totalConversations: 0,
     openCount: 0,
@@ -57,36 +62,36 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
     windowExpiringSoonCount: 0
   });
 
-  // Conversations List & Pagination
+  // 2. Conversations Directory State
   const [conversations, setConversations] = useState<WhatsappConversationItem[]>([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 25, totalPages: 1 });
   const [loadingConversations, setLoadingConversations] = useState(false);
 
-  // Filters & Search
+  // 3. Search & Filters
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'unread' | 'open' | 'window_open' | 'window_expired' | 'window_expiring_soon' | 'closed'>('all');
+  const [filter, setFilter] = useState<'all' | 'unread' | 'open' | 'window_open' | 'window_expired' | 'closed'>('all');
   const [selectedEventId, setSelectedEventId] = useState<string>('all');
 
-  // Active Conversation Thread
+  // 4. Active Chat Thread State
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [activeConv, setActiveConv] = useState<WhatsappConversationItem | null>(null);
   const [messages, setMessages] = useState<WhatsappThreadMessage[]>([]);
   const [notes, setNotes] = useState<ConversationNote[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
-  // Composer States
+  // 5. Composer & Mode
   const [composerMode, setComposerMode] = useState<'reply' | 'note'>('reply');
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
   const [selectedTemplateKey, setSelectedTemplateKey] = useState('edkl_payment_confirmed_pass_v1');
   const [sendingTemplate, setSendingTemplate] = useState(false);
 
-  // Side Details Drawer (Desktop & Mobile)
-  const [showDetailsDrawer, setShowDetailsDrawer] = useState(false);
+  // 6. Right-Side Contact Profile Drawer (WhatsApp Web Style)
+  const [showContactProfile, setShowContactProfile] = useState(false);
   const [newNoteText, setNewNoteText] = useState('');
   const [addingNote, setAddingNote] = useState(false);
 
-  // Mobile View Toggle
+  // 7. Mobile View State (Master-Detail)
   const [mobileShowChat, setMobileShowChat] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -96,7 +101,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
-  // Fetch Stats
+  // Fetch Global Stats
   const fetchStats = useCallback(async () => {
     try {
       const res = await whatsappApi.getConversationStats();
@@ -106,7 +111,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
     } catch (_) {}
   }, []);
 
-  // Fetch Conversations
+  // Fetch Conversations (Silent background polling)
   const fetchConversations = useCallback(async (pageToLoad = 1, silent = false) => {
     try {
       if (!silent) setLoadingConversations(true);
@@ -156,7 +161,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
     }
   }, [fetchStats]);
 
-  // Initial load
+  // Initial Load
   useEffect(() => {
     fetchStats();
     fetchConversations(1, false);
@@ -179,14 +184,14 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
     return () => clearInterval(interval);
   }, [fetchStats, fetchConversations, fetchThreadDetails, pagination.page, selectedConvId]);
 
-  // Select conversation
+  // Handle Conversation Selection
   const handleSelectConversation = (conv: WhatsappConversationItem) => {
     setSelectedConvId(conv._id);
     setMobileShowChat(true);
     fetchThreadDetails(conv._id, true);
   };
 
-  // Free-Text Reply
+  // Dispatch Free-Text Reply
   const handleSendReply = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!selectedConvId || !replyText.trim()) return;
@@ -212,7 +217,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
     }
   };
 
-  // Approved Template Reply
+  // Dispatch Approved Meta Template
   const handleSendTemplate = async () => {
     if (!selectedConvId || !selectedTemplateKey) return;
 
@@ -231,7 +236,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
     }
   };
 
-  // Add Note
+  // Save Internal Note
   const handleAddNote = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const textToAdd = (composerMode === 'note' ? replyText : newNoteText).trim();
@@ -258,7 +263,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
     }
   };
 
-  // Status Toggle
+  // Toggle Case Status (Open / Closed)
   const handleToggleStatus = async () => {
     if (!selectedConvId || !activeConv) return;
     const newStatus = activeConv.status === 'OPEN' ? 'CLOSED' : 'OPEN';
@@ -267,7 +272,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
       await whatsappApi.updateConversationStatus(selectedConvId, newStatus);
       setActiveConv(prev => prev ? { ...prev, status: newStatus } : null);
       setConversations(prev => prev.map(c => c._id === selectedConvId ? { ...c, status: newStatus } : c));
-      toast.success(`Conversation marked as ${newStatus}.`);
+      toast.success(`Case marked as ${newStatus}.`);
       fetchStats();
     } catch (err: any) {
       toast.error(err.message || 'Failed to update status.');
@@ -276,14 +281,18 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
 
   const formatTimeAgo = (dateStr?: string) => {
     if (!dateStr) return '';
-    const diffMs = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diffMs / 60000);
-    if (mins < 1) return 'Just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
+    const date = new Date(dateStr);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+
+    if (isToday) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return date.toLocaleDateString([], { weekday: 'short' });
+    return date.toLocaleDateString([], { day: 'numeric', month: 'short' });
   };
 
   const formatWindowRemaining = (seconds: number) => {
@@ -300,22 +309,22 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
   };
 
   return (
-    <div className="space-y-3.5">
-      {/* 1. Global Metrics Bar (Compact & Responsive) */}
+    <div className="space-y-3">
+      {/* 1. TOP METRICS STRIP */}
       <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 ${mobileShowChat ? 'hidden md:grid' : 'grid'}`}>
-        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
           <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Total Inquiries</span>
           <div className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">{stats.totalConversations}</div>
           <span className="text-[10px] text-slate-400 font-medium">All live chat threads</span>
         </div>
 
-        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-emerald-200 bg-emerald-50/20 shadow-xs">
+        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50/20 shadow-xs">
           <span className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider block">Active Open</span>
           <div className="text-xl sm:text-2xl font-black text-emerald-800 mt-0.5">{stats.openCount}</div>
           <span className="text-[10px] text-emerald-600 font-medium">Requiring support</span>
         </div>
 
-        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-rose-200 bg-rose-50/30 shadow-xs">
+        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-rose-200 bg-rose-50/30 shadow-xs">
           <span className="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider block flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
             Unread
@@ -324,63 +333,63 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
           <span className="text-[10px] text-rose-600 font-medium">Awaiting operator reply</span>
         </div>
 
-        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-amber-200 bg-amber-50/20 shadow-xs">
+        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-amber-200 bg-amber-50/20 shadow-xs">
           <span className="text-[10px] font-extrabold text-amber-700 uppercase tracking-wider block">Expiring Soon</span>
           <div className="text-xl sm:text-2xl font-black text-amber-800 mt-0.5">{stats.windowExpiringSoonCount}</div>
           <span className="text-[10px] text-amber-700 font-medium">&lt; 2h window left</span>
         </div>
 
-        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs col-span-2 sm:col-span-1">
+        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 shadow-xs col-span-2 sm:col-span-1">
           <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Unassigned</span>
           <div className="text-xl sm:text-2xl font-black text-slate-700 mt-0.5">{stats.unassignedCount}</div>
           <span className="text-[10px] text-slate-400 font-medium">Team claim pool</span>
         </div>
       </div>
 
-      {/* 2. Main Two-Column Luxury Chat Layout */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl shadow-xs overflow-hidden flex flex-col md:flex-row h-[calc(100dvh-180px)] md:h-[calc(100vh-220px)] min-h-[580px] max-h-[880px]">
+      {/* 2. MAIN WHATSAPP WEB STYLE 2-PANE APP CONTAINER */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl sm:rounded-3xl shadow-sm overflow-hidden flex flex-col md:flex-row h-[calc(100dvh-170px)] md:h-[calc(100vh-210px)] min-h-[580px] max-h-[880px]">
         {/* ========================================================================= */}
-        {/* LEFT COLUMN: CONVERSATIONS DIRECTORY */}
+        {/* LEFT DIRECTORY PANE (WhatsApp Web Sidebar) */}
         {/* ========================================================================= */}
-        <div className={`w-full md:w-[360px] lg:w-[410px] flex flex-col border-r border-slate-200/80 bg-slate-50/40 ${mobileShowChat ? 'hidden md:flex' : 'flex'}`}>
-          {/* Search, Filter & Seminar Select Header */}
-          <div className="p-3 sm:p-3.5 border-b border-slate-200/80 bg-white space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-100 text-rose-700 flex items-center justify-center font-bold">
-                  <MessageSquareIcon className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm">Direct Inquiries</h3>
-                  <p className="text-[10px] text-slate-400 font-medium">Meta WhatsApp Cloud API</p>
-                </div>
+        <div className={`w-full md:w-[360px] lg:w-[410px] flex flex-col border-r border-slate-200/90 bg-[#FAF9F6] ${mobileShowChat ? 'hidden md:flex' : 'flex'}`}>
+          {/* Top Bar: Profile / App Header */}
+          <div className="p-3 sm:p-3.5 bg-[#F0EBE3] border-b border-slate-200/90 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-full bg-[#881337] text-white flex items-center justify-center font-black text-xs shadow-xs">
+                ED
               </div>
-              <button
-                onClick={() => {
-                  fetchStats();
-                  fetchConversations(pagination.page);
-                }}
-                disabled={loadingConversations}
-                className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
-                title="Refresh Inquiries"
-              >
-                <RefreshCwIcon className={`w-3.5 h-3.5 ${loadingConversations ? 'animate-spin text-rose-600' : ''}`} />
-              </button>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm">WhatsApp Chats</h3>
+                <p className="text-[10px] text-slate-500 font-medium">Meta Cloud API &bull; Live</p>
+              </div>
             </div>
 
-            {/* Search Input */}
+            <button
+              onClick={() => {
+                fetchStats();
+                fetchConversations(pagination.page);
+              }}
+              disabled={loadingConversations}
+              className="p-2 text-slate-500 hover:text-slate-900 hover:bg-black/5 rounded-full transition-all cursor-pointer"
+              title="Refresh Inquiries"
+            >
+              <RefreshCwIcon className={`w-4 h-4 ${loadingConversations ? 'animate-spin text-rose-700' : ''}`} />
+            </button>
+          </div>
+
+          {/* Search Bar & Slot Filter */}
+          <div className="p-2.5 bg-white border-b border-slate-200/80 space-y-2">
             <div className="relative">
-              <SearchIcon className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+              <SearchIcon className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search name, phone, EK-ID..."
-                className="w-full pl-9 pr-3.5 py-1.5 sm:py-2 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500 focus:bg-white transition-all placeholder:text-slate-400"
+                placeholder="Search or start new chat..."
+                className="w-full pl-9 pr-3.5 py-1.5 bg-[#F0EBE3]/60 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-rose-500 border border-transparent transition-all placeholder:text-slate-500"
               />
             </div>
 
-            {/* Event Dropdown Filter */}
             <div className="w-full">
               <LuxurySelect
                 value={selectedEventId}
@@ -396,12 +405,12 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
                 ]}
                 placeholder="Filter by Seminar Slot..."
                 searchable
-                variant="card"
+                variant="subtle"
                 size="sm"
               />
             </div>
 
-            {/* Filter Tabs */}
+            {/* Status Filter Chips */}
             <div className="flex items-center gap-1 overflow-x-auto pb-0.5 text-[11px] scrollbar-none">
               {[
                 { id: 'all', label: 'All' },
@@ -414,9 +423,9 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
                 <button
                   key={pill.id}
                   onClick={() => setFilter(pill.id as any)}
-                  className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-full font-bold whitespace-nowrap transition-all cursor-pointer ${
                     filter === pill.id
-                      ? 'bg-rose-600 text-white shadow-xs'
+                      ? 'bg-[#881337] text-white shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
@@ -426,21 +435,21 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
             </div>
           </div>
 
-          {/* Conversations Scroll List */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 p-2 space-y-1">
+          {/* WhatsApp Conversations Scroll List */}
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 p-1.5 space-y-0.5">
             {loadingConversations && conversations.length === 0 ? (
               <div className="p-8 text-center text-slate-400 text-xs">
-                <RefreshCwIcon className="w-5 h-5 mx-auto animate-spin mb-2 text-rose-600" />
-                <span>Loading inquiries...</span>
+                <RefreshCwIcon className="w-5 h-5 mx-auto animate-spin mb-2 text-rose-700" />
+                <span>Loading WhatsApp chats...</span>
               </div>
             ) : conversations.length === 0 ? (
               <div className="p-8 text-center text-slate-400 text-xs space-y-1.5">
-                <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
                   <MessageSquareIcon className="w-5 h-5" />
                 </div>
                 <span className="font-bold text-slate-700 block">No conversations found</span>
                 <span className="text-[11px] text-slate-400 block max-w-xs mx-auto">
-                  Incoming WhatsApp messages from attendees will automatically appear here in real-time.
+                  When attendees send a message on WhatsApp, it will appear here in real-time.
                 </span>
               </div>
             ) : (
@@ -458,37 +467,39 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
                   <div
                     key={conv._id}
                     onClick={() => handleSelectConversation(conv)}
-                    className={`p-3 rounded-2xl flex items-start gap-3 cursor-pointer transition-all ${
+                    className={`p-2.5 sm:p-3 rounded-xl flex items-center gap-3 cursor-pointer transition-all ${
                       isSelected
-                        ? 'bg-white shadow-sm border border-rose-200 ring-1 ring-rose-500/20'
-                        : 'hover:bg-white bg-transparent'
+                        ? 'bg-[#EBE5DE] shadow-xs ring-1 ring-black/5'
+                        : 'hover:bg-black/5 bg-transparent'
                     }`}
                   >
-                    {/* Couple Avatar */}
-                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-extrabold text-xs flex-shrink-0 shadow-xs ${
+                    {/* Circle Avatar */}
+                    <div className={`w-11 h-11 rounded-full flex items-center justify-center font-extrabold text-xs flex-shrink-0 shadow-xs ${
                       conv.unreadCount > 0
-                        ? 'bg-rose-600 text-white'
+                        ? 'bg-[#881337] text-white ring-2 ring-rose-300'
                         : 'bg-slate-200 text-slate-700'
                     }`}>
                       {initials}
                     </div>
 
-                    {/* Info */}
+                    {/* Chat Item Metadata */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-0.5">
                         <span className={`text-xs truncate ${conv.unreadCount > 0 ? 'font-black text-slate-900' : 'font-bold text-slate-800'}`}>
                           {conv.customerName}
                         </span>
-                        <span className="text-[10px] text-slate-400 whitespace-nowrap font-medium flex-shrink-0">
+                        <span className={`text-[10px] whitespace-nowrap font-medium flex-shrink-0 ${
+                          conv.unreadCount > 0 ? 'text-[#881337] font-bold' : 'text-slate-400'
+                        }`}>
                           {formatTimeAgo(conv.lastMessageAt)}
                         </span>
                       </div>
 
-                      {/* Phone & Inquiry Badges */}
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mb-1">
+                      {/* Phone & Inquiry ID Badge */}
+                      <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mb-0.5">
                         <span className="font-mono">{conv.phoneMasked}</span>
                         {conv.inquiryId && (
-                          <span className="px-1.5 py-0.2 bg-slate-100 border border-slate-200 text-slate-700 rounded font-mono font-bold">
+                          <span className="px-1.5 py-0.2 bg-white border border-slate-200 text-slate-700 rounded font-mono font-bold">
                             {conv.inquiryId}
                           </span>
                         )}
@@ -499,30 +510,20 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
                         )}
                       </div>
 
-                      {/* Snippet */}
-                      <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'font-bold text-slate-900' : 'text-slate-500'}`}>
-                        {conv.lastMessageDirection === 'OUTBOUND' && <span className="text-slate-400">You: </span>}
-                        {conv.lastMessagePreview || 'New inquiry'}
-                      </p>
+                      {/* Message Snippet & Unread Badge */}
+                      <div className="flex items-center justify-between gap-1">
+                        <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'font-bold text-slate-900' : 'text-slate-500'}`}>
+                          {conv.lastMessageDirection === 'OUTBOUND' && <span className="text-slate-400">You: </span>}
+                          {conv.lastMessagePreview || 'New inquiry'}
+                        </p>
 
-                      {/* 24h Window Badge */}
-                      <div className="mt-1.5 flex items-center justify-between">
-                        {conv.isWindowOpen ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            {formatWindowRemaining(conv.windowRemainingSeconds)}
+                        {conv.unreadCount > 0 ? (
+                          <span className="px-2 py-0.5 bg-[#881337] text-white rounded-full text-[10px] font-black shadow-xs flex-shrink-0">
+                            {conv.unreadCount}
                           </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                            Window Expired
-                          </span>
-                        )}
-
-                        {conv.unreadCount > 0 && (
-                          <span className="px-2 py-0.5 bg-rose-600 text-white rounded-full text-[10px] font-black shadow-xs">
-                            {conv.unreadCount} new
-                          </span>
-                        )}
+                        ) : conv.isWindowOpen ? (
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" title="24h Window Active" />
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -533,67 +534,78 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
         </div>
 
         {/* ========================================================================= */}
-        {/* RIGHT COLUMN: ACTIVE CHAT CANVAS */}
+        {/* RIGHT CHAT CANVAS (WhatsApp Web Chat Window) */}
         {/* ========================================================================= */}
-        <div className={`flex-1 flex flex-col bg-[#FAF9F6] relative ${!mobileShowChat ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`flex-1 flex flex-col bg-[#EFEAE2] relative ${!mobileShowChat ? 'hidden md:flex' : 'flex'}`}>
           {!selectedConvId || !activeConv ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-              <div className="w-14 h-14 rounded-3xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-700 mb-3 shadow-xs">
-                <MessageSquareIcon className="w-7 h-7" />
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#FAF9F6]">
+              <div className="w-16 h-16 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-700 mb-3 shadow-xs">
+                <MessageSquareIcon className="w-8 h-8" />
               </div>
-              <h4 className="font-extrabold text-slate-900 text-sm sm:text-base">Select an Attendee Inquiry</h4>
-              <p className="text-xs text-slate-500 max-w-sm mt-1 leading-relaxed">
-                Choose a conversation from the left to view registration details, verified payment state, and reply directly through Meta Cloud API.
+              <h4 className="font-extrabold text-slate-900 text-base">WhatsApp Support Workspace</h4>
+              <p className="text-xs text-slate-500 max-w-sm mt-1.5 leading-relaxed">
+                Select an attendee inquiry from the left to view registration credentials, inspect payment status, and reply directly through Meta WhatsApp Cloud API.
               </p>
             </div>
           ) : (
             <>
-              {/* Top Chat Header */}
-              <div className="p-3 sm:p-3.5 bg-white border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-xs z-10">
-                <div className="flex items-center gap-2.5">
+              {/* WhatsApp Chat Top Header */}
+              <div className="p-3 sm:p-3.5 bg-[#F0EBE3] border-b border-slate-200/90 flex items-center justify-between gap-2 shadow-xs z-10">
+                <div className="flex items-center gap-2.5 min-w-0">
                   {/* Mobile Back Button */}
                   <button
                     onClick={() => setMobileShowChat(false)}
-                    className="md:hidden px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1"
+                    className="md:hidden p-1.5 bg-black/5 hover:bg-black/10 text-slate-700 rounded-full text-xs font-bold cursor-pointer"
                   >
-                    <span>← Inquiries</span>
+                    <span>←</span>
                   </button>
 
-                  <div className="w-10 h-10 rounded-2xl bg-rose-600 text-white flex items-center justify-center font-extrabold text-xs shadow-xs flex-shrink-0">
-                    {(activeConv.customerName || 'WG').slice(0, 2).toUpperCase()}
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm truncate">{activeConv.customerName}</h4>
-                      <span className="text-xs font-mono text-slate-500 font-bold hidden sm:inline">{activeConv.phoneMasked}</span>
+                  <div
+                    onClick={() => setShowContactProfile(!showContactProfile)}
+                    className="flex items-center gap-2.5 cursor-pointer min-w-0"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-[#881337] text-white flex items-center justify-center font-extrabold text-xs shadow-xs flex-shrink-0">
+                      {(activeConv.customerName || 'WG').slice(0, 2).toUpperCase()}
                     </div>
-                    <div className="flex flex-wrap items-center gap-1 mt-0.5">
-                      {activeConv.inquiryId && (
-                        <span className="px-1.5 py-0.2 bg-slate-100 text-slate-700 text-[10px] font-bold rounded border border-slate-200 font-mono">
-                          {activeConv.inquiryId}
-                        </span>
-                      )}
-                      <span className="px-1.5 py-0.2 bg-rose-50 text-rose-700 text-[10px] font-bold rounded border border-rose-200">
-                        {getEventName(activeConv.eventId)}
-                      </span>
-                      <span className={`px-1.5 py-0.2 text-[10px] font-extrabold rounded ${
-                        activeConv.paymentStatus === 'PAID'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                          : 'bg-amber-100 text-amber-800 border border-amber-300'
-                      }`}>
-                        {activeConv.paymentStatus === 'PAID' ? 'PAID (₹1500)' : 'PAYMENT PENDING'}
-                      </span>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm truncate hover:underline">
+                          {activeConv.customerName}
+                        </h4>
+                        <span className="text-xs font-mono text-slate-500 font-bold hidden sm:inline">{activeConv.phoneMasked}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                        {activeConv.inquiryId && (
+                          <span className="px-1.5 py-0.2 bg-white text-slate-700 font-bold rounded border border-slate-200 font-mono">
+                            {activeConv.inquiryId}
+                          </span>
+                        )}
+                        <span className="truncate">{getEventName(activeConv.eventId)}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Quick Header Action Buttons */}
-                <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                {/* Header Action Buttons */}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {activeConv.inquiryId && (
+                    <a
+                      href={`/pass/${activeConv.inquiryId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-2.5 py-1.5 bg-white hover:bg-rose-50 text-rose-700 rounded-xl text-xs font-bold border border-slate-200/80 transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                      title="View Digital Pass"
+                    >
+                      <TicketIcon className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Pass</span>
+                    </a>
+                  )}
+
                   {activeConv.inquiryId && onOpenTimeline && (
                     <button
                       onClick={() => onOpenTimeline(activeConv.inquiryId!)}
-                      className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                      className="px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold border border-slate-200/80 transition-all cursor-pointer flex items-center gap-1 shadow-xs"
                       title="View Lifecycle Timeline"
                     >
                       <ClockIcon className="w-3.5 h-3.5" />
@@ -601,63 +613,49 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
                     </button>
                   )}
 
-                  {activeConv.inquiryId && (
-                    <a
-                      href={`/pass/${activeConv.inquiryId}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold border border-rose-200 transition-all cursor-pointer flex items-center gap-1"
-                      title="View Digital Pass"
-                    >
-                      <TicketIcon className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Pass</span>
-                      <ExternalLinkIcon className="w-3 h-3" />
-                    </a>
-                  )}
-
                   <button
-                    onClick={() => setShowDetailsDrawer(!showDetailsDrawer)}
-                    className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-xl text-xs font-bold border border-amber-200 transition-all cursor-pointer flex items-center gap-1"
+                    onClick={() => setShowContactProfile(!showContactProfile)}
+                    className="px-2.5 py-1.5 bg-white hover:bg-amber-50 text-amber-900 rounded-xl text-xs font-bold border border-slate-200/80 transition-all cursor-pointer flex items-center gap-1 shadow-xs"
                   >
-                    <FileTextIcon className="w-3.5 h-3.5" />
-                    <span>Notes ({notes.length})</span>
+                    <UsersIcon className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Info</span>
                   </button>
 
                   <button
                     onClick={handleToggleStatus}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs ${
                       activeConv.status === 'OPEN'
                         ? 'bg-slate-900 text-white hover:bg-slate-800'
-                        : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                        : 'bg-emerald-700 text-white hover:bg-emerald-800'
                     }`}
                   >
-                    {activeConv.status === 'OPEN' ? 'Close Case' : 'Reopen'}
+                    {activeConv.status === 'OPEN' ? 'Close' : 'Reopen'}
                   </button>
                 </div>
               </div>
 
-              {/* 24-Hour Customer Window Notification Bar */}
+              {/* 24-Hour WhatsApp Service Window Banner */}
               <div className={`px-4 py-1.5 text-xs font-bold flex items-center justify-between border-b ${
                 activeConv.isWindowOpen
-                  ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
-                  : 'bg-amber-50 border-amber-200 text-amber-900'
+                  ? 'bg-emerald-100/70 border-emerald-300 text-emerald-900'
+                  : 'bg-amber-100/70 border-amber-300 text-amber-900'
               }`}>
                 <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${activeConv.isWindowOpen ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                  <span className={`w-2 h-2 rounded-full ${activeConv.isWindowOpen ? 'bg-emerald-600 animate-pulse' : 'bg-amber-600'}`} />
                   <span className="text-[11px] sm:text-xs">
                     {activeConv.isWindowOpen
-                      ? `24-Hour Customer Window OPEN (${formatWindowRemaining(activeConv.windowRemainingSeconds)}) — Free-form replies active.`
-                      : '24-Hour Customer Window EXPIRED — Meta requires an approved template to message.'}
+                      ? `24h Customer Service Window Active (${formatWindowRemaining(activeConv.windowRemainingSeconds)}) — Free-form replies permitted.`
+                      : '24h Customer Service Window Expired — Meta requires an approved template to message.'}
                   </span>
                 </div>
               </div>
 
-              {/* Messages Thread Canvas */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
+              {/* WhatsApp Messages Canvas */}
+              <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
                 {loadingDetails ? (
-                  <div className="text-center py-12 text-slate-400 text-xs">
-                    <RefreshCwIcon className="w-5 h-5 mx-auto animate-spin mb-2 text-rose-600" />
-                    Loading conversation thread...
+                  <div className="text-center py-12 text-slate-500 text-xs">
+                    <RefreshCwIcon className="w-5 h-5 mx-auto animate-spin mb-2 text-rose-700" />
+                    Loading WhatsApp thread...
                   </div>
                 ) : (
                   <>
@@ -665,12 +663,12 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
                       const isInbound = m.direction === 'INBOUND';
                       const isAutomation = m.executionSource !== 'ADMIN_REPLY' && m.executionSource !== 'INBOUND_WEBHOOK' && !!m.templateName;
 
-                      // 1. Automation Lifecycle Message (Centered Gold/Ivory Card)
+                      // 1. Lifecycle Automation Notification Card (Centered)
                       if (isAutomation) {
                         return (
                           <div key={m._id} className="flex flex-col items-center my-2">
-                            <div className="bg-white border border-slate-200 shadow-xs px-4 py-2 rounded-2xl max-w-md text-center space-y-1">
-                              <div className="flex items-center justify-center gap-1.5 text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
+                            <div className="bg-[#FFFDF9] border border-amber-200/80 shadow-xs px-3.5 py-1.5 rounded-2xl max-w-md text-center space-y-0.5">
+                              <div className="flex items-center justify-center gap-1.5 text-[10px] font-extrabold text-amber-800 uppercase tracking-wider">
                                 <ActivityIcon className="w-3 h-3 text-rose-700" />
                                 <span>Automation: {m.messageType?.replace(/_/g, ' ') || m.templateName}</span>
                               </div>
@@ -690,15 +688,14 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
                         );
                       }
 
-                      // 2. Inbound WhatsApp Message from Attendee (Left-aligned Clean Card)
+                      // 2. Inbound Message from Attendee (Left-aligned WhatsApp White Bubble)
                       if (isInbound) {
                         return (
-                          <div key={m._id} className="flex items-start gap-2 max-w-[85%] sm:max-w-[72%]">
-                            <div className="w-7 h-7 rounded-xl bg-slate-300 text-slate-700 flex items-center justify-center text-[10px] font-extrabold flex-shrink-0">
-                              {(activeConv.customerName || 'C')[0]}
-                            </div>
-                            <div className="bg-white border border-slate-200/80 p-3 rounded-2xl rounded-tl-sm shadow-xs space-y-1">
-                              <span className="text-[10px] font-extrabold text-slate-500 block">Customer</span>
+                          <div key={m._id} className="flex items-start gap-2 max-w-[88%] sm:max-w-[70%]">
+                            <div className="bg-white p-3 rounded-2xl rounded-tl-xs shadow-xs space-y-1 border border-slate-200/60">
+                              <span className="text-[10px] font-extrabold text-[#881337] block">
+                                {activeConv.customerName}
+                              </span>
                               <p className="text-xs text-slate-900 whitespace-pre-wrap leading-relaxed">
                                 {m.content}
                               </p>
@@ -712,12 +709,12 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
 
                       // 3. Outbound Admin Reply (Right-aligned Luxury Wine Bubble)
                       return (
-                        <div key={m._id} className="flex items-start justify-end gap-2 ml-auto max-w-[85%] sm:max-w-[72%]">
-                          <div className="bg-[#881337] text-white p-3 rounded-2xl rounded-tr-sm shadow-xs space-y-1">
+                        <div key={m._id} className="flex items-start justify-end gap-2 ml-auto max-w-[88%] sm:max-w-[70%]">
+                          <div className="bg-[#881337] text-white p-3 rounded-2xl rounded-tr-xs shadow-xs space-y-1">
                             <span className="text-[10px] font-extrabold text-rose-200 block">
-                              {m.sentByAdminName || 'Operator'}
+                              {m.sentByAdminName || 'Support Team'}
                             </span>
-                            <p className="text-xs whitespace-pre-wrap leading-relaxed">
+                            <p className="text-xs whitespace-pre-wrap leading-relaxed text-rose-50">
                               {m.content}
                             </p>
                             <div className="flex items-center justify-end gap-1.5 text-[9px] text-rose-200/80 font-mono">
@@ -735,61 +732,10 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
                 )}
               </div>
 
-              {/* Collapsible Details / Notes Drawer */}
-              {showDetailsDrawer && (
-                <div className="bg-amber-50/80 border-t border-amber-200 p-3.5 space-y-2.5 max-h-56 overflow-y-auto">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                      <FileTextIcon className="w-3.5 h-3.5 text-amber-700" />
-                      Staff Internal Notes (Confidential)
-                    </span>
-                    <button
-                      onClick={() => setShowDetailsDrawer(false)}
-                      className="text-amber-800 hover:text-amber-950 p-1 cursor-pointer"
-                    >
-                      <XIcon className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    {notes.length === 0 ? (
-                      <span className="text-[11px] text-amber-700 italic block">No internal notes added yet.</span>
-                    ) : (
-                      notes.map((n, i) => (
-                        <div key={n._id || i} className="bg-white p-2.5 rounded-xl border border-amber-200 text-xs shadow-xs">
-                          <div className="flex items-center justify-between text-[10px] text-amber-800 font-bold mb-0.5">
-                            <span>{n.adminName || 'Admin'}</span>
-                            <span className="font-mono">{new Date(n.createdAt).toLocaleString()}</span>
-                          </div>
-                          <p className="text-slate-800">{n.text}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  <form onSubmit={handleAddNote} className="flex gap-2 pt-1">
-                    <input
-                      type="text"
-                      value={newNoteText}
-                      onChange={(e) => setNewNoteText(e.target.value)}
-                      placeholder="Add staff note for this customer..."
-                      className="flex-1 px-3 py-1.5 bg-white border border-amber-300 rounded-xl text-xs focus:outline-none focus:border-amber-600"
-                    />
-                    <button
-                      type="submit"
-                      disabled={addingNote || !newNoteText.trim()}
-                      className="px-3.5 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold disabled:opacity-50 cursor-pointer shadow-xs"
-                    >
-                      {addingNote ? 'Saving...' : 'Save Note'}
-                    </button>
-                  </form>
-                </div>
-              )}
-
-              {/* Quick Replies Strip */}
+              {/* Quick Replies Bar */}
               {activeConv.isWindowOpen && (
-                <div className="bg-white px-3.5 py-2 border-t border-slate-200/80 flex items-center gap-1.5 overflow-x-auto text-[11px] scrollbar-none">
-                  <span className="text-slate-400 font-bold whitespace-nowrap text-[10px]">Quick:</span>
+                <div className="bg-[#F0EBE3] px-3.5 py-1.5 border-t border-slate-200/80 flex items-center gap-1.5 overflow-x-auto text-[11px] scrollbar-none">
+                  <span className="text-slate-500 font-bold whitespace-nowrap text-[10px]">Quick:</span>
                   {QUICK_REPLIES.map((qr, i) => (
                     <button
                       key={i}
@@ -798,7 +744,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
                         setReplyText(qr);
                         textareaRef.current?.focus();
                       }}
-                      className="px-2.5 py-1 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-700 rounded-lg whitespace-nowrap font-medium transition-colors cursor-pointer border border-slate-200/80"
+                      className="px-2.5 py-1 bg-white hover:bg-rose-50 hover:text-rose-700 text-slate-700 rounded-full whitespace-nowrap font-medium transition-colors cursor-pointer border border-slate-200/80 shadow-xs"
                     >
                       {qr}
                     </button>
@@ -806,18 +752,17 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
                 </div>
               )}
 
-              {/* Message Composer Bar */}
-              <div className="p-3 sm:p-3.5 bg-white border-t border-slate-200/80">
+              {/* WhatsApp Composer Bar */}
+              <div className="p-2.5 sm:p-3 bg-[#F0EBE3] border-t border-slate-200/90">
                 {activeConv.isWindowOpen ? (
-                  <form onSubmit={handleSendReply} className="space-y-2">
-                    {/* Mode Toggle */}
+                  <form onSubmit={handleSendReply} className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
+                      <div className="flex items-center gap-1 bg-white/70 p-0.5 rounded-lg text-[10px] font-bold border border-slate-200/60">
                         <button
                           type="button"
                           onClick={() => setComposerMode('reply')}
                           className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
-                            composerMode === 'reply' ? 'bg-white text-rose-700 shadow-xs' : 'text-slate-500'
+                            composerMode === 'reply' ? 'bg-[#881337] text-white shadow-xs' : 'text-slate-600'
                           }`}
                         >
                           💬 WhatsApp Reply
@@ -826,15 +771,15 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
                           type="button"
                           onClick={() => setComposerMode('note')}
                           className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
-                            composerMode === 'note' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate-500'
+                            composerMode === 'note' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600'
                           }`}
                         >
                           🔒 Internal Note
                         </button>
                       </div>
 
-                      <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">
-                        Press Enter to send &bull; Shift+Enter for newline
+                      <span className="text-[10px] text-slate-500 font-medium hidden sm:inline">
+                        Enter to send &bull; Shift+Enter for newline
                       </span>
                     </div>
 
@@ -853,38 +798,38 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
                           }}
                           placeholder={
                             composerMode === 'reply'
-                              ? 'Type a WhatsApp reply to customer...'
-                              : 'Write an internal note for staff (not sent to WhatsApp)...'
+                              ? 'Type a message to customer on WhatsApp...'
+                              : 'Write an internal operator note (will not be sent to WhatsApp)...'
                           }
-                          className={`w-full px-3.5 py-2 rounded-xl text-xs font-medium focus:outline-none resize-none transition-all ${
+                          className={`w-full px-3.5 py-2 rounded-2xl text-xs font-medium focus:outline-none resize-none transition-all ${
                             composerMode === 'reply'
-                              ? 'bg-slate-50 border border-slate-200/80 text-slate-900 focus:border-rose-500 focus:bg-white'
-                              : 'bg-amber-50/50 border border-amber-300 text-amber-950 focus:border-amber-600 focus:bg-white'
+                              ? 'bg-white border border-slate-200 text-slate-900 focus:ring-1 focus:ring-rose-500 shadow-xs'
+                              : 'bg-amber-50 border border-amber-300 text-amber-950 focus:ring-1 focus:ring-amber-500 shadow-xs'
                           }`}
                         />
                       </div>
                       <button
                         type="submit"
                         disabled={sendingReply || addingNote || !replyText.trim()}
-                        className={`px-4 py-2.5 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer ${
+                        className={`px-4 py-2.5 font-bold text-xs rounded-2xl shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer ${
                           composerMode === 'reply'
-                            ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                            ? 'bg-[#881337] hover:bg-rose-900 text-white'
                             : 'bg-amber-600 hover:bg-amber-700 text-white'
                         }`}
                       >
                         <MessageSquareIcon className="w-3.5 h-3.5" />
                         <span>
                           {sendingReply || addingNote
-                            ? 'Processing...'
+                            ? 'Sending...'
                             : composerMode === 'reply'
                             ? 'Send'
-                            : 'Save Note'}
+                            : 'Save'}
                         </span>
                       </button>
                     </div>
                   </form>
                 ) : (
-                  <div className="space-y-2 bg-amber-50/70 p-3 rounded-xl border border-amber-200">
+                  <div className="space-y-2 bg-amber-50 p-3 rounded-2xl border border-amber-200 shadow-xs">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
                       <AlertTriangleIcon className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
                       <span>24h Window Expired: Select an approved Meta template to message:</span>
@@ -912,7 +857,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
                         type="button"
                         onClick={handleSendTemplate}
                         disabled={sendingTemplate}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                        className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer whitespace-nowrap"
                       >
                         <span>{sendingTemplate ? 'Sending...' : 'Send Template'}</span>
                       </button>
@@ -921,6 +866,150 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
                 )}
               </div>
             </>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SLIDE-OUT CONTACT INFO PANEL (WhatsApp Web Contact Drawer) */}
+          {/* ========================================================================= */}
+          {showContactProfile && activeConv && (
+            <div className="absolute inset-y-0 right-0 w-full sm:w-[360px] bg-white border-l border-slate-200/90 shadow-2xl z-20 flex flex-col justify-between">
+              {/* Profile Top Bar */}
+              <div className="p-3.5 bg-[#F0EBE3] border-b border-slate-200/90 flex items-center justify-between">
+                <span className="font-extrabold text-xs text-slate-900">Contact & Ticket Details</span>
+                <button
+                  onClick={() => setShowContactProfile(false)}
+                  className="p-1 rounded-full hover:bg-black/5 text-slate-600 cursor-pointer"
+                >
+                  <XIcon className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Profile Body */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+                {/* User Avatar & Name */}
+                <div className="text-center pb-3 border-b border-slate-100">
+                  <div className="w-16 h-16 rounded-full bg-[#881337] text-white flex items-center justify-center font-black text-lg mx-auto mb-2 shadow-xs">
+                    {(activeConv.customerName || 'WG').slice(0, 2).toUpperCase()}
+                  </div>
+                  <h3 className="font-black text-slate-900 text-sm">{activeConv.customerName}</h3>
+                  <p className="font-mono text-slate-500 font-bold mt-0.5">{activeConv.phoneMasked}</p>
+
+                  <div className="flex items-center justify-center gap-1.5 mt-2">
+                    <a
+                      href={`https://wa.me/${activeConv.phone}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3 py-1 bg-emerald-50 text-emerald-800 rounded-full font-bold border border-emerald-200 hover:bg-emerald-100 transition-colors flex items-center gap-1"
+                    >
+                      <MessageCircleIcon className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>WhatsApp Direct</span>
+                    </a>
+                  </div>
+                </div>
+
+                {/* Event & Registration Data */}
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 font-bold uppercase text-[9px]">Inquiry ID</span>
+                    <span className="font-mono font-black text-slate-900">{activeConv.inquiryId || 'Not Assigned'}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 font-bold uppercase text-[9px]">Seminar Slot</span>
+                    <span className="font-bold text-slate-800 truncate max-w-[180px]">{getEventName(activeConv.eventId)}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 font-bold uppercase text-[9px]">Payment Status</span>
+                    <span className={`px-2 py-0.5 rounded font-extrabold text-[10px] ${
+                      activeConv.paymentStatus === 'PAID'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {activeConv.paymentStatus === 'PAID' ? 'PAID (₹1,500)' : 'PAYMENT PENDING'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Quick Pass & Invitation Links */}
+                {activeConv.inquiryId && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <a
+                      href={`/pass/${activeConv.inquiryId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl border border-rose-200 font-bold text-center transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <TicketIcon className="w-3.5 h-3.5" />
+                      <span>VIP Pass</span>
+                    </a>
+
+                    <a
+                      href={`/invitation/${activeConv.inquiryId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-200 font-bold text-center transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <ExternalLinkIcon className="w-3.5 h-3.5" />
+                      <span>Card Link</span>
+                    </a>
+                  </div>
+                )}
+
+                {/* Internal Team Notes Ledger */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-slate-800 text-[11px] flex items-center gap-1">
+                      <FileTextIcon className="w-3.5 h-3.5 text-amber-600" />
+                      Internal Notes ({notes.length})
+                    </span>
+                  </div>
+
+                  <div className="max-h-40 overflow-y-auto space-y-1.5">
+                    {notes.length === 0 ? (
+                      <span className="text-[11px] text-slate-400 italic block">No staff notes added yet.</span>
+                    ) : (
+                      notes.map((n, i) => (
+                        <div key={n._id || i} className="bg-amber-50/70 p-2 rounded-xl border border-amber-200 text-[11px] shadow-xs">
+                          <div className="flex items-center justify-between font-bold text-amber-900 text-[10px] mb-0.5">
+                            <span>{n.adminName || 'Admin'}</span>
+                            <span className="font-mono text-slate-400">{new Date(n.createdAt).toLocaleString()}</span>
+                          </div>
+                          <p className="text-slate-800">{n.text}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <form onSubmit={handleAddNote} className="flex gap-1.5 pt-1">
+                    <input
+                      type="text"
+                      value={newNoteText}
+                      onChange={(e) => setNewNoteText(e.target.value)}
+                      placeholder="Add staff note..."
+                      className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-amber-600"
+                    />
+                    <button
+                      type="submit"
+                      disabled={addingNote || !newNoteText.trim()}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 cursor-pointer"
+                    >
+                      {addingNote ? '...' : 'Add'}
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+              {/* Close Drawer Button */}
+              <div className="p-3 bg-slate-50 border-t border-slate-200">
+                <button
+                  onClick={() => setShowContactProfile(false)}
+                  className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl cursor-pointer transition-all"
+                >
+                  Close Profile
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>
