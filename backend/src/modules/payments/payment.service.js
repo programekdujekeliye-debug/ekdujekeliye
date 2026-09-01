@@ -143,18 +143,19 @@ export class PaymentService {
 
     submission.status = 'approved';
     submission.payment.status = 'captured';
-    submission.payment.razorpayPaymentId = razorpayPaymentId;
-    submission.payment.razorpaySignature = razorpaySignature;
+    submission.payment.razorpayPaymentId = paymentId;
+    submission.payment.razorpayOrderId = orderId;
+    submission.payment.razorpaySignature = signature;
     submission.payment.paidAt = new Date();
     await submission.save();
 
     // Record verified transaction in ledger
     try {
       await Payment.findOneAndUpdate(
-        { paymentId: razorpayPaymentId },
+        { paymentId },
         {
-          paymentId: razorpayPaymentId,
-          orderId: razorpayOrderId,
+          paymentId,
+          orderId,
           inquiryId: submission.inquiryId,
           eventId: submission.programId,
           amount: submission.payment.amount || 1500,
@@ -173,7 +174,7 @@ export class PaymentService {
         {
           registrationId: submission._id,
           messageType: 'payment_pending',
-          status: { $in: ['QUEUED', 'SENDING'] }
+          status: 'QUEUED'
         },
         {
           $set: {
@@ -211,7 +212,7 @@ export class PaymentService {
           registrationId: submission.inquiryId,
           inquiryId: submission.inquiryId
         },
-        idempotencyKey: `PAYMENT_CONFIRMED:${submission._id}:${razorpayPaymentId}`,
+        idempotencyKey: `PAYMENT_CONFIRMED:${submission._id}:${paymentId}`,
         registrationId: submission._id,
         eventId: submission.programId,
         inquiryId: submission.inquiryId,
