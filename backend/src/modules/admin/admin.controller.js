@@ -410,34 +410,40 @@ export const clearAllData = async (req, res) => {
 /**
  * Optimized Single-Roundtrip Admin Operational Dashboard Summary (< 50ms)
  */
+const dashboardCacheMap = new Map();
+
 export const getAdminDashboardSummary = async (req, res) => {
   try {
     const now = Date.now();
-    const eventId = req.query.eventId;
+    const eventId = req.query.eventId || 'all';
+    const cacheKey = String(eventId);
 
-    if (!eventId && adminDashboardCache && now < adminDashboardCacheExpiry) {
-      return res.json(adminDashboardCache);
+    const cached = dashboardCacheMap.get(cacheKey);
+    if (cached && now < cached.expiry) {
+      return res.json(cached.data);
     }
 
+    let selectedEventObj = null;
     const matchFilter = { isDeleted: { $ne: true } };
+
     if (eventId && eventId !== 'all') {
-      const eventObj = await Event.findOne({
+      selectedEventObj = await Event.findOne({
         $or: [{ id: eventId }, { slug: eventId }, { date: eventId }]
       }).lean();
 
       const matchedIds = [eventId];
-      if (eventObj) {
-        if (eventObj.id && !matchedIds.includes(eventObj.id)) matchedIds.push(eventObj.id);
-        if (eventObj.slug && !matchedIds.includes(eventObj.slug)) matchedIds.push(eventObj.slug);
+      if (selectedEventObj) {
+        if (selectedEventObj.id && !matchedIds.includes(selectedEventObj.id)) matchedIds.push(selectedEventObj.id);
+        if (selectedEventObj.slug && !matchedIds.includes(selectedEventObj.slug)) matchedIds.push(selectedEventObj.slug);
       }
 
       matchFilter.$or = [
         { programId: { $in: matchedIds } },
-        ...(eventObj?.date ? [{ programDate: eventObj.date }] : [])
+        ...(selectedEventObj?.date ? [{ programDate: selectedEventObj.date }] : [])
       ];
     }
 
-    const [statsList, recentSubmissions, activeEvents, selectedEventObj] = await Promise.all([
+    const [statsList, recentSubmissions, activeEvents] = await Promise.all([
       Registration.aggregate([
         { $match: matchFilter },
         {
@@ -450,30 +456,14 @@ export const getAdminDashboardSummary = async (req, res) => {
             rejected: { $sum: { $cond: [{ $eq: ['$status', 'rejected'] }, 1, 0] } },
             present: { $sum: { $cond: [{ $eq: ['$attendance', 'present'] }, 1, 0] } },
             vipTotal: {
-              $sum: {
-                $cond: [
-                  {
-                    $or: [
-                      { $eq: ['$isVip', true] },
-                      { $regexMatch: { input: { $ifNull: ['$inquiryId', ''] }, regex: '^IP-', options: 'i' } }
-                    ]
-                  },
-                  1,
-                  0
-                ]
-              }
+              $sum: { $cond: [{ $eq: ['$isVip', true] }, 1, 0] }
             },
             vipApproved: {
               $sum: {
                 $cond: [
                   {
                     $and: [
-                      {
-                        $or: [
-                          { $eq: ['$isVip', true] },
-                          { $regexMatch: { input: { $ifNull: ['$inquiryId', ''] }, regex: '^IP-', options: 'i' } }
-                        ]
-                      },
+                      { $eq: ['$isVip', true] },
                       { $eq: ['$status', 'approved'] }
                     ]
                   },
@@ -483,18 +473,7 @@ export const getAdminDashboardSummary = async (req, res) => {
               }
             },
             regularTotal: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [
-                      { $ne: ['$isVip', true] },
-                      { $not: [{ $regexMatch: { input: { $ifNull: ['$inquiryId', ''] }, regex: '^IP-', options: 'i' } }] }
-                    ]
-                  },
-                  1,
-                  0
-                ]
-              }
+              $sum: { $cond: [{ $ne: ['$isVip', true] }, 1, 0] }
             },
             regularApproved: {
               $sum: {
@@ -502,7 +481,6 @@ export const getAdminDashboardSummary = async (req, res) => {
                   {
                     $and: [
                       { $ne: ['$isVip', true] },
-                      { $not: [{ $regexMatch: { input: { $ifNull: ['$inquiryId', ''] }, regex: '^IP-', options: 'i' } }] },
                       { $eq: ['$status', 'approved'] }
                     ]
                   },
@@ -515,7 +493,7 @@ export const getAdminDashboardSummary = async (req, res) => {
         }
       ]),
       Registration.find(matchFilter)
-        .sort({ createdAt: -1 })
+        .sort({ _id: -1 })
         .limit(5)
         .select('inquiryId coupleName partner1Name partner2Name husbandName wifeName surname phoneNumber city status paymentStatus attendance createdAt programId isVip')
         .lean(),
@@ -523,14 +501,11 @@ export const getAdminDashboardSummary = async (req, res) => {
         .sort({ date: 1 })
         .limit(3)
         .select('id name shortName date time status city venue capacity')
-        .lean(),
-      eventId && eventId !== 'all'
-        ? Event.findOne({ $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] }).lean()
-        : null
+        .lean()
     ]);
 
     const s = statsList[0] || { total: 0, approved: 0, pending: 0, inquiry: 0, rejected: 0, present: 0, vipTotal: 0, vipApproved: 0, regularTotal: 0, regularApproved: 0 };
-    const eventCapacity = selectedEventObj?.capacity || 1184;
+    const eventCapacity = selectedEventObj?.capacity || 1000;
     const isHousefull = s.approved >= eventCapacity;
     const availableSlots = Math.max(0, eventCapacity - s.approved);
 
@@ -551,7 +526,6 @@ export const getAdminDashboardSummary = async (req, res) => {
         isHousefull,
         attendanceRate: s.approved > 0 ? parseFloat(((s.present / s.approved) * 100).toFixed(1)) : 0
       },
-
       selectedEvent: selectedEventObj ? {
         id: selectedEventObj.id,
         name: selectedEventObj.name,
@@ -565,11 +539,10 @@ export const getAdminDashboardSummary = async (req, res) => {
       activeEvents
     };
 
-
-    if (!eventId) {
-      adminDashboardCache = result;
-      adminDashboardCacheExpiry = now + (15 * 1000); // 15s cache
-    }
+    dashboardCacheMap.set(cacheKey, {
+      data: result,
+      expiry: now + (15 * 1000) // 15s cache
+    });
 
     res.json(result);
   } catch (err) {
@@ -577,6 +550,8 @@ export const getAdminDashboardSummary = async (req, res) => {
     res.status(500).json({ error: 'Server error fetching admin dashboard summary.' });
   }
 };
+
+
 
 /**
  * Optimized Single-Roundtrip Super Admin Global Dashboard Summary (< 60ms)
