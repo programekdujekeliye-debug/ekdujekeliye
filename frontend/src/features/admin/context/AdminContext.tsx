@@ -127,9 +127,10 @@ export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       isFetchingRef.current = true;
       setLoadingPrograms(true);
-      const data = await eventsApi.getEventOptions();
+      const data = await eventsApi.getEventsSummary();
       const list = data || [];
       setPrograms(list);
+
 
       // Automatically default to the nearest upcoming event
       const defaultEvent = computeDefaultUpcomingEvent(list);

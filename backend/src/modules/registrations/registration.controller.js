@@ -248,40 +248,39 @@ export const manualInviteeRegistration = async (req, res) => {
 
     await sub.save();
 
-    // Authoritative Cryptographic Pass Generation for VIP Guest
-    try {
-      await qrPassService.ensurePass(sub, program);
-
-      // Dispatch WhatsApp VIP Pass Notification
-      const customerName = `${husbandName} & ${wifeName}`.trim();
-      await sendUtilityTemplate({
-        recipientPhone: phoneNumber,
-        templateKey: 'edkl_payment_confirmed_pass_v1',
-        languageCode: 'en_US',
-        variables: {
-          customerName,
-          eventName: program.name || 'Ek Duje Ke Liye Seminar',
-          eventDate: program.date || 'TBD',
-          eventTime: program.time || '8:30 PM',
-          venue: program.venue || 'Sardar Smruti Bhavan, Surat',
-          registrationId: inquiryId,
-          inquiryId
-        },
-        idempotencyKey: `VIP_PASS:${sub._id}:${inquiryId}`,
-        registrationId: sub._id,
-        eventId: program.id,
-        inquiryId,
-        trigger: 'payment_verified'
-      });
-    } catch (passErr) {
-      console.warn('[ManualInvitee] Pass or WhatsApp dispatch notice:', passErr.message);
-    }
+    // Authoritative Cryptographic Pass Generation for VIP Guest (Async Non-Blocking)
+    qrPassService.ensurePass(sub, program)
+      .then(() => {
+        const customerName = `${husbandName} & ${wifeName}`.trim();
+        return sendUtilityTemplate({
+          recipientPhone: phoneNumber,
+          templateKey: 'edkl_payment_confirmed_pass_v1',
+          languageCode: 'en_US',
+          variables: {
+            customerName,
+            eventName: program.name || 'Ek Duje Ke Liye Seminar',
+            eventDate: program.date || 'TBD',
+            eventTime: program.time || '8:30 PM',
+            venue: program.venue || 'Sardar Smruti Bhavan, Surat',
+            registrationId: inquiryId,
+            inquiryId
+          },
+          idempotencyKey: `VIP_PASS:${sub._id}:${inquiryId}`,
+          registrationId: sub._id,
+          eventId: program.id,
+          inquiryId,
+          trigger: 'payment_verified'
+        });
+      })
+      .catch(passErr => console.warn('[ManualInvitee] Background Pass or WhatsApp notice:', passErr.message));
 
     res.json({ success: true, data: sub });
   } catch (err) {
+    console.error('[ManualInvitee] Error creating manual invitee:', err);
     res.status(500).json({ error: 'Error creating manual invitee.' });
   }
 };
+
 
 export const getSubmissionsList = async (req, res) => {
   const { programId, status, attendance, paymentStatus, isVip, search, sortBy = 'createdAt', sortOrder = 'desc', page = 1, limit = 50 } = req.query;
@@ -605,14 +604,24 @@ export const updateSubmission = async (req, res) => {
       }
     }
 
-    delete updateData.paymentStatus;
-    delete updateData.paymentAmount;
+    // Handle new photo upload if provided
+    const couplePhotoFile = req.files && req.files['couplePhoto'] ? req.files['couplePhoto'][0] : null;
+    if (couplePhotoFile && couplePhotoFile.buffer) {
+      const base64Data = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
+      const couplePhotoUrl = await storageService.upload({
+        data: base64Data,
+        folder: 'couplePhotos',
+        filename: `${existing.inquiryId}_couple`
+      });
+      updateData.couplePhoto = couplePhotoUrl;
+    }
 
     const updated = await Registration.findOneAndUpdate(
       { _id: existing._id },
       { $set: updateData },
       { returnDocument: 'after' }
     );
+
 
 
     res.json({ success: true, submission: updated });

@@ -54,4 +54,5 @@ registrationRouter.post('/:inquiryId/attendance', requireAuth, markAttendance);
 registrationRouter.post('/:inquiryId/restore', requireAuth, restoreSubmission);
 registrationRouter.delete('/:inquiryId/permanent', requireAuth, permanentDeleteSubmission);
 registrationRouter.delete('/:inquiryId', requireAuth, softDeleteSubmission);
-registrationRouter.put('/:inquiryId', requireAuth, updateSubmission);
+registrationRouter.put('/:inquiryId', requireAuth, upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), updateSubmission);
+

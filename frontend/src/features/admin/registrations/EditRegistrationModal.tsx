@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Submission, Program } from '../../../types';
 import { registrationsApi } from '../../../services/admin/registrationsApi';
+import { API_BASE_URL } from '../../../config';
 import {
   XIcon,
   CheckCircleIcon,
@@ -40,20 +41,57 @@ export const EditRegistrationModal: React.FC<EditRegistrationModalProps> = ({
   const [paymentStatus, setPaymentStatus] = useState<string>(
     submission.payment?.status || (submission.status === 'approved' ? 'captured' : 'pending')
   );
-  const [paymentAmount, setPaymentAmount] = useState<number>(
-    submission.payment?.amount || 1500
+  const isVip = Boolean(
+    submission.isVip ||
+    submission.inquiryId?.startsWith('IP-') ||
+    submission.payment?.provider === 'manual_invite'
   );
+
+  const [paymentAmount, setPaymentAmount] = useState<number>(
+    submission.payment?.amount !== undefined && submission.payment?.amount !== null
+      ? submission.payment.amount
+      : isVip
+      ? 0
+      : 1500
+  );
+  
+  // Photo edit states
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(
+    submission.photoThumbnailUrl || submission.couplePhoto || null
+  );
+
   const [saving, setSaving] = useState(false);
 
   const cleanDigits = phoneNumber.replace(/\D/g, '').slice(-10);
 
   const getWhatsAppMessageUrl = () => {
     if (!cleanDigits) return '#';
-    const isPaid = paymentStatus === 'captured' || status === 'approved';
-    const text = isPaid
+    const isPaid = paymentStatus === 'captured' || status === 'approved' || isVip;
+    const text = isVip
+      ? `નમસ્તે ${husbandName} & ${wifeName}, એક દુજે કે લિયે સેમિનાર (${submission.inquiryId}) માટે તમારો VIP પાસ તૈયાર છે.\n\nતમારો ડિજિટલ એન્ટ્રી પાસ: https://www.ekdujekeliye.in/pass/${submission.inquiryId}\n\nતમારું પર્સનલાઇઝ્ડ ઇન્વિટેશન કાર્ડ: https://www.ekdujekeliye.in/invitation/${submission.inquiryId}`
+      : isPaid
       ? `નમસ્તે ${husbandName} & ${wifeName}, એક દુજે કે લિયે સેમિનાર (${submission.inquiryId}) માટે તમારું કપલ રજીસ્ટ્રેશન કન્ફર્મ થયેલ છે.\n\nતમારો ડિજિટલ એન્ટ્રી પાસ: https://www.ekdujekeliye.in/pass/${submission.inquiryId}\n\nતમારું પર્સનલાઇઝ્ડ ઇન્વિટેશન કાર્ડ: https://www.ekdujekeliye.in/invitation/${submission.inquiryId}`
       : `નમસ્તે ${husbandName} & ${wifeName}, એક દુજે કે લિયે સેમિનાર (${submission.inquiryId}) માટે તમારું રજીસ્ટ્રેશન પેન્ડિંગ છે. પેમેન્ટ પૂર્ણ કરવા માટે કૃપા કરીને આ લિંક પર ક્લિક કરો: https://www.ekdujekeliye.in/payment/${submission.inquiryId}`;
     return `https://wa.me/91${cleanDigits}?text=${encodeURIComponent(text)}`;
+  };
+
+
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 15 * 1024 * 1024) {
+        toast.error('Image is too large. Please select a photo under 15MB.');
+        return;
+      }
+      setPhotoFile(file);
+      setPhotoPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleRemoveNewPhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(submission.photoThumbnailUrl || submission.couplePhoto || null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -69,7 +107,7 @@ export const EditRegistrationModal: React.FC<EditRegistrationModalProps> = ({
 
     try {
       setSaving(true);
-      const res = await registrationsApi.updateSubmission(submission.inquiryId, {
+      const updatePayload: any = {
         husbandName: husbandName.trim(),
         wifeName: wifeName.trim(),
         surname: surname.trim(),
@@ -78,7 +116,9 @@ export const EditRegistrationModal: React.FC<EditRegistrationModalProps> = ({
         status,
         ...(paymentStatus ? { paymentStatus } : {}),
         ...(paymentAmount ? { paymentAmount } : {})
-      } as any);
+      };
+
+      const res = await registrationsApi.updateSubmission(submission.inquiryId, updatePayload, photoFile);
 
       if (res && res.submission) {
         toast.success(`Registration ${submission.inquiryId} updated successfully!`);
@@ -94,6 +134,7 @@ export const EditRegistrationModal: React.FC<EditRegistrationModalProps> = ({
           phoneNumber: cleanDigits,
           programId: programId || submission.programId,
           status,
+          couplePhoto: photoPreview || submission.couplePhoto,
           payment: {
             ...submission.payment,
             status: paymentStatus as any,
@@ -108,6 +149,12 @@ export const EditRegistrationModal: React.FC<EditRegistrationModalProps> = ({
     } finally {
       setSaving(false);
     }
+  };
+
+  const getFullImageUrl = (url?: string | null) => {
+    if (!url) return '';
+    if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+    return `${API_BASE_URL}${url}`;
   };
 
   return (
@@ -125,7 +172,7 @@ export const EditRegistrationModal: React.FC<EditRegistrationModalProps> = ({
             </span>
             <div>
               <h3 className="font-extrabold text-stone-900 text-base leading-tight">Edit Registration &amp; Slot Transfer</h3>
-              <p className="text-[11px] text-stone-500 font-medium">Update couple details, assign program event, or adjust payment</p>
+              <p className="text-[11px] text-stone-500 font-medium">Update couple details, photo, assign program event, or adjust payment</p>
             </div>
           </div>
           <button
@@ -175,6 +222,61 @@ export const EditRegistrationModal: React.FC<EditRegistrationModalProps> = ({
         {/* Modal Form Body */}
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs text-stone-700">
           
+          {/* Couple Photo Upload Section */}
+          <div className="bg-stone-50/80 border border-stone-200 rounded-2xl p-3.5 flex items-center gap-3.5">
+            <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-stone-300 bg-white flex-shrink-0 shadow-xs">
+              {photoPreview ? (
+                <img
+                  src={getFullImageUrl(photoPreview)}
+                  alt="Couple Preview"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-stone-200 flex items-center justify-center text-stone-400 font-bold text-[10px]">
+                  No Photo
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-stone-800 uppercase tracking-wider">
+                  Couple Photo
+                </span>
+                {photoFile && (
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                    New File Selected
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-stone-500">
+                Uploaded photo appears on the personalized invitation card and pass.
+              </p>
+              
+              <div className="flex items-center gap-2 pt-1">
+                <label className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold cursor-pointer transition-colors inline-block">
+                  <span>{photoFile ? 'Change Selected' : 'Upload / Replace Photo'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoSelect}
+                    className="hidden"
+                  />
+                </label>
+
+                {photoFile && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveNewPhoto}
+                    className="px-2.5 py-1.5 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer"
+                  >
+                    Revert
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Couple Names Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>

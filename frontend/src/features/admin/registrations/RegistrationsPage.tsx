@@ -34,6 +34,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [attendanceFilter, setAttendanceFilter] = useState('all');
+  const [entryTypeFilter, setEntryTypeFilter] = useState<'all' | 'regular' | 'vip'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalSubmissions, setTotalSubmissions] = useState(0);
@@ -102,6 +103,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
   const fetchList = async (page = 1) => {
     try {
       setLoading(true);
+      const isVipParam = entryTypeFilter === 'vip' ? 'true' : entryTypeFilter === 'regular' ? 'false' : undefined;
       const res = await registrationsApi.getSubmissions({
         page,
         limit: pageSize,
@@ -110,9 +112,8 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
         paymentStatus: paymentFilter,
         programId: selectedProgramId,
         attendance: attendanceFilter,
-        isVip: 'false'
+        ...(isVipParam !== undefined ? { isVip: isVipParam } : {})
       });
-
 
       setSubmissions(res.submissions || []);
       setTotalPages(res.totalPages || 1);
@@ -129,7 +130,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
     if (viewMode === 'all') {
       fetchList(1);
     }
-  }, [selectedProgramId, statusFilter, paymentFilter, attendanceFilter, viewMode, pageSize]);
+  }, [selectedProgramId, statusFilter, paymentFilter, attendanceFilter, entryTypeFilter, viewMode, pageSize]);
 
   // Debounced search
   useEffect(() => {
@@ -336,13 +337,24 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
             </div>
 
             {/* Filter Dropdowns with LuxurySelect */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+              <LuxurySelect
+                label="Entry Type"
+                value={entryTypeFilter}
+                onChange={(val) => setEntryTypeFilter(val as any)}
+                options={[
+                  { value: 'all', label: 'All Entries (Public + VIP)', badge: 'ALL' },
+                  { value: 'regular', label: 'Public Registrations', badge: 'PUBLIC' },
+                  { value: 'vip', label: 'VIP Guest Passes', badge: 'VIP' }
+                ]}
+              />
+
               <LuxurySelect
                 label="Registration Status"
                 value={statusFilter}
                 onChange={(val) => setStatusFilter(val)}
                 options={[
-                  { value: 'all', label: 'All Registrations' },
+                  { value: 'all', label: 'All Statuses' },
                   { value: 'pending', label: 'Pending', badge: 'Review' },
                   { value: 'approved', label: 'Approved', badge: 'Verified' },
                   { value: 'rejected', label: 'Rejected' }
@@ -468,11 +480,12 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                       const isApproved = sub.status === 'approved';
                       const isRejected = sub.status === 'rejected';
                       const isPending = !isApproved && !isRejected;
-                      const isPaid = sub.payment?.status === 'captured' || sub.status === 'approved';
+                      const isVip = Boolean(sub.isVip || sub.inquiryId?.startsWith('IP-') || sub.payment?.provider === 'manual_invite');
+                      const isPaid = sub.payment?.status === 'captured' || sub.status === 'approved' || isVip;
                       const isPaymentFailed = sub.payment?.status === 'failed';
                       const cleanDigits = getCleanDigits(sub.phoneNumber);
                       const isOldEvent = sub.programDate?.startsWith('2026-08') || sub.inquiryId?.startsWith('EK05') || sub.inquiryId?.startsWith('IP') || sub.inquiryId?.startsWith('EK01') || sub.inquiryId?.startsWith('EK02') || sub.inquiryId?.startsWith('EK03') || sub.inquiryId?.startsWith('EK04');
-                      const displayAmount = sub.payment?.amount !== undefined ? sub.payment.amount : (isOldEvent ? 1000 : 1500);
+                      const displayAmount = sub.payment?.amount !== undefined ? sub.payment.amount : (isVip ? 0 : isOldEvent ? 1000 : 1500);
 
                       return (
                         <tr key={sub.inquiryId} className={`hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-rose-50/40' : ''}`}>
@@ -492,7 +505,18 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                           </td>
                           <td className="px-4 py-3.5">
                             <div className="space-y-0.5">
-                              <span className="font-mono font-extrabold text-rose-700 text-xs block">{sub.inquiryId}</span>
+                              <div className="flex items-center gap-1">
+                                <span className={`font-mono font-extrabold text-xs px-1.5 py-0.5 rounded ${
+                                  isVip ? 'bg-amber-50 text-amber-900 border border-amber-300' : 'text-rose-700'
+                                }`}>
+                                  {sub.inquiryId}
+                                </span>
+                                {isVip && (
+                                  <span className="text-[9px] font-black uppercase px-1 py-0.5 bg-amber-100 text-amber-900 border border-amber-200 rounded">
+                                    VIP
+                                  </span>
+                                )}
+                              </div>
                               <span className="text-[10px] text-slate-400 font-medium block whitespace-nowrap">
                                 {formatSubmissionTime(sub.createdAt)}
                               </span>

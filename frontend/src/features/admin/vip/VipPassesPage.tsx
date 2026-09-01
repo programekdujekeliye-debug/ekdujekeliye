@@ -19,9 +19,12 @@ import {
   WhatsappIcon,
   MapPinIcon,
   ClockIcon,
-  XIcon
+  XIcon,
+  EditIcon
 } from '../../../components/Icons';
 import { BatchExportModal } from '../reports/BatchExportModal';
+import { EditRegistrationModal } from '../registrations/EditRegistrationModal';
+import { registrationsApi } from '../../../services/admin/registrationsApi';
 import { LuxurySelect } from '../../../components/LuxurySelect';
 import toast from 'react-hot-toast';
 
@@ -32,9 +35,49 @@ export const VipPassesPage = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProgramId, setSelectedProgramId] = useState('all');
+  const [attendanceFilter, setAttendanceFilter] = useState('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [editingGuest, setEditingGuest] = useState<Submission | null>(null);
+
+  const formatSubmissionTime = (dateStr?: string) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return 'N/A';
+      return d.toLocaleString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return 'N/A';
+    }
+  };
+
+  const getWhatsAppMessageUrl = (g: Submission) => {
+    const digits = g.phoneNumber.replace(/\D/g, '').slice(-10);
+    if (!digits) return '#';
+    const text = `નમસ્તે ${g.husbandName} & ${g.wifeName}, એક દુજે કે લિયે સેમિનાર (${g.inquiryId}) માટે તમારો VIP પાસ તૈયાર છે.\n\nતમારો ડિજિટલ એન્ટ્રી પાસ: https://www.ekdujekeliye.in/pass/${g.inquiryId}\n\nતમારું પર્સનલાઇઝ્ડ ઇન્વિટેશન કાર્ડ: https://www.ekdujekeliye.in/invitation/${g.inquiryId}`;
+    return `https://wa.me/91${digits}?text=${encodeURIComponent(text)}`;
+  };
+
+  const handleAttendance = async (inquiryId: string, attendance: 'present' | 'absent' | 'unmarked') => {
+    try {
+      await registrationsApi.markAttendance(inquiryId, attendance);
+      setVipGuests((prev) =>
+        prev.map((g) => (g.inquiryId === inquiryId ? { ...g, attendance } : g))
+      );
+      toast.success(`Attendance updated to ${attendance}.`);
+    } catch (err: any) {
+      toast.error('Failed to update attendance.');
+    }
+  };
+
 
   // Modal State for Issuing VIP Pass
   const [showIssueModal, setShowIssueModal] = useState(false);
@@ -179,17 +222,25 @@ export const VipPassesPage = () => {
     }
   };
 
-  // Filter VIP list by search
+  // Filter VIP list by search and attendance
   const filteredGuests = vipGuests.filter((g) => {
     const q = searchQuery.toLowerCase();
-    return (
+    const matchSearch =
+      !q ||
       g.inquiryId?.toLowerCase().includes(q) ||
       g.husbandName?.toLowerCase().includes(q) ||
       g.wifeName?.toLowerCase().includes(q) ||
       g.surname?.toLowerCase().includes(q) ||
-      g.phoneNumber?.includes(q)
-    );
+      g.phoneNumber?.includes(q);
+
+    const matchAttendance =
+      attendanceFilter === 'all' ||
+      (attendanceFilter === 'unmarked' && (!g.attendance || g.attendance === 'unmarked')) ||
+      g.attendance === attendanceFilter;
+
+    return matchSearch && matchAttendance;
   });
+
 
   const totalVipCount = vipGuests.length;
   const presentCount = vipGuests.filter((g) => g.attendance === 'present').length;
@@ -391,22 +442,39 @@ export const VipPassesPage = () => {
           )}
         </div>
 
-        <div className="w-full sm:w-64 min-w-0">
-          <LuxurySelect
-            label="Filter Event Slot"
-            value={selectedProgramId}
-            onChange={(val) => setSelectedProgramId(val)}
-            options={[
-              { value: 'all', label: 'All Event Slots' },
-              ...programs.map((p) => ({
-                value: p.id,
-                label: p.name,
-                sublabel: p.date
-              }))
-            ]}
-          />
+        <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
+          <div className="w-full sm:w-56 min-w-0">
+            <LuxurySelect
+              label="Filter Event Slot"
+              value={selectedProgramId}
+              onChange={(val) => setSelectedProgramId(val)}
+              options={[
+                { value: 'all', label: 'All Event Slots' },
+                ...programs.map((p) => ({
+                  value: p.id,
+                  label: p.name,
+                  sublabel: p.date
+                }))
+              ]}
+            />
+          </div>
+
+          <div className="w-full sm:w-44 min-w-0">
+            <LuxurySelect
+              label="Gate Attendance"
+              value={attendanceFilter}
+              onChange={(val) => setAttendanceFilter(val)}
+              options={[
+                { value: 'all', label: 'All Attendance' },
+                { value: 'present', label: 'Present (Checked In)' },
+                { value: 'unmarked', label: 'Unmarked' },
+                { value: 'absent', label: 'Absent' }
+              ]}
+            />
+          </div>
         </div>
       </div>
+
 
       {/* VIP Passes Container */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
@@ -437,98 +505,177 @@ export const VipPassesPage = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-600">
-                    <th className="py-3.5 px-4">Pass ID</th>
+                    <th className="py-3.5 px-4">Pass ID &amp; Submitted</th>
                     <th className="py-3.5 px-4">Invited VIP Couple</th>
-                    <th className="py-3.5 px-4">Contact Phone</th>
-                    <th className="py-3.5 px-4">Event Slot</th>
-                    <th className="py-3.5 px-4">Gate Status</th>
+                    <th className="py-3.5 px-4">Phone &amp; WhatsApp</th>
+                    <th className="py-3.5 px-4">Program Slot</th>
+                    <th className="py-3.5 px-4">Payment / Type</th>
+                    <th className="py-3.5 px-4">Gate Attendance</th>
+                    <th className="py-3.5 px-4">Couple Photo</th>
                     <th className="py-3.5 px-4 text-right">Pass Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs font-medium">
-                  {filteredGuests.map((g) => (
-                    <tr key={g._id || g.inquiryId} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3.5 px-4 font-mono font-bold">
-                        <span className="px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-300 rounded-lg text-[11px] font-extrabold tracking-wide inline-flex items-center gap-1 whitespace-nowrap">
-                          <SparklesIcon className="w-3 h-3 text-amber-600 flex-shrink-0" />
-                          <span>{g.inquiryId}</span>
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="font-extrabold text-slate-900 truncate">
-                          {g.husbandName} &amp; {g.wifeName} {g.surname}
-                        </div>
-                        <span className="text-[10px] text-amber-700 font-bold uppercase tracking-wider block">
-                          Honorary VIP Guest
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 font-mono font-medium text-slate-700">
-                        <a
-                          href={`https://wa.me/${g.phoneNumber.replace(/\D/g, '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:text-emerald-600 inline-flex items-center gap-1 font-bold"
-                        >
-                          <PhoneIcon className="w-3 h-3 text-emerald-600" />
-                          <span>{g.phoneNumber}</span>
-                        </a>
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-600">
-                        <div className="font-bold text-slate-800 truncate">{g.programName}</div>
-                        <div className="text-[10px] text-slate-500">{g.programDate} &bull; {g.programTime || '8:30 PM'}</div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        {g.attendance === 'present' ? (
-                          <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-extrabold rounded-full inline-flex items-center gap-1 whitespace-nowrap">
-                            <CheckIcon className="w-3 h-3" />
-                            <span>Present (Admitted)</span>
+                  {filteredGuests.map((g) => {
+                    const cleanDigits = g.phoneNumber.replace(/\D/g, '').slice(-10);
+
+                    return (
+                      <tr key={g._id || g.inquiryId} className="hover:bg-slate-50/60 transition-colors">
+                        {/* Pass ID & Submitted */}
+                        <td className="py-3.5 px-4 font-mono font-bold">
+                          <div className="space-y-0.5">
+                            <span className="px-2.5 py-0.5 bg-amber-50 text-amber-900 border border-amber-300 rounded-lg text-xs font-mono font-extrabold tracking-wide inline-flex items-center gap-1">
+                              <SparklesIcon className="w-3 h-3 text-amber-600 flex-shrink-0" />
+                              <span>{g.inquiryId}</span>
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium block whitespace-nowrap">
+                              {formatSubmissionTime(g.createdAt)}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Couple Name */}
+                        <td className="py-3.5 px-4">
+                          <span className="font-extrabold text-slate-900 block truncate">
+                            {g.husbandName} &amp; {g.wifeName}
                           </span>
-                        ) : (
-                          <span className="px-2.5 py-1 bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold rounded-full whitespace-nowrap">
-                            Awaiting Entry
+                          <span className="text-[11px] text-slate-500 font-semibold">{g.surname}</span>
+                        </td>
+
+                        {/* Phone & WhatsApp */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex flex-col gap-1 items-start">
+                            <a
+                              href={`tel:+91${cleanDigits}`}
+                              className="font-mono font-bold text-slate-900 hover:text-rose-600 flex items-center gap-1 group transition-colors"
+                              title="Click to Call Mobile Number"
+                            >
+                              <PhoneIcon className="w-3 h-3 text-slate-400 group-hover:text-rose-600 transition-colors" />
+                              <span>{g.phoneNumber}</span>
+                            </a>
+                            <a
+                              href={`https://wa.me/91${cleanDigits}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded transition-colors"
+                              title="Direct WhatsApp Chat"
+                            >
+                              <WhatsappIcon className="w-2.5 h-2.5 text-emerald-600" />
+                              <span>WhatsApp</span>
+                            </a>
+                          </div>
+                        </td>
+
+                        {/* Program Slot */}
+                        <td className="py-3.5 px-4 text-slate-600">
+                          <div className="font-bold text-slate-800 truncate">{g.programName || 'VIP Seminar Slot'}</div>
+                          <div className="text-[10px] text-slate-500">{g.programDate} &bull; {g.programTime || '8:30 PM'}</div>
+                        </td>
+
+                        {/* Payment Pill */}
+                        <td className="py-3.5 px-4">
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-amber-50 border border-amber-300 text-amber-900 inline-flex items-center gap-1 whitespace-nowrap">
+                            <SparklesIcon className="w-3 h-3 text-amber-600" />
+                            <span>Paid (₹0) MANUAL_INVITE</span>
                           </span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <a
-                            href={`/pass/${g.inquiryId}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap"
-                            title="Open Gate Entry Pass"
-                          >
-                            Pass ↗
-                          </a>
-                          <a
-                            href={`/invitation/${g.inquiryId}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap"
-                            title="Open Personalized Invitation Card"
-                          >
-                            Card ↗
-                          </a>
-                          <button
-                            onClick={() => handleResendWhatsApp(g)}
-                            disabled={resendingId === g.inquiryId}
-                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1 whitespace-nowrap"
-                            title="Send Pass via WhatsApp"
-                          >
-                            <WhatsappIcon className="w-3.5 h-3.5 text-emerald-700 flex-shrink-0" />
-                            <span>{resendingId === g.inquiryId ? 'Sending...' : 'Send'}</span>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteVip(g._id || '', `${g.husbandName} & ${g.wifeName}`)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                            title="Revoke / Delete VIP Pass"
-                          >
-                            <TrashIcon className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+
+                        {/* Attendance Dropdown */}
+                        <td className="py-3.5 px-4">
+                          <div className="w-36">
+                            <LuxurySelect
+                              size="sm"
+                              variant="subtle"
+                              value={g.attendance || 'unmarked'}
+                              onChange={(val) => handleAttendance(g.inquiryId, val as any)}
+                              options={[
+                                { value: 'unmarked', label: 'Unmarked' },
+                                { value: 'present', label: 'Present', badge: 'IN' },
+                                { value: 'absent', label: 'Absent' }
+                              ]}
+                            />
+                          </div>
+                        </td>
+
+
+                        {/* Photo Thumbnail */}
+                        <td className="py-3.5 px-4">
+                          {g.couplePhoto ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedImage(g.photoThumbnailUrl || g.couplePhoto)}
+                              className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer shadow-xs hover:scale-105 transition-transform"
+                              title="Click to zoom couple photo"
+                            >
+                              <img
+                                src={
+                                  (g.photoThumbnailUrl || g.couplePhoto).startsWith('http') ||
+                                  (g.photoThumbnailUrl || g.couplePhoto).startsWith('data:')
+                                    ? g.photoThumbnailUrl || g.couplePhoto
+                                    : `${API_BASE_URL}${g.photoThumbnailUrl || g.couplePhoto}`
+                                }
+                                alt="VIP Couple"
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
+                            </button>
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 text-[9px] font-bold">
+                              No Pic
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <a
+                              href={`/pass/${g.inquiryId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap"
+                              title="Open Gate Entry Pass"
+                            >
+                              Pass ↗
+                            </a>
+                            <a
+                              href={`/invitation/${g.inquiryId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap"
+                              title="Open Personalized Invitation Card"
+                            >
+                              Card ↗
+                            </a>
+                            <a
+                              href={getWhatsAppMessageUrl(g)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-lg cursor-pointer transition-colors"
+                              title="Send Pass & Card on WhatsApp"
+                            >
+                              <WhatsappIcon className="w-3.5 h-3.5 text-emerald-600" />
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => setEditingGuest(g)}
+                              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-lg transition-all cursor-pointer"
+                              title="Edit VIP details & slot"
+                            >
+                              <EditIcon className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteVip(g._id || '', `${g.husbandName} & ${g.wifeName}`)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                              title="Revoke / Delete VIP Pass"
+                            >
+                              <TrashIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -537,14 +684,13 @@ export const VipPassesPage = () => {
             <div className="md:hidden p-3 sm:p-4 space-y-3.5">
               {filteredGuests.map((g) => {
                 const cleanDigits = g.phoneNumber.replace(/\D/g, '').slice(-10);
-                const isPresent = g.attendance === 'present';
 
                 return (
                   <div
                     key={g._id || g.inquiryId}
                     className="bg-white border border-amber-200/90 rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-3.5"
                   >
-                    {/* Row 1: Pass ID Chip, Gate Status, and Trash */}
+                    {/* Row 1: Pass ID Chip, Date/Time, and Trash */}
                     <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="px-2.5 py-0.5 bg-amber-50 text-amber-900 border border-amber-300 rounded-lg text-xs font-mono font-extrabold tracking-wide inline-flex items-center gap-1">
@@ -565,15 +711,10 @@ export const VipPassesPage = () => {
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {isPresent ? (
-                          <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-extrabold rounded-full inline-flex items-center gap-1">
-                            <CheckIcon className="w-3 h-3" />
-                            <span>Present</span>
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold rounded-full">
-                            Awaiting Entry
+                      <div className="flex items-center gap-2 flex-shrink-0 text-slate-400 text-[10px]">
+                        {g.createdAt && (
+                          <span className="font-medium text-slate-500 whitespace-nowrap">
+                            {formatSubmissionTime(g.createdAt)}
                           </span>
                         )}
                         <button
@@ -586,7 +727,27 @@ export const VipPassesPage = () => {
                       </div>
                     </div>
 
-                    {/* Row 2: VIP Couple Information */}
+                    {/* Row 2: Status Chips */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-50 border border-amber-300 text-amber-900 inline-flex items-center gap-1">
+                        <SparklesIcon className="w-3 h-3 text-amber-600" />
+                        <span>Paid (₹0) MANUAL_INVITE</span>
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-100 text-amber-900 border border-amber-200">
+                        Honorary VIP
+                      </span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border whitespace-nowrap ${
+                        g.attendance === 'present'
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                          : g.attendance === 'absent'
+                          ? 'bg-slate-100 border-slate-300 text-slate-600'
+                          : 'bg-slate-50 border-slate-200 text-slate-500'
+                      }`}>
+                        {g.attendance === 'present' ? '✓ Present' : g.attendance === 'absent' ? 'Absent' : 'Unmarked'}
+                      </span>
+                    </div>
+
+                    {/* Row 3: VIP Couple Information + Photo */}
                     <div className="flex items-start gap-3 bg-amber-50/50 border border-amber-200/60 rounded-xl p-3">
                       {/* Photo / Avatar */}
                       <div className="flex flex-col items-center gap-1 flex-shrink-0">
@@ -621,12 +782,7 @@ export const VipPassesPage = () => {
                         <h4 className="font-extrabold text-slate-900 text-sm leading-snug break-words">
                           {g.husbandName} &amp; {g.wifeName}
                         </h4>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs text-slate-600 font-semibold">{g.surname}</span>
-                          <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200">
-                            Honorary VIP
-                          </span>
-                        </div>
+                        <p className="text-xs text-slate-600 font-semibold">{g.surname}</p>
                         <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 pt-0.5">
                           <MapPinIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                           <span className="truncate">{g.programName || 'VIP Special Guest'} ({g.programDate})</span>
@@ -634,7 +790,7 @@ export const VipPassesPage = () => {
                       </div>
                     </div>
 
-                    {/* Row 3: Communication Bar */}
+                    {/* Row 4: Communication Bar */}
                     <div className="grid grid-cols-2 gap-2">
                       <a
                         href={`tel:+91${cleanDigits}`}
@@ -657,48 +813,69 @@ export const VipPassesPage = () => {
                       </a>
                     </div>
 
-                    {/* Row 4: Pass Action Strip */}
-                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                      <a
-                        href={`/pass/${g.inquiryId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1 transition-colors min-h-[36px]"
-                        title="Open Gate Entry Pass"
-                      >
-                        <span>Pass ↗</span>
-                      </a>
-
-                      <a
-                        href={`/invitation/${g.inquiryId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1 transition-colors min-h-[36px]"
-                        title="Open Personalized Invitation Card"
-                      >
-                        <span>Card ↗</span>
-                      </a>
-
-                      <button
-                        onClick={() => handleResendWhatsApp(g)}
-                        disabled={resendingId === g.inquiryId}
-                        className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1 cursor-pointer min-h-[36px] shadow-xs"
-                        title="Send Pass on WhatsApp"
-                      >
-                        <WhatsappIcon className="w-3.5 h-3.5 text-white flex-shrink-0" />
-                        <span>{resendingId === g.inquiryId ? 'Sending...' : 'Send'}</span>
-                      </button>
-                    </div>
-
-                    {resendStatus && resendStatus.id === g.inquiryId && (
-                      <div
-                        className={`text-[11px] p-2 rounded-xl text-center font-bold ${
-                          resendStatus.success ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
-                        }`}
-                      >
-                        {resendStatus.message}
+                    {/* Row 5: Attendance Selector & Actions Strip */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                      {/* Attendance LuxurySelect Dropdown */}
+                      <div className="flex-1 min-w-0">
+                        <LuxurySelect
+                          size="sm"
+                          variant="card"
+                          value={g.attendance || 'unmarked'}
+                          onChange={(val) => handleAttendance(g.inquiryId, val as any)}
+                          options={[
+                            { value: 'unmarked', label: 'Unmarked Attendance' },
+                            { value: 'present', label: 'Present (Checked In)', badge: 'IN' },
+                            { value: 'absent', label: 'Absent' }
+                          ]}
+                        />
                       </div>
-                    )}
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <a
+                          href={`/pass/${g.inquiryId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1.5 min-h-[34px] bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 font-bold text-xs rounded-xl flex items-center gap-1 shadow-2xs"
+                          title="Open Gate Entry Pass"
+                        >
+                          <span>Pass</span>
+                          <span>↗</span>
+                        </a>
+
+                        <a
+                          href={`/invitation/${g.inquiryId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1.5 min-h-[34px] bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-xs rounded-xl flex items-center gap-1 shadow-2xs"
+                          title="Open Personalized Invitation Card"
+                        >
+                          <span>Card</span>
+                          <span>↗</span>
+                        </a>
+
+                        <a
+                          href={getWhatsAppMessageUrl(g)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1.5 min-h-[34px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow-xs"
+                          title="Send Pass & Card on WhatsApp"
+                        >
+                          <WhatsappIcon className="w-3.5 h-3.5 text-white" />
+                          <span>Send</span>
+                        </a>
+
+                        <button
+                          type="button"
+                          onClick={() => setEditingGuest(g)}
+                          className="px-2.5 py-1.5 min-h-[34px] bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer transition-colors"
+                          title="Edit VIP details & slot"
+                        >
+                          <EditIcon className="w-3.5 h-3.5 text-slate-600" />
+                          <span>Edit</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
@@ -706,6 +883,8 @@ export const VipPassesPage = () => {
           </div>
         )}
       </div>
+
+
 
       {/* Modal: Issue New VIP Pass */}
       {showIssueModal && (
@@ -914,6 +1093,18 @@ export const VipPassesPage = () => {
           </div>
         </div>
       )}
+      {/* Edit VIP Guest Entry Modal */}
+      <EditRegistrationModal
+        submission={editingGuest}
+        programs={programs}
+        isOpen={!!editingGuest}
+        onClose={() => setEditingGuest(null)}
+        onSuccess={(updated) => {
+          setVipGuests((prev) =>
+            prev.map((item) => (item.inquiryId === updated.inquiryId ? updated : item))
+          );
+        }}
+      />
     </div>
   );
 };

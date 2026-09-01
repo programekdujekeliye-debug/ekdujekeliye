@@ -23,7 +23,9 @@ export interface Submission {
   photoZoom?: number;
   photoOffsetY?: number;
   photoLink?: string;
+  isVip?: boolean;
   isDeleted?: boolean;
+
   payment?: {
     provider?: string;
     status?: 'pending' | 'captured' | 'failed' | 'refunded';

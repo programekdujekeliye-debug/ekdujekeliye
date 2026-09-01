@@ -448,14 +448,76 @@ export const getAdminDashboardSummary = async (req, res) => {
             pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
             inquiry: { $sum: { $cond: [{ $eq: ['$status', 'inquiry'] }, 1, 0] } },
             rejected: { $sum: { $cond: [{ $eq: ['$status', 'rejected'] }, 1, 0] } },
-            present: { $sum: { $cond: [{ $eq: ['$attendance', 'present'] }, 1, 0] } }
+            present: { $sum: { $cond: [{ $eq: ['$attendance', 'present'] }, 1, 0] } },
+            vipTotal: {
+              $sum: {
+                $cond: [
+                  {
+                    $or: [
+                      { $eq: ['$isVip', true] },
+                      { $regexMatch: { input: { $ifNull: ['$inquiryId', ''] }, regex: '^IP-', options: 'i' } }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            },
+            vipApproved: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      {
+                        $or: [
+                          { $eq: ['$isVip', true] },
+                          { $regexMatch: { input: { $ifNull: ['$inquiryId', ''] }, regex: '^IP-', options: 'i' } }
+                        ]
+                      },
+                      { $eq: ['$status', 'approved'] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            },
+            regularTotal: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $ne: ['$isVip', true] },
+                      { $not: [{ $regexMatch: { input: { $ifNull: ['$inquiryId', ''] }, regex: '^IP-', options: 'i' } }] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            },
+            regularApproved: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $ne: ['$isVip', true] },
+                      { $not: [{ $regexMatch: { input: { $ifNull: ['$inquiryId', ''] }, regex: '^IP-', options: 'i' } }] },
+                      { $eq: ['$status', 'approved'] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            }
           }
         }
       ]),
       Registration.find(matchFilter)
         .sort({ createdAt: -1 })
         .limit(5)
-        .select('inquiryId coupleName partner1Name partner2Name phoneNumber city status paymentStatus attendance createdAt programId')
+        .select('inquiryId coupleName partner1Name partner2Name husbandName wifeName surname phoneNumber city status paymentStatus attendance createdAt programId isVip')
         .lean(),
       Event.find({ status: { $in: ['upcoming', 'few_seats'] } })
         .sort({ date: 1 })
@@ -467,7 +529,7 @@ export const getAdminDashboardSummary = async (req, res) => {
         : null
     ]);
 
-    const s = statsList[0] || { total: 0, approved: 0, pending: 0, inquiry: 0, rejected: 0, present: 0 };
+    const s = statsList[0] || { total: 0, approved: 0, pending: 0, inquiry: 0, rejected: 0, present: 0, vipTotal: 0, vipApproved: 0, regularTotal: 0, regularApproved: 0 };
     const eventCapacity = selectedEventObj?.capacity || 1184;
     const isHousefull = s.approved >= eventCapacity;
     const availableSlots = Math.max(0, eventCapacity - s.approved);
@@ -480,11 +542,16 @@ export const getAdminDashboardSummary = async (req, res) => {
         inquiry: s.inquiry,
         rejected: s.rejected,
         present: s.present,
+        vipTotal: s.vipTotal || 0,
+        vipApproved: s.vipApproved || 0,
+        regularTotal: s.regularTotal || 0,
+        regularApproved: s.regularApproved || 0,
         capacity: eventCapacity,
         availableSlots,
         isHousefull,
         attendanceRate: s.approved > 0 ? parseFloat(((s.present / s.approved) * 100).toFixed(1)) : 0
       },
+
       selectedEvent: selectedEventObj ? {
         id: selectedEventObj.id,
         name: selectedEventObj.name,

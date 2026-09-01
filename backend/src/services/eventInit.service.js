@@ -24,6 +24,10 @@ export async function ensureEarlyRegistrationEvents() {
     const MAP_URL = 'https://share.google/y1jtFAZXuKusYTiUD';
 
     // 1. Ensure 7 September 2026 Program (Sequence 6 -> EK06-XX)
+    const existingEvent7 = await Event.findOne({
+      $or: [{ sequenceNumber: 6 }, { id: 'prog-2026-09-07' }, { date: '2026-09-07' }]
+    });
+
     await Event.findOneAndUpdate(
       { $or: [{ sequenceNumber: 6 }, { id: 'prog-2026-09-07' }, { date: '2026-09-07' }] },
       {
@@ -44,7 +48,7 @@ export async function ensureEarlyRegistrationEvents() {
           paymentOpenedAt: null,
           paymentOpeningNote: 'Online payment will open shortly. Payment link will be sent on your registered WhatsApp number.',
           isDateFinal: true,
-          capacity: 1184,
+          capacity: existingEvent7?.capacity || 1000,
           time: '8:30 PM',
           date: '2026-09-07'
         }
@@ -53,6 +57,10 @@ export async function ensureEarlyRegistrationEvents() {
     );
 
     // 2. Ensure 12 September 2026 Program (Sequence 7 -> EK07-XX)
+    const existingEvent12 = await Event.findOne({
+      $or: [{ sequenceNumber: 7 }, { id: 'prog-2026-09-11' }, { id: 'prog-2026-09-12' }, { date: '2026-09-11' }, { date: '2026-09-12' }]
+    });
+
     await Event.findOneAndUpdate(
       { $or: [{ sequenceNumber: 7 }, { id: 'prog-2026-09-11' }, { id: 'prog-2026-09-12' }, { date: '2026-09-11' }, { date: '2026-09-12' }] },
       {
@@ -73,13 +81,14 @@ export async function ensureEarlyRegistrationEvents() {
           paymentOpenedAt: null,
           paymentOpeningNote: 'Online payment will open shortly. Payment link will be sent on your registered WhatsApp number.',
           isDateFinal: true,
-          capacity: 1184,
+          capacity: existingEvent12?.capacity || 1000,
           time: '8:30 PM',
           date: '2026-09-12'
         }
       },
       { upsert: true, returnDocument: 'after' }
     );
+
 
     // 3. Link and standardize all 7 September registrations to EK06
     try {

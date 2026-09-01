@@ -322,7 +322,9 @@ export const EventsPage = () => {
         {filteredPrograms.map((prog) => {
           const isTbd = prog.date === 'TBD' || prog.date === 'TBA' || prog.status === 'date_tba' || !prog.isDateFinal;
           const isCompleted = prog.status === 'completed' || prog.status === 'archived' || (prog.date < todayStr && !isTbd);
-          const capacity = prog.capacity && prog.capacity > 0 ? prog.capacity : 1184;
+          const capacity = prog.capacity && prog.capacity > 0 ? prog.capacity : 1000;
+
+
           const approved = prog.approvedCount ?? prog.bookingsCount ?? 0;
           const pending = prog.pendingCount ?? 0;
           const rejected = prog.rejectedCount ?? 0;

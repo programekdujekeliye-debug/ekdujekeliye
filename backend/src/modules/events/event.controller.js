@@ -173,8 +173,16 @@ import { communicationSchedulerService } from '../../services/communicationSched
 export const updateEvent = async (req, res) => {
   const { id } = req.params;
   try {
-    const event = await Event.findOne({ id });
+    const event = await Event.findOne({
+      $or: [
+        { id },
+        { slug: id },
+        { date: id },
+        ...(typeof id === 'string' && id.match(/^[0-9a-fA-F]{24}$/) ? [{ _id: id }] : [])
+      ]
+    });
     if (!event) return res.status(404).json({ error: 'Event program not found.' });
+
 
     const previousDate = event.date;
     const previousTime = event.time;

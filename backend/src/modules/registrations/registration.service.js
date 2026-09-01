@@ -153,39 +153,36 @@ export class RegistrationService {
     if (isEarlyRegistration) {
       console.log(`[RegistrationService] Silent Early Registration: Suppressing WhatsApp dispatch for inquiry ${inquiryId}. Payment & communication not open yet.`);
     } else {
-      // Standard Registration with Active Online Payment & Communications: Send payment link button
-      try {
-        const customerName = `${husbandName || ''} & ${wifeName || ''}`.trim() || 'Valued Couple';
-        const eventName = program.name || 'Ek Duje Ke Liye Seminar';
-        const eventDate = program.date || 'TBD';
-        const eventTime = program.time || '8:30 PM';
-        const venue = program.venue || 'Sardar Smruti Bhavan, Surat';
-        const feeAmount = `₹${amount}`;
+      // Standard Registration with Active Online Payment & Communications: Send payment link button (Async Non-Blocking)
+      const customerName = `${husbandName || ''} & ${wifeName || ''}`.trim() || 'Valued Couple';
+      const eventName = program.name || 'Ek Duje Ke Liye Seminar';
+      const eventDate = program.date || 'TBD';
+      const eventTime = program.time || '8:30 PM';
+      const venue = program.venue || 'Sardar Smruti Bhavan, Surat';
+      const feeAmount = `₹${amount}`;
 
-        await sendUtilityTemplate({
-          recipientPhone: phoneNumber,
-          templateKey: 'edkl_payment_pending_v1',
-          languageCode: 'en_US',
-          variables: {
-            customerName,
-            eventName,
-            registrationId: inquiryId,
-            eventDate,
-            eventTime,
-            venue,
-            feeAmount,
-            inquiryId
-          },
-          idempotencyKey: `REGISTRATION_PENDING:${newRegistration._id}:${inquiryId}`,
-          registrationId: newRegistration._id,
-          eventId: program.id,
-          inquiryId,
-          trigger: 'registration_created'
-        });
-      } catch (msgErr) {
-        console.warn('[RegistrationService] WhatsApp dispatch notice:', msgErr.message);
-      }
+      sendUtilityTemplate({
+        recipientPhone: phoneNumber,
+        templateKey: 'edkl_payment_pending_v1',
+        languageCode: 'en_US',
+        variables: {
+          customerName,
+          eventName,
+          registrationId: inquiryId,
+          eventDate,
+          eventTime,
+          venue,
+          feeAmount,
+          inquiryId
+        },
+        idempotencyKey: `REGISTRATION_PENDING:${newRegistration._id}:${inquiryId}`,
+        registrationId: newRegistration._id,
+        eventId: program.id,
+        inquiryId,
+        trigger: 'registration_created'
+      }).catch(msgErr => console.warn('[RegistrationService] Background WhatsApp dispatch notice:', msgErr.message));
     }
+
 
     return {
       registration: newRegistration,

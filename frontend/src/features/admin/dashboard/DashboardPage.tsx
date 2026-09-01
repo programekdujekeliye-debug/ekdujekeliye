@@ -18,6 +18,10 @@ export const DashboardPage = () => {
   const [approvedCount, setApprovedCount] = useState<number>(0);
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [rejectedCount, setRejectedCount] = useState<number>(0);
+  const [regularTotal, setRegularTotal] = useState<number>(0);
+  const [vipTotal, setVipTotal] = useState<number>(0);
+  const [regularApproved, setRegularApproved] = useState<number>(0);
+  const [vipApproved, setVipApproved] = useState<number>(0);
   const [capacity, setCapacity] = useState<number>(1184);
   const [availableSlots, setAvailableSlots] = useState<number>(1184);
   const [isHousefull, setIsHousefull] = useState<boolean>(false);
@@ -32,6 +36,10 @@ export const DashboardPage = () => {
         const app = data.stats.approved || 0;
         const pend = data.stats.pending || 0;
         const rej = data.stats.rejected || 0;
+        const regTot = data.stats.regularTotal || 0;
+        const vTot = data.stats.vipTotal || 0;
+        const regApp = data.stats.regularApproved || 0;
+        const vApp = data.stats.vipApproved || 0;
         const cap = data.stats.capacity || 1184;
         const avail = data.stats.availableSlots !== undefined ? data.stats.availableSlots : Math.max(0, cap - app);
         const housefull = data.stats.isHousefull || app >= cap;
@@ -40,9 +48,14 @@ export const DashboardPage = () => {
         setApprovedCount(app);
         setPendingCount(pend);
         setRejectedCount(rej);
+        setRegularTotal(regTot);
+        setVipTotal(vTot);
+        setRegularApproved(regApp);
+        setVipApproved(vApp);
         setCapacity(cap);
         setAvailableSlots(avail);
         setIsHousefull(housefull);
+
 
         if (data.selectedEvent) {
           setSelectedEventName(`${data.selectedEvent.name} (${data.selectedEvent.date})`);
@@ -131,30 +144,41 @@ export const DashboardPage = () => {
 
       {/* Operational Metric Cards (4 Cards Grid) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 lg:gap-5">
-        <div className="p-4 sm:p-5 bg-white border border-stone-200/90 rounded-2xl shadow-xs space-y-1">
+        <div className="p-4 sm:p-5 bg-white border border-stone-200/90 rounded-2xl shadow-xs space-y-1.5">
           <span className="text-[11px] sm:text-xs text-stone-500 font-bold uppercase tracking-wider block">Total Inquiries</span>
-          <span className="text-2xl sm:text-3xl font-black text-stone-900 block truncate">{totalInquiries}</span>
-          <span className="text-[10px] sm:text-[11px] text-stone-400 font-medium block truncate">Total couple entries received</span>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-2xl sm:text-3xl font-black text-stone-900 block truncate">{totalInquiries}</span>
+            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 border border-stone-200">
+              {regularTotal} Public • {vipTotal} VIP
+            </span>
+          </div>
+          <span className="text-[10px] sm:text-[11px] text-stone-400 font-medium block truncate">All couple entries received</span>
         </div>
 
-        <div className="p-4 sm:p-5 bg-white border border-stone-200/90 rounded-2xl shadow-xs space-y-1">
+        <div className="p-4 sm:p-5 bg-white border border-stone-200/90 rounded-2xl shadow-xs space-y-1.5">
           <span className="text-[11px] sm:text-xs text-stone-500 font-bold uppercase tracking-wider block">Approved Passes</span>
-          <span className="text-2xl sm:text-3xl font-black text-emerald-600 block truncate">{approvedCount}</span>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-2xl sm:text-3xl font-black text-emerald-600 block truncate">{approvedCount}</span>
+            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+              {regularApproved} Public • {vipApproved} VIP
+            </span>
+          </div>
           <span className="text-[10px] sm:text-[11px] text-emerald-700/80 font-medium block truncate">Confirmed &amp; active passes</span>
         </div>
 
-        <div className="p-4 sm:p-5 bg-white border border-stone-200/90 rounded-2xl shadow-xs space-y-1">
+        <div className="p-4 sm:p-5 bg-white border border-stone-200/90 rounded-2xl shadow-xs space-y-1.5">
           <span className="text-[11px] sm:text-xs text-stone-500 font-bold uppercase tracking-wider block">Pending Review</span>
           <span className="text-2xl sm:text-3xl font-black text-amber-600 block truncate">{pendingCount}</span>
           <span className="text-[10px] sm:text-[11px] text-amber-700/80 font-medium block truncate">Awaiting review or payment</span>
         </div>
 
-        <div className="p-4 sm:p-5 bg-white border border-stone-200/90 rounded-2xl shadow-xs space-y-1">
+        <div className="p-4 sm:p-5 bg-white border border-stone-200/90 rounded-2xl shadow-xs space-y-1.5">
           <span className="text-[11px] sm:text-xs text-stone-500 font-bold uppercase tracking-wider block">Rejected / Failed</span>
           <span className="text-2xl sm:text-3xl font-black text-rose-600 block truncate">{rejectedCount}</span>
           <span className="text-[10px] sm:text-[11px] text-rose-600/80 font-medium block truncate">Declined or payment failed</span>
         </div>
       </div>
+
 
       {/* Registrations & Inquiries Table View */}
       <RegistrationsPage isEmbedded={true} />

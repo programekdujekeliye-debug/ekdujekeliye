@@ -104,7 +104,21 @@ export const registrationsApi = {
     return apiClient(`/api/submissions/${inquiryId}/permanent`, { method: 'DELETE' });
   },
 
-  async updateSubmission(inquiryId: string, updateData: Partial<Submission>): Promise<{ success: boolean; submission: Submission }> {
+  async updateSubmission(inquiryId: string, updateData: any, photoFile?: File | null): Promise<{ success: boolean; submission: Submission }> {
+    if (photoFile) {
+      const formData = new FormData();
+      Object.keys(updateData).forEach((key) => {
+        if (updateData[key] !== undefined && updateData[key] !== null) {
+          formData.append(key, typeof updateData[key] === 'object' ? JSON.stringify(updateData[key]) : String(updateData[key]));
+        }
+      });
+      formData.append('couplePhoto', photoFile);
+      return apiClient(`/api/submissions/${inquiryId}`, {
+        method: 'PUT',
+        body: formData
+      });
+    }
+
     return apiClient(`/api/submissions/${inquiryId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -112,3 +126,4 @@ export const registrationsApi = {
     });
   }
 };
+
