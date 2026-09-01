@@ -59,6 +59,10 @@ const RegistrationSchema = new mongoose.Schema({
 
 RegistrationSchema.index({ inquiryId: 1 }, { unique: true });
 RegistrationSchema.index({ createdAt: -1 });
+RegistrationSchema.index({ isDeleted: 1, createdAt: -1 });
+RegistrationSchema.index({ isDeleted: 1, isVip: 1, createdAt: -1 });
+RegistrationSchema.index({ isDeleted: 1, isVip: 1, programId: 1, createdAt: -1 });
+RegistrationSchema.index({ isDeleted: 1, isVip: 1, status: 1, createdAt: -1 });
 RegistrationSchema.index({ programId: 1, createdAt: -1 });
 RegistrationSchema.index({ programId: 1, status: 1, isDeleted: 1 });
 RegistrationSchema.index({ programDate: 1, createdAt: -1 });
@@ -67,6 +71,7 @@ RegistrationSchema.index({ phoneNumber: 1, status: 1 });
 RegistrationSchema.index({ phoneNumber: 1, programId: 1, status: 1 });
 RegistrationSchema.index({ 'payment.razorpayOrderId': 1 });
 RegistrationSchema.index({ 'payment.razorpayPaymentId': 1 });
+
 
 // Consent Evaluation Helpers
 export function hasOperationalWhatsappConsent(registration) {

@@ -560,10 +560,14 @@ export const updateSubmission = async (req, res) => {
   try {
     const cleanInquiryId = inquiryId.trim().toUpperCase();
     const existing = await Registration.findOne({
-      inquiryId: { $regex: new RegExp(`^${cleanInquiryId}$`, 'i') },
-      isDeleted: { $ne: true }
+      $or: [
+        { inquiryId: cleanInquiryId, isDeleted: { $ne: true } },
+        { inquiryId: inquiryId.trim(), isDeleted: { $ne: true } },
+        { inquiryId: cleanInquiryId }
+      ]
     });
     if (!existing) return res.status(404).json({ error: 'Submission not found.' });
+
 
     // If transferring event, automatically cascade event name, date, and timing
     if (updateData.programId && updateData.programId !== existing.programId) {
