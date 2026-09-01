@@ -142,8 +142,8 @@ export default function PersonalizedInvitationPage() {
     canvas.height = 1024;
 
     const templateImg = new Image();
-    const templatePath = sub.program?.cardTemplate || sub.cardTemplate || '/card_template.png';
-    const templateImgSrc = templatePath.startsWith('data:') || templatePath.startsWith('http')
+    const templatePath = (sub.program as any)?.cardTemplateUrl || sub.program?.cardTemplate || (sub as any)?.cardTemplateUrl || sub.cardTemplate || '/card_template.png';
+    let templateImgSrc = templatePath.startsWith('data:') || templatePath.startsWith('http')
       ? templatePath
       : templatePath.startsWith('/')
         ? templatePath
@@ -152,6 +152,17 @@ export default function PersonalizedInvitationPage() {
     if (templateImgSrc.startsWith('http')) {
       templateImg.crossOrigin = 'anonymous';
     }
+
+    let templateRetried = false;
+    templateImg.onerror = () => {
+      if (!templateRetried && templateImgSrc.startsWith('http')) {
+        templateRetried = true;
+        templateImg.removeAttribute('crossOrigin');
+        templateImg.src = templateImgSrc + (templateImgSrc.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
+      } else if (templateImgSrc !== '/card_template.png') {
+        templateImg.src = '/card_template.png';
+      }
+    };
 
     templateImg.onload = () => {
       const tempCanvas = document.createElement('canvas');
@@ -262,16 +273,6 @@ export default function PersonalizedInvitationPage() {
       coupleImg.src = coupleImgSrc;
     };
 
-    let templateRetried = false;
-    templateImg.onerror = () => {
-      if (!templateRetried && templateImgSrc.startsWith('http')) {
-        templateRetried = true;
-        templateImg.removeAttribute('crossOrigin');
-        templateImg.src = templateImgSrc + (templateImgSrc.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
-      } else {
-        setCardReady(true);
-      }
-    };
     templateImg.src = templateImgSrc;
   }, [userZoom, userOffsetY]);
 

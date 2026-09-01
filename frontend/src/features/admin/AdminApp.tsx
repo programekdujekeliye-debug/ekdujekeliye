@@ -9,6 +9,7 @@ import { ScannerPage } from './scanner/ScannerPage';
 import { EventsPage } from './events/EventsPage';
 import { RegistrationsPage } from './registrations/RegistrationsPage';
 import { WhatsAppPage } from './whatsapp/WhatsAppPage';
+import { WhatsAppInboxPage } from './whatsapp/WhatsAppInboxPage';
 import { VipPassesPage } from './vip/VipPassesPage';
 import { SettingsPage } from './settings/SettingsPage';
 import { BatchExportModal } from './reports/BatchExportModal';
@@ -74,6 +75,7 @@ const NormalAdminAppContent = () => {
       {activeSection === 'registrations' && <RegistrationsPage />}
       {activeSection === 'vip_passes' && <VipPassesPage />}
       {activeSection === 'whatsapp' && <WhatsAppPage />}
+      {activeSection === 'whatsapp_inbox' && <WhatsAppInboxPage />}
       {activeSection === 'settings' && <SettingsPage />}
 
       {/* Export Modal */}

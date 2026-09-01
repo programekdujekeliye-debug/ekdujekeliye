@@ -275,5 +275,194 @@ export const whatsappApi = {
     return apiClient(`/api/whatsapp/templates/${id}`, {
       method: 'DELETE'
     });
+  },
+
+  // ==========================================
+  // TWO-WAY WHATSAPP HUMAN SUPPORT INBOX
+  // ==========================================
+
+  async getConversations(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    filter?: string;
+    eventId?: string;
+  } = {}): Promise<{
+    success: boolean;
+    pagination: { total: number; page: number; limit: number; totalPages: number };
+    conversations: WhatsappConversationItem[];
+  }> {
+    const query = new URLSearchParams();
+    if (params.page) query.set('page', String(params.page));
+    if (params.limit) query.set('limit', String(params.limit));
+    if (params.search) query.set('search', params.search);
+    if (params.filter) query.set('filter', params.filter);
+    if (params.eventId) query.set('eventId', params.eventId);
+    return apiClient(`/api/whatsapp/conversations?${query.toString()}`);
+  },
+
+  async getConversationStats(): Promise<{
+    success: boolean;
+    stats: {
+      totalConversations: number;
+      openCount: number;
+      unreadCount: number;
+      unassignedCount: number;
+      windowExpiringSoonCount: number;
+    };
+  }> {
+    return apiClient('/api/whatsapp/conversations/stats');
+  },
+
+  async getConversationDetails(conversationId: string): Promise<{
+    success: boolean;
+    conversation: WhatsappConversationItem;
+    messages: WhatsappThreadMessage[];
+    notes: ConversationNote[];
+  }> {
+    return apiClient(`/api/whatsapp/conversations/${conversationId}`);
+  },
+
+  async replyConversation(conversationId: string, text: string, replyToMessageId?: string): Promise<{
+    success: boolean;
+    status: string;
+    providerMessageId: string;
+    message: any;
+  }> {
+    return apiClient(`/api/whatsapp/conversations/${conversationId}/reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, replyToMessageId })
+    });
+  },
+
+  async templateReplyConversation(conversationId: string, templateKey: string, variables?: Record<string, any>): Promise<{
+    success: boolean;
+    status: string;
+    providerMessageId: string;
+    message: string;
+  }> {
+    return apiClient(`/api/whatsapp/conversations/${conversationId}/template-reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ templateKey, variables })
+    });
+  },
+
+  async addConversationNote(conversationId: string, text: string): Promise<{
+    success: boolean;
+    notes: ConversationNote[];
+  }> {
+    return apiClient(`/api/whatsapp/conversations/${conversationId}/notes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+  },
+
+  async markConversationRead(conversationId: string): Promise<{ success: boolean; unreadCount: number }> {
+    return apiClient(`/api/whatsapp/conversations/${conversationId}/read`, {
+      method: 'POST'
+    });
+  },
+
+  async assignConversation(conversationId: string, adminId?: string | null, adminName?: string | null): Promise<{
+    success: boolean;
+    conversation: WhatsappConversationItem;
+  }> {
+    return apiClient(`/api/whatsapp/conversations/${conversationId}/assign`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminId, adminName })
+    });
+  },
+
+  async updateConversationStatus(conversationId: string, status: 'OPEN' | 'CLOSED'): Promise<{
+    success: boolean;
+    status: string;
+  }> {
+    return apiClient(`/api/whatsapp/conversations/${conversationId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
   }
 };
+
+export interface ConversationNote {
+  _id?: string;
+  text: string;
+  adminId?: string;
+  adminName?: string;
+  createdAt: string;
+}
+
+export interface WhatsappConversationItem {
+  _id: string;
+  phone: string;
+  phoneMasked: string;
+  customerName: string;
+  inquiryId?: string;
+  eventId?: string;
+  status: 'OPEN' | 'CLOSED';
+  unreadCount: number;
+  lastMessageAt: string;
+  lastMessagePreview?: string;
+  lastMessageDirection?: 'INBOUND' | 'OUTBOUND';
+  lastMessageStatus?: string;
+  lastInboundAt?: string;
+  lastOutboundAt?: string;
+  customerServiceWindowExpiresAt?: string;
+  isWindowOpen: boolean;
+  windowRemainingSeconds: number;
+  assignedAdminId?: string;
+  assignedAdminName?: string;
+  notesCount?: number;
+  paymentStatus?: 'PAID' | 'PENDING' | 'UNKNOWN';
+  pass?: {
+    passId?: string;
+    status?: string;
+    version?: number;
+    tier?: string;
+    scannedAt?: string;
+    isRevoked?: boolean;
+  };
+  registration?: {
+    _id: string;
+    inquiryId: string;
+    coupleName: string;
+    programId?: string;
+    programName?: string;
+    programDate?: string;
+    paymentStatus: 'PAID' | 'PENDING' | 'UNKNOWN';
+    paymentAmount: number;
+    attendance: string;
+  } | null;
+}
+
+export interface WhatsappThreadMessage {
+  _id: string;
+  messageId?: string;
+  direction: 'INBOUND' | 'OUTBOUND';
+  status: string;
+  content: string;
+  contentType: string;
+  mediaId?: string;
+  mediaUrl?: string;
+  mediaMimeType?: string;
+  mediaCaption?: string;
+  templateName?: string;
+  messageType?: string;
+  trigger?: string;
+  executionSource?: string;
+  sentByAdminName?: string;
+  isInternalNote?: boolean;
+  providerMessageId?: string;
+  providerErrorCode?: string;
+  providerErrorMessage?: string;
+  receivedAt?: string;
+  sentAt?: string;
+  deliveredAt?: string;
+  readAt?: string;
+  createdAt: string;
+}

@@ -49,6 +49,11 @@ export const SUPER_ADMIN_NAVIGATION: SuperAdminNavItem[] = [
     iconName: 'MessageCircleIcon'
   },
   {
+    id: 'whatsapp_inbox',
+    label: 'Support Inbox',
+    iconName: 'MessageSquareIcon'
+  },
+  {
     id: 'settings',
     label: 'Global Settings',
     iconName: 'SettingsIcon'

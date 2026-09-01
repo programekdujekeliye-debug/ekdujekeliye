@@ -8,6 +8,7 @@ export type AdminSection =
   | 'vip_passes'
   | 'finance'
   | 'whatsapp'
+  | 'whatsapp_inbox'
   | 'settings'
   | 'resources'
   | 'integrations'

@@ -155,21 +155,27 @@ export class EventService {
    */
   async getEventBySlug(slug) {
     if (!slug) return null;
-    const normalizedSlug = slug.toLowerCase();
+    const normalizedSlug = String(slug).toLowerCase().trim();
 
     // 1. Fast path: Memory Cache hit (0ms)
     if (slugCache.has(normalizedSlug)) {
       return slugCache.get(normalizedSlug);
     }
 
-    // 2. Database lookup: Try direct indexed slug first, then ID
+    // 2. Database lookup: Try direct indexed slug first, then ID, then Date, then ObjectId
     let event = await Event.findOne({ slug: normalizedSlug }).lean();
     if (!event) {
       event = await Event.findOne({ id: slug }).lean();
     }
     if (!event) {
+      event = await Event.findOne({ date: slug }).lean();
+    }
+    if (!event && typeof slug === 'string' && slug.match(/^[0-9a-fA-F]{24}$/)) {
+      event = await Event.findOne({ _id: slug }).lean();
+    }
+    if (!event) {
       event = await Event.findOne({
-        $or: [{ slug: normalizedSlug }, { id: slug }]
+        $or: [{ slug: normalizedSlug }, { id: slug }, { date: slug }]
       }).lean();
     }
 
@@ -184,6 +190,7 @@ export class EventService {
     // Cache result
     if (event.slug) slugCache.set(event.slug.toLowerCase(), mapped);
     if (event.id) slugCache.set(event.id.toLowerCase(), mapped);
+    if (event.date) slugCache.set(event.date.toLowerCase(), mapped);
 
     return mapped;
   }

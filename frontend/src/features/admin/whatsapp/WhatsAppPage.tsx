@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useTransition } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   whatsappApi,
   EventCommunicationDashboardResponse,
@@ -23,15 +23,22 @@ import {
   SearchIcon,
   ClockIcon,
   RefreshCwIcon,
-  ChevronDownIcon,
-  EyeIcon
+  EyeIcon,
+  ActivityIcon,
+  FileTextIcon,
+  CameraIcon,
+  ExternalLinkIcon,
+  UsersIcon,
+  XIcon
 } from '../../../components/Icons';
-import { LuxurySelect } from '../../../components/LuxurySelect';
+import { WhatsAppInbox } from './WhatsAppInbox';
+import { LuxurySelect, SelectOption } from '../../../components/LuxurySelect';
 import toast from 'react-hot-toast';
 
 export const WhatsAppPage = () => {
-  // Navigation Sub-tabs: 'dashboard' | 'templates' | 'logs'
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'templates' | 'logs'>('dashboard');
+  // Navigation Sub-tabs: 'dashboard' | 'inbox' | 'templates' | 'logs'
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inbox' | 'templates' | 'logs'>('dashboard');
+  const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
 
   // Events & Selected Event
   const [events, setEvents] = useState<Program[]>([]);
@@ -48,8 +55,6 @@ export const WhatsAppPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('ALL');
   const [healthFilter, setHealthFilter] = useState('ALL');
-  const [messageStatusFilter, setMessageStatusFilter] = useState('ALL');
-  const [attendanceFilter, setAttendanceFilter] = useState('ALL');
 
   // Person Timeline Drawer Modal
   const [selectedInquiryId, setSelectedInquiryId] = useState<string | null>(null);
@@ -85,6 +90,10 @@ export const WhatsAppPage = () => {
   // Logs Tab State
   const [logs, setLogs] = useState<WhatsappLogItem[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [logStatusFilter, setLogStatusFilter] = useState('ALL');
+  const [logSearch, setLogSearch] = useState('');
+
+  // Queue Worker Trigger State
   const [runningWorker, setRunningWorker] = useState(false);
 
   const handleRunWorker = async () => {
@@ -93,7 +102,7 @@ export const WhatsAppPage = () => {
       const res = await whatsappApi.runWorker();
       if (res?.success) {
         const summary = res.summary || {};
-        toast.success(`Worker run complete: Sent ${summary.sent ?? 0}, Processed ${summary.processed ?? 0}`);
+        toast.success(`Queue worker dispatched. Sent: ${summary.sent ?? 0}, Processed: ${summary.processed ?? 0}`);
         await Promise.all([
           fetchDashboardData(selectedEventId),
           fetchRegistrations(selectedEventId, pagination.page)
@@ -161,9 +170,7 @@ export const WhatsAppPage = () => {
         limit: pagination.limit,
         search: searchQuery,
         paymentStatus: paymentFilter,
-        health: healthFilter,
-        messageStatus: messageStatusFilter,
-        attendance: attendanceFilter
+        health: healthFilter
       });
       if (res && res.rows) {
         setRegistrations(res.rows);
@@ -182,7 +189,7 @@ export const WhatsAppPage = () => {
       fetchDashboardData(selectedEventId);
       fetchRegistrations(selectedEventId, 1);
     }
-  }, [selectedEventId, paymentFilter, healthFilter, messageStatusFilter, attendanceFilter]);
+  }, [selectedEventId, paymentFilter, healthFilter]);
 
   // Debounced search trigger
   useEffect(() => {
@@ -219,8 +226,7 @@ export const WhatsAppPage = () => {
       setResendStatus(null);
       const res = await whatsappApi.resendMessage(inquiryId, templateKey);
       if (res.success) {
-        setResendStatus('Message successfully queued / sent!');
-        // Refresh timeline
+        setResendStatus('Message successfully queued.');
         openPersonDrawer(inquiryId);
       } else {
         setResendStatus(`Failed: ${res.message}`);
@@ -258,7 +264,7 @@ export const WhatsAppPage = () => {
         templateKey: broadcastTemplateKey,
         customMessage: broadcastCustomMsg
       });
-      toast.success(`Broadcast queued! (${res.queuedCount} messages scheduled)`);
+      toast.success(`Broadcast queued (${res.queuedCount} messages scheduled).`);
       setShowBroadcastModal(false);
       fetchDashboardData(selectedEventId);
       fetchRegistrations(selectedEventId, pagination.page);
@@ -276,7 +282,7 @@ export const WhatsAppPage = () => {
     try {
       setSendingGallery(true);
       const res = await whatsappApi.triggerGallery(selectedEventId, galleryUrl);
-      toast.success(`Gallery link queued for ${res.queuedCount} participants!`);
+      toast.success(`Gallery link queued for ${res.queuedCount} participants.`);
       setShowGalleryModal(false);
       fetchDashboardData(selectedEventId);
       fetchRegistrations(selectedEventId, pagination.page);
@@ -291,7 +297,7 @@ export const WhatsAppPage = () => {
   const fetchLogs = async () => {
     try {
       setLoadingLogs(true);
-      const res = await whatsappApi.getLogs(50);
+      const res = await whatsappApi.getLogs(100);
       if (res && res.logs) setLogs(res.logs);
     } catch (err) {
       console.error('Failed to refresh logs:', err);
@@ -299,6 +305,21 @@ export const WhatsAppPage = () => {
       setLoadingLogs(false);
     }
   };
+
+  const fetchInboxStats = async () => {
+    try {
+      const res = await whatsappApi.getConversationStats();
+      if (res.success && res.stats) {
+        setInboxUnreadCount(res.stats.unreadCount || 0);
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    fetchInboxStats();
+    const interval = setInterval(fetchInboxStats, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'logs') fetchLogs();
@@ -329,105 +350,145 @@ export const WhatsAppPage = () => {
     const s = (status || '').toUpperCase();
     if (s === 'READ') {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-sky-50 text-sky-700 border border-sky-200">
           READ
         </span>
       );
     }
     if (s === 'DELIVERED') {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-teal-100 text-teal-800 border border-teal-300">
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
           DELIVERED
         </span>
       );
     }
     if (s === 'SENT') {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-300">
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
           SENT
         </span>
       );
     }
     if (s === 'QUEUED' || s === 'SCHEDULED' || s === 'PENDING') {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300">
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200">
           {s}
         </span>
       );
     }
     if (s === 'FAILED') {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300">
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200">
           FAILED
         </span>
       );
     }
     if (s === 'NOT_REQUIRED') {
       return (
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-400 border border-slate-200">
           NOT REQUIRED
         </span>
       );
     }
-    // Missing reason badge
     return (
-      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-50 text-slate-500 border border-slate-200" title={reasonIfMissing || 'Not sent'}>
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-50 text-slate-400 border border-slate-200" title={reasonIfMissing || 'Not sent'}>
         {reasonIfMissing ? reasonIfMissing.replace(/_/g, ' ') : 'NOT SENT'}
       </span>
     );
   };
 
   const summary = dashboardData?.summary;
+  const activeTemplateObj = metaTemplates.find(t => t.key === selectedTemplateKey);
+
+  // Filtered Logs
+  const filteredLogs = logs.filter(log => {
+    if (logStatusFilter !== 'ALL' && log.status !== logStatusFilter) return false;
+    if (logSearch) {
+      const q = logSearch.toLowerCase();
+      return (
+        log.recipientPhone?.toLowerCase().includes(q) ||
+        log.inquiryId?.toLowerCase().includes(q) ||
+        log.templateName?.toLowerCase().includes(q) ||
+        log.providerMessageId?.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
-      {/* Top Header & Sub-Navigation */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center">
-              <WhatsappIcon className="w-5 h-5" />
+    <div className="space-y-6 max-w-7xl mx-auto pb-20">
+      {/* ========================================================================= */}
+      {/* 1. TOP EDKL THEMED COMMAND HEADER & SUB-NAVIGATION */}
+      {/* ========================================================================= */}
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xs border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center shadow-xs flex-shrink-0">
+            <WhatsappIcon className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-black tracking-tight text-slate-900">WhatsApp Telemetry &amp; Support Hub</h1>
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-extrabold uppercase flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                Cloud API v26.0
+              </span>
             </div>
-            <div>
-              <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">WhatsApp Communication Center</h1>
-              <p className="text-xs text-slate-500 font-medium">
-                Live delivery &amp; read ledger, event lifecycle monitoring, broadcast controls, and per-person history.
-              </p>
-            </div>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Live delivery ledger, automated queue monitor, two-way support chat, and broadcast engine.
+            </p>
           </div>
         </div>
 
         {/* Tab Buttons */}
-        <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 self-start md:self-auto">
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 self-start md:self-auto overflow-x-auto scrollbar-none w-full md:w-auto">
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${
+            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 flex-1 md:flex-none justify-center ${
               activeTab === 'dashboard'
-                ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
             }`}
           >
-            Event Dashboard
+            <ActivityIcon className="w-3.5 h-3.5" />
+            <span>Event Dashboard</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('inbox')}
+            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 flex-1 md:flex-none justify-center ${
+              activeTab === 'inbox'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+            }`}
+          >
+            <MessageCircleIcon className="w-3.5 h-3.5" />
+            <span>Support Inbox</span>
+            {inboxUnreadCount > 0 && (
+              <span className="px-1.5 py-0.2 bg-white text-rose-700 rounded-full text-[10px] font-black shadow-xs">
+                {inboxUnreadCount}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('templates')}
-            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${
+            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 flex-1 md:flex-none justify-center ${
               activeTab === 'templates'
-                ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
             }`}
           >
-            Templates &amp; Test Sender
+            <FileTextIcon className="w-3.5 h-3.5" />
+            <span>Templates &amp; Sandbox</span>
           </button>
           <button
             onClick={() => setActiveTab('logs')}
-            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${
+            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 flex-1 md:flex-none justify-center ${
               activeTab === 'logs'
-                ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
             }`}
           >
-            Delivery Audit Logs
+            <ClockIcon className="w-3.5 h-3.5" />
+            <span>Live Audit Logs</span>
           </button>
         </div>
       </div>
@@ -437,23 +498,32 @@ export const WhatsAppPage = () => {
       {/* ========================================================================= */}
       {activeTab === 'dashboard' && (
         <div className="space-y-6">
-          {/* Event Selector & Actions Bar */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <label className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
-                Select Seminar / Event:
-              </label>
-              <select
-                value={selectedEventId}
-                onChange={(e) => setSelectedEventId(e.target.value)}
-                className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-rose-500 min-w-[280px]"
-              >
-                {events.map((evt) => (
-                  <option key={evt.id || (evt as any)._id} value={evt.id || (evt as any)._id}>
-                    {evt.name} — {evt.city} ({evt.date || 'TBA'})
-                  </option>
-                ))}
-              </select>
+          {/* Event Selector & Actions Strip */}
+          <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 min-w-0 flex-1 max-w-xl">
+              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 shrink-0">
+                <span className="w-2 h-2 rounded-full bg-rose-600" />
+                Active Seminar / Slot:
+              </span>
+              <div className="flex-1 min-w-[280px] sm:min-w-[340px]">
+                <LuxurySelect
+                  value={selectedEventId}
+                  onChange={(val) => setSelectedEventId(val)}
+                  options={[
+                    { value: 'all', label: 'All Seminar Slots (Global Overview)' },
+                    ...events.map((evt) => ({
+                      value: evt.id || (evt as any)._id,
+                      label: `${evt.name} — ${evt.city}`,
+                      badge: evt.date || 'TBA',
+                      sublabel: evt.venue
+                    }))
+                  ]}
+                  placeholder="Select Seminar Slot..."
+                  searchable
+                  variant="card"
+                  size="md"
+                />
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -475,8 +545,8 @@ export const WhatsAppPage = () => {
                 disabled={loadingDashboard || loadingRegistrations}
                 className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold border border-slate-200 flex items-center gap-1.5 transition-all cursor-pointer"
               >
-                <RefreshCwIcon className={`w-3.5 h-3.5 ${loadingDashboard ? 'animate-spin' : ''}`} />
-                <span>Refresh Stats</span>
+                <RefreshCwIcon className={`w-3.5 h-3.5 ${loadingDashboard ? 'animate-spin text-rose-600' : ''}`} />
+                <span>Refresh</span>
               </button>
 
               <button
@@ -487,155 +557,196 @@ export const WhatsAppPage = () => {
                 className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
               >
                 <MessageCircleIcon className="w-3.5 h-3.5" />
-                <span>Send Event Broadcast</span>
+                <span>Broadcast</span>
               </button>
 
               <button
                 onClick={() => setShowGalleryModal(true)}
                 className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
               >
-                <span>Publish Gallery Link</span>
+                <CameraIcon className="w-3.5 h-3.5" />
+                <span>Gallery Link</span>
               </button>
             </div>
           </div>
 
-          {/* Top Aggregate Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+          {/* Bento KPI Matrix */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {/* 1. Registrations */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-1">
+            <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 shadow-xs space-y-1.5">
               <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Registrations</span>
-              <div className="text-xl font-extrabold text-slate-900">
+              <div className="text-xl sm:text-2xl font-black text-slate-900">
                 {summary?.totalRegistrations ?? 0}
               </div>
               <div className="text-[10px] text-slate-500 font-medium">
-                <span className="text-emerald-700 font-bold">{summary?.confirmedRegistrations ?? 0} Paid</span> &bull; {summary?.paymentPendingRegistrations ?? 0} Pending
+                <span className="text-emerald-700 font-extrabold">{summary?.confirmedRegistrations ?? 0} Paid</span> &bull; {summary?.paymentPendingRegistrations ?? 0} Pending
+              </div>
+              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
+                <div
+                  className="bg-emerald-600 h-full"
+                  style={{
+                    width: `${summary?.totalRegistrations ? ((summary.confirmedRegistrations || 0) / summary.totalRegistrations) * 100 : 0}%`
+                  }}
+                />
+                <div
+                  className="bg-amber-500 h-full"
+                  style={{
+                    width: `${summary?.totalRegistrations ? ((summary.paymentPendingRegistrations || 0) / summary.totalRegistrations) * 100 : 0}%`
+                  }}
+                />
               </div>
             </div>
 
             {/* 2. Messages Sent */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-1">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Total Sent</span>
-              <div className="text-xl font-extrabold text-blue-700">
+            <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 shadow-xs space-y-1.5">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Total Dispatched</span>
+              <div className="text-xl sm:text-2xl font-black text-blue-700">
                 {summary?.totalMessagesSent ?? 0}
               </div>
               <div className="text-[10px] text-slate-500 font-medium">
                 Meta accepted wamid
               </div>
+              <div className="w-full h-1.5 bg-blue-100 rounded-full overflow-hidden">
+                <div className="bg-blue-600 h-full w-full" />
+              </div>
             </div>
 
             {/* 3. Delivered */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-1">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Delivered</span>
-              <div className="text-xl font-extrabold text-teal-700">
+            <div className="bg-white border border-emerald-200 bg-emerald-50/30 rounded-2xl sm:rounded-3xl p-4 shadow-xs space-y-1.5">
+              <span className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider block">Delivered</span>
+              <div className="text-xl sm:text-2xl font-black text-emerald-700">
                 {summary?.totalMessagesDelivered ?? 0}
               </div>
-              <div className="text-[10px] text-teal-700 font-bold">
+              <div className="text-[10px] text-emerald-700 font-bold">
                 {summary?.deliveryRate ?? 0}% Delivery Rate
+              </div>
+              <div className="w-full h-1.5 bg-emerald-100 rounded-full overflow-hidden">
+                <div className="bg-emerald-600 h-full" style={{ width: `${summary?.deliveryRate || 0}%` }} />
               </div>
             </div>
 
             {/* 4. Read */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-1">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Read (Opened)</span>
-              <div className="text-xl font-extrabold text-emerald-700">
+            <div className="bg-white border border-sky-200 bg-sky-50/30 rounded-2xl sm:rounded-3xl p-4 shadow-xs space-y-1.5">
+              <span className="text-[10px] font-extrabold text-sky-700 uppercase tracking-wider block">Read (Opened)</span>
+              <div className="text-xl sm:text-2xl font-black text-sky-700">
                 {summary?.totalMessagesRead ?? 0}
               </div>
-              <div className="text-[10px] text-emerald-700 font-bold">
+              <div className="text-[10px] text-sky-700 font-bold">
                 {summary?.readRate ?? 0}% of delivered
+              </div>
+              <div className="w-full h-1.5 bg-sky-100 rounded-full overflow-hidden">
+                <div className="bg-sky-600 h-full" style={{ width: `${summary?.readRate || 0}%` }} />
               </div>
             </div>
 
             {/* 5. Failed */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-1">
+            <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 shadow-xs space-y-1.5">
               <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Failed</span>
-              <div className="text-xl font-extrabold text-rose-700">
+              <div className={`text-xl sm:text-2xl font-black ${(summary?.totalMessagesFailed ?? 0) > 0 ? 'text-rose-700' : 'text-slate-400'}`}>
                 {summary?.totalMessagesFailed ?? 0}
               </div>
-              <div className="text-[10px] text-rose-700 font-bold">
-                {summary?.failureRate ?? 0}% Failure Rate
+              <div className="text-[10px] text-slate-500 font-medium">
+                {(summary?.totalMessagesFailed ?? 0) === 0 ? '0% Failure Rate' : `${summary?.failureRate}% Failure Rate`}
+              </div>
+              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div className="bg-rose-500 h-full" style={{ width: `${summary?.failureRate || 0}%` }} />
               </div>
             </div>
 
             {/* 6. Action Needed */}
             <div
-              onClick={() => setHealthFilter('ACTION_NEEDED')}
-              className={`border rounded-2xl p-4 shadow-xs space-y-1 cursor-pointer transition-all ${
+              onClick={() => setHealthFilter(healthFilter === 'ACTION_NEEDED' ? 'ALL' : 'ACTION_NEEDED')}
+              className={`border rounded-2xl sm:rounded-3xl p-4 shadow-xs space-y-1.5 cursor-pointer transition-all ${
                 healthFilter === 'ACTION_NEEDED'
-                  ? 'bg-rose-50 border-rose-300 ring-2 ring-rose-500'
+                  ? 'bg-rose-50 border-rose-300 ring-2 ring-rose-500/30'
                   : 'bg-white border-slate-200 hover:border-rose-300'
               }`}
             >
-              <span className="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider block">Action Needed</span>
-              <div className="text-xl font-extrabold text-rose-800">
+              <span className="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider block flex items-center justify-between">
+                <span>Action Needed</span>
+                {healthFilter === 'ACTION_NEEDED' && <span className="text-[9px] bg-rose-600 text-white px-1.5 py-0.2 rounded font-bold">FILTER ON</span>}
+              </span>
+              <div className="text-xl sm:text-2xl font-black text-rose-700">
                 {summary?.actionNeededCount ?? 0}
               </div>
-              <div className="text-[10px] text-rose-600 font-bold">
+              <div className="text-[10px] text-rose-600 font-medium">
                 Failed dispatches
+              </div>
+              <div className="w-full h-1.5 bg-rose-100 rounded-full overflow-hidden">
+                <div className="bg-rose-600 h-full w-full" />
               </div>
             </div>
           </div>
 
-          {/* Lifecycle Message Performance Table */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+          {/* Lifecycle Message Performance Matrix */}
+          <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
               <div>
-                <h3 className="text-sm font-extrabold text-slate-900 tracking-tight">Lifecycle Message Performance Breakdown</h3>
-                <p className="text-xs text-slate-500 font-medium">Real-time status metrics across each automated milestone.</p>
+                <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
+                  <ActivityIcon className="w-4 h-4 text-rose-700" />
+                  <span>Lifecycle Milestone Performance Breakdown</span>
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">Automated milestone dispatch, delivery rate, and read funnel.</p>
               </div>
-              <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg border border-slate-200">
-                Scheduled: {summary?.totalMessagesScheduled ?? 0} pending
-              </span>
+              {summary?.totalMessagesScheduled ? (
+                <span className="px-3 py-1 bg-amber-50 text-amber-900 border border-amber-200 rounded-full text-xs font-bold self-start sm:self-auto flex items-center gap-1">
+                  <ClockIcon className="w-3.5 h-3.5 text-amber-700" />
+                  <span>{summary.totalMessagesScheduled} pending in queue</span>
+                </span>
+              ) : null}
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto touch-scroll">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider bg-slate-50/70">
-                    <th className="py-2.5 px-3">Message Type</th>
-                    <th className="py-2.5 px-3">Eligible</th>
-                    <th className="py-2.5 px-3">Queued / Scheduled</th>
-                    <th className="py-2.5 px-3">Sent</th>
-                    <th className="py-2.5 px-3">Delivered</th>
-                    <th className="py-2.5 px-3">Read</th>
-                    <th className="py-2.5 px-3">Failed</th>
-                    <th className="py-2.5 px-3 text-right">Delivery Rate</th>
-                    <th className="py-2.5 px-3 text-right">Read Rate</th>
+                    <th className="py-2.5 px-3">Milestone Type</th>
+                    <th className="py-2.5 px-2.5 text-center">Eligible</th>
+                    <th className="py-2.5 px-2.5 text-center">Queued / Due</th>
+                    <th className="py-2.5 px-2.5 text-center">Sent</th>
+                    <th className="py-2.5 px-2.5 text-center">Delivered</th>
+                    <th className="py-2.5 px-2.5 text-center">Read</th>
+                    <th className="py-2.5 px-2.5 text-center">Failed</th>
+                    <th className="py-2.5 px-3">Delivery Rate</th>
+                    <th className="py-2.5 px-3">Read Rate</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
                   {dashboardData?.messageTypeStats &&
-                    Object.entries(dashboardData.messageTypeStats).map(([key, st]) => (
-                      <tr key={key} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-3 px-3 font-bold text-slate-900 capitalize">
-                          {key.replace(/_/g, ' ')}
+                    Object.entries(dashboardData.messageTypeStats).map(([msgType, m]) => (
+                      <tr key={msgType} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-2.5 px-3 font-bold text-slate-900 capitalize">
+                          {msgType.replace(/_/g, ' ')}
                         </td>
-                        <td className="py-3 px-3 text-slate-600 font-mono">{st.eligible}</td>
-                        <td className="py-3 px-3">
-                          {st.queued > 0 ? (
-                            <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded text-[10px] font-bold">
-                              {st.queued} queued
+                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-slate-600">{m.eligible}</td>
+                        <td className="py-2.5 px-2.5 text-center">
+                          {m.queued > 0 ? (
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-900 font-bold rounded text-[10px]">
+                              {m.queued} queued
                             </span>
                           ) : (
                             <span className="text-slate-400 font-mono">0</span>
                           )}
                         </td>
-                        <td className="py-3 px-3 text-blue-700 font-mono font-bold">{st.sent}</td>
-                        <td className="py-3 px-3 text-teal-700 font-mono font-bold">{st.delivered}</td>
-                        <td className="py-3 px-3 text-emerald-700 font-mono font-bold">{st.read}</td>
-                        <td className="py-3 px-3">
-                          {st.failed > 0 ? (
-                            <span className="px-2 py-0.5 bg-rose-50 text-rose-800 border border-rose-200 rounded text-[10px] font-bold font-mono">
-                              {st.failed} failed
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 font-mono">0</span>
-                          )}
+                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-blue-700">{m.sent}</td>
+                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-emerald-700">{m.delivered}</td>
+                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-sky-700">{m.read}</td>
+                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-rose-700">{m.failed}</td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-emerald-700 w-8">{m.deliveryRate}%</span>
+                            <div className="flex-1 max-w-[80px] h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="bg-emerald-600 h-full" style={{ width: `${m.deliveryRate}%` }} />
+                            </div>
+                          </div>
                         </td>
-                        <td className="py-3 px-3 text-right font-mono font-bold text-teal-800">
-                          {st.deliveryRate}%
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono font-bold text-emerald-800">
-                          {st.readRate}%
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sky-700 w-8">{m.readRate}%</span>
+                            <div className="flex-1 max-w-[80px] h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="bg-sky-600 h-full" style={{ width: `${m.readRate}%` }} />
+                            </div>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -644,71 +755,74 @@ export const WhatsAppPage = () => {
             </div>
           </div>
 
-          {/* ========================================================================= */}
-          {/* PER-PERSON COMMUNICATION TABLE */}
-          {/* ========================================================================= */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          {/* Registrations Communication Ledger */}
+          <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xs space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
               <div>
-                <h3 className="text-sm font-extrabold text-slate-900 tracking-tight">
-                  Couple / Registration Communication Ledger
+                <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
+                  <UsersIcon className="w-4 h-4 text-rose-600" />
+                  <span>Attendee Communication Ledger</span>
                 </h3>
-                <p className="text-xs text-slate-500 font-medium">
-                  Detailed delivery journey for each couple. Click any row to view full timestamp timeline &amp; resend controls.
-                </p>
+                <p className="text-xs text-slate-500 font-medium">Per-couple real-time delivery state, payment status, and timeline drawer.</p>
               </div>
 
-              {/* Filters & Search Row */}
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative">
-                  <SearchIcon className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              {/* Multi Filter Toolbar */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <div className="relative flex-1 sm:flex-none">
+                  <SearchIcon className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Search name, phone, ID..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500 w-48 sm:w-56"
+                    placeholder="Search couple name, phone, EK-ID..."
+                    className="w-full sm:w-auto pl-8 pr-8 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500 min-w-[220px]"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                      title="Clear search"
+                    >
+                      <XIcon className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="w-[140px]">
+                  <LuxurySelect
+                    value={paymentFilter}
+                    onChange={(val) => setPaymentFilter(val as any)}
+                    options={[
+                      { value: 'ALL', label: 'Payment: All' },
+                      { value: 'PAID', label: 'PAID Only', badge: 'PAID' },
+                      { value: 'PENDING', label: 'PENDING Only', badge: 'PENDING' }
+                    ]}
+                    placeholder="Payment..."
+                    variant="card"
+                    size="sm"
                   />
                 </div>
 
-                <select
-                  value={paymentFilter}
-                  onChange={(e) => setPaymentFilter(e.target.value)}
-                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
-                >
-                  <option value="ALL">Payment: All</option>
-                  <option value="PAID">Paid Only</option>
-                  <option value="PENDING">Pending Only</option>
-                  <option value="FAILED">Failed Payment</option>
-                </select>
-
-                <select
-                  value={healthFilter}
-                  onChange={(e) => setHealthFilter(e.target.value)}
-                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
-                >
-                  <option value="ALL">Health: All</option>
-                  <option value="HEALTHY">Healthy Only</option>
-                  <option value="ACTION_NEEDED">Action Needed</option>
-                  <option value="PENDING">Pending Only</option>
-                </select>
-
-                <select
-                  value={messageStatusFilter}
-                  onChange={(e) => setMessageStatusFilter(e.target.value)}
-                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
-                >
-                  <option value="ALL">Delivery: All</option>
-                  <option value="READ">Read (Opened)</option>
-                  <option value="DELIVERED_NOT_READ">Delivered Unread</option>
-                  <option value="SENT_NOT_DELIVERED">Sent Undelivered</option>
-                  <option value="FAILED">Failed Dispatches</option>
-                </select>
+                <div className="w-[155px]">
+                  <LuxurySelect
+                    value={healthFilter}
+                    onChange={(val) => setHealthFilter(val as any)}
+                    options={[
+                      { value: 'ALL', label: 'Health: All' },
+                      { value: 'HEALTHY', label: 'HEALTHY', badge: 'OK' },
+                      { value: 'ACTION_NEEDED', label: 'ACTION NEEDED', badge: 'FAIL' },
+                      { value: 'IN_PROGRESS', label: 'IN PROGRESS', badge: 'QUEUE' }
+                    ]}
+                    placeholder="Health..."
+                    variant="card"
+                    size="sm"
+                  />
+                </div>
               </div>
             </div>
 
             {/* Table */}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto touch-scroll">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider bg-slate-50/70">
@@ -717,27 +831,27 @@ export const WhatsAppPage = () => {
                     <th className="py-2.5 px-3">Payment</th>
                     <th className="py-2.5 px-3">Pass</th>
                     <th className="py-2.5 px-3">Registration</th>
-                    <th className="py-2.5 px-3">Pay Reminder</th>
+                    <th className="py-2.5 px-3">Payment Link</th>
                     <th className="py-2.5 px-3">Confirmation</th>
-                    <th className="py-2.5 px-3">48h Invitation</th>
+                    <th className="py-2.5 px-3">48h Invite</th>
                     <th className="py-2.5 px-3">24h Reminder</th>
                     <th className="py-2.5 px-3">Feedback</th>
-                    <th className="py-2.5 px-3">Last Comm</th>
                     <th className="py-2.5 px-3">Health</th>
-                    <th className="py-2.5 px-3 text-center">Action</th>
+                    <th className="py-2.5 px-3 text-center">Timeline</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
                   {loadingRegistrations ? (
                     <tr>
-                      <td colSpan={13} className="py-12 text-center text-xs text-slate-500 font-medium">
-                        Loading registration communication records...
+                      <td colSpan={12} className="py-12 text-center text-slate-400 text-xs">
+                        <RefreshCwIcon className="w-5 h-5 mx-auto animate-spin mb-2 text-rose-600" />
+                        Loading attendee ledger...
                       </td>
                     </tr>
                   ) : registrations.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="py-10 text-center text-xs text-slate-500">
-                        No registrations matching the active filters.
+                      <td colSpan={12} className="py-8 text-center text-slate-400 text-xs">
+                        No attendees match current filters.
                       </td>
                     </tr>
                   ) : (
@@ -745,123 +859,67 @@ export const WhatsAppPage = () => {
                       <tr
                         key={row.inquiryId}
                         onClick={() => openPersonDrawer(row.inquiryId)}
-                        className="hover:bg-slate-50/80 cursor-pointer transition-colors"
+                        className="hover:bg-rose-50/40 transition-colors cursor-pointer"
                       >
-                        {/* Couple Name & Inquiry ID */}
-                        <td className="py-3 px-3">
-                          <div className="font-extrabold text-slate-900">{row.coupleName}</div>
-                          <div className="font-mono text-[10px] font-bold text-rose-700">{row.inquiryId}</div>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center text-[10px] font-black flex-shrink-0">
+                              {(row.coupleName || 'WG').slice(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <span className="font-extrabold text-slate-900 block leading-tight">{row.coupleName}</span>
+                              <span className="text-[10px] font-mono text-rose-700 font-bold">{row.inquiryId}</span>
+                            </div>
+                          </div>
                         </td>
 
-                        {/* Masked Phone */}
-                        <td className="py-3 px-3 font-mono text-[11px] text-slate-600">
-                          {row.maskedPhone || '-'}
-                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-600">{row.maskedPhone}</td>
 
-                        {/* Payment */}
-                        <td className="py-3 px-3">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                              row.paymentStatus === 'PAID'
-                                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                                : row.paymentStatus === 'FAILED'
-                                ? 'bg-rose-50 text-rose-800 border border-rose-200'
-                                : 'bg-amber-50 text-amber-800 border border-amber-200'
-                            }`}
-                          >
+                        <td className="py-2.5 px-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                            row.paymentStatus === 'PAID'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : 'bg-amber-100 text-amber-800 border border-amber-300'
+                          }`}>
                             {row.paymentStatus}
                           </span>
                         </td>
 
-                        {/* Pass */}
-                        <td className="py-3 px-3 font-mono text-[10px] font-bold">
+                        <td className="py-2.5 px-3 font-mono text-[10px] font-bold">
                           {row.passStatus === 'ACTIVE' ? (
-                            <span className="text-emerald-700">ACTIVE</span>
+                            <span className="text-emerald-700 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              ACTIVE
+                            </span>
                           ) : (
                             <span className="text-slate-400">{row.passStatus}</span>
                           )}
                         </td>
 
-                        {/* Registration Msg */}
-                        <td className="py-3 px-3">
-                          {renderStatusBadge(row.messages.registration.status, row.messages.registration.reasonIfMissing)}
-                        </td>
+                        <td className="py-2.5 px-3">{renderStatusBadge(row.messages.registration.status, row.messages.registration.reasonIfMissing)}</td>
+                        <td className="py-2.5 px-3">{renderStatusBadge(row.messages.paymentReminder.status, row.messages.paymentReminder.reasonIfMissing)}</td>
+                        <td className="py-2.5 px-3">{renderStatusBadge(row.messages.paymentConfirmed.status, row.messages.paymentConfirmed.reasonIfMissing)}</td>
+                        <td className="py-2.5 px-3">{renderStatusBadge(row.messages.invitation48h.status, row.messages.invitation48h.reasonIfMissing)}</td>
+                        <td className="py-2.5 px-3">{renderStatusBadge(row.messages.reminder24h.status, row.messages.reminder24h.reasonIfMissing)}</td>
+                        <td className="py-2.5 px-3">{renderStatusBadge(row.messages.feedback.status, row.messages.feedback.reasonIfMissing)}</td>
 
-                        {/* Payment Reminder */}
-                        <td className="py-3 px-3">
-                          {row.messages.paymentReminder.count > 0 ? (
-                            <div className="space-y-0.5">
-                              {renderStatusBadge(row.messages.paymentReminder.status)}
-                              <span className="text-[9px] text-slate-400 block font-mono">({row.messages.paymentReminder.count} sent)</span>
-                            </div>
-                          ) : (
-                            renderStatusBadge(row.messages.paymentReminder.status, row.messages.paymentReminder.reasonIfMissing)
-                          )}
-                        </td>
-
-                        {/* Payment Confirmation */}
-                        <td className="py-3 px-3">
-                          {renderStatusBadge(row.messages.paymentConfirmed.status, row.messages.paymentConfirmed.reasonIfMissing)}
-                        </td>
-
-                        {/* 48h Invitation */}
-                        <td className="py-3 px-3">
-                          {renderStatusBadge(row.messages.invitation48h.status, row.messages.invitation48h.reasonIfMissing)}
-                        </td>
-
-                        {/* 24h Reminder */}
-                        <td className="py-3 px-3">
-                          {renderStatusBadge(row.messages.reminder24h.status, row.messages.reminder24h.reasonIfMissing)}
-                        </td>
-
-                        {/* Feedback */}
-                        <td className="py-3 px-3">
-                          {renderStatusBadge(row.messages.feedback.status, row.messages.feedback.reasonIfMissing)}
-                        </td>
-
-                        {/* Last Comm */}
-                        <td className="py-3 px-3">
-                          {row.lastCommunication ? (
-                            <div className="text-[10px]">
-                              <span className="font-bold text-slate-800 capitalize block">
-                                {row.lastCommunication.messageType.replace(/_/g, ' ')}
-                              </span>
-                              <span className="text-slate-400 font-mono">
-                                {new Date(row.lastCommunication.at).toLocaleDateString('en-IN', {
-                                  month: 'short',
-                                  day: 'numeric'
-                                })}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 text-[10px]">-</span>
-                          )}
-                        </td>
-
-                        {/* Overall Health */}
-                        <td className="py-3 px-3">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                              row.health === 'HEALTHY'
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                : row.health === 'ACTION_NEEDED'
-                                ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                                : 'bg-amber-100 text-amber-800 border border-amber-300'
-                            }`}
-                          >
+                        <td className="py-2.5 px-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                            row.health === 'HEALTHY'
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                              : row.health === 'ACTION_NEEDED'
+                              ? 'bg-rose-50 text-rose-800 border border-rose-300'
+                              : 'bg-amber-50 text-amber-800 border border-amber-300'
+                          }`}>
                             {row.health.replace(/_/g, ' ')}
                           </span>
                         </td>
 
-                        {/* Action Button */}
-                        <td className="py-3 px-3 text-center">
+                        <td className="py-2.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openPersonDrawer(row.inquiryId);
-                            }}
-                            className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                            title="View Timeline"
+                            onClick={() => openPersonDrawer(row.inquiryId)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
+                            title="Open Timeline"
                           >
                             <EyeIcon className="w-4 h-4" />
                           </button>
@@ -873,23 +931,26 @@ export const WhatsAppPage = () => {
               </table>
             </div>
 
-            {/* Pagination Controls */}
-            <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
+            {/* Pagination */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-3 border-t border-slate-100 text-xs text-slate-500 font-medium">
               <span>
-                Showing page <strong className="text-slate-800">{pagination.page}</strong> of <strong className="text-slate-800">{pagination.totalPages}</strong> ({pagination.total} total)
+                Showing {registrations.length} of {pagination.total} registrations
               </span>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 self-end sm:self-auto">
                 <button
                   disabled={pagination.page <= 1}
                   onClick={() => fetchRegistrations(selectedEventId, pagination.page - 1)}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-800 rounded-lg text-xs font-bold border border-slate-200 transition-all cursor-pointer disabled:cursor-not-allowed"
+                  className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg disabled:opacity-40 cursor-pointer font-bold"
                 >
                   Previous
                 </button>
+                <span className="px-2 font-bold text-slate-800">
+                  Page {pagination.page} / {pagination.totalPages || 1}
+                </span>
                 <button
                   disabled={pagination.page >= pagination.totalPages}
                   onClick={() => fetchRegistrations(selectedEventId, pagination.page + 1)}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-800 rounded-lg text-xs font-bold border border-slate-200 transition-all cursor-pointer disabled:cursor-not-allowed"
+                  className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg disabled:opacity-40 cursor-pointer font-bold"
                 >
                   Next
                 </button>
@@ -900,18 +961,290 @@ export const WhatsAppPage = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* PERSON COMMUNICATION TIMELINE DRAWER / MODAL */}
+      {/* TAB 2: TWO-WAY SUPPORT INBOX */}
+      {/* ========================================================================= */}
+      {activeTab === 'inbox' && (
+        <WhatsAppInbox
+          events={events}
+          metaTemplates={metaTemplates}
+          onOpenTimeline={openPersonDrawer}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 3: TEMPLATES & TEST SENDER (WITH LIVE WHATSAPP PHONE SIMULATOR) */}
+      {/* ========================================================================= */}
+      {activeTab === 'templates' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left: Test Sender Controls */}
+            <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xs space-y-4">
+              <div className="border-b border-slate-100 pb-3">
+                <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
+                  <ShieldCheckIcon className="w-4 h-4 text-rose-600" />
+                  <span>Meta WhatsApp Sandbox &amp; Live Test Dispatcher</span>
+                </h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Send real-time test messages to any registered attendee or staff test phone.
+                </p>
+              </div>
+
+              <form onSubmit={handleSendTestMessage} className="space-y-4 text-xs">
+                <div>
+                  <label className="font-extrabold text-slate-700 block mb-1.5">Select Registered Couple (Auto-fill):</label>
+                  <LuxurySelect
+                    value={selectedSubmissionId}
+                    onChange={(val) => {
+                      setSelectedSubmissionId(val);
+                      const sub = submissions.find(s => (s._id || s.inquiryId) === val);
+                      if (sub) {
+                        setCustomPhone(sub.phoneNumber || '');
+                        setCustomName(`${sub.husbandName} & ${sub.wifeName}`);
+                      }
+                    }}
+                    options={submissions.map((s) => ({
+                      value: s._id || s.inquiryId,
+                      label: `${s.husbandName} & ${s.wifeName}`,
+                      badge: s.inquiryId,
+                      sublabel: `Phone: ${s.phoneNumber}`
+                    }))}
+                    placeholder="Choose registered couple..."
+                    searchable
+                    variant="card"
+                    size="md"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-extrabold text-slate-700 block mb-1.5">Recipient Phone Number (with 91):</label>
+                    <input
+                      type="text"
+                      value={customPhone}
+                      onChange={(e) => setCustomPhone(e.target.value)}
+                      className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-extrabold text-slate-700 block mb-1.5">Customer / Couple Name:</label>
+                    <input
+                      type="text"
+                      value={customName}
+                      onChange={(e) => setCustomName(e.target.value)}
+                      className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-extrabold text-slate-700 block mb-1.5">Meta Approved Template:</label>
+                  <LuxurySelect
+                    value={selectedTemplateKey}
+                    onChange={(val) => setSelectedTemplateKey(val)}
+                    options={metaTemplates.map((t) => ({
+                      value: t.key,
+                      label: t.metaName,
+                      badge: t.category,
+                      sublabel: t.purpose || t.trigger
+                    }))}
+                    placeholder="Select Meta approved template..."
+                    searchable
+                    variant="card"
+                    size="md"
+                  />
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                  {dispatchResult && (
+                    <span className={`text-xs font-bold ${dispatchResult.success ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {dispatchResult.message}
+                    </span>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={sendingTest}
+                    className="sm:ml-auto px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {sendingTest ? 'Dispatching via Meta API...' : 'Send Live Test Message'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Right: Live WhatsApp Device Simulator */}
+            <div className="lg:col-span-5 bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xs flex flex-col items-center justify-center">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-3">Live WhatsApp Preview</span>
+              
+              {/* Phone Frame */}
+              <div className="w-[280px] sm:w-[300px] bg-[#EFEAE2] border-8 border-slate-800 rounded-[36px] shadow-lg overflow-hidden flex flex-col h-[460px] relative">
+                {/* Phone Top Notch */}
+                <div className="bg-slate-800 h-5 w-full flex items-center justify-center">
+                  <div className="w-14 h-2 bg-slate-900 rounded-full" />
+                </div>
+
+                {/* WhatsApp Chat Header */}
+                <div className="bg-[#075E54] text-white p-2.5 flex items-center gap-2 shadow-xs">
+                  <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-black">
+                    ED
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="font-bold text-xs block truncate">Ek Duje Ke Liye</span>
+                    <span className="text-[9px] text-emerald-200 block">Official Business Account</span>
+                  </div>
+                </div>
+
+                {/* Chat Bubble Canvas */}
+                <div className="flex-1 p-3 overflow-y-auto space-y-2">
+                  <div className="bg-white p-3 rounded-2xl rounded-tl-sm shadow-xs text-[11px] leading-relaxed text-slate-800 space-y-2 border border-slate-200">
+                    <p className="whitespace-pre-wrap">
+                      {activeTemplateObj?.bodyText?.replace(/\{\{1\}\}/g, customName) || 'Select a template...'}
+                    </p>
+                    <span className="text-[9px] text-slate-400 block text-right font-mono">
+                      {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+
+                  {activeTemplateObj?.buttons?.map((b, idx) => (
+                    <div key={idx} className="bg-white/95 text-sky-700 font-bold text-[10px] p-2 rounded-xl text-center shadow-xs border border-slate-200 flex items-center justify-center gap-1">
+                      <ExternalLinkIcon className="w-3 h-3 text-sky-600" />
+                      <span>{b.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Template Catalog Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {metaTemplates.map((t) => (
+              <div key={t.key} className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="font-mono font-extrabold text-xs text-slate-900">{t.metaName}</span>
+                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[9px] font-black rounded uppercase border border-emerald-200">
+                    APPROVED
+                  </span>
+                </div>
+                <div className="bg-[#EFEAE2]/60 p-3 rounded-2xl border border-[#DDD6C8] text-xs text-slate-800 shadow-inner">
+                  <p className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs leading-relaxed whitespace-pre-wrap">
+                    {t.bodyText}
+                  </p>
+                </div>
+                {t.buttons && t.buttons.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {t.buttons.map((b, idx) => (
+                      <span key={idx} className="px-2.5 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[10px] font-bold flex items-center gap-1">
+                        <ExternalLinkIcon className="w-2.5 h-2.5 text-slate-500" />
+                        <span>{b.text}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: DELIVERY AUDIT LOGS */}
+      {/* ========================================================================= */}
+      {activeTab === 'logs' && (
+        <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xs space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <h3 className="text-xs sm:text-sm font-black text-slate-900">
+                Meta Delivery Webhook Activity Ledger
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">Real-time status updates received directly from Meta Graph API webhook listeners.</p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <SearchIcon className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={logSearch}
+                  onChange={(e) => setLogSearch(e.target.value)}
+                  placeholder="Search logs..."
+                  className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div className="w-[140px]">
+                <LuxurySelect
+                  value={logStatusFilter}
+                  onChange={(val) => setLogStatusFilter(val)}
+                  options={[
+                    { value: 'ALL', label: 'Status: All' },
+                    { value: 'SENT', label: 'SENT', badge: 'SENT' },
+                    { value: 'DELIVERED', label: 'DELIVERED', badge: 'DLVD' },
+                    { value: 'READ', label: 'READ', badge: 'READ' },
+                    { value: 'FAILED', label: 'FAILED', badge: 'FAIL' }
+                  ]}
+                  placeholder="Status..."
+                  variant="card"
+                  size="sm"
+                />
+              </div>
+
+              <button
+                onClick={fetchLogs}
+                disabled={loadingLogs}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold border border-slate-200 cursor-pointer flex items-center gap-1.5"
+              >
+                <RefreshCwIcon className={`w-3.5 h-3.5 ${loadingLogs ? 'animate-spin text-rose-600' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto touch-scroll">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                  <th className="py-2.5 px-3">Time</th>
+                  <th className="py-2.5 px-3">Recipient Phone</th>
+                  <th className="py-2.5 px-3">Inquiry ID</th>
+                  <th className="py-2.5 px-3">Template</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3">Meta Message ID</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                {filteredLogs.map((log) => (
+                  <tr key={log._id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-2.5 px-3 text-[11px] text-slate-500 font-mono">
+                      {new Date(log.createdAt).toLocaleString('en-IN')}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono font-bold text-slate-900">{log.recipientPhone}</td>
+                    <td className="py-2.5 px-3 font-mono font-extrabold text-rose-700">{log.inquiryId || '-'}</td>
+                    <td className="py-2.5 px-3 font-mono text-slate-700">{log.templateName}</td>
+                    <td className="py-2.5 px-3">{renderStatusBadge(log.status)}</td>
+                    <td className="py-2.5 px-3 font-mono text-[10px] text-slate-400 truncate max-w-[180px]">
+                      {log.providerMessageId || '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* PERSON TIMELINE SLIDE-OVER DRAWER */}
       {/* ========================================================================= */}
       {selectedInquiryId && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex justify-end">
-          <div className="bg-white w-full max-w-xl h-full shadow-2xl p-6 overflow-y-auto space-y-6 flex flex-col justify-between">
-            <div className="space-y-5">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex justify-end">
+          <div className="bg-white w-full max-w-lg h-full shadow-2xl p-4 sm:p-6 overflow-y-auto space-y-5 flex flex-col justify-between">
+            <div className="space-y-4">
               {/* Header */}
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div>
-                  <h3 className="text-base font-extrabold text-slate-900">{timelineData?.customerName || selectedInquiryId}</h3>
+                  <h3 className="text-sm sm:text-base font-black text-slate-900">{timelineData?.customerName || selectedInquiryId}</h3>
                   <div className="flex items-center gap-2 text-xs text-slate-500 font-mono mt-0.5">
-                    <span>{timelineData?.inquiryId}</span> &bull; <span>{timelineData?.phoneNumberMasked}</span>
+                    <span className="font-bold text-rose-700">{timelineData?.inquiryId}</span> &bull; <span>{timelineData?.phoneNumberMasked}</span>
                   </div>
                 </div>
                 <button
@@ -921,7 +1254,7 @@ export const WhatsAppPage = () => {
                   }}
                   className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center transition-colors cursor-pointer"
                 >
-                  ✕
+                  <XIcon className="w-4 h-4" />
                 </button>
               </div>
 
@@ -930,79 +1263,72 @@ export const WhatsAppPage = () => {
                 <div className="grid grid-cols-4 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center">
                   <div>
                     <span className="text-[9px] font-extrabold uppercase text-slate-400 block">Attempted</span>
-                    <span className="text-sm font-extrabold text-slate-900">{timelineData.totals.attempted}</span>
+                    <span className="text-sm font-black text-slate-900">{timelineData.totals.attempted}</span>
                   </div>
                   <div>
                     <span className="text-[9px] font-extrabold uppercase text-teal-700 block">Delivered</span>
-                    <span className="text-sm font-extrabold text-teal-800">{timelineData.totals.delivered}</span>
+                    <span className="text-sm font-black text-teal-800">{timelineData.totals.delivered}</span>
                   </div>
                   <div>
                     <span className="text-[9px] font-extrabold uppercase text-emerald-700 block">Read</span>
-                    <span className="text-sm font-extrabold text-emerald-800">{timelineData.totals.read}</span>
+                    <span className="text-sm font-black text-emerald-800">{timelineData.totals.read}</span>
                   </div>
                   <div>
                     <span className="text-[9px] font-extrabold uppercase text-rose-700 block">Failed</span>
-                    <span className="text-sm font-extrabold text-rose-800">{timelineData.totals.failed}</span>
+                    <span className="text-sm font-black text-rose-800">{timelineData.totals.failed}</span>
                   </div>
                 </div>
               )}
 
               {/* Resend Status Banner */}
               {resendStatus && (
-                <div className="p-3 bg-slate-100 border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
+                <div className="p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-xl text-xs font-bold">
                   {resendStatus}
                 </div>
               )}
 
-              {/* Chronological Timeline */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
-                  Communication History &amp; Timestamp Journey:
-                </h4>
-
+              {/* Timeline Flow */}
+              <div className="space-y-2.5">
+                <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block">Communication Lifecycle Feed</span>
                 {loadingTimeline ? (
-                  <div className="py-8 text-center text-xs text-slate-500 font-medium">
+                  <div className="py-8 text-center text-slate-400 text-xs">
+                    <RefreshCwIcon className="w-5 h-5 mx-auto animate-spin mb-2 text-rose-600" />
                     Loading timeline...
                   </div>
-                ) : timelineData?.timeline.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-slate-500 bg-slate-50 rounded-2xl border border-slate-200">
-                    No WhatsApp messages dispatched yet for this couple.
-                  </div>
                 ) : (
-                  <div className="space-y-3 relative before:absolute before:left-3.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
-                    {timelineData?.timeline.map((msg) => (
-                      <div key={msg.id} className="relative pl-8 space-y-1.5">
-                        <div className="absolute left-2 top-1.5 w-3.5 h-3.5 rounded-full bg-white border-2 border-slate-400" />
-                        <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5 space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-bold text-xs text-slate-900 capitalize">
-                              {msg.templateName}
-                            </span>
-                            {renderStatusBadge(msg.status)}
-                          </div>
-
-                          <div className="text-[10px] text-slate-500 font-mono space-y-0.5">
-                            <div><strong>Trigger:</strong> {msg.trigger} &bull; <strong>Type:</strong> {msg.messageType}</div>
-                            {msg.sentAt && <div><strong>Sent:</strong> {new Date(msg.sentAt).toLocaleString('en-IN')}</div>}
-                            {msg.deliveredAt && <div><strong>Delivered:</strong> {new Date(msg.deliveredAt).toLocaleString('en-IN')}</div>}
-                            {msg.readAt && <div><strong>Read:</strong> {new Date(msg.readAt).toLocaleString('en-IN')}</div>}
-                            {msg.failedAt && <div className="text-rose-700"><strong>Failed:</strong> {new Date(msg.failedAt).toLocaleString('en-IN')} ({msg.lastErrorMessage || 'Error'})</div>}
-                            {msg.providerMessageId && <div className="truncate text-slate-400"><strong>wamid:</strong> {msg.providerMessageId}</div>}
-                          </div>
-
-                          <div className="pt-2 border-t border-slate-200 flex justify-end">
-                            <button
-                              disabled={resendingKey === msg.templateName}
-                              onClick={() => handleResend(timelineData.inquiryId, msg.templateName)}
-                              className="px-2.5 py-1 bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-700 border border-slate-200 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
-                            >
-                              {resendingKey === msg.templateName ? 'Resending...' : 'Resend Message ↺'}
-                            </button>
-                          </div>
-                        </div>
+                  timelineData?.timeline?.map((item, idx) => (
+                    <div key={idx} className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-slate-900 capitalize">
+                          {item.messageType.replace(/_/g, ' ')}
+                        </span>
+                        {renderStatusBadge(item.status)}
                       </div>
-                    ))}
-                  </div>
+
+                      <div className="text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100 font-mono space-y-0.5">
+                        <div><strong>Template:</strong> {item.templateName} &bull; <strong>Trigger:</strong> {item.trigger}</div>
+                        {item.lastErrorMessage && (
+                          <div className="text-rose-600"><strong>Error:</strong> {item.lastErrorMessage}</div>
+                        )}
+                        {item.providerMessageId && (
+                          <div className="text-slate-400 truncate"><strong>wamid:</strong> {item.providerMessageId}</div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 text-[10px] text-slate-400 font-mono">
+                        <span>{item.sentAt ? new Date(item.sentAt).toLocaleString('en-IN') : 'Not sent yet'}</span>
+                        {item.status === 'FAILED' && (
+                          <button
+                            onClick={() => handleResend(timelineData.inquiryId, item.templateName || item.messageType)}
+                            disabled={resendingKey === (item.templateName || item.messageType)}
+                            className="px-2.5 py-1 bg-rose-600 text-white rounded-lg font-bold cursor-pointer hover:bg-rose-700"
+                          >
+                            {resendingKey === (item.templateName || item.messageType) ? 'Resending...' : 'Resend'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
             </div>
@@ -1012,9 +1338,9 @@ export const WhatsAppPage = () => {
                 setSelectedInquiryId(null);
                 setTimelineData(null);
               }}
-              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl cursor-pointer transition-all"
             >
-              Close Ledger
+              Close Drawer
             </button>
           </div>
         </div>
@@ -1024,31 +1350,36 @@ export const WhatsAppPage = () => {
       {/* BROADCAST MODAL */}
       {/* ========================================================================= */}
       {showBroadcastModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 max-w-lg w-full shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                <MessageCircleIcon className="w-4 h-4 text-rose-700" />
+              <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
+                <MessageCircleIcon className="w-4 h-4 text-rose-600" />
                 <span>Launch Event Broadcast</span>
               </h3>
-              <button onClick={() => setShowBroadcastModal(false)} className="text-slate-400 hover:text-slate-700 font-bold">✕</button>
+              <button onClick={() => setShowBroadcastModal(false)} className="text-slate-400 hover:text-slate-700 font-bold">
+                <XIcon className="w-4 h-4" />
+              </button>
             </div>
 
             <div className="space-y-3 text-xs">
               <div>
                 <label className="font-extrabold text-slate-700 block mb-1">Target Audience:</label>
-                <select
+                <LuxurySelect
                   value={broadcastAudience}
-                  onChange={(e) => {
-                    setBroadcastAudience(e.target.value as any);
+                  onChange={(val) => {
+                    setBroadcastAudience(val as any);
                     setTimeout(handlePreviewBroadcast, 50);
                   }}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
-                >
-                  <option value="ALL_CONFIRMED">All Confirmed Attendees (Paid / Active Pass)</option>
-                  <option value="PAYMENT_PENDING">Payment Pending Couples Only</option>
-                  <option value="ATTENDED">Verified Attended Attendees (Present at Gate)</option>
-                </select>
+                  options={[
+                    { value: 'ALL_CONFIRMED', label: 'All Confirmed Attendees', badge: 'PAID / ACTIVE PASS' },
+                    { value: 'PAYMENT_PENDING', label: 'Payment Pending Couples Only', badge: 'PENDING' },
+                    { value: 'ATTENDED', label: 'Verified Attended Attendees', badge: 'PRESENT AT GATE' }
+                  ]}
+                  placeholder="Choose audience..."
+                  variant="card"
+                  size="md"
+                />
               </div>
 
               {/* Preview Box */}
@@ -1076,14 +1407,17 @@ export const WhatsAppPage = () => {
 
               <div>
                 <label className="font-extrabold text-slate-700 block mb-1">Select Meta Template:</label>
-                <select
+                <LuxurySelect
                   value={broadcastTemplateKey}
-                  onChange={(e) => setBroadcastTemplateKey(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
-                >
-                  <option value="edkl_event_update_v1">edkl_event_update_v1 (Event Update Notification)</option>
-                  <option value="edkl_event_reminder_v1">edkl_event_reminder_v1 (Event Reminder)</option>
-                </select>
+                  onChange={(val) => setBroadcastTemplateKey(val)}
+                  options={[
+                    { value: 'edkl_event_update_v1', label: 'edkl_event_update_v1', badge: 'EVENT UPDATE', sublabel: 'Event Update Notification' },
+                    { value: 'edkl_event_reminder_v1', label: 'edkl_event_reminder_v1', badge: 'REMINDER', sublabel: 'Event Reminder' }
+                  ]}
+                  placeholder="Choose template..."
+                  variant="card"
+                  size="md"
+                />
               </div>
 
               <div>
@@ -1093,7 +1427,7 @@ export const WhatsAppPage = () => {
                   value={broadcastCustomMsg}
                   onChange={(e) => setBroadcastCustomMsg(e.target.value)}
                   placeholder="e.g. Please arrive 15 minutes before seminar time at Gate 2."
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium resize-none"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium resize-none"
                 />
               </div>
             </div>
@@ -1101,7 +1435,7 @@ export const WhatsAppPage = () => {
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 onClick={() => setShowBroadcastModal(false)}
-                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 cursor-pointer"
+                className="px-3.5 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 cursor-pointer"
               >
                 Cancel
               </button>
@@ -1121,11 +1455,13 @@ export const WhatsAppPage = () => {
       {/* GALLERY READY MODAL */}
       {/* ========================================================================= */}
       {showGalleryModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 max-w-md w-full shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-extrabold text-slate-900">Publish Event Photo Gallery</h3>
-              <button onClick={() => setShowGalleryModal(false)} className="text-slate-400 hover:text-slate-700 font-bold">✕</button>
+              <h3 className="text-xs sm:text-sm font-black text-slate-900">Publish Event Photo Gallery</h3>
+              <button onClick={() => setShowGalleryModal(false)} className="text-slate-400 hover:text-slate-700 font-bold">
+                <XIcon className="w-4 h-4" />
+              </button>
             </div>
 
             <div className="space-y-3 text-xs">
@@ -1138,7 +1474,7 @@ export const WhatsAppPage = () => {
                   type="text"
                   value={galleryUrl}
                   onChange={(e) => setGalleryUrl(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900"
                 />
               </div>
             </div>
@@ -1146,7 +1482,7 @@ export const WhatsAppPage = () => {
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 onClick={() => setShowGalleryModal(false)}
-                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200"
+                className="px-3.5 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200"
               >
                 Cancel
               </button>
@@ -1158,165 +1494,6 @@ export const WhatsAppPage = () => {
                 {sendingGallery ? 'Queueing...' : 'Dispatch Gallery Link'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 2: TEMPLATES & TEST SENDER */}
-      {/* ========================================================================= */}
-      {activeTab === 'templates' && (
-        <div className="space-y-6">
-          {/* Test Sender Form */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
-            <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-              <ShieldCheckIcon className="w-4 h-4 text-rose-700" />
-              <span>Direct Meta WhatsApp Sandbox &amp; Live Test Sender</span>
-            </h3>
-
-            <form onSubmit={handleSendTestMessage} className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-              <div>
-                <label className="font-extrabold text-slate-700 block mb-1">Select Registered Couple:</label>
-                <select
-                  value={selectedSubmissionId}
-                  onChange={(e) => {
-                    setSelectedSubmissionId(e.target.value);
-                    const sub = submissions.find(s => (s._id || s.inquiryId) === e.target.value);
-                    if (sub) {
-                      setCustomPhone(sub.phoneNumber || '');
-                      setCustomName(`${sub.husbandName} & ${sub.wifeName}`);
-                    }
-                  }}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
-                >
-                  {submissions.map((s) => (
-                    <option key={s._id || s.inquiryId} value={s._id || s.inquiryId}>
-                      {s.husbandName} &amp; {s.wifeName} ({s.inquiryId})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="font-extrabold text-slate-700 block mb-1">Recipient Phone Number:</label>
-                <input
-                  type="text"
-                  value={customPhone}
-                  onChange={(e) => setCustomPhone(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="font-extrabold text-slate-700 block mb-1">Template to Test:</label>
-                <select
-                  value={selectedTemplateKey}
-                  onChange={(e) => setSelectedTemplateKey(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
-                >
-                  {metaTemplates.map((t) => (
-                    <option key={t.key} value={t.key}>
-                      {t.metaName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="md:col-span-3 flex items-center justify-between pt-2 border-t border-slate-100">
-                {dispatchResult && (
-                  <span className={`text-xs font-bold ${dispatchResult.success ? 'text-emerald-700' : 'text-rose-700'}`}>
-                    {dispatchResult.message}
-                  </span>
-                )}
-                <button
-                  type="submit"
-                  disabled={sendingTest}
-                  className="ml-auto px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
-                >
-                  {sendingTest ? 'Sending via Meta API...' : 'Send Live Test Message'}
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* Template Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {metaTemplates.map((t) => (
-              <div key={t.key} className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                  <span className="font-mono font-extrabold text-xs text-slate-900">{t.metaName}</span>
-                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[10px] font-extrabold rounded uppercase border border-emerald-200">
-                    APPROVED
-                  </span>
-                </div>
-                <div className="bg-[#EFEAE2] p-3 rounded-2xl border border-[#DDD6C8] text-xs leading-relaxed text-slate-900 shadow-inner">
-                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-                    {t.bodyText}
-                  </div>
-                </div>
-                {t.buttons && t.buttons.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {t.buttons.map((b, idx) => (
-                      <span key={idx} className="px-3 py-1 bg-emerald-50 text-emerald-900 border border-emerald-300 rounded-lg text-xs font-bold">
-                        🔗 {b.text}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 3: DELIVERY AUDIT LOGS */}
-      {/* ========================================================================= */}
-      {activeTab === 'logs' && (
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h3 className="text-sm font-extrabold text-slate-900">Meta Delivery Webhook Activity Ledger</h3>
-              <p className="text-xs text-slate-500 font-medium">Real-time status updates from Meta Graph API webhook callbacks.</p>
-            </div>
-            <button
-              onClick={fetchLogs}
-              disabled={loadingLogs}
-              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold border border-slate-200 cursor-pointer"
-            >
-              {loadingLogs ? 'Refreshing...' : 'Refresh Logs'}
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider bg-slate-50/70">
-                  <th className="py-2.5 px-3">Time</th>
-                  <th className="py-2.5 px-3">Recipient Phone</th>
-                  <th className="py-2.5 px-3">Inquiry ID</th>
-                  <th className="py-2.5 px-3">Template</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3">Meta Message ID</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                {logs.map((log) => (
-                  <tr key={log._id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-2.5 px-3 text-[11px] text-slate-500">
-                      {new Date(log.createdAt).toLocaleString('en-IN')}
-                    </td>
-                    <td className="py-2.5 px-3 font-mono font-bold text-slate-900">{log.recipientPhone}</td>
-                    <td className="py-2.5 px-3 font-mono font-extrabold text-rose-700">{log.inquiryId || '-'}</td>
-                    <td className="py-2.5 px-3 font-mono text-slate-700">{log.templateName}</td>
-                    <td className="py-2.5 px-3">{renderStatusBadge(log.status)}</td>
-                    <td className="py-2.5 px-3 font-mono text-[10px] text-slate-400 truncate max-w-[150px]">
-                      {log.providerMessageId || '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
       )}

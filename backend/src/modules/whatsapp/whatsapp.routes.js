@@ -15,7 +15,16 @@ import {
   resendMessage,
   getTemplates,
   createTemplate,
-  activateTemplate
+  activateTemplate,
+  getConversations,
+  getConversationStats,
+  getConversationDetails,
+  replyConversation,
+  templateReplyConversation,
+  addConversationNote,
+  markConversationAsRead,
+  assignConversation,
+  updateConversationStatus
 } from './whatsapp.controller.js';
 import { requireAuth, requireSuperAuth, requireCronAuth } from '../../middleware/auth.js';
 
@@ -24,6 +33,17 @@ export const whatsappRouter = Router();
 // Meta Webhook (GET subscription verify, POST inbound events)
 whatsappRouter.get('/webhook', handleVerification);
 whatsappRouter.post('/webhook', handleEvents);
+
+// Two-Way WhatsApp Support Inbox
+whatsappRouter.get('/conversations/stats', requireAuth, getConversationStats);
+whatsappRouter.get('/conversations', requireAuth, getConversations);
+whatsappRouter.get('/conversations/:conversationId', requireAuth, getConversationDetails);
+whatsappRouter.post('/conversations/:conversationId/reply', requireAuth, replyConversation);
+whatsappRouter.post('/conversations/:conversationId/template-reply', requireAuth, templateReplyConversation);
+whatsappRouter.post('/conversations/:conversationId/notes', requireAuth, addConversationNote);
+whatsappRouter.post('/conversations/:conversationId/read', requireAuth, markConversationAsRead);
+whatsappRouter.patch('/conversations/:conversationId/assign', requireAuth, assignConversation);
+whatsappRouter.patch('/conversations/:conversationId/status', requireAuth, updateConversationStatus);
 
 // Meta Approved Templates & Live Test Tool
 whatsappRouter.get('/meta-templates', requireAuth, getMetaTemplates);
@@ -45,3 +65,4 @@ whatsappRouter.post('/run-worker-admin', requireSuperAuth, runSchedulerWorker);
 whatsappRouter.get('/templates', requireAuth, getTemplates);
 whatsappRouter.post('/templates', requireAuth, createTemplate);
 whatsappRouter.post('/templates/:id/use', requireAuth, activateTemplate);
+

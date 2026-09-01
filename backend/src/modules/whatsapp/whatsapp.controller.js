@@ -1,13 +1,15 @@
 import mongoose from 'mongoose';
-import { verifyWebhook, handleWebhookEvent, sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
+import { verifyWebhook, handleWebhookEvent, sendUtilityTemplate, sendFreeTextMessage } from '../../integrations/whatsapp/whatsapp.service.js';
 import { WhatsappTemplate } from '../../models/WhatsappTemplate.js';
 import { CORE_TEMPLATES } from '../../integrations/whatsapp/templateRegistry.js';
 import { Registration } from '../../models/Registration.js';
 import { WhatsappMessage, WHATSAPP_MESSAGE_STATUSES } from '../../models/WhatsappMessage.js';
+import { WhatsappConversation } from '../../models/WhatsappConversation.js';
 import { Pass } from '../../models/Pass.js';
 import { Event } from '../../models/Event.js';
 import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
 import { invitationCardService } from '../../services/invitationCard.service.js';
+import { maskPhoneNumber } from '../../integrations/whatsapp/whatsapp.service.js';
 
 export const handleVerification = verifyWebhook;
 export const handleEvents = handleWebhookEvent;
@@ -304,7 +306,6 @@ export const getRegistrationTimeline = async (req, res) => {
     res.status(500).json({ error: 'Error fetching communication timeline.', details: err.message });
   }
 };
-
 const commDashboardCache = new Map();
 
 /**
@@ -316,36 +317,44 @@ export const getEventCommunicationDashboard = async (req, res) => {
 
   try {
     const now = Date.now();
-    const cacheKey = String(eventId);
+    const cacheKey = String(eventId || 'all');
     const cached = commDashboardCache.get(cacheKey);
     if (cached && now < cached.expiry) {
       return res.json(cached.data);
     }
 
-    const event = await Event.findOne(
-      { $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] },
-      'id name slug date time venue city capacity status price isPaymentEnabled earlyRegistrationMode'
-    ).lean();
+    let event = null;
+    let matchedIds = [];
+    if (eventId && eventId !== 'all') {
+      event = await Event.findOne(
+        { $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] },
+        'id name slug date time venue city capacity status price isPaymentEnabled earlyRegistrationMode'
+      ).lean();
 
-    const matchedIds = [eventId];
-    if (event) {
-      if (event.id && !matchedIds.includes(event.id)) matchedIds.push(event.id);
-      if (event.slug && !matchedIds.includes(event.slug)) matchedIds.push(event.slug);
+      matchedIds.push(eventId);
+      if (event) {
+        if (event.id && !matchedIds.includes(event.id)) matchedIds.push(event.id);
+        if (event.slug && !matchedIds.includes(event.slug)) matchedIds.push(event.slug);
+      }
     }
 
     const eventRegMatch = {
-      $or: [
-        { programId: { $in: matchedIds } },
-        ...(event?.date ? [{ programDate: event.date }] : [])
-      ],
+      ...(matchedIds.length > 0 ? {
+        $or: [
+          { programId: { $in: matchedIds } },
+          ...(event?.date ? [{ programDate: event.date }] : [])
+        ]
+      } : {}),
       isDeleted: { $ne: true }
     };
 
     const eventMsgMatch = {
-      $or: [
-        { eventId: { $in: matchedIds } },
-        ...(event?.date ? [{ eventDate: event.date }] : [])
-      ]
+      ...(matchedIds.length > 0 ? {
+        $or: [
+          { eventId: { $in: matchedIds } },
+          ...(event?.date ? [{ eventDate: event.date }] : [])
+        ]
+      } : {})
     };
 
     // Parallel aggregate queries in single roundtrip (< 30ms)
@@ -386,13 +395,23 @@ export const getEventCommunicationDashboard = async (req, res) => {
           }
         }
       ]),
-      WhatsappMessage.distinct('registrationId', {
-        eventId: { $in: matchedIds },
-        status: 'FAILED'
+      Registration.find({
+        ...eventRegMatch,
+        status: { $ne: 'approved' }
       })
+        .select('inquiryId')
+        .lean()
+        .then(async (unpaidRegs) => {
+          if (!unpaidRegs || unpaidRegs.length === 0) return [];
+          const unpaidIds = unpaidRegs.map(r => r.inquiryId);
+          return WhatsappMessage.distinct('inquiryId', {
+            inquiryId: { $in: unpaidIds },
+            status: 'FAILED'
+          });
+        })
     ]);
 
-    const regStats = regAggList[0] || {
+    const regAgg = regAggList[0] || {
       total: 0,
       confirmed: 0,
       pending: 0,
@@ -401,12 +420,12 @@ export const getEventCommunicationDashboard = async (req, res) => {
       attended: 0
     };
 
-    const totalRegistrations = regStats.total;
-    const confirmedRegistrations = regStats.confirmed;
-    const paymentPendingRegistrations = regStats.pending;
-    const whatsappOptInRegistrations = regStats.optIn;
-    const whatsappOptOutRegistrations = regStats.optOut;
-    const attendedRegistrations = regStats.attended;
+    const totalRegistrations = regAgg.total;
+    const confirmedRegistrations = regAgg.confirmed;
+    const paymentPendingRegistrations = regAgg.pending;
+    const whatsappOptIn = regAgg.optIn;
+    const whatsappOptOut = regAgg.optOut;
+    const attendedRegistrations = regAgg.attended;
 
     // Top aggregate counters
     let totalMessagesAttempted = 0;
@@ -476,19 +495,22 @@ export const getEventCommunicationDashboard = async (req, res) => {
     const failureRate = totalMessagesAttempted > 0 ? Math.round((totalMessagesFailed / totalMessagesAttempted) * 100) : 0;
     const actionNeededCount = (actionNeededIds || []).filter(Boolean).length;
 
-    const responsePayload = {
+    const result = {
       success: true,
-      eventId,
-      eventName: event?.name || 'Ek Duje Ke Liye Seminar',
+      eventId: event?.id || eventId,
+      eventName: event?.name || (eventId === 'all' ? 'All Seminar Slots' : 'Seminar Slot'),
       eventDate: event?.date || '',
       eventTime: event?.time || '',
       venue: event?.venue || '',
+      city: event?.city || '',
+      capacity: event?.capacity || 0,
+      price: event?.price || 1500,
       summary: {
         totalRegistrations,
         confirmedRegistrations,
         paymentPendingRegistrations,
-        whatsappOptIn: whatsappOptInRegistrations,
-        whatsappOptOut: whatsappOptOutRegistrations,
+        whatsappOptIn,
+        whatsappOptOut,
         attendedRegistrations,
         totalMessagesAttempted,
         totalMessagesSent,
@@ -503,23 +525,15 @@ export const getEventCommunicationDashboard = async (req, res) => {
       },
       messageTypeStats,
       eventSettings: {
-        registrationMessage: true,
-        paymentPendingReminder: true,
-        paymentConfirmation: true,
-        invitation48h: event?.personalizedInvitationEnabled !== false,
-        reminder24h: true,
-        feedbackRequest: true,
-        galleryReady: false
+        isPaymentEnabled: event?.isPaymentEnabled !== false,
+        earlyRegistrationMode: event?.earlyRegistrationMode === true
       }
     };
 
-    commDashboardCache.set(cacheKey, {
-      data: responsePayload,
-      expiry: now + 10000 // 10s fast cache
-    });
-
-    res.json(responsePayload);
+    commDashboardCache.set(cacheKey, { data: result, expiry: now + 5000 });
+    res.json(result);
   } catch (err) {
+    logger.error('Error generating event communication dashboard:', err);
     res.status(500).json({ error: 'Error generating communication dashboard.', details: err.message });
   }
 };
@@ -541,37 +555,62 @@ export const getEventRegistrationsCommunication = async (req, res) => {
     const messageTypeFilter = req.query.messageType ? String(req.query.messageType).toLowerCase() : 'ALL';
     const healthFilter = req.query.health ? String(req.query.health).toUpperCase() : 'ALL';
 
-    const event = await Event.findOne(
-      { $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] },
-      'id name slug date time venue city capacity status price isPaymentEnabled earlyRegistrationMode'
-    ).lean();
+    let eventMatchOr = [];
+    if (eventId && eventId !== 'all') {
+      const event = await Event.findOne(
+        { $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] },
+        'id name slug date time venue city capacity status price isPaymentEnabled earlyRegistrationMode'
+      ).lean();
 
-    const matchedIds = [eventId];
-    if (event) {
-      if (event.id && !matchedIds.includes(event.id)) matchedIds.push(event.id);
-      if (event.slug && !matchedIds.includes(event.slug)) matchedIds.push(event.slug);
+      const matchedIds = [eventId];
+      if (event) {
+        if (event.id && !matchedIds.includes(event.id)) matchedIds.push(event.id);
+        if (event.slug && !matchedIds.includes(event.slug)) matchedIds.push(event.slug);
+      }
+
+      eventMatchOr = [
+        { programId: { $in: matchedIds } },
+        ...(event?.date ? [{ programDate: event.date }] : [])
+      ];
     }
 
-    const eventMatchOr = [
-      { programId: { $in: matchedIds } },
-      ...(event?.date ? [{ programDate: event.date }] : [])
-    ];
-
     const andConditions = [
-      { $or: eventMatchOr },
+      ...(eventMatchOr.length > 0 ? [{ $or: eventMatchOr }] : []),
       { isDeleted: { $ne: true } }
     ];
 
     if (search) {
-      andConditions.push({
-        $or: [
-          { husbandName: { $regex: search, $options: 'i' } },
-          { wifeName: { $regex: search, $options: 'i' } },
-          { surname: { $regex: search, $options: 'i' } },
-          { inquiryId: { $regex: search, $options: 'i' } },
-          { phoneNumber: { $regex: search, $options: 'i' } }
-        ]
-      });
+      const cleanSearch = search.replace(/[-[\]{}()*+?.,\\^$|#]/g, '\\$&');
+      const phoneDigits = search.replace(/\D/g, '');
+      const searchTerms = search.split(/\s*&\s*|\s+/).filter(Boolean);
+
+      const searchOr = [
+        { husbandName: { $regex: cleanSearch, $options: 'i' } },
+        { wifeName: { $regex: cleanSearch, $options: 'i' } },
+        { surname: { $regex: cleanSearch, $options: 'i' } },
+        { inquiryId: { $regex: cleanSearch, $options: 'i' } },
+        { phoneNumber: { $regex: cleanSearch, $options: 'i' } }
+      ];
+
+      if (phoneDigits.length >= 4) {
+        searchOr.push({ phoneNumber: { $regex: phoneDigits, $options: 'i' } });
+      }
+
+      // If user typed multi-word names like "Ravi & Krupa" or "Ravi Devani"
+      if (searchTerms.length >= 2) {
+        searchOr.push({
+          $and: searchTerms.map(term => ({
+            $or: [
+              { husbandName: { $regex: term.replace(/[-[\]{}()*+?.,\\^$|#]/g, '\\$&'), $options: 'i' } },
+              { wifeName: { $regex: term.replace(/[-[\]{}()*+?.,\\^$|#]/g, '\\$&'), $options: 'i' } },
+              { surname: { $regex: term.replace(/[-[\]{}()*+?.,\\^$|#]/g, '\\$&'), $options: 'i' } },
+              { inquiryId: { $regex: term.replace(/[-[\]{}()*+?.,\\^$|#]/g, '\\$&'), $options: 'i' } }
+            ]
+          }))
+        });
+      }
+
+      andConditions.push({ $or: searchOr });
     }
 
     if (paymentFilter === 'PAID') {
@@ -592,9 +631,9 @@ export const getEventRegistrationsCommunication = async (req, res) => {
       });
     }
 
-    const matchQuery = { $and: andConditions };
+    let matchQuery = { $and: andConditions };
 
-    const [totalRegistrations, registrations] = await Promise.all([
+    let [totalRegistrations, registrations] = await Promise.all([
       Registration.countDocuments(matchQuery),
       Registration.find(matchQuery)
         .sort({ createdAt: -1 })
@@ -603,6 +642,27 @@ export const getEventRegistrationsCommunication = async (req, res) => {
         .select('inquiryId customerToken husbandName wifeName surname phoneNumber whatsappOptIn whatsappMarketingOptIn whatsappOptOutAt status payment attendance isDeleted createdAt updatedAt')
         .lean()
     ]);
+
+    // Fallback: If user searched specifically for a name/phone/ID and 0 results found for this event,
+    // search across ALL events so the user finds the couple!
+    if (search && totalRegistrations === 0 && eventMatchOr.length > 0) {
+      const globalAnd = andConditions.filter(c => !c.$or || c.$or !== eventMatchOr);
+      const globalMatch = { $and: globalAnd };
+      const [gTotal, gRegs] = await Promise.all([
+        Registration.countDocuments(globalMatch),
+        Registration.find(globalMatch)
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .select('inquiryId customerToken husbandName wifeName surname phoneNumber whatsappOptIn whatsappMarketingOptIn whatsappOptOutAt status payment attendance isDeleted createdAt updatedAt')
+          .lean()
+      ]);
+      if (gTotal > 0) {
+        totalRegistrations = gTotal;
+        registrations = gRegs;
+      }
+    }
+
     const totalPages = Math.ceil(totalRegistrations / limit) || 1;
 
     const regIds = registrations.map(r => r._id);
@@ -1074,5 +1134,517 @@ export const resendMessage = async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Server error during message resend.', details: err.message });
+  }
+};
+
+/**
+ * ============================================================================
+ * TWO-WAY WHATSAPP HUMAN SUPPORT INBOX CONTROLLERS
+ * ============================================================================
+ */
+
+/**
+ * List WhatsApp conversations with pagination, search, and smart status filters
+ */
+export const getConversations = async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 25));
+    const search = (req.query.search || '').trim();
+    const filter = req.query.filter || 'all';
+    const eventId = req.query.eventId || '';
+
+    const query = {};
+
+    if (eventId && eventId !== 'all') {
+      query.eventId = eventId;
+    }
+
+    const now = new Date();
+
+    if (filter === 'unread') {
+      query.unreadCount = { $gt: 0 };
+    } else if (filter === 'open') {
+      query.status = 'OPEN';
+    } else if (filter === 'closed') {
+      query.status = 'CLOSED';
+    } else if (filter === 'unassigned') {
+      query.assignedAdminId = null;
+    } else if (filter === 'assigned_to_me') {
+      const adminId = req.user?.id || req.user?.username || 'admin';
+      query.assignedAdminId = adminId;
+    } else if (filter === 'window_open') {
+      query.customerServiceWindowExpiresAt = { $gt: now };
+    } else if (filter === 'window_expired') {
+      query.customerServiceWindowExpiresAt = { $lte: now };
+    } else if (filter === 'window_expiring_soon') {
+      const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      query.customerServiceWindowExpiresAt = { $gt: now, $lte: twoHoursLater };
+    }
+
+    if (search) {
+      query.$or = [
+        { customerName: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { inquiryId: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [conversations, total] = await Promise.all([
+      WhatsappConversation.find(query)
+        .sort({ unreadCount: -1, lastMessageAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate({
+          path: 'registrationId',
+          select: 'inquiryId husbandName wifeName surname coupleName status payment attendance programId programName programDate isVip'
+        })
+        .lean(),
+      WhatsappConversation.countDocuments(query)
+    ]);
+
+    const enriched = conversations.map(c => {
+      const nowMs = Date.now();
+      const expiry = c.customerServiceWindowExpiresAt ? new Date(c.customerServiceWindowExpiresAt).getTime() : 0;
+      const isWindowOpen = expiry > nowMs;
+      const windowRemainingSeconds = isWindowOpen ? Math.floor((expiry - nowMs) / 1000) : 0;
+
+      const reg = c.registrationId;
+      const paymentStatus = reg ? (reg.payment?.status === 'captured' || reg.status === 'approved' ? 'PAID' : 'PENDING') : 'UNKNOWN';
+
+      return {
+        _id: c._id,
+        phone: c.phone,
+        phoneMasked: c.phoneMasked || maskPhoneNumber(c.phone),
+        customerName: c.customerName,
+        inquiryId: c.inquiryId,
+        eventId: c.eventId,
+        status: c.status,
+        unreadCount: c.unreadCount || 0,
+        lastMessageAt: c.lastMessageAt,
+        lastMessagePreview: c.lastMessagePreview,
+        lastMessageDirection: c.lastMessageDirection,
+        lastMessageStatus: c.lastMessageStatus,
+        lastInboundAt: c.lastInboundAt,
+        lastOutboundAt: c.lastOutboundAt,
+        customerServiceWindowExpiresAt: c.customerServiceWindowExpiresAt,
+        isWindowOpen,
+        windowRemainingSeconds,
+        assignedAdminId: c.assignedAdminId,
+        assignedAdminName: c.assignedAdminName,
+        notesCount: c.notes?.length || 0,
+        registration: reg ? {
+          _id: reg._id,
+          inquiryId: reg.inquiryId,
+          coupleName: `${reg.husbandName || ''} & ${reg.wifeName || ''}`.trim() || reg.coupleName,
+          programId: reg.programId,
+          programName: reg.programName,
+          programDate: reg.programDate,
+          paymentStatus,
+          paymentAmount: reg.payment?.amount || 1500,
+          attendance: reg.attendance || 'unmarked'
+        } : null
+      };
+    });
+
+    res.json({
+      success: true,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      },
+      conversations: enriched
+    });
+  } catch (err) {
+    console.error('[getConversations Error]:', err);
+    res.status(500).json({ error: 'Server error fetching conversations.', details: err.message });
+  }
+};
+
+/**
+ * Get aggregated statistics for the WhatsApp Inbox overview
+ */
+export const getConversationStats = async (req, res) => {
+  try {
+    const now = new Date();
+    const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+
+    const [openCount, unreadCount, unassignedCount, windowExpiringSoonCount, totalConversations] = await Promise.all([
+      WhatsappConversation.countDocuments({ status: 'OPEN' }),
+      WhatsappConversation.countDocuments({ unreadCount: { $gt: 0 } }),
+      WhatsappConversation.countDocuments({ status: 'OPEN', assignedAdminId: null }),
+      WhatsappConversation.countDocuments({
+        status: 'OPEN',
+        customerServiceWindowExpiresAt: { $gt: now, $lte: twoHoursLater }
+      }),
+      WhatsappConversation.countDocuments()
+    ]);
+
+    res.json({
+      success: true,
+      stats: {
+        totalConversations,
+        openCount,
+        unreadCount,
+        unassignedCount,
+        windowExpiringSoonCount
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error fetching conversation statistics.', details: err.message });
+  }
+};
+
+/**
+ * Get detailed conversation thread with unified timeline (inbound + outbound + lifecycle automation + pass + notes)
+ */
+export const getConversationDetails = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const conversation = await WhatsappConversation.findById(conversationId)
+      .populate('registrationId')
+      .lean();
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found.' });
+    }
+
+    // Look up all unified messages for this conversation / phone
+    const messages = await WhatsappMessage.find({
+      $or: [
+        { conversationId: conversation._id },
+        { recipientPhone: conversation.phone },
+        { senderPhone: conversation.phone },
+        ...(conversation.registrationId ? [{ registrationId: conversation.registrationId._id || conversation.registrationId }] : [])
+      ]
+    })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    // Look up Digital Pass if registered
+    let pass = null;
+    if (conversation.inquiryId || conversation.registrationId) {
+      const inq = conversation.inquiryId || conversation.registrationId?.inquiryId;
+      if (inq) {
+        pass = await Pass.findOne({
+          $or: [{ inquiryId: inq }, { registrationId: conversation.registrationId?._id || conversation.registrationId }]
+        }).select('passId status version tier downloadedAt scannedAt isRevoked').lean();
+      }
+    }
+
+    const nowMs = Date.now();
+    const expiry = conversation.customerServiceWindowExpiresAt ? new Date(conversation.customerServiceWindowExpiresAt).getTime() : 0;
+    const isWindowOpen = expiry > nowMs;
+    const windowRemainingSeconds = isWindowOpen ? Math.floor((expiry - nowMs) / 1000) : 0;
+
+    const reg = conversation.registrationId;
+    const paymentStatus = reg ? (reg.payment?.status === 'captured' || reg.status === 'approved' ? 'PAID' : 'PENDING') : 'UNKNOWN';
+
+    res.json({
+      success: true,
+      conversation: {
+        ...conversation,
+        isWindowOpen,
+        windowRemainingSeconds,
+        paymentStatus,
+        pass
+      },
+      messages: messages.map(m => ({
+        _id: m._id,
+        messageId: m.messageId,
+        direction: m.direction || (m.executionSource === 'INBOUND_WEBHOOK' ? 'INBOUND' : 'OUTBOUND'),
+        status: m.status,
+        content: m.content || (m.templateName ? `Template: ${m.templateName}` : ''),
+        contentType: m.contentType || (m.templateName ? 'template' : 'text'),
+        mediaId: m.mediaId,
+        mediaUrl: m.mediaUrl,
+        mediaMimeType: m.mediaMimeType,
+        mediaCaption: m.mediaCaption,
+        templateName: m.templateName,
+        messageType: m.messageType,
+        trigger: m.trigger,
+        executionSource: m.executionSource,
+        sentByAdminName: m.sentByAdminName,
+        isInternalNote: m.isInternalNote || false,
+        providerMessageId: m.providerMessageId,
+        providerErrorCode: m.providerErrorCode,
+        providerErrorMessage: m.providerErrorMessage,
+        receivedAt: m.receivedAt || m.createdAt,
+        sentAt: m.sentAt,
+        deliveredAt: m.deliveredAt,
+        readAt: m.readAt,
+        createdAt: m.createdAt
+      })),
+      notes: conversation.notes || []
+    });
+  } catch (err) {
+    console.error('[getConversationDetails Error]:', err);
+    res.status(500).json({ error: 'Error fetching conversation details.', details: err.message });
+  }
+};
+
+/**
+ * Send human free-text reply within open 24-hour customer service window
+ */
+export const replyConversation = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { text, replyToMessageId } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: 'Message text is required.' });
+    }
+
+    const conversation = await WhatsappConversation.findById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found.' });
+    }
+
+    // Strict 24-Hour Customer Service Window Guard
+    const nowMs = Date.now();
+    const expiry = conversation.customerServiceWindowExpiresAt ? new Date(conversation.customerServiceWindowExpiresAt).getTime() : 0;
+    if (expiry <= nowMs) {
+      return res.status(403).json({
+        error: 'CUSTOMER_SERVICE_WINDOW_EXPIRED',
+        message: 'The 24-hour customer service window has expired. You must use an approved Meta template to contact this customer.'
+      });
+    }
+
+    const adminId = req.user?.id || req.user?.username || 'admin';
+    const adminName = req.user?.name || req.user?.username || 'Admin Support';
+
+    const sendRes = await sendFreeTextMessage({
+      recipientPhone: conversation.phone,
+      text: text.trim(),
+      conversationId: conversation._id,
+      registrationId: conversation.registrationId,
+      eventId: conversation.eventId,
+      inquiryId: conversation.inquiryId,
+      adminId,
+      adminName,
+      replyToMessageId,
+      executionSource: 'ADMIN_REPLY'
+    });
+
+    res.json({
+      success: sendRes.success,
+      status: sendRes.status,
+      providerMessageId: sendRes.providerMessageId,
+      message: sendRes.messageRecord
+    });
+  } catch (err) {
+    console.error('[replyConversation Error]:', err);
+    res.status(500).json({ error: err.message || 'Error sending reply.' });
+  }
+};
+
+/**
+ * Send approved Meta template when 24h window is expired or for formal business updates
+ */
+export const templateReplyConversation = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { templateKey, variables = {} } = req.body;
+
+    if (!templateKey) {
+      return res.status(400).json({ error: 'Template key is required.' });
+    }
+
+    const conversation = await WhatsappConversation.findById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found.' });
+    }
+
+    let reg = null;
+    if (conversation.registrationId) {
+      reg = await Registration.findById(conversation.registrationId);
+    }
+    const event = conversation.eventId ? await Event.findOne({ $or: [{ id: conversation.eventId }, { slug: conversation.eventId }] }) : null;
+
+    const customerName = reg ? `${reg.husbandName || ''} & ${reg.wifeName || ''}`.trim() || reg.coupleName : conversation.customerName || 'Respected Couple';
+
+    const mergedVars = {
+      customerName,
+      eventName: event?.name || 'Ek Duje Ke Liye Seminar',
+      eventDate: event?.date || '',
+      eventTime: event?.time || '8:30 PM',
+      venue: event?.venue || 'Sardar Smruti Bhavan, Surat',
+      registrationId: reg?.inquiryId || conversation.inquiryId || '',
+      inquiryId: reg?.inquiryId || conversation.inquiryId || '',
+      ...variables
+    };
+
+    const idempotencyKey = `TEMPLATE_REPLY:${conversation._id}:${templateKey}:${Date.now()}`;
+    const adminName = req.user?.name || req.user?.username || 'Admin Support';
+
+    const sendRes = await sendUtilityTemplate({
+      recipientPhone: conversation.phone,
+      templateKey,
+      languageCode: 'en_US',
+      variables: mergedVars,
+      idempotencyKey,
+      registrationId: conversation.registrationId,
+      eventId: conversation.eventId,
+      inquiryId: conversation.inquiryId,
+      trigger: 'admin_template_reply',
+      executionSource: 'MANUAL_ADMIN'
+    });
+
+    if (sendRes.messageRecord?._id) {
+      await WhatsappMessage.updateOne(
+        { _id: sendRes.messageRecord._id },
+        { $set: { conversationId: conversation._id, sentByAdminName: adminName } }
+      );
+      await WhatsappConversation.updateOne(
+        { _id: conversation._id },
+        {
+          $set: {
+            lastOutboundAt: new Date(),
+            lastMessageAt: new Date(),
+            lastMessagePreview: `[Template: ${templateKey}]`,
+            lastMessageDirection: 'OUTBOUND',
+            lastMessageStatus: sendRes.status || 'SENT'
+          }
+        }
+      );
+    }
+
+    res.json({
+      success: sendRes.success,
+      status: sendRes.status,
+      providerMessageId: sendRes.providerMessageId,
+      message: 'Template sent successfully.'
+    });
+  } catch (err) {
+    console.error('[templateReplyConversation Error]:', err);
+    res.status(500).json({ error: err.message || 'Error sending template.' });
+  }
+};
+
+/**
+ * Add internal operator note to conversation (never sent to customer WhatsApp)
+ */
+export const addConversationNote = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { text } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: 'Note text is required.' });
+    }
+
+    const adminId = req.user?.id || req.user?.username || 'admin';
+    const adminName = req.user?.name || req.user?.username || 'Admin';
+
+    const conversation = await WhatsappConversation.findByIdAndUpdate(
+      conversationId,
+      {
+        $push: {
+          notes: {
+            text: text.trim(),
+            adminId,
+            adminName,
+            createdAt: new Date()
+          }
+        }
+      },
+      { new: true }
+    );
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found.' });
+    }
+
+    res.json({ success: true, notes: conversation.notes });
+  } catch (err) {
+    res.status(500).json({ error: 'Error adding internal note.', details: err.message });
+  }
+};
+
+/**
+ * Mark conversation as read internally (resets unreadCount and sets readByAdminAt)
+ */
+export const markConversationAsRead = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const conversation = await WhatsappConversation.findByIdAndUpdate(
+      conversationId,
+      { $set: { unreadCount: 0 } },
+      { new: true }
+    );
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found.' });
+    }
+
+    await WhatsappMessage.updateMany(
+      { conversationId: conversation._id, direction: 'INBOUND', readByAdminAt: null },
+      { $set: { readByAdminAt: new Date() } }
+    );
+
+    res.json({ success: true, unreadCount: 0 });
+  } catch (err) {
+    res.status(500).json({ error: 'Error marking conversation as read.', details: err.message });
+  }
+};
+
+/**
+ * Assign conversation to support agent
+ */
+export const assignConversation = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { adminId, adminName } = req.body;
+
+    const conversation = await WhatsappConversation.findByIdAndUpdate(
+      conversationId,
+      {
+        $set: {
+          assignedAdminId: adminId || null,
+          assignedAdminName: adminName || null
+        }
+      },
+      { new: true }
+    );
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found.' });
+    }
+
+    res.json({ success: true, conversation });
+  } catch (err) {
+    res.status(500).json({ error: 'Error assigning conversation.', details: err.message });
+  }
+};
+
+/**
+ * Update conversation status (OPEN / CLOSED)
+ */
+export const updateConversationStatus = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { status } = req.body;
+
+    if (!['OPEN', 'CLOSED'].includes(status)) {
+      return res.status(400).json({ error: 'Status must be OPEN or CLOSED.' });
+    }
+
+    const conversation = await WhatsappConversation.findByIdAndUpdate(
+      conversationId,
+      { $set: { status } },
+      { new: true }
+    );
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found.' });
+    }
+
+    res.json({ success: true, status: conversation.status });
+  } catch (err) {
+    res.status(500).json({ error: 'Error updating status.', details: err.message });
   }
 };

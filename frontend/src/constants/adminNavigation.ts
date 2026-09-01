@@ -5,6 +5,7 @@ export type NormalAdminSection =
   | 'registrations'
   | 'vip_passes'
   | 'whatsapp'
+  | 'whatsapp_inbox'
   | 'settings';
 
 export interface AdminNavItem {
@@ -44,6 +45,11 @@ export const NORMAL_ADMIN_NAVIGATION: AdminNavItem[] = [
     id: 'whatsapp',
     label: 'WhatsApp Center',
     iconName: 'MessageCircleIcon'
+  },
+  {
+    id: 'whatsapp_inbox',
+    label: 'Support Inbox',
+    iconName: 'MessageSquareIcon'
   },
   {
     id: 'settings',

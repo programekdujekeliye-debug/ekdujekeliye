@@ -9,6 +9,7 @@ export const WHATSAPP_MESSAGE_STATUSES = {
   SENT: 'SENT',
   DELIVERED: 'DELIVERED',
   READ: 'READ',
+  RECEIVED: 'RECEIVED',
   FAILED: 'FAILED',
   EXPIRED: 'EXPIRED',
   CANCELLED: 'CANCELLED'
@@ -16,6 +17,13 @@ export const WHATSAPP_MESSAGE_STATUSES = {
 
 const WhatsappMessageSchema = new mongoose.Schema({
   messageId: { type: String, unique: true, index: true },
+  conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'WhatsappConversation', index: true },
+  direction: {
+    type: String,
+    enum: ['INBOUND', 'OUTBOUND'],
+    default: 'OUTBOUND',
+    index: true
+  },
   eventId: { type: String, index: true },
   registrationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Submission', index: true },
   paymentId: { type: String, index: true },
@@ -24,32 +32,34 @@ const WhatsappMessageSchema = new mongoose.Schema({
   recipientPhone: { type: String, required: true },
   recipientMasked: { type: String },
   recipientHash: { type: String, index: true },
-  templateName: { type: String, required: true },
+  senderPhone: { type: String },
+  senderMasked: { type: String },
+  content: { type: String, default: '' },
+  contentType: {
+    type: String,
+    enum: ['text', 'image', 'document', 'audio', 'video', 'location', 'interactive', 'template', 'button', 'note'],
+    default: 'template'
+  },
+  mediaId: { type: String },
+  mediaUrl: { type: String },
+  mediaMimeType: { type: String },
+  mediaCaption: { type: String },
+  replyToMessageId: { type: String },
+  readByAdminAt: { type: Date, default: null },
+  sentByAdminId: { type: String, default: null },
+  sentByAdminName: { type: String, default: null },
+  isInternalNote: { type: Boolean, default: false },
+  templateName: { type: String, default: null },
   templateLanguage: { type: String, default: 'en_US' },
-  templateCategory: { type: String, enum: ['UTILITY', 'MARKETING', 'AUTHENTICATION'], default: 'UTILITY' },
+  templateCategory: { type: String, enum: ['UTILITY', 'MARKETING', 'AUTHENTICATION', 'SERVICE'], default: 'UTILITY' },
   messageType: {
     type: String,
-    enum: [
-      'registration_received',
-      'payment_pending',
-      'payment_confirmation',
-      'payment_failed',
-      'pass_delivery',
-      'invitation',
-      'reminder',
-      'event_update',
-      'event_cancelled',
-      'pass_reissued',
-      'feedback_request',
-      'gallery_ready',
-      'custom'
-    ],
     default: 'payment_confirmation'
   },
   trigger: { type: String, default: 'manual', index: true },
   executionSource: {
     type: String,
-    enum: ['NORMAL', 'MANUAL_TEST', 'AUTOMATED_TEST'],
+    enum: ['NORMAL', 'MANUAL_TEST', 'AUTOMATED_TEST', 'ADMIN_REPLY', 'INBOUND_WEBHOOK', 'MANUAL_ADMIN'],
     default: 'NORMAL',
     index: true
   },
@@ -79,6 +89,7 @@ const WhatsappMessageSchema = new mongoose.Schema({
   templateParameters: { type: mongoose.Schema.Types.Mixed, default: {} },
   rawProviderResponse: { type: mongoose.Schema.Types.Mixed },
   providerAcceptedAt: { type: Date },
+  receivedAt: { type: Date },
   sentAt: { type: Date },
   deliveredAt: { type: Date },
   readAt: { type: Date },
@@ -89,6 +100,7 @@ const WhatsappMessageSchema = new mongoose.Schema({
   autoIndex: false
 });
 
+WhatsappMessageSchema.index({ conversationId: 1, createdAt: 1 });
 WhatsappMessageSchema.index({ status: 1, createdAt: 1 });
 WhatsappMessageSchema.index({ idempotencyKey: 1 }, { unique: true });
 WhatsappMessageSchema.index({ providerMessageId: 1 }, { sparse: true });

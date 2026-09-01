@@ -207,6 +207,12 @@ export const updateEvent = async (req, res) => {
     if (updates.photoZoom !== undefined) updates.photoZoom = Number(updates.photoZoom);
     if (updates.photoOffsetY !== undefined) updates.photoOffsetY = Number(updates.photoOffsetY);
 
+    if (updates.cardTemplate !== undefined || updates.cardTemplateUrl !== undefined) {
+      const tpl = updates.cardTemplate || updates.cardTemplateUrl || null;
+      updates.cardTemplate = tpl;
+      updates.cardTemplateUrl = tpl || '';
+    }
+
     Object.assign(event, updates);
     await event.save();
     eventService.invalidateCache();

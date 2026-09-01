@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { env, getMetaGraphApiUrl, normalizePhoneNumber, maskSecret } from '../../config/env.js';
 import { TEMPLATE_REGISTRY, validateTemplateVariables } from './templateRegistry.js';
 import { WhatsappMessage } from '../../models/WhatsappMessage.js';
+import { WhatsappConversation } from '../../models/WhatsappConversation.js';
 import { Registration } from '../../models/Registration.js';
 import { whatsappTemplateService } from './whatsappTemplate.service.js';
 
@@ -496,7 +497,165 @@ export async function queuePassConfirmationMessage({ registration, pass, event }
 }
 
 /**
- * Webhook Inbound Event Handler with STOP / Opt-Out Support
+ * Dispatch free-text reply to an open 24-hour customer service window
+ */
+export async function sendFreeTextMessage({
+  recipientPhone,
+  text,
+  conversationId,
+  registrationId = null,
+  eventId = null,
+  inquiryId = null,
+  adminId = null,
+  adminName = 'Admin',
+  replyToMessageId = null,
+  executionSource = 'ADMIN_REPLY',
+  providerMode = 'META'
+}) {
+  const normalizedPhone = normalizePhoneNumber(recipientPhone);
+  if (!normalizedPhone || normalizedPhone.length < 10) {
+    throw new Error(`Invalid recipient phone: ${recipientPhone}`);
+  }
+
+  const maskedPhone = maskPhoneNumber(normalizedPhone);
+  const idempotencyKey = `REPLY:${conversationId || normalizedPhone}:${Date.now()}:${crypto.randomBytes(4).toString('hex')}`;
+
+  const messageRecord = await WhatsappMessage.create({
+    messageId: `WA-REP-${crypto.randomBytes(8).toString('hex')}`,
+    conversationId,
+    direction: 'OUTBOUND',
+    eventId,
+    registrationId,
+    inquiryId,
+    recipientPhone: normalizedPhone,
+    recipientMasked: maskedPhone,
+    recipientHash: hashPhoneNumber(normalizedPhone),
+    content: text,
+    contentType: 'text',
+    replyToMessageId,
+    sentByAdminId: adminId,
+    sentByAdminName: adminName,
+    messageType: 'admin_reply',
+    trigger: 'support_reply',
+    executionSource,
+    providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : providerMode,
+    idempotencyKey,
+    status: 'SENDING',
+    attemptCount: 1,
+    lastAttemptAt: new Date()
+  });
+
+  // Mock Provider for automated tests / local test mode
+  if (providerMode === 'MOCK' || executionSource === 'AUTOMATED_TEST' || env.WHATSAPP_MODE === 'mock' || env.WHATSAPP_MODE === 'test') {
+    const mockWamid = `wamid.MOCK_TEST_${Date.now()}`;
+    messageRecord.status = 'SENT';
+    messageRecord.providerMessageId = mockWamid;
+    messageRecord.providerMode = 'MOCK';
+    messageRecord.providerAcceptedAt = new Date();
+    messageRecord.sentAt = new Date();
+    messageRecord.rawProviderResponse = {
+      messaging_product: 'whatsapp',
+      contacts: [{ input: normalizedPhone, wa_id: normalizedPhone }],
+      messages: [{ id: mockWamid, message_status: 'accepted' }]
+    };
+    await messageRecord.save();
+
+    if (conversationId) {
+      await WhatsappConversation.updateOne(
+        { _id: conversationId },
+        {
+          $set: {
+            lastOutboundAt: new Date(),
+            lastMessageAt: new Date(),
+            lastMessagePreview: text,
+            lastMessageDirection: 'OUTBOUND',
+            lastMessageStatus: 'SENT'
+          }
+        }
+      );
+    }
+
+    return {
+      success: true,
+      status: 'SENT',
+      providerMessageId: mockWamid,
+      messageRecord
+    };
+  }
+
+  // Dispatch via Meta Graph API
+  const metaUrl = getMetaGraphApiUrl(`${env.WHATSAPP_PHONE_NUMBER_ID}/messages`);
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: normalizedPhone,
+    type: 'text',
+    text: {
+      preview_url: false,
+      body: text
+    },
+    ...(replyToMessageId ? { context: { message_id: replyToMessageId } } : {})
+  };
+
+  try {
+    const response = await fetch(metaUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || data.error) {
+      const errCode = String(data.error?.code || response.status);
+      const errTitle = data.error?.message || `HTTP ${response.status}`;
+      messageRecord.status = 'FAILED';
+      messageRecord.lastErrorCode = errCode;
+      messageRecord.lastErrorMessage = errTitle;
+      messageRecord.failedAt = new Date();
+      messageRecord.rawProviderResponse = data;
+      await messageRecord.save();
+      return { success: false, status: 'FAILED', error: errTitle, code: errCode };
+    }
+
+    const providerMessageId = data.messages?.[0]?.id || '';
+    messageRecord.status = 'SENT';
+    messageRecord.providerMessageId = providerMessageId;
+    messageRecord.providerAcceptedAt = new Date();
+    messageRecord.sentAt = new Date();
+    messageRecord.rawProviderResponse = data;
+    await messageRecord.save();
+
+    if (conversationId) {
+      await WhatsappConversation.updateOne(
+        { _id: conversationId },
+        {
+          $set: {
+            lastOutboundAt: new Date(),
+            lastMessageAt: new Date(),
+            lastMessagePreview: text,
+            lastMessageDirection: 'OUTBOUND',
+            lastMessageStatus: 'SENT'
+          }
+        }
+      );
+    }
+
+    return { success: true, status: 'SENT', providerMessageId, messageRecord };
+  } catch (netErr) {
+    messageRecord.status = 'FAILED';
+    messageRecord.lastErrorMessage = netErr.message;
+    messageRecord.failedAt = new Date();
+    await messageRecord.save();
+    return { success: false, status: 'FAILED', error: netErr.message };
+  }
+}
+
+/**
+ * Webhook Inbound Event Handler with Status Updates, STOP / Opt-Out, and Two-Way Inbox Inbound Messages
  */
 export const verifyWebhook = (req, res) => {
   const mode = req.query['hub.mode'];
@@ -565,16 +724,44 @@ export const handleWebhookEvent = async (req, res) => {
             }
           }
 
-          // 2. Process Inbound Messages (Opt-Out / STOP commands)
+          // 2. Process Inbound Messages (Two-Way Support Chat + Opt-Out)
           if (Array.isArray(value.messages)) {
             for (const msg of value.messages) {
+              const providerMessageId = msg.id;
               const senderPhone = normalizePhoneNumber(msg.from);
-              const textBody = (msg.text?.body || '').trim().toUpperCase();
+              if (!senderPhone || senderPhone.length < 10) continue;
 
+              const timestamp = msg.timestamp ? new Date(Number(msg.timestamp) * 1000) : new Date();
+
+              // Idempotency: Ignore duplicate webhook delivery from Meta
+              if (providerMessageId) {
+                const existing = await WhatsappMessage.findOne({ providerMessageId });
+                if (existing) continue;
+              }
+
+              const msgType = msg.type || 'text';
+              let textBody = '';
+              let mediaId = null;
+              let mediaMimeType = null;
+              let mediaCaption = null;
+
+              if (msgType === 'text') {
+                textBody = (msg.text?.body || '').trim();
+              } else if (msgType === 'button') {
+                textBody = msg.button?.text || '';
+              } else if (msgType === 'interactive') {
+                textBody = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || '';
+              } else if (msg[msgType]) {
+                mediaId = msg[msgType]?.id || null;
+                mediaMimeType = msg[msgType]?.mime_type || null;
+                mediaCaption = msg[msgType]?.caption || '';
+                textBody = mediaCaption || `[${msgType.toUpperCase()}]`;
+              }
+
+              // Check Opt-Out Keywords
               const optOutKeywords = ['STOP', 'UNSUBSCRIBE', 'CANCEL', 'OPT OUT', 'OPTOUT', 'બંધ કરો', 'રોકો'];
-              if (optOutKeywords.includes(textBody)) {
+              if (optOutKeywords.includes(textBody.toUpperCase())) {
                 console.log(`[WhatsApp Opt-Out] User '${maskPhoneNumber(senderPhone)}' requested opt-out with keyword: "${textBody}"`);
-
                 await Registration.updateMany(
                   { phoneNumber: senderPhone },
                   {
@@ -585,6 +772,88 @@ export const handleWebhookEvent = async (req, res) => {
                   }
                 );
               }
+
+              // Match Customer to Registration (Prefer active/upcoming, then latest)
+              const registrations = await Registration.find({
+                phoneNumber: senderPhone,
+                isDeleted: { $ne: true }
+              }).sort({ createdAt: -1 });
+
+              const activeReg = registrations.find(r => r.status === 'approved' || r.status === 'pending') || registrations[0] || null;
+
+              const customerName = activeReg
+                ? `${activeReg.husbandName || ''} & ${activeReg.wifeName || ''}`.trim() || activeReg.coupleName || 'Respected Couple'
+                : (value.contacts?.[0]?.profile?.name || 'WhatsApp Guest');
+
+              // Find or create Conversation and set 24h Customer Service Window
+              const windowExpiry = new Date(timestamp.getTime() + 24 * 60 * 60 * 1000);
+              let conversation = await WhatsappConversation.findOne({ phone: senderPhone });
+
+              if (!conversation) {
+                conversation = await WhatsappConversation.create({
+                  phone: senderPhone,
+                  phoneMasked: maskPhoneNumber(senderPhone),
+                  phoneHash: hashPhoneNumber(senderPhone),
+                  registrationId: activeReg?._id || null,
+                  inquiryId: activeReg?.inquiryId || null,
+                  eventId: activeReg?.programId || null,
+                  customerName,
+                  status: 'OPEN',
+                  unreadCount: 1,
+                  lastMessageAt: timestamp,
+                  lastMessagePreview: textBody || `[${msgType.toUpperCase()}]`,
+                  lastMessageDirection: 'INBOUND',
+                  lastMessageStatus: 'RECEIVED',
+                  lastInboundAt: timestamp,
+                  customerServiceWindowExpiresAt: windowExpiry
+                });
+              } else {
+                conversation.status = 'OPEN'; // Reopen conversation on new inbound message
+                conversation.unreadCount = (conversation.unreadCount || 0) + 1;
+                conversation.lastMessageAt = timestamp;
+                conversation.lastMessagePreview = textBody || `[${msgType.toUpperCase()}]`;
+                conversation.lastMessageDirection = 'INBOUND';
+                conversation.lastMessageStatus = 'RECEIVED';
+                conversation.lastInboundAt = timestamp;
+                conversation.customerServiceWindowExpiresAt = windowExpiry;
+                if (activeReg && !conversation.registrationId) {
+                  conversation.registrationId = activeReg._id;
+                  conversation.inquiryId = activeReg.inquiryId;
+                  conversation.eventId = activeReg.programId;
+                  conversation.customerName = customerName;
+                }
+                await conversation.save();
+              }
+
+              // Store Inbound Message Record
+              const displayBusinessNumber = value.metadata?.display_phone_number || env.WHATSAPP_PHONE_NUMBER_ID || 'business';
+              await WhatsappMessage.create({
+                messageId: `WA-IN-${providerMessageId || crypto.randomBytes(8).toString('hex')}`,
+                conversationId: conversation._id,
+                direction: 'INBOUND',
+                eventId: conversation.eventId,
+                registrationId: conversation.registrationId,
+                inquiryId: conversation.inquiryId,
+                recipientPhone: normalizePhoneNumber(displayBusinessNumber),
+                recipientMasked: maskPhoneNumber(displayBusinessNumber),
+                recipientHash: hashPhoneNumber(displayBusinessNumber),
+                senderPhone,
+                senderMasked: maskPhoneNumber(senderPhone),
+                content: textBody,
+                contentType: msgType,
+                mediaId,
+                mediaMimeType,
+                mediaCaption,
+                replyToMessageId: msg.context?.id || null,
+                messageType: 'chat_message',
+                executionSource: 'INBOUND_WEBHOOK',
+                providerMode: (providerMessageId && providerMessageId.startsWith('wamid.MOCK_TEST_')) ? 'MOCK' : 'META',
+                idempotencyKey: `INBOUND:${providerMessageId || crypto.randomBytes(8).toString('hex')}`,
+                status: 'RECEIVED',
+                providerMessageId,
+                receivedAt: timestamp,
+                rawProviderResponse: msg
+              });
             }
           }
         }
