@@ -17,7 +17,8 @@ import {
   ActivityIcon,
   ArchiveIcon,
   ShieldCheckIcon,
-  SparklesIcon
+  AwardIcon,
+  StarIcon
 } from '../../Icons';
 
 interface AdminSidebarProps {
@@ -31,7 +32,8 @@ const iconMap: Record<string, React.FC<{ className?: string }>> = {
   CameraIcon,
   TicketIcon,
   UsersIcon,
-  SparklesIcon,
+  AwardIcon,
+  StarIcon,
   DollarSignIcon,
   MessageCircleIcon,
   MessageSquareIcon,

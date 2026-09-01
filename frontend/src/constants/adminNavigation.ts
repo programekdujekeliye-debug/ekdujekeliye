@@ -39,7 +39,7 @@ export const NORMAL_ADMIN_NAVIGATION: AdminNavItem[] = [
   {
     id: 'vip_passes',
     label: 'VIP Passes',
-    iconName: 'SparklesIcon'
+    iconName: 'AwardIcon'
   },
   {
     id: 'whatsapp',

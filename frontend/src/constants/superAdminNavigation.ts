@@ -31,7 +31,7 @@ export const SUPER_ADMIN_NAVIGATION: SuperAdminNavItem[] = [
   {
     id: 'vip_passes',
     label: 'VIP Passes',
-    iconName: 'SparklesIcon'
+    iconName: 'AwardIcon'
   },
   {
     id: 'finance',
