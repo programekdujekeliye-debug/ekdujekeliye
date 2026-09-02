@@ -52,7 +52,7 @@ async function runDashboardTests() {
       name: 'Communication Dashboard Seminar',
       city: 'Surat',
       venue: 'Sardar Smruti Bhavan',
-      date: '2026-09-25',
+      date: '2026-09-30',
       time: '8:30 PM',
       capacity: 500,
       price: 1500,

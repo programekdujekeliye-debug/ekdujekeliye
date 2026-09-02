@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { env, getMetaGraphApiUrl, normalizePhoneNumber, maskSecret } from '../../config/env.js';
-import { TEMPLATE_REGISTRY, validateTemplateVariables } from './templateRegistry.js';
+import { TEMPLATE_REGISTRY, validateTemplateVariables, renderTemplatePreview } from './templateRegistry.js';
 import { WhatsappMessage } from '../../models/WhatsappMessage.js';
 import { WhatsappConversation } from '../../models/WhatsappConversation.js';
 import { Registration } from '../../models/Registration.js';
@@ -53,6 +53,7 @@ export function maskPhoneNumber(phone) {
  * Normalizes a recipient phone number (canonical export)
  */
 export const normalizeWhatsAppRecipient = normalizePhoneNumber;
+export { normalizePhoneNumber };
 
 /**
  * Safely get WhatsApp configuration status without exposing raw secrets
@@ -237,21 +238,99 @@ export async function sendWhatsAppMessage({
     };
   }
 
+  // 7.5. Render Human-Readable Template Body for Live Chat Thread Preview
+  const renderedContent = renderTemplatePreview(templateKey, variables);
+
+  // Match Customer to Registration (Prefer active/upcoming, then latest)
+  const clean10Phone = normalizedPhone.replace(/^91/, '');
+  let targetRegistration = null;
+  try {
+    const registrations = await Registration.find({
+      $or: [
+        ...(registrationId ? [{ _id: registrationId }] : []),
+        ...(inquiryId ? [{ inquiryId }] : []),
+        { phoneNumber: normalizedPhone },
+        { phoneNumber: clean10Phone },
+        { phoneNumber: `+91${clean10Phone}` },
+        { phoneNumber: `+${normalizedPhone}` },
+        { phoneNumber: { $regex: clean10Phone + '$' } }
+      ],
+      isDeleted: { $ne: true }
+    }).sort({ createdAt: -1 });
+    targetRegistration = registrations.find(r => r.status === 'approved' || r.status === 'pending') || registrations[0] || null;
+  } catch (_) {}
+
+  const customerName = targetRegistration
+    ? `${targetRegistration.husbandName || ''} & ${targetRegistration.wifeName || ''} ${targetRegistration.surname || ''}`.trim() || targetRegistration.coupleName || 'Respected Couple'
+    : (variables.customerName || 'WhatsApp Guest');
+
+  // Find or create Conversation to ensure two-way inbox linkage
+  let conversation = null;
+  try {
+    conversation = await WhatsappConversation.findOne({
+      $or: [
+        { phone: normalizedPhone },
+        { phone: clean10Phone },
+        { phone: `+91${clean10Phone}` },
+        ...(targetRegistration ? [{ registrationId: targetRegistration._id }] : []),
+        ...(inquiryId ? [{ inquiryId }] : [])
+      ]
+    });
+
+    if (!conversation) {
+      conversation = await WhatsappConversation.create({
+        phone: normalizedPhone,
+        phoneMasked: maskedPhone,
+        phoneHash,
+        registrationId: targetRegistration?._id || registrationId || null,
+        inquiryId: targetRegistration?.inquiryId || inquiryId || null,
+        eventId: targetRegistration?.programId || eventId || null,
+        customerName,
+        status: 'OPEN',
+        unreadCount: 0,
+        lastMessageAt: new Date(),
+        lastMessagePreview: renderedContent || `[Template: ${templateDef.metaName}]`,
+        lastMessageDirection: 'OUTBOUND',
+        lastMessageStatus: 'SENDING',
+        lastOutboundAt: new Date()
+      });
+    } else {
+      conversation.lastMessageAt = new Date();
+      conversation.lastMessagePreview = renderedContent || `[Template: ${templateDef.metaName}]`;
+      conversation.lastMessageDirection = 'OUTBOUND';
+      conversation.lastMessageStatus = 'SENDING';
+      conversation.lastOutboundAt = new Date();
+      if (targetRegistration && !conversation.registrationId) {
+        conversation.registrationId = targetRegistration._id;
+        conversation.inquiryId = targetRegistration.inquiryId;
+        conversation.eventId = targetRegistration.programId;
+        conversation.customerName = customerName;
+      }
+      await conversation.save();
+    }
+  } catch (convErr) {
+    console.warn('[WhatsApp Service] Warning ensuring conversation record:', convErr.message);
+  }
+
   // 8. Create or Update Ledger Record
   const internalMessageId = existingMsg?.messageId || `WA-MSG-${crypto.randomBytes(8).toString('hex')}`;
   const messageRecord = await WhatsappMessage.findOneAndUpdate(
     { idempotencyKey: finalIdempotencyKey },
     {
       messageId: internalMessageId,
-      eventId,
-      registrationId,
+      conversationId: conversation?._id || null,
+      direction: 'OUTBOUND',
+      eventId: eventId || targetRegistration?.programId,
+      registrationId: registrationId || targetRegistration?._id,
       paymentId,
       passId,
-      inquiryId,
+      inquiryId: inquiryId || targetRegistration?.inquiryId,
       customerId,
       recipientPhone: normalizedPhone,
       recipientMasked: maskedPhone,
       recipientHash: phoneHash,
+      content: renderedContent,
+      contentType: 'template',
       templateName: templateDef.metaName,
       languageCode: resolvedLang,
       templateLanguage: resolvedLang,
@@ -275,6 +354,12 @@ export async function sendWhatsAppMessage({
     messageRecord.lastErrorMessage = errorMsg;
     messageRecord.failedAt = new Date();
     await messageRecord.save();
+    if (conversation?._id) {
+      await WhatsappConversation.updateOne(
+        { _id: conversation._id },
+        { $set: { lastMessageStatus: 'FAILED' } }
+      ).catch(() => {});
+    }
     return { success: false, status: 'FAILED', error: errorMsg };
   }
 
@@ -362,6 +447,13 @@ export async function sendWhatsAppMessage({
     };
     await messageRecord.save();
 
+    if (conversation?._id) {
+      await WhatsappConversation.updateOne(
+        { _id: conversation._id },
+        { $set: { lastMessageStatus: 'SENT', lastOutboundAt: new Date() } }
+      ).catch(() => {});
+    }
+
     console.log(`[WhatsApp Mock Dispatch] Simulated message '${templateDef.metaName}' for ${maskedPhone} -> ${mockWamid}`);
 
     return {
@@ -405,6 +497,13 @@ export async function sendWhatsAppMessage({
       }
       await messageRecord.save();
 
+      if (conversation?._id) {
+        await WhatsappConversation.updateOne(
+          { _id: conversation._id },
+          { $set: { lastMessageStatus: messageRecord.status } }
+        ).catch(() => {});
+      }
+
       return {
         success: false,
         status: messageRecord.status,
@@ -424,6 +523,13 @@ export async function sendWhatsAppMessage({
     messageRecord.rawProviderResponse = data;
     await messageRecord.save();
 
+    if (conversation?._id) {
+      await WhatsappConversation.updateOne(
+        { _id: conversation._id },
+        { $set: { lastMessageStatus: 'SENT', lastOutboundAt: new Date() } }
+      ).catch(() => {});
+    }
+
     console.log(`[WhatsApp Success] Meta accepted message '${templateDef.metaName}' for ${maskedPhone} -> ${providerMessageId}`);
 
     return {
@@ -442,6 +548,14 @@ export async function sendWhatsAppMessage({
       messageRecord.status = 'QUEUED';
     }
     await messageRecord.save();
+
+    if (conversation?._id) {
+      await WhatsappConversation.updateOne(
+        { _id: conversation._id },
+        { $set: { lastMessageStatus: messageRecord.status } }
+      ).catch(() => {});
+    }
+
     return { success: false, status: messageRecord.status, error: netErr.message };
   }
 }

@@ -466,3 +466,21 @@ export function validateTemplateVariables(templateKey, providedVariables = {}) {
 
   return { valid: true };
 }
+
+/**
+ * Render human-readable template text preview with variables substituted
+ */
+export function renderTemplatePreview(templateKey, variables = {}) {
+  const template = TEMPLATE_REGISTRY[templateKey];
+  if (!template) return '';
+  const bodyComp = template.components?.find(c => c.type === 'BODY');
+  if (!bodyComp || !bodyComp.text) return template.metaName || templateKey;
+  let text = bodyComp.text;
+  const bodyVars = template.bodyVariables || template.requiredVariables || [];
+  bodyVars.forEach((varKey, index) => {
+    const placeholder = new RegExp(`\\{\\{${index + 1}\\}\\}`, 'g');
+    const val = variables[varKey] !== undefined ? String(variables[varKey]) : `[${varKey}]`;
+    text = text.replace(placeholder, val);
+  });
+  return text;
+}

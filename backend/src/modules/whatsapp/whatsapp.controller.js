@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
-import { verifyWebhook, handleWebhookEvent, sendUtilityTemplate, sendFreeTextMessage } from '../../integrations/whatsapp/whatsapp.service.js';
+import { env } from '../../config/env.js';
+import { verifyWebhook, handleWebhookEvent, sendUtilityTemplate, sendFreeTextMessage, hashPhoneNumber, normalizePhoneNumber, maskPhoneNumber } from '../../integrations/whatsapp/whatsapp.service.js';
 import { WhatsappTemplate } from '../../models/WhatsappTemplate.js';
 import { CORE_TEMPLATES } from '../../integrations/whatsapp/templateRegistry.js';
 import { Registration } from '../../models/Registration.js';
@@ -9,7 +10,6 @@ import { Pass } from '../../models/Pass.js';
 import { Event } from '../../models/Event.js';
 import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
 import { invitationCardService } from '../../services/invitationCard.service.js';
-import { maskPhoneNumber } from '../../integrations/whatsapp/whatsapp.service.js';
 
 export const handleVerification = verifyWebhook;
 export const handleEvents = handleWebhookEvent;
@@ -556,8 +556,9 @@ export const getEventRegistrationsCommunication = async (req, res) => {
     const healthFilter = req.query.health ? String(req.query.health).toUpperCase() : 'ALL';
 
     let eventMatchOr = [];
+    let event = null;
     if (eventId && eventId !== 'all') {
-      const event = await Event.findOne(
+      event = await Event.findOne(
         { $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] },
         'id name slug date time venue city capacity status price isPaymentEnabled earlyRegistrationMode'
       ).lean();
@@ -880,6 +881,7 @@ export const getEventRegistrationsCommunication = async (req, res) => {
       rows: filteredRows
     });
   } catch (err) {
+    console.error('[Registrations Communication Endpoint Error]:', err);
     res.status(500).json({ error: 'Error fetching registration communication table.', details: err.message });
   }
 };
@@ -1313,17 +1315,36 @@ export const getConversationDetails = async (req, res) => {
       return res.status(404).json({ error: 'Conversation not found.' });
     }
 
+    const clean10 = (conversation.phone || '').replace(/^91/, '');
+    const phoneVariants = [
+      conversation.phone,
+      clean10,
+      `91${clean10}`,
+      `+91${clean10}`,
+      `+${conversation.phone}`
+    ].filter(Boolean);
+
     // Look up all unified messages for this conversation / phone
     const messages = await WhatsappMessage.find({
       $or: [
         { conversationId: conversation._id },
-        { recipientPhone: conversation.phone },
-        { senderPhone: conversation.phone },
-        ...(conversation.registrationId ? [{ registrationId: conversation.registrationId._id || conversation.registrationId }] : [])
+        { recipientPhone: { $in: phoneVariants } },
+        { senderPhone: { $in: phoneVariants } },
+        ...(conversation.registrationId ? [{ registrationId: conversation.registrationId._id || conversation.registrationId }] : []),
+        ...(conversation.inquiryId ? [{ inquiryId: conversation.inquiryId }] : [])
       ]
     })
       .sort({ createdAt: 1 })
       .lean();
+
+    // Auto-link any unlinked message
+    const unlinkedIds = messages.filter(m => !m.conversationId).map(m => m._id);
+    if (unlinkedIds.length > 0) {
+      await WhatsappMessage.updateMany(
+        { _id: { $in: unlinkedIds } },
+        { $set: { conversationId: conversation._id } }
+      ).catch(() => {});
+    }
 
     // Look up Digital Pass if registered
     let pass = null;
@@ -1365,6 +1386,7 @@ export const getConversationDetails = async (req, res) => {
         mediaMimeType: m.mediaMimeType,
         mediaCaption: m.mediaCaption,
         templateName: m.templateName,
+        templateParameters: m.templateParameters,
         messageType: m.messageType,
         trigger: m.trigger,
         executionSource: m.executionSource,
@@ -1646,5 +1668,372 @@ export const updateConversationStatus = async (req, res) => {
     res.json({ success: true, status: conversation.status });
   } catch (err) {
     res.status(500).json({ error: 'Error updating status.', details: err.message });
+  }
+};
+
+/**
+ * Check or create conversation for any phone number (e.g. 8320594829) or inquiry ID,
+ * backfill and link all past messages, and return the complete conversation thread.
+ */
+export const checkOrCreateConversationByPhone = async (req, res) => {
+  try {
+    const { phone, inquiryId, customerName: inputCustomerName } = req.body;
+    if (!phone && !inquiryId) {
+      return res.status(400).json({ error: 'Phone number or inquiryId is required.' });
+    }
+
+    let cleanPhone = phone ? normalizePhoneNumber(phone) : '';
+    let targetReg = null;
+
+    if (inquiryId) {
+      targetReg = await Registration.findOne({
+        $or: [
+          ...(mongoose.isValidObjectId(inquiryId) ? [{ _id: inquiryId }] : []),
+          { inquiryId }
+        ],
+        isDeleted: { $ne: true }
+      }).lean();
+    }
+
+    if (!cleanPhone && targetReg?.phoneNumber) {
+      cleanPhone = normalizePhoneNumber(targetReg.phoneNumber);
+    }
+
+    if (!cleanPhone && !targetReg) {
+      return res.status(400).json({ error: 'Could not resolve phone number.' });
+    }
+
+    const clean10 = cleanPhone.replace(/^91/, '');
+    const phoneVariants = [
+      cleanPhone,
+      clean10,
+      `91${clean10}`,
+      `+91${clean10}`,
+      `+${cleanPhone}`
+    ].filter(Boolean);
+
+    if (!targetReg && cleanPhone) {
+      const regs = await Registration.find({
+        $or: [
+          { phoneNumber: { $in: phoneVariants } },
+          { phoneNumber: { $regex: clean10 + '$' } }
+        ],
+        isDeleted: { $ne: true }
+      }).sort({ createdAt: -1 }).lean();
+      targetReg = regs.find(r => r.status === 'approved' || r.status === 'pending') || regs[0] || null;
+    }
+
+    const customerName = targetReg
+      ? `${targetReg.husbandName || ''} & ${targetReg.wifeName || ''} ${targetReg.surname || ''}`.trim() || targetReg.coupleName || 'Respected Couple'
+      : (inputCustomerName || maskPhoneNumber(cleanPhone) || 'WhatsApp Guest');
+
+    // Find existing conversation
+    let conversation = await WhatsappConversation.findOne({
+      $or: [
+        { phone: { $in: phoneVariants } },
+        ...(targetReg ? [{ registrationId: targetReg._id }] : []),
+        ...(targetReg?.inquiryId ? [{ inquiryId: targetReg.inquiryId }] : [])
+      ]
+    });
+
+    if (!conversation) {
+      conversation = await WhatsappConversation.create({
+        phone: cleanPhone,
+        phoneMasked: maskPhoneNumber(cleanPhone),
+        phoneHash: hashPhoneNumber(cleanPhone),
+        registrationId: targetReg?._id || null,
+        inquiryId: targetReg?.inquiryId || inquiryId || null,
+        eventId: targetReg?.programId || null,
+        customerName,
+        status: 'OPEN',
+        unreadCount: 0,
+        lastMessageAt: new Date(),
+        lastMessagePreview: 'Conversation opened',
+        lastMessageDirection: 'OUTBOUND',
+        lastMessageStatus: 'OPEN',
+        lastOutboundAt: null
+      });
+    } else {
+      if (targetReg && !conversation.registrationId) {
+        conversation.registrationId = targetReg._id;
+        conversation.inquiryId = targetReg.inquiryId;
+        conversation.eventId = targetReg.programId;
+        conversation.customerName = customerName;
+        await conversation.save();
+      }
+    }
+
+    // Link all historical unlinked messages for this phone/registration
+    await WhatsappMessage.updateMany(
+      {
+        $or: [
+          { recipientPhone: { $in: phoneVariants } },
+          { senderPhone: { $in: phoneVariants } },
+          ...(targetReg ? [{ registrationId: targetReg._id }] : []),
+          ...(targetReg?.inquiryId ? [{ inquiryId: targetReg.inquiryId }] : [])
+        ],
+        conversationId: null
+      },
+      { $set: { conversationId: conversation._id } }
+    );
+
+    // Fetch full messages
+    const messages = await WhatsappMessage.find({
+      $or: [
+        { conversationId: conversation._id },
+        { recipientPhone: { $in: phoneVariants } },
+        { senderPhone: { $in: phoneVariants } }
+      ]
+    }).sort({ createdAt: 1 }).lean();
+
+    // If there are messages, update lastMessage preview & timestamps
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      await WhatsappConversation.updateOne(
+        { _id: conversation._id },
+        {
+          $set: {
+            lastMessageAt: lastMsg.createdAt,
+            lastMessagePreview: lastMsg.content || (lastMsg.templateName ? `Template: ${lastMsg.templateName}` : 'Message'),
+            lastMessageDirection: lastMsg.direction || (lastMsg.executionSource === 'INBOUND_WEBHOOK' ? 'INBOUND' : 'OUTBOUND'),
+            lastMessageStatus: lastMsg.status || 'SENT'
+          }
+        }
+      );
+    }
+
+    res.json({
+      success: true,
+      conversationId: conversation._id,
+      conversation,
+      totalMessages: messages.length
+    });
+  } catch (err) {
+    console.error('[checkOrCreateConversationByPhone Error]:', err);
+    res.status(500).json({ error: 'Failed to check or create conversation.', details: err.message });
+  }
+};
+
+/**
+ * One-click Sync & Repair: Scan all WhatsappMessage records and Registration records,
+ * create missing WhatsappConversation entries, link orphaned messages, and update previews.
+ */
+export const syncHistoricalConversations = async (req, res) => {
+  try {
+    const allMessages = await WhatsappMessage.find().sort({ createdAt: 1 }).lean();
+    const phoneMap = new Map();
+
+    for (const msg of allMessages) {
+      const phone = normalizePhoneNumber(msg.direction === 'INBOUND' ? msg.senderPhone : msg.recipientPhone);
+      if (!phone || phone.length < 10) continue;
+      if (!phoneMap.has(phone)) phoneMap.set(phone, []);
+      phoneMap.get(phone).push(msg);
+    }
+
+    // Also collect all registrations
+    const allRegs = await Registration.find({ isDeleted: { $ne: true } }).lean();
+    for (const reg of allRegs) {
+      const phone = normalizePhoneNumber(reg.phoneNumber);
+      if (phone && phone.length >= 10 && !phoneMap.has(phone)) {
+        phoneMap.set(phone, []);
+      }
+    }
+
+    let createdCount = 0;
+    let updatedCount = 0;
+    let linkedMessagesCount = 0;
+
+    for (const [phone, msgs] of phoneMap.entries()) {
+      const clean10 = phone.replace(/^91/, '');
+      const phoneVariants = [phone, clean10, `91${clean10}`, `+91${clean10}`, `+${phone}`];
+
+      // Find matching registration
+      const reg = allRegs.find(r => phoneVariants.includes(normalizePhoneNumber(r.phoneNumber))) || null;
+      const customerName = reg
+        ? `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim() || reg.coupleName || 'Respected Couple'
+        : maskPhoneNumber(phone) || 'WhatsApp Guest';
+
+      let conversation = await WhatsappConversation.findOne({
+        $or: [
+          { phone: { $in: phoneVariants } },
+          ...(reg ? [{ registrationId: reg._id }] : [])
+        ]
+      });
+
+      const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+      const unreadCount = msgs.filter(m => m.direction === 'INBOUND' && !m.readByAdminAt).length;
+
+      if (!conversation) {
+        conversation = await WhatsappConversation.create({
+          phone,
+          phoneMasked: maskPhoneNumber(phone),
+          phoneHash: hashPhoneNumber(phone),
+          registrationId: reg?._id || null,
+          inquiryId: reg?.inquiryId || null,
+          eventId: reg?.programId || null,
+          customerName,
+          status: 'OPEN',
+          unreadCount,
+          lastMessageAt: lastMsg ? lastMsg.createdAt : new Date(),
+          lastMessagePreview: lastMsg ? (lastMsg.content || (lastMsg.templateName ? `Template: ${lastMsg.templateName}` : 'Synced chat')) : 'Synced Registration',
+          lastMessageDirection: lastMsg ? (lastMsg.direction || (lastMsg.executionSource === 'INBOUND_WEBHOOK' ? 'INBOUND' : 'OUTBOUND')) : 'OUTBOUND',
+          lastMessageStatus: lastMsg ? lastMsg.status : 'RECEIVED',
+          lastInboundAt: msgs.filter(m => m.direction === 'INBOUND').pop()?.createdAt || null,
+          lastOutboundAt: msgs.filter(m => m.direction === 'OUTBOUND').pop()?.createdAt || null
+        });
+        createdCount++;
+      } else {
+        const updateFields = {};
+        if (reg && !conversation.registrationId) {
+          updateFields.registrationId = reg._id;
+          updateFields.inquiryId = reg.inquiryId;
+          updateFields.eventId = reg.programId;
+          updateFields.customerName = customerName;
+        }
+        if (lastMsg) {
+          updateFields.lastMessageAt = lastMsg.createdAt;
+          updateFields.lastMessagePreview = lastMsg.content || (lastMsg.templateName ? `Template: ${lastMsg.templateName}` : 'Synced chat');
+          updateFields.lastMessageDirection = lastMsg.direction || (lastMsg.executionSource === 'INBOUND_WEBHOOK' ? 'INBOUND' : 'OUTBOUND');
+          updateFields.lastMessageStatus = lastMsg.status;
+        }
+        updateFields.unreadCount = unreadCount;
+        await WhatsappConversation.updateOne({ _id: conversation._id }, { $set: updateFields });
+        updatedCount++;
+      }
+
+      // Link unlinked messages
+      const msgIdsToLink = msgs.filter(m => !m.conversationId || String(m.conversationId) !== String(conversation._id)).map(m => m._id);
+      if (msgIdsToLink.length > 0) {
+        await WhatsappMessage.updateMany(
+          { _id: { $in: msgIdsToLink } },
+          { $set: { conversationId: conversation._id } }
+        );
+        linkedMessagesCount += msgIdsToLink.length;
+      }
+    }
+
+    res.json({
+      success: true,
+      summary: {
+        totalPhones: phoneMap.size,
+        createdConversations: createdCount,
+        updatedConversations: updatedCount,
+        linkedMessages: linkedMessagesCount
+      }
+    });
+  } catch (err) {
+    console.error('[syncHistoricalConversations Error]:', err);
+    res.status(500).json({ error: 'Failed to sync historical conversations.', details: err.message });
+  }
+};
+
+/**
+ * Inbound Webhook Test Simulator:
+ * Simulate receiving an inbound WhatsApp message from any number (e.g. 8320594829)
+ * to verify two-way chat, 24-hour service window, and real-time inbox without waiting for Meta.
+ */
+export const simulateInboundMessage = async (req, res) => {
+  try {
+    const { phone, text, customerName: inputName } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: 'Phone number is required.' });
+    }
+    const msgText = (text || 'Hello! I have a question about my seminar pass.').trim();
+    const cleanPhone = normalizePhoneNumber(phone);
+    const clean10 = cleanPhone.replace(/^91/, '');
+    const phoneVariants = [cleanPhone, clean10, `91${clean10}`, `+91${clean10}`, `+${cleanPhone}`];
+
+    // Find registration
+    const reg = await Registration.findOne({
+      $or: [
+        { phoneNumber: { $in: phoneVariants } },
+        { phoneNumber: { $regex: clean10 + '$' } }
+      ],
+      isDeleted: { $ne: true }
+    }).lean();
+
+    const customerName = reg
+      ? `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim() || reg.coupleName || 'Respected Couple'
+      : (inputName || maskPhoneNumber(cleanPhone) || 'WhatsApp Guest');
+
+    const now = new Date();
+    const windowExpiry = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    let conversation = await WhatsappConversation.findOne({
+      $or: [
+        { phone: { $in: phoneVariants } },
+        ...(reg ? [{ registrationId: reg._id }] : [])
+      ]
+    });
+
+    if (!conversation) {
+      conversation = await WhatsappConversation.create({
+        phone: cleanPhone,
+        phoneMasked: maskPhoneNumber(cleanPhone),
+        phoneHash: hashPhoneNumber(cleanPhone),
+        registrationId: reg?._id || null,
+        inquiryId: reg?.inquiryId || null,
+        eventId: reg?.programId || null,
+        customerName,
+        status: 'OPEN',
+        unreadCount: 1,
+        lastMessageAt: now,
+        lastMessagePreview: msgText,
+        lastMessageDirection: 'INBOUND',
+        lastMessageStatus: 'RECEIVED',
+        lastInboundAt: now,
+        customerServiceWindowExpiresAt: windowExpiry
+      });
+    } else {
+      conversation.status = 'OPEN';
+      conversation.unreadCount = (conversation.unreadCount || 0) + 1;
+      conversation.lastMessageAt = now;
+      conversation.lastMessagePreview = msgText;
+      conversation.lastMessageDirection = 'INBOUND';
+      conversation.lastMessageStatus = 'RECEIVED';
+      conversation.lastInboundAt = now;
+      conversation.customerServiceWindowExpiresAt = windowExpiry;
+      if (reg && !conversation.registrationId) {
+        conversation.registrationId = reg._id;
+        conversation.inquiryId = reg.inquiryId;
+        conversation.eventId = reg.programId;
+        conversation.customerName = customerName;
+      }
+      await conversation.save();
+    }
+
+    const mockWamid = `wamid.SIMULATED_${Date.now()}`;
+    const messageRecord = await WhatsappMessage.create({
+      messageId: `WA-IN-${mockWamid}`,
+      conversationId: conversation._id,
+      direction: 'INBOUND',
+      eventId: conversation.eventId,
+      registrationId: conversation.registrationId,
+      inquiryId: conversation.inquiryId,
+      recipientPhone: normalizePhoneNumber(env.WHATSAPP_PHONE_NUMBER_ID || '1212458621961809'),
+      recipientMasked: maskPhoneNumber(env.WHATSAPP_PHONE_NUMBER_ID || '1212458621961809'),
+      recipientHash: hashPhoneNumber(env.WHATSAPP_PHONE_NUMBER_ID || '1212458621961809'),
+      senderPhone: cleanPhone,
+      senderMasked: maskPhoneNumber(cleanPhone),
+      content: msgText,
+      contentType: 'text',
+      messageType: 'chat_message',
+      executionSource: 'INBOUND_WEBHOOK',
+      providerMode: 'MOCK',
+      idempotencyKey: `SIMULATED:${mockWamid}`,
+      status: 'RECEIVED',
+      providerMessageId: mockWamid,
+      receivedAt: now
+    });
+
+    res.json({
+      success: true,
+      conversationId: conversation._id,
+      message: messageRecord,
+      windowExpiresAt: windowExpiry
+    });
+  } catch (err) {
+    console.error('[simulateInboundMessage Error]:', err);
+    res.status(500).json({ error: 'Failed to simulate inbound message.', details: err.message });
   }
 };

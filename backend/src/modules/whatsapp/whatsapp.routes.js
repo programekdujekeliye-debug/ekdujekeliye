@@ -24,7 +24,10 @@ import {
   addConversationNote,
   markConversationAsRead,
   assignConversation,
-  updateConversationStatus
+  updateConversationStatus,
+  checkOrCreateConversationByPhone,
+  syncHistoricalConversations,
+  simulateInboundMessage
 } from './whatsapp.controller.js';
 import { requireAuth, requireSuperAuth, requireCronAuth } from '../../middleware/auth.js';
 
@@ -37,6 +40,9 @@ whatsappRouter.post('/webhook', handleEvents);
 // Two-Way WhatsApp Support Inbox
 whatsappRouter.get('/conversations/stats', requireAuth, getConversationStats);
 whatsappRouter.get('/conversations', requireAuth, getConversations);
+whatsappRouter.post('/conversations/check-phone', requireAuth, checkOrCreateConversationByPhone);
+whatsappRouter.post('/conversations/sync', requireAuth, syncHistoricalConversations);
+whatsappRouter.post('/simulate-inbound', requireAuth, simulateInboundMessage);
 whatsappRouter.get('/conversations/:conversationId', requireAuth, getConversationDetails);
 whatsappRouter.post('/conversations/:conversationId/reply', requireAuth, replyConversation);
 whatsappRouter.post('/conversations/:conversationId/template-reply', requireAuth, templateReplyConversation);

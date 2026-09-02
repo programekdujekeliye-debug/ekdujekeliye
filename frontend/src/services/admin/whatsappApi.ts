@@ -386,6 +386,46 @@ export const whatsappApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })
     });
+  },
+
+  async checkOrCreateConversation(payload: { phone?: string; inquiryId?: string; customerName?: string }): Promise<{
+    success: boolean;
+    conversationId: string;
+    conversation: WhatsappConversationItem;
+    totalMessages: number;
+  }> {
+    return apiClient('/api/whatsapp/conversations/check-phone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  async syncConversations(): Promise<{
+    success: boolean;
+    summary: {
+      totalPhones: number;
+      createdConversations: number;
+      updatedConversations: number;
+      linkedMessages: number;
+    };
+  }> {
+    return apiClient('/api/whatsapp/conversations/sync', {
+      method: 'POST'
+    });
+  },
+
+  async simulateInboundMessage(payload: { phone: string; text: string; customerName?: string }): Promise<{
+    success: boolean;
+    conversationId: string;
+    message: any;
+    windowExpiresAt: string;
+  }> {
+    return apiClient('/api/whatsapp/simulate-inbound', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
   }
 };
 
@@ -452,6 +492,7 @@ export interface WhatsappThreadMessage {
   mediaMimeType?: string;
   mediaCaption?: string;
   templateName?: string;
+  templateParameters?: Record<string, any>;
   messageType?: string;
   trigger?: string;
   executionSource?: string;

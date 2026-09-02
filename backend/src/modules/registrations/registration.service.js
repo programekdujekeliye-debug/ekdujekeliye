@@ -149,38 +149,64 @@ export class RegistrationService {
 
     const isEarlyRegistration = Boolean(program.isPaymentEnabled === false || program.earlyRegistrationMode === true || program.communicationsEnabled === false);
 
-    // Suppress all WhatsApp communications during Silent Early Registration Mode
+    const customerName = `${husbandName || ''} & ${wifeName || ''}`.trim() || 'Valued Couple';
+    const eventName = program.name || 'Ek Duje Ke Liye Seminar';
+    const eventDate = program.date || 'TBD';
+    const eventTime = program.time || '8:30 PM';
+    const venue = program.venue || 'Sardar Smruti Bhavan, Surat';
+    const feeAmount = `₹${amount}`;
+
     if (isEarlyRegistration) {
-      console.log(`[RegistrationService] Silent Early Registration: Suppressing WhatsApp dispatch for inquiry ${inquiryId}. Payment & communication not open yet.`);
+      // Early Registration: Send Registration Received Acknowledgment (Payment not open yet)
+      try {
+        await sendUtilityTemplate({
+          recipientPhone: phoneNumber,
+          templateKey: 'edkl_registration_received_v1',
+          languageCode: 'en_US',
+          variables: {
+            customerName,
+            eventName,
+            registrationId: inquiryId,
+            eventDate,
+            eventTime,
+            venue,
+            statusText: 'Early Registration Received'
+          },
+          idempotencyKey: `REGISTRATION_RECEIVED:${newRegistration._id}:${inquiryId}`,
+          registrationId: newRegistration._id,
+          eventId: program.id,
+          inquiryId,
+          trigger: 'early_registration_created'
+        });
+      } catch (msgErr) {
+        console.warn('[RegistrationService] Early registration WhatsApp dispatch notice:', msgErr.message);
+      }
     } else {
       // Standard Registration with Active Online Payment & Communications: Send payment link button (Async Non-Blocking)
-      const customerName = `${husbandName || ''} & ${wifeName || ''}`.trim() || 'Valued Couple';
-      const eventName = program.name || 'Ek Duje Ke Liye Seminar';
-      const eventDate = program.date || 'TBD';
-      const eventTime = program.time || '8:30 PM';
-      const venue = program.venue || 'Sardar Smruti Bhavan, Surat';
-      const feeAmount = `₹${amount}`;
-
-      sendUtilityTemplate({
-        recipientPhone: phoneNumber,
-        templateKey: 'edkl_payment_pending_v1',
-        languageCode: 'en_US',
-        variables: {
-          customerName,
-          eventName,
-          registrationId: inquiryId,
-          eventDate,
-          eventTime,
-          venue,
-          feeAmount,
-          inquiryId
-        },
-        idempotencyKey: `REGISTRATION_PENDING:${newRegistration._id}:${inquiryId}`,
-        registrationId: newRegistration._id,
-        eventId: program.id,
-        inquiryId,
-        trigger: 'registration_created'
-      }).catch(msgErr => console.warn('[RegistrationService] Background WhatsApp dispatch notice:', msgErr.message));
+      try {
+        await sendUtilityTemplate({
+          recipientPhone: phoneNumber,
+          templateKey: 'edkl_payment_pending_v1',
+          languageCode: 'en_US',
+          variables: {
+            customerName,
+            eventName,
+            registrationId: inquiryId,
+            eventDate,
+            eventTime,
+            venue,
+            feeAmount,
+            inquiryId
+          },
+          idempotencyKey: `REGISTRATION_PENDING:${newRegistration._id}:${inquiryId}`,
+          registrationId: newRegistration._id,
+          eventId: program.id,
+          inquiryId,
+          trigger: 'registration_created'
+        });
+      } catch (msgErr) {
+        console.warn('[RegistrationService] Background WhatsApp dispatch notice:', msgErr.message);
+      }
     }
 
 
