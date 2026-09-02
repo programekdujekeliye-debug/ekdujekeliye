@@ -843,9 +843,11 @@ export const getEventRegistrationsCommunication = async (req, res) => {
           if (remainingMinutes < 24 * 60) return 'LATE_INVITATION_SCHEDULED';
         }
         if (type === 'post_event') {
-          if (!isPresent) return 'NO_ATTENDANCE';
+          if (!isPaid) return 'PAYMENT_NOT_COMPLETE';
           const midnight = calculateEventMidnightIST(event?.date);
-          if (midnight && now < midnight) return 'NOT_YET_DUE';
+          if (midnight && now < midnight) return 'EVENT_UPCOMING';
+          if (!isPresent) return 'NO_ATTENDANCE';
+          return 'NOT_YET_DUE';
         }
         return 'NOT_YET_DUE';
       };
@@ -917,14 +919,17 @@ export const getEventRegistrationsCommunication = async (req, res) => {
             readAt: mPostCombined.readAt,
             failedAt: mPostCombined.failedAt,
             reasonIfMissing: null
-          } : { status: isPresent ? 'WAITING' : 'NOT_ELIGIBLE', reasonIfMissing: getReason('post_event') },
+          } : {
+            status: isPaid ? (now < calculateEventMidnightIST(event?.date) ? 'SCHEDULED' : (isPresent ? 'WAITING' : 'NOT_ELIGIBLE')) : 'NOT_ELIGIBLE',
+            reasonIfMissing: getReason('post_event')
+          },
 
           // Backwards compatible aliases
           registration: mReg ? { status: mReg.status, sentAt: mReg.sentAt, deliveredAt: mReg.deliveredAt, readAt: mReg.readAt, failedAt: mReg.failedAt, reasonIfMissing: null } : { status: 'NOT_REQUIRED', reasonIfMissing: 'NOT_REQUIRED' },
           invitation48h: mInv ? { status: mInv.status, scheduledFor: mInv.scheduledFor, sentAt: mInv.sentAt, deliveredAt: mInv.deliveredAt, readAt: mInv.readAt, failedAt: mInv.failedAt, reasonIfMissing: null } : { status: isPaid && remainingMinutes >= 120 ? 'SCHEDULED' : 'SKIPPED', reasonIfMissing: getReason('invitation_24h') },
           reminder24h: mRem ? { status: mRem.status, scheduledFor: mRem.scheduledFor, sentAt: mRem.sentAt, deliveredAt: mRem.deliveredAt, readAt: mRem.readAt, failedAt: mRem.failedAt, reasonIfMissing: null } : { status: isPaid && remainingMinutes > 48 * 60 ? 'SCHEDULED' : 'SKIPPED', reasonIfMissing: getReason('pass_reminder_48h') },
-          feedback: mPostCombined ? { status: mPostCombined.status } : { status: isPresent ? 'WAITING' : 'NOT_ELIGIBLE', reasonIfMissing: getReason('post_event') },
-          gallery: mPostCombined ? { status: mPostCombined.status } : { status: isPresent ? 'WAITING' : 'NOT_ELIGIBLE', reasonIfMissing: getReason('post_event') }
+          feedback: mPostCombined ? { status: mPostCombined.status } : { status: isPaid ? (now < calculateEventMidnightIST(event?.date) ? 'SCHEDULED' : (isPresent ? 'WAITING' : 'NOT_ELIGIBLE')) : 'NOT_ELIGIBLE', reasonIfMissing: getReason('post_event') },
+          gallery: mPostCombined ? { status: mPostCombined.status } : { status: isPaid ? (now < calculateEventMidnightIST(event?.date) ? 'SCHEDULED' : (isPresent ? 'WAITING' : 'NOT_ELIGIBLE')) : 'NOT_ELIGIBLE', reasonIfMissing: getReason('post_event') }
         },
         totals,
         lastCommunication,

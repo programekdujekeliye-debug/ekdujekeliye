@@ -278,8 +278,49 @@ export class CommunicationSchedulerService {
       console.log(`[CommunicationScheduler] Skipping 24h invitation for ${inquiryId}: DISABLED_FOR_EVENT`);
     }
 
-    // 3. Post-event feedback is NOT auto-queued here.
-    // Instead, at next-day midnight (Asia/Kolkata), status becomes READY TO SEND for admin review and manual trigger.
+    // 3. Milestone: Post-Event Combined Memories + Feedback (edkl_post_event_memories_feedback_v1)
+    const postEventSendAt = schedules.feedbackSendAt;
+    const postEventIdempotencyKey = `POST_EVENT:${event.id || event.slug}:${registration._id}:v1`;
+
+    const existingPostEvent = await WhatsappMessage.findOne({
+      inquiryId,
+      messageType: { $in: ['post_event', 'feedback_request'] },
+      status: { $in: ['QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'READ'] }
+    }).select('_id status scheduledFor').lean();
+
+    if (!existingPostEvent) {
+      const feedbackToken = registration.customerToken || registration.inquiryId;
+      results.postEvent = await WhatsappMessage.findOneAndUpdate(
+        { idempotencyKey: postEventIdempotencyKey },
+        {
+          $setOnInsert: {
+            messageId: `WA-SCH-${crypto.randomBytes(8).toString('hex')}`,
+            registrationId: registration._id,
+            eventId: event.id || event.slug,
+            inquiryId,
+            recipientPhone: phone,
+            recipientMasked: phone ? phone.replace(/(\d{4})\d{4}(\d{2})/, '$1****$2') : '',
+            messageType: 'post_event',
+            templateName: 'edkl_post_event_memories_feedback_v1',
+            templateLanguage: 'en_US',
+            templateCategory: 'UTILITY',
+            trigger: 'post_event_memories_feedback',
+            status: 'QUEUED',
+            scheduledFor: postEventSendAt,
+            providerMode: 'META',
+            executionSource,
+            templateParameters: {
+              customerName,
+              eventName,
+              registrationId: inquiryId,
+              galleryToken: inquiryId,
+              feedbackToken
+            }
+          }
+        },
+        { upsert: true, returnDocument: 'after' }
+      );
+    }
 
     return {
       success: true,
@@ -460,12 +501,12 @@ export class CommunicationSchedulerService {
         }
       }
 
-      // Revalidate: Feedback message requires attendance === 'PRESENT'
-      if (job.messageType === 'feedback_request') {
+      // Revalidate: Post-event memories & feedback message requires attendance === 'PRESENT'
+      if (job.messageType === 'feedback_request' || job.messageType === 'post_event') {
         const isPresent = registration.attendance === 'PRESENT' || registration.attendance === 'present';
         if (!isPresent) {
           job.status = WHATSAPP_MESSAGE_STATUSES.CANCELLED;
-          job.lastErrorMessage = `No-show attendee (attendance: ${registration.attendance}). Feedback request cancelled.`;
+          job.lastErrorMessage = `No-show attendee (attendance: ${registration.attendance || 'unmarked'}). Post-event memories cancelled.`;
           await job.save();
           summary.skippedIneligible++;
           continue;
