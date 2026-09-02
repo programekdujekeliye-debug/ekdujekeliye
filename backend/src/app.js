@@ -154,7 +154,9 @@ app.get('/api/super-admin/dashboard', requireSuperAuth, getSuperAdminDashboardSu
 // 2. Registrations & Inquiries
 app.post('/api/submit', upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), submitRegistration);
 app.get('/api/submissions/status/:inquiryId', getRegistrationStatus);
+app.get('/api/registrations/status/:inquiryId', getRegistrationStatus);
 app.use('/api/submissions', registrationRouter);
+app.use('/api/registrations', registrationRouter);
 
 // 3. Payments & Passes
 app.post('/api/payments/create-order', createOrder);

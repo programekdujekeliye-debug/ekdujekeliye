@@ -21,10 +21,14 @@ export default function GalleryRedirectPage() {
 
     const fetchGallery = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/registrations/status/${encodeURIComponent(inquiryId)}`);
+        let res = await fetch(`${API_BASE_URL}/api/submissions/status/${encodeURIComponent(inquiryId)}`);
+        if (!res.ok) {
+          res = await fetch(`${API_BASE_URL}/api/registrations/status/${encodeURIComponent(inquiryId)}`);
+        }
+
         if (res.ok) {
           const data = await res.json();
-          const photoUrl = data.program?.photoLink || data.photoLink;
+          const photoUrl = data.program?.photoLink || data.photoLink || (data.program as any)?.photoUrl;
           if (data.husbandName && data.wifeName) {
             setCoupleName(`${data.husbandName} & ${data.wifeName}`);
           }
