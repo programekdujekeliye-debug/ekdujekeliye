@@ -8,6 +8,7 @@ import { Submission } from '../../../types';
 import { API_BASE_URL } from '../../../config';
 import { DownloadIcon, CheckCircleIcon, SparklesIcon, XIcon, SearchIcon, CameraIcon } from '../../../components/Icons';
 import { LuxurySelect } from '../../../components/LuxurySelect';
+import { FrameReviewExportModal } from './FrameReviewExportModal';
 import toast from 'react-hot-toast';
 
 interface BatchExportModalProps {
@@ -37,6 +38,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
   const [zipProgress, setZipProgress] = useState('');
   const [matchCount, setMatchCount] = useState<number | null>(null);
   const [countingMatches, setCountingMatches] = useState(false);
+  const [showFrameReviewModal, setShowFrameReviewModal] = useState(false);
 
   // Sync defaultProgramId when modal opens
   useEffect(() => {
@@ -594,6 +596,31 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
               </div>
             </button>
           </div>
+
+          {/* Framed ZIP Review Banner */}
+          {selectedFormat === 'framed_zip' && (
+            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                  <SparklesIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-extrabold text-amber-950">Photo Frame Alignment Review</h4>
+                  <p className="text-[11px] text-amber-800/80 font-medium">
+                    Review each couple photo inside the frame, adjust zoom and vertical shift, or download individual PNGs.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFrameReviewModal(true)}
+                className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-xs shrink-0 cursor-pointer flex items-center gap-1.5 transition-all whitespace-nowrap active:scale-95"
+              >
+                <span>Launch Frame Review</span>
+                <span>→</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 2. Dynamic Category Filters */}
@@ -705,19 +732,31 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
         </div>
 
         {/* 4. Action Buttons with luxury styling */}
-        <div className="flex gap-2.5 pt-1">
+        <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs transition-all cursor-pointer"
+            className="sm:w-28 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs transition-all cursor-pointer text-center"
           >
             Cancel
           </button>
+
+          {selectedFormat === 'framed_zip' && (
+            <button
+              type="button"
+              onClick={() => setShowFrameReviewModal(true)}
+              className="flex-1 py-3 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-extrabold rounded-2xl text-xs transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+            >
+              <SparklesIcon className="w-4 h-4 flex-shrink-0" />
+              <span>Review &amp; Adjust Frames</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleExport}
             disabled={isExporting || matchCount === 0}
-            className={`flex-2 py-3 text-white font-extrabold rounded-2xl text-xs transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 ${
+            className={`flex-1 py-3 text-white font-extrabold rounded-2xl text-xs transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 ${
               selectedFormat === 'excel'
                 ? 'bg-emerald-700 hover:bg-emerald-800'
                 : selectedFormat === 'pdf'
@@ -736,12 +775,18 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
                 : selectedFormat === 'pdf'
                 ? `Export ${matchCount !== null ? `(${matchCount}) ` : ''}PDF Report`
                 : selectedFormat === 'framed_zip'
-                ? `Export ${matchCount !== null ? `(${matchCount}) ` : ''}Framed Photos ZIP`
+                ? `Direct Export ZIP`
                 : `Export ${matchCount !== null ? `(${matchCount}) ` : ''}Raw Photos ZIP`}
             </span>
           </button>
         </div>
 
+        {/* Frame Review & Export Modal Integration */}
+        <FrameReviewExportModal
+          isOpen={showFrameReviewModal}
+          onClose={() => setShowFrameReviewModal(false)}
+          defaultProgramId={exportProgramId}
+        />
       </div>
     </div>
   );
