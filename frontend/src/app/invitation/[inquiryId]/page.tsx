@@ -32,6 +32,7 @@ interface SubmissionData {
   programTime?: string;
   venue?: string;
   cardTemplate?: string;
+  cardTemplateUrl?: string;
   heartX?: number;
   heartY?: number;
   heartWidth?: number;
@@ -44,6 +45,7 @@ interface SubmissionData {
     time?: string;
     venue?: string;
     cardTemplate?: string;
+    cardTemplateUrl?: string;
     heartX?: number;
     heartY?: number;
     heartWidth?: number;
@@ -142,7 +144,7 @@ export default function PersonalizedInvitationPage() {
     canvas.height = 1024;
 
     const templateImg = new Image();
-    const templatePath = (sub.program as any)?.cardTemplateUrl || sub.program?.cardTemplate || (sub as any)?.cardTemplateUrl || sub.cardTemplate || '/card_template.png';
+    const templatePath = sub.program?.cardTemplateUrl || sub.program?.cardTemplate || sub.cardTemplate || (sub as any)?.cardTemplateUrl || '/card_template.png';
     let templateImgSrc = templatePath.startsWith('data:') || templatePath.startsWith('http')
       ? templatePath
       : templatePath.startsWith('/')
@@ -151,6 +153,9 @@ export default function PersonalizedInvitationPage() {
 
     if (templateImgSrc.startsWith('http')) {
       templateImg.crossOrigin = 'anonymous';
+      if (templateImgSrc.includes('cloudinary.com') && !templateImgSrc.includes('cors=')) {
+        templateImgSrc += (templateImgSrc.includes('?') ? '&' : '?') + 'cors=1';
+      }
     }
 
     let templateRetried = false;

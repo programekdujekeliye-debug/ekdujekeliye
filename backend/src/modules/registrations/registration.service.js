@@ -238,26 +238,29 @@ export class RegistrationService {
     if (!submission) return null;
 
     let program = null;
-    if (submission.programId) {
+
+    // 1. Precise Prefix Mapping for 7 Sep (EK06) and 11 Sep (EK07)
+    const inq = (submission.inquiryId || '').toUpperCase();
+    if (inq.startsWith('EK06') || inq.startsWith('EK-06') || inq.startsWith('EK 06')) {
+      program = await Event.findOne({
+        $or: [{ id: 'prog-2026-09-07' }, { date: '2026-09-07' }, { slug: 'surat-7-september-2026' }]
+      }).lean();
+    } else if (inq.startsWith('EK07') || inq.startsWith('EK-07') || inq.startsWith('EK 07')) {
+      program = await Event.findOne({
+        $or: [{ id: 'prog-2026-09-11' }, { date: '2026-09-11' }, { slug: 'surat-11-september-2026' }]
+      }).lean();
+    }
+
+    // 2. Fallback to programId or programDate
+    if (!program && submission.programId) {
       program = await eventService.getEventBySlug(submission.programId);
     }
     if (!program && submission.programDate) {
       program = await Event.findOne({ date: submission.programDate }).lean();
     }
-    if (!program && submission.inquiryId) {
-      const inq = submission.inquiryId.toUpperCase();
-      if (inq.startsWith('EK06') || inq.startsWith('EK-06') || inq.startsWith('EK 06')) {
-        program = await Event.findOne({
-          $or: [{ id: 'prog-2026-09-07' }, { date: '2026-09-07' }, { slug: 'surat-7-september-2026' }]
-        }).lean();
-      } else if (inq.startsWith('EK07') || inq.startsWith('EK-07') || inq.startsWith('EK 07')) {
-        program = await Event.findOne({
-          $or: [{ id: 'prog-2026-09-11' }, { date: '2026-09-11' }, { slug: 'surat-11-september-2026' }]
-        }).lean();
-      }
-    }
 
     const mediaState = await mediaService.resolveRegistrationMedia(submission);
+    // Prioritize the Event's current active card template over any stale registration cardTemplate!
     const resolvedTemplate = program?.cardTemplateUrl || program?.cardTemplate || submission.cardTemplate || null;
 
     return {
