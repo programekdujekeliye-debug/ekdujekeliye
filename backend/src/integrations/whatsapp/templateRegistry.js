@@ -525,6 +525,26 @@ export function validateTemplateVariables(templateKey, providedVariables = {}) {
     return { valid: false, error: `Template '${templateKey}' is not registered.` };
   }
 
+  // Auto-fill smart fallback aliases for edkl_post_event_memories_feedback_v1
+  if (templateKey === 'edkl_post_event_memories_feedback_v1') {
+    if (!providedVariables.galleryToken) {
+      providedVariables.galleryToken = providedVariables.registrationId || providedVariables.inquiryId || 'gallery';
+    }
+    if (!providedVariables.feedbackToken) {
+      providedVariables.feedbackToken = providedVariables.customerToken || providedVariables.registrationId || providedVariables.inquiryId || 'feedback';
+    }
+  }
+
+  // Auto-fill smart aliases for reminder & invitation
+  if (templateKey === 'edkl_event_pass_reminder_v2' || templateKey === 'edkl_personal_invitation_24h_v2') {
+    if (!providedVariables.inquiryId && providedVariables.registrationId) {
+      providedVariables.inquiryId = providedVariables.registrationId;
+    }
+    if (!providedVariables.registrationId && providedVariables.inquiryId) {
+      providedVariables.registrationId = providedVariables.inquiryId;
+    }
+  }
+
   const missing = [];
   for (const varName of template.requiredVariables) {
     const val = providedVariables[varName];

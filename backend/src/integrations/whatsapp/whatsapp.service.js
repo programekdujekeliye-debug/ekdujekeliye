@@ -448,9 +448,9 @@ export async function sendWhatsAppMessage({
       if (btn.type === 'URL') {
         let btnVal = '';
         if (btnIdx === 0) {
-          btnVal = String(variables.inquiryId || variables.registrationId || variables.galleryToken || '');
+          btnVal = String(variables.galleryToken || variables.inquiryId || variables.registrationId || '');
         } else if (btnIdx === 1) {
-          btnVal = String(variables.feedbackToken || variables.inquiryId || '');
+          btnVal = String(variables.feedbackToken || variables.inquiryId || variables.registrationId || '');
         }
         if (btnVal) {
           componentsPayload.push({

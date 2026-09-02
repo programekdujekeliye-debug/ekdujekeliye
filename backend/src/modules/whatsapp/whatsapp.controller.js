@@ -117,6 +117,9 @@ export const sendTestMessage = async (req, res) => {
       ? 'VIP Pass Confirmed'
       : (targetRegistration ? 'Payment Confirmed' : (customVariables?.statusText || 'Registration Confirmed'));
 
+    const galleryToken = customVariables?.galleryToken || targetRegistration?.inquiryId || inquiryId || 'TEST-01';
+    const feedbackToken = customVariables?.feedbackToken || targetRegistration?.customerToken || targetRegistration?.inquiryId || inquiryId || 'demo-feedback';
+
     const result = await sendUtilityTemplate({
       recipientPhone: cleanPhone,
       templateKey: tplKey,
@@ -131,7 +134,10 @@ export const sendTestMessage = async (req, res) => {
         feeAmount,
         inquiryId,
         statusText,
-        headerImageUrl
+        headerImageUrl,
+        galleryToken,
+        feedbackToken,
+        ...(customVariables || {})
       },
       idempotencyKey: `MANUAL_${targetRegistration ? 'REAL' : 'TEST'}:${tplKey}:${cleanPhone}:${Date.now()}`,
       trigger: targetRegistration ? (targetRegistration.isVip ? 'vip_invitation_pass' : 'manual_admin_resend') : 'manual_admin_test',
@@ -1529,7 +1535,9 @@ export const sendSpecificBroadcast = async (req, res) => {
             eventTime: event?.time || '8:30 PM',
             venue: event?.venue || 'Sardar Smruti Bhavan, Surat',
             registrationId: reg.inquiryId,
-            inquiryId: reg.inquiryId
+            inquiryId: reg.inquiryId,
+            galleryToken: reg.inquiryId,
+            feedbackToken: reg.customerToken || reg.inquiryId
           }
         });
         queuedCount++;
