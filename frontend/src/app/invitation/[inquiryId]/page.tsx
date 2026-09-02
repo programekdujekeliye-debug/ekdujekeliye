@@ -310,20 +310,21 @@ export default function PersonalizedInvitationPage() {
   };
 
   const handleDownloadCard = () => {
-    const isIOS = typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
-    if (isIOS) {
-      alert("iPhone પર ડાઉનલોડ કરવા માટે કાર્ડ પર લાંબો સમય ટચ (Press & Hold) કરી રાખીને 'Save to Photos' અથવા 'Add to Photos' કરો, અથવા આ સ્ક્રીનનો સ્ક્રીનશોટ (Screenshot) પાડી લો.");
-      return;
-    }
+    const coupleTitle = `${submission?.surname || 'Couple'}_${submission?.husbandName || 'Pass'}`.replace(/\s+/g, '_');
+    const imageSrc = canvasDataUrl || (canvasRef.current ? canvasRef.current.toDataURL('image/png') : '');
+    if (!imageSrc) return;
 
     try {
       const link = document.createElement('a');
-      const coupleTitle = `${submission?.surname || 'Couple'}_${submission?.husbandName || 'Pass'}`.replace(/\s+/g, '_');
       link.download = `${coupleTitle}_Invitation_Card.png`;
-      link.href = canvasDataUrl || (canvasRef.current ? canvasRef.current.toDataURL('image/png') : '');
+      link.href = imageSrc;
+      link.target = '_blank';
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
     } catch (err) {
-      alert("કાર્ડ તૈયાર છે. ડાઉનલોડ કરવા માટે લાંબા સમય સુધી કાર્ડ પર ટચ કરી રાખીને સેવ (Save Image) કરો અથવા આ સ્ક્રીનનો સ્ક્રીનશોટ (Screenshot) પાડી લો.");
+      // Fallback for iOS Safari
+      window.open(imageSrc, '_blank');
     }
   };
 

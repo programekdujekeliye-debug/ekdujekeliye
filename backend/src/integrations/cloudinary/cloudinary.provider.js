@@ -21,7 +21,8 @@ export class CloudinaryStorageProvider {
     try {
       const options = {
         folder,
-        resource_type: 'auto'
+        resource_type: 'image',
+        format: 'jpg'
       };
       if (filename) options.public_id = filename;
 

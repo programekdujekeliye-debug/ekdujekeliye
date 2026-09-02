@@ -107,6 +107,14 @@ export class MediaService {
       couplePhoto = archive.operationalThumbnailUrl;
     }
 
+    // Auto-transcode HEIC/HEIF Cloudinary URLs to universal standard JPEG
+    if (couplePhoto && couplePhoto.includes('cloudinary.com') && /\.(heic|heif)$/i.test(couplePhoto)) {
+      couplePhoto = couplePhoto.replace(/\.(heic|heif)$/i, '.jpg');
+    }
+    if (photoThumbnailUrl && photoThumbnailUrl.includes('cloudinary.com') && /\.(heic|heif)$/i.test(photoThumbnailUrl)) {
+      photoThumbnailUrl = photoThumbnailUrl.replace(/\.(heic|heif)$/i, '.jpg');
+    }
+
     return {
       photoThumbnailUrl,
       couplePhoto,

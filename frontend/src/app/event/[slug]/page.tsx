@@ -106,11 +106,18 @@ const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 
             (blob) => {
               clearTimeout(timeoutId);
               if (blob) {
-                const compressedFile = new File([blob], file.name, {
-                  type: 'image/jpeg',
-                  lastModified: Date.now()
-                });
-                resolve(compressedFile);
+                try {
+                  const compressedFile = new File([blob], file.name, {
+                    type: 'image/jpeg',
+                    lastModified: Date.now()
+                  });
+                  resolve(compressedFile);
+                } catch {
+                  const fallbackBlob: any = blob;
+                  fallbackBlob.name = file.name;
+                  fallbackBlob.lastModified = Date.now();
+                  resolve(fallbackBlob as File);
+                }
               } else {
                 resolve(file);
               }
