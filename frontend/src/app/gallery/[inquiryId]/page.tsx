@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { API_BASE_URL } from '@/config';
-import { CameraIcon, ExternalLinkIcon, SparklesIcon } from '@/components/Icons';
+import { CameraIcon, ExternalLinkIcon, SparklesIcon, CheckIcon } from '@/components/Icons';
 
 export default function GalleryRedirectPage() {
   const params = useParams();
@@ -13,6 +13,8 @@ export default function GalleryRedirectPage() {
   const [targetUrl, setTargetUrl] = useState<string | null>(null);
   const [eventName, setEventName] = useState<string>('Ek Duje Ke Liye Seminar');
   const [coupleName, setCoupleName] = useState<string>('');
+  const [groupCode, setGroupCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!inquiryId) return;
@@ -31,10 +33,18 @@ export default function GalleryRedirectPage() {
           }
 
           if (photoUrl && photoUrl.trim()) {
-            setTargetUrl(photoUrl.trim());
-            // Smoothly redirect to the photo album / Google Drive
-            window.location.replace(photoUrl.trim());
-            return;
+            const cleanUrl = photoUrl.trim();
+            setTargetUrl(cleanUrl);
+
+            // Detect groupCode or ucode in query string (e.g. groupCode=X5ZHM6 or ucode=X5ZHM6)
+            const codeMatch = cleanUrl.match(/[?&](?:groupCode|ucode|code)=([A-Za-z0-9_-]+)/i);
+            if (codeMatch && codeMatch[1]) {
+              setGroupCode(codeMatch[1]);
+            } else {
+              // Direct URL like Google Drive / Cloudinary -> redirect immediately
+              window.location.replace(cleanUrl);
+              return;
+            }
           }
         }
       } catch (err) {
@@ -47,11 +57,18 @@ export default function GalleryRedirectPage() {
     fetchGallery();
   }, [inquiryId]);
 
+  const handleCopyCode = () => {
+    if (!groupCode) return;
+    navigator.clipboard.writeText(groupCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
   return (
-    <div className="min-h-screen bg-stone-900 text-stone-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-stone-800/90 border border-stone-700 rounded-3xl p-6 sm:p-8 shadow-2xl text-center space-y-5">
+    <div className="min-h-screen bg-stone-950 text-stone-100 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-stone-900 border border-stone-800 rounded-3xl p-6 sm:p-8 shadow-2xl text-center space-y-5">
         <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 mx-auto flex items-center justify-center shadow-inner">
-          <CameraIcon className="w-8 h-8 animate-pulse" />
+          <CameraIcon className="w-8 h-8" />
         </div>
 
         <div className="space-y-1">
@@ -59,7 +76,7 @@ export default function GalleryRedirectPage() {
             Ek Duje Ke Liye Memories
           </span>
           <h1 className="text-xl sm:text-2xl font-black text-white">
-            {coupleName ? `${coupleName}` : 'Event Photo Gallery'}
+            {coupleName ? `${coupleName}` : 'Event Digital Memories'}
           </h1>
           <p className="text-xs text-stone-400 font-medium">
             {eventName}
@@ -67,22 +84,49 @@ export default function GalleryRedirectPage() {
         </div>
 
         {loading ? (
-          <div className="p-4 bg-stone-900/60 rounded-2xl border border-stone-700/50 text-xs text-stone-400 space-y-2">
+          <div className="p-4 bg-stone-900/60 rounded-2xl border border-stone-800 text-xs text-stone-400 space-y-2">
             <div className="w-5 h-5 border-2 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto" />
-            <p>તમારા ફોટા લોડ થઈ રહ્યા છે... (Opening photo album...)</p>
+            <p>તમારા ફોટા લોડ થઈ રહ્યા છે... (Loading photo album...)</p>
           </div>
         ) : targetUrl ? (
-          <div className="space-y-3">
-            <p className="text-xs text-stone-300">
-              Redirecting you to the official event photo album...
-            </p>
+          <div className="space-y-4">
+            {groupCode && (
+              <div className="p-4 bg-stone-800/80 border border-stone-700 rounded-2xl space-y-2.5 text-left">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-rose-400 block">
+                  Album Access Code (Ucode)
+                </span>
+                <div className="flex items-center justify-between gap-2 bg-stone-950 px-3.5 py-2.5 rounded-xl border border-stone-800">
+                  <span className="font-mono text-base font-black text-amber-300 tracking-wider">
+                    {groupCode}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopyCode}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    {copied ? (
+                      <>
+                        <CheckIcon className="w-3.5 h-3.5" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <span>Copy Code</span>
+                    )}
+                  </button>
+                </div>
+                <p className="text-[11px] text-stone-400 leading-relaxed">
+                  ફોટા જોવા માટે &ldquo;Open Photos&rdquo; પર ક્લિક કરો. જો Ucode માંગે તો ઉપર આપેલ કોડ પેસ્ટ કરો.
+                </p>
+              </div>
+            )}
+
             <a
               href={targetUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 w-full py-3.5 px-6 bg-rose-600 hover:bg-rose-500 text-white font-extrabold rounded-2xl shadow-lg transition-all text-xs"
+              className="inline-flex items-center justify-center gap-2 w-full py-3.5 px-6 bg-rose-600 hover:bg-rose-500 text-white font-extrabold rounded-2xl shadow-lg transition-all text-xs cursor-pointer"
             >
-              <span>Open Event Photos Album</span>
+              <span>Open Photos (Full Access)</span>
               <ExternalLinkIcon className="w-4 h-4" />
             </a>
           </div>
@@ -94,12 +138,12 @@ export default function GalleryRedirectPage() {
                 <span>ફોટા તૈયાર થઈ રહ્યા છે (Photos Coming Soon)</span>
               </p>
               <p className="text-[11px] leading-relaxed text-stone-300">
-                આ સેમિનારના હાઇ-રિઝોલ્યુશન ફોટા પ્રોસેસ થઈ રહ્યા છે. થોડા સમયમાં અહીં લિંક અપડેટ થઈ જશે.
+                આ સેમિનારના હાઇ-રિઝોલ્યુશન ફોટા પ્રોસેસ થઈ રહ્યા છે. થોડા સમયમાં અહીં લિંક ઉપલબ્ધ થઈ જશે.
               </p>
             </div>
             <a
               href="/#gallery"
-              className="inline-flex items-center justify-center gap-2 w-full py-3 px-6 bg-stone-700 hover:bg-stone-600 text-white font-bold rounded-2xl transition-all text-xs"
+              className="inline-flex items-center justify-center gap-2 w-full py-3 px-6 bg-stone-800 hover:bg-stone-700 text-white font-bold rounded-2xl transition-all text-xs"
             >
               <span>Explore Website Gallery</span>
               <span>→</span>
@@ -107,9 +151,9 @@ export default function GalleryRedirectPage() {
           </div>
         )}
 
-        <div className="pt-2 border-t border-stone-700/50">
+        <div className="pt-2 border-t border-stone-800/80">
           <p className="text-[10px] text-stone-500">
-            Registration: <span className="font-mono text-stone-400">{inquiryId}</span> &bull; Ek Duje Ke Liye
+            Pass / Inquiry: <span className="font-mono text-stone-400">{inquiryId}</span> &bull; Ek Duje Ke Liye
           </p>
         </div>
       </div>
