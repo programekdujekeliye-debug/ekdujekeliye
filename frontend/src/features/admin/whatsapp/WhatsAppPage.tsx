@@ -29,6 +29,7 @@ import {
   CameraIcon,
   ExternalLinkIcon,
   UsersIcon,
+  CalendarIcon,
   XIcon
 } from '../../../components/Icons';
 import { WhatsAppInbox } from './WhatsAppInbox';
@@ -617,88 +618,107 @@ export const WhatsAppPage = () => {
       {/* ========================================================================= */}
       {activeTab === 'dashboard' && (
         <div className="space-y-6">
-          {/* Event Selector & Actions Strip */}
-          <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 min-w-0 flex-1 max-w-xl">
-              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 shrink-0">
-                <span className="w-2 h-2 rounded-full bg-rose-600" />
-                Active Seminar / Slot:
-              </span>
-              <div className="flex-1 min-w-[280px] sm:min-w-[340px]">
-                <LuxurySelect
-                  value={selectedEventId}
-                  onChange={(val) => setSelectedEventId(val)}
-                  options={[
-                    { value: 'all', label: 'All Seminar Slots (Global Overview)' },
-                    ...events.map((evt) => ({
-                      value: evt.id || (evt as any)._id,
-                      label: `${evt.name} — ${evt.city}`,
-                      badge: evt.date || 'TBA',
-                      sublabel: evt.venue
-                    }))
-                  ]}
-                  placeholder="Select Seminar Slot..."
-                  searchable
-                  variant="card"
-                  size="md"
-                />
+          {/* Event Selector & Actions Toolbar (Non-Overlapping Two-Tier Architecture) */}
+          <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xs relative z-30 space-y-3.5">
+            {/* Tier 1: Active Seminar Selector & Quick Status */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 min-w-0 flex-1">
+                <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 shrink-0">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-600 animate-pulse shrink-0" />
+                  Active Seminar / Slot:
+                </span>
+                <div className="flex-1 max-w-xl min-w-0">
+                  <LuxurySelect
+                    value={selectedEventId}
+                    onChange={(val) => setSelectedEventId(val)}
+                    options={[
+                      { value: 'all', label: 'All Seminar Slots (Global Overview)' },
+                      ...events.map((evt) => ({
+                        value: evt.id || (evt as any)._id,
+                        label: `${evt.name} — ${evt.city}`,
+                        badge: evt.date || 'TBA',
+                        sublabel: evt.venue
+                      }))
+                    ]}
+                    placeholder="Select Seminar Slot..."
+                    searchable
+                    variant="card"
+                    size="md"
+                  />
+                </div>
+              </div>
+
+              {/* Refresh & Active Slot Badge */}
+              <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
+                {selectedEventId && selectedEventId !== 'all' && (
+                  <span className="hidden xl:inline-flex px-3 py-2 bg-slate-50 text-slate-700 rounded-xl text-xs font-bold border border-slate-200/80 items-center gap-1.5">
+                    <CalendarIcon className="w-3.5 h-3.5 text-slate-500" />
+                    <span>{events.find(e => (e.id || (e as any)._id) === selectedEventId)?.date || 'Event Slot'}</span>
+                  </span>
+                )}
+                <button
+                  onClick={() => {
+                    fetchDashboardData(selectedEventId);
+                    fetchRegistrations(selectedEventId, pagination.page);
+                  }}
+                  disabled={loadingDashboard || loadingRegistrations}
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold border border-slate-200 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  title="Refresh metrics and subscriber list"
+                >
+                  <RefreshCwIcon className={`w-3.5 h-3.5 ${loadingDashboard ? 'animate-spin text-rose-600' : ''}`} />
+                  <span>Refresh</span>
+                </button>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={handleRunWorker}
-                disabled={runningWorker}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                title="Dispatch all due queued messages immediately to WhatsApp"
-              >
-                <RefreshCwIcon className={`w-3.5 h-3.5 ${runningWorker ? 'animate-spin' : ''}`} />
-                <span>{runningWorker ? 'Dispatching Queue...' : 'Dispatch Due Queue (Run Worker)'}</span>
-              </button>
+            {/* Tier 2: Dedicated Operational Actions Strip */}
+            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 relative z-10">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRunWorker}
+                  disabled={runningWorker}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white rounded-xl text-xs font-extrabold shadow-xs flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                  title="Immediately dispatch all pending due lifecycle messages"
+                >
+                  <RefreshCwIcon className={`w-3.5 h-3.5 ${runningWorker ? 'animate-spin' : ''}`} />
+                  <span>{runningWorker ? 'Dispatching Queue...' : 'Dispatch Due Queue (Run Worker)'}</span>
+                </button>
+              </div>
 
-              <button
-                onClick={() => {
-                  fetchDashboardData(selectedEventId);
-                  fetchRegistrations(selectedEventId, pagination.page);
-                }}
-                disabled={loadingDashboard || loadingRegistrations}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold border border-slate-200 flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                <RefreshCwIcon className={`w-3.5 h-3.5 ${loadingDashboard ? 'animate-spin text-rose-600' : ''}`} />
-                <span>Refresh</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => {
+                    setShowBroadcastModal(true);
+                    handlePreviewBroadcast();
+                  }}
+                  className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="Broadcast official WhatsApp template to entire audience segment"
+                >
+                  <MessageCircleIcon className="w-3.5 h-3.5" />
+                  <span>Audience Broadcast</span>
+                </button>
 
-              <button
-                onClick={() => {
-                  setShowBroadcastModal(true);
-                  handlePreviewBroadcast();
-                }}
-                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                <MessageCircleIcon className="w-3.5 h-3.5" />
-                <span>Audience Broadcast</span>
-              </button>
+                <button
+                  onClick={() => {
+                    setShowSpecificBroadcastModal(true);
+                    setSpecificPreviewData(null);
+                  }}
+                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="Send WhatsApp message to specific attendee phone numbers"
+                >
+                  <UsersIcon className="w-3.5 h-3.5" />
+                  <span>Specific Numbers</span>
+                </button>
 
-              <button
-                onClick={() => {
-                  setShowSpecificBroadcastModal(true);
-                  setSpecificPreviewData(null);
-                }}
-                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
-                title="Send WhatsApp message to specific attendee phone numbers"
-              >
-                <UsersIcon className="w-3.5 h-3.5" />
-                <span>Specific Numbers</span>
-              </button>
-
-              <button
-                onClick={handleOpenPostEventModal}
-                className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
-                title="Review post-event readiness and dispatch combined memories + feedback"
-              >
-                <CameraIcon className="w-3.5 h-3.5" />
-                <span>Post-Event Communication</span>
-              </button>
+                <button
+                  onClick={handleOpenPostEventModal}
+                  className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="Review post-event readiness and dispatch combined memories + feedback"
+                >
+                  <CameraIcon className="w-3.5 h-3.5" />
+                  <span>Post-Event Communication</span>
+                </button>
+              </div>
             </div>
           </div>
 
