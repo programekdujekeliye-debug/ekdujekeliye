@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
+import sharp from 'sharp';
 import { Registration } from '../models/Registration.js';
 import { Event } from '../models/Event.js';
 import { eventService } from '../modules/events/event.service.js';
@@ -174,7 +175,7 @@ export class InvitationCardService {
           REGISTRATION ID: ${escapeXml(inquiryId)}
         </text>
         <text x="${width / 2}" y="1295" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#fcd34d" letter-spacing="4">
-          EK DUJE KE LIYE &bull; A SPECIAL PROGRAM FOR COUPLES
+          EK DUJE KE LIYE &#8226; A SPECIAL PROGRAM FOR COUPLES
         </text>
       </svg>
     `;
@@ -219,10 +220,68 @@ export class InvitationCardService {
     const currentHash = this.calculateInvitationHash(reg, event);
     if (reg.invitationHash && reg.invitationHash !== currentHash) {
       reg.invitationHash = null; // Forces regeneration on next fetch
+      reg.invitationCardUrl = null;
       await reg.save();
       return true;
     }
     return false;
+  }
+
+  /**
+   * Ensure a rendered high-resolution JPEG invitation card is uploaded to Cloudinary
+   * and return its permanent public image URL for WhatsApp IMAGE headers
+   */
+  async ensureInvitationCardImage(registrationOrInquiryId, eventParam = null) {
+    let reg = registrationOrInquiryId;
+    if (typeof registrationOrInquiryId === 'string') {
+      reg = await Registration.findOne({ inquiryId: { $regex: new RegExp(`^${registrationOrInquiryId}$`, 'i') } });
+    }
+    if (!reg) return null;
+
+    let event = eventParam;
+    if (!event) {
+      event = await Event.findOne({ $or: [{ id: reg.programId }, { slug: reg.programId }] }).lean();
+    }
+
+    const hash = this.calculateInvitationHash(reg, event);
+
+    // If already generated and hash matches, return existing URL
+    if (reg.invitationCardUrl && reg.invitationHash === hash) {
+      return {
+        cardUrl: reg.invitationCardUrl,
+        hash,
+        version: reg.invitationVersion || 1
+      };
+    }
+
+    // Generate SVG composed with couple's photo and typography
+    const svgBuf = await this.generateCardBuffer(reg, event);
+
+    // Convert SVG to high-quality JPEG using sharp
+    const jpegBuffer = await sharp(svgBuf)
+      .jpeg({ quality: 90 })
+      .toBuffer();
+
+    // Upload to Cloudinary
+    const uploadRes = await storageService.upload({
+      data: `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`,
+      folder: 'invitation-cards',
+      filename: `invitation_${reg.inquiryId}_${Date.now()}`
+    });
+
+    const cardUrl = typeof uploadRes === 'string' ? uploadRes : (uploadRes?.secure_url || uploadRes?.url);
+
+    reg.invitationHash = hash;
+    reg.invitationCardUrl = cardUrl;
+    reg.invitationVersion = (reg.invitationVersion || 0) + 1;
+    reg.invitationGeneratedAt = new Date();
+    await reg.save();
+
+    return {
+      cardUrl,
+      hash,
+      version: reg.invitationVersion
+    };
   }
 }
 

@@ -50,7 +50,11 @@ const RegistrationSchema = new mongoose.Schema({
     count: { type: Number, default: 0 },
     lastSentAt: { type: Date, default: null },
     nextReminderAt: { type: Date, default: null }
-  }
+  },
+  invitationCardUrl: { type: String, default: null },
+  invitationHash: { type: String, default: null },
+  invitationVersion: { type: Number, default: 1 },
+  invitationGeneratedAt: { type: Date, default: null }
 }, {
   collection: 'submission',
   timestamps: true,

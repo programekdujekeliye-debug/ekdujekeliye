@@ -221,8 +221,19 @@ export class CommunicationSchedulerService {
         }
 
         if (scheduledFor) {
-          // Resolve couple photo URL or safe brand fallback
-          const couplePhotoUrl = registration.couplePhoto || 'https://www.ekdujekeliye.in/sample_couple.png';
+          // Resolve rendered couple invitation card or fallback photo
+          let coupleCardUrl = registration.invitationCardUrl;
+          if (!coupleCardUrl) {
+            try {
+              const cardRes = await invitationCardService.ensureInvitationCardImage(registration, event);
+              coupleCardUrl = cardRes?.cardUrl;
+            } catch (err) {
+              console.warn(`[CommunicationScheduler] Failed to render card image for ${inquiryId}:`, err.message);
+            }
+          }
+          if (!coupleCardUrl) {
+            coupleCardUrl = registration.couplePhoto || 'https://www.ekdujekeliye.in/sample_couple.png';
+          }
 
           results.invitation = await WhatsappMessage.findOneAndUpdate(
             { idempotencyKey: invIdempotencyKey },
@@ -252,9 +263,9 @@ export class CommunicationSchedulerService {
                   venue,
                   registrationId: inquiryId,
                   inquiryId,
-                  headerImageUrl: couplePhotoUrl,
-                  imageUrl: couplePhotoUrl,
-                  invitationImageUrl: couplePhotoUrl
+                  headerImageUrl: coupleCardUrl,
+                  imageUrl: coupleCardUrl,
+                  invitationImageUrl: coupleCardUrl
                 }
               }
             },
