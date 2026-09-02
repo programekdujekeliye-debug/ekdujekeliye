@@ -201,7 +201,7 @@ export class PaymentService {
       // Dispatch M3: Payment Confirmation & Digital Pass
       await sendUtilityTemplate({
         recipientPhone: submission.phoneNumber,
-        templateKey: 'edkl_payment_confirmed_pass_v1',
+        templateKey: 'edkl_payment_confirmed_pass_v2',
         languageCode: 'en_US',
         variables: {
           customerName,
@@ -218,6 +218,22 @@ export class PaymentService {
         inquiryId: submission.inquiryId,
         trigger: 'payment_verified'
       });
+
+      // Cancel any pending payment reminders in queue
+      await WhatsappMessage.updateMany(
+        {
+          inquiryId: submission.inquiryId,
+          messageType: 'payment_pending',
+          status: 'QUEUED'
+        },
+        {
+          $set: {
+            status: 'CANCELLED',
+            cancelledAt: new Date(),
+            cancellationReason: 'PAYMENT_CAPTURED'
+          }
+        }
+      );
 
       // Schedule Future Lifecycle: 48h Invitation, 24h Reminder, Post-Event Feedback
       await communicationSchedulerService.scheduleRegistrationLifecycle(submission, event);
@@ -311,7 +327,7 @@ export class PaymentService {
         // Dispatch M3: Payment Confirmation & Pass
         await sendUtilityTemplate({
           recipientPhone: submission.phoneNumber,
-          templateKey: 'edkl_payment_confirmed_pass_v1',
+          templateKey: 'edkl_payment_confirmed_pass_v2',
           languageCode: 'en_US',
           variables: {
             customerName,
@@ -328,6 +344,22 @@ export class PaymentService {
           inquiryId: submission.inquiryId,
           trigger: 'payment_webhook_captured'
         });
+
+        // Cancel any pending payment reminders in queue
+        await WhatsappMessage.updateMany(
+          {
+            inquiryId: submission.inquiryId,
+            messageType: 'payment_pending',
+            status: 'QUEUED'
+          },
+          {
+            $set: {
+              status: 'CANCELLED',
+              cancelledAt: new Date(),
+              cancellationReason: 'PAYMENT_CAPTURED'
+            }
+          }
+        );
 
         // Schedule Future Lifecycle: 48h Invitation, 24h Reminder, Post-Event Feedback
         await communicationSchedulerService.scheduleRegistrationLifecycle(submission, event);

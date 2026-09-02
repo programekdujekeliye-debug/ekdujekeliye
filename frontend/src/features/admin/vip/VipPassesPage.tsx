@@ -188,23 +188,24 @@ export const VipPassesPage = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           recipientPhone: guest.phoneNumber,
-          templateKey: 'edkl_payment_confirmed_pass_v1'
+          submissionId: guest._id || guest.inquiryId,
+          templateKey: 'edkl_personal_invitation_24h_v2'
         })
       });
 
       setResendStatus({
         id: guest.inquiryId,
-        message: res.message || 'Pass resent to WhatsApp!',
+        message: res.message || 'VIP Pass & Invitation sent to WhatsApp!',
         success: true
       });
-      toast.success(`VIP pass resent to ${guest.phoneNumber}!`);
+      toast.success(`VIP pass & invitation sent to ${guest.phoneNumber}!`);
     } catch (err: any) {
       setResendStatus({
         id: guest.inquiryId,
-        message: err.message || 'Failed to resend pass.',
+        message: err.message || 'Failed to send VIP pass & invitation.',
         success: false
       });
-      toast.error(err.message || 'Failed to resend VIP pass.');
+      toast.error(err.message || 'Failed to send VIP pass & invitation.');
     } finally {
       setResendingId(null);
     }
@@ -647,14 +648,23 @@ export const VipPassesPage = () => {
                             >
                               Card ↗
                             </a>
+                            <button
+                              type="button"
+                              onClick={() => handleResendWhatsApp(g)}
+                              disabled={resendingId === g.inquiryId}
+                              className="p-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
+                              title="Send Official VIP Pass & Invitation Card via Meta WhatsApp API"
+                            >
+                              <WhatsappIcon className={`w-3.5 h-3.5 ${resendingId === g.inquiryId ? 'animate-spin' : ''}`} />
+                            </button>
                             <a
                               href={getWhatsAppMessageUrl(g)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="p-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-lg cursor-pointer transition-colors"
-                              title="Send Pass & Card on WhatsApp"
+                              title="Open in WhatsApp Web (wa.me)"
                             >
-                              <WhatsappIcon className="w-3.5 h-3.5 text-emerald-600" />
+                              <ExternalLinkIcon className="w-3.5 h-3.5 text-emerald-600" />
                             </a>
                             <button
                               type="button"
@@ -854,15 +864,25 @@ export const VipPassesPage = () => {
                           <span>↗</span>
                         </a>
 
+                        <button
+                          type="button"
+                          onClick={() => handleResendWhatsApp(g)}
+                          disabled={resendingId === g.inquiryId}
+                          className="px-2.5 py-1.5 min-h-[34px] bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
+                          title="Send Official VIP Pass & Invitation Card via Meta WhatsApp API"
+                        >
+                          <WhatsappIcon className={`w-3.5 h-3.5 ${resendingId === g.inquiryId ? 'animate-spin' : ''}`} />
+                          <span>{resendingId === g.inquiryId ? 'Sending...' : 'Meta Send'}</span>
+                        </button>
+
                         <a
                           href={getWhatsAppMessageUrl(g)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="px-2.5 py-1.5 min-h-[34px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow-xs"
-                          title="Send Pass & Card on WhatsApp"
+                          className="px-2.5 py-1.5 min-h-[34px] bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-bold text-xs rounded-xl flex items-center gap-1"
+                          title="Open in WhatsApp Web (wa.me)"
                         >
-                          <WhatsappIcon className="w-3.5 h-3.5 text-white" />
-                          <span>Send</span>
+                          <span>wa.me ↗</span>
                         </a>
 
                         <button

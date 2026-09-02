@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import { env } from '../../config/env.js';
 import { verifyWebhook, handleWebhookEvent, sendUtilityTemplate, sendFreeTextMessage, hashPhoneNumber, normalizePhoneNumber, maskPhoneNumber } from '../../integrations/whatsapp/whatsapp.service.js';
 import { WhatsappTemplate } from '../../models/WhatsappTemplate.js';
@@ -10,40 +11,45 @@ import { Pass } from '../../models/Pass.js';
 import { Event } from '../../models/Event.js';
 import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
 import { invitationCardService } from '../../services/invitationCard.service.js';
+import { ensureFeedbackToken } from '../feedback/feedback.controller.js';
 
 export const handleVerification = verifyWebhook;
 export const handleEvents = handleWebhookEvent;
 
 /**
- * Get all official Meta approved WhatsApp templates configured in system
+ * Get all official Meta approved WhatsApp templates configured in system (filtering out deprecated and fallback-only)
  */
 export const getMetaTemplates = async (req, res) => {
   try {
-    const list = Object.values(CORE_TEMPLATES).map((tpl) => {
-      const bodyComp = tpl.components?.find((c) => c.type === 'BODY');
-      const buttonComp = tpl.components?.find((c) => c.type === 'BUTTONS');
-      const buttons = buttonComp?.buttons || [];
+    const includeAll = req.query.includeAll === 'true';
+    const list = Object.values(CORE_TEMPLATES)
+      .filter((tpl) => includeAll || (!tpl.isDeprecated && !tpl.isFallbackOnly && tpl.section !== 'DEPRECATED' && tpl.section !== 'FALLBACK'))
+      .map((tpl) => {
+        const bodyComp = tpl.components?.find((c) => c.type === 'BODY');
+        const buttonComp = tpl.components?.find((c) => c.type === 'BUTTONS');
+        const buttons = buttonComp?.buttons || [];
 
-      return {
-        key: tpl.key,
-        metaName: tpl.metaName,
-        category: tpl.category || 'UTILITY',
-        language: tpl.language || 'en_US',
-        purpose: tpl.purpose || '',
-        trigger: tpl.trigger || '',
-        bodyText: bodyComp?.text || '',
-        buttons: buttons.map((b) => ({
-          type: b.type,
-          text: b.text,
-          url: b.url
-        })),
-        requiredVariables: tpl.requiredVariables || [],
-        status: 'APPROVED',
-        channel: 'Meta WhatsApp Cloud API'
-      };
-    });
+        return {
+          key: tpl.key,
+          metaName: tpl.metaName,
+          category: tpl.category || 'UTILITY',
+          section: tpl.section || 'CORE',
+          language: tpl.language || 'en_US',
+          purpose: tpl.purpose || '',
+          trigger: tpl.trigger || '',
+          bodyText: bodyComp?.text || '',
+          buttons: buttons.map((b) => ({
+            type: b.type,
+            text: b.text,
+            url: b.url
+          })),
+          requiredVariables: tpl.requiredVariables || [],
+          status: 'APPROVED',
+          channel: 'Meta WhatsApp Cloud API'
+        };
+      });
 
-    res.json({ success: true, metaTemplates: list });
+    res.json({ success: true, metaTemplates: list, total: list.length });
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching Meta templates.' });
   }
@@ -55,7 +61,7 @@ export const getMetaTemplates = async (req, res) => {
 export const sendTestMessage = async (req, res) => {
   const { recipientPhone, templateKey, submissionId, customVariables } = req.body;
 
-  const tplKey = templateKey || 'edkl_payment_pending_v1';
+  const tplKey = templateKey || 'edkl_payment_confirmed_pass_v2';
   let cleanPhone = recipientPhone ? recipientPhone.replace(/\D/g, '') : '';
 
   try {
@@ -91,6 +97,26 @@ export const sendTestMessage = async (req, res) => {
       : customVariables?.feeAmount || '₹1500';
     const inquiryId = targetRegistration?.inquiryId || customVariables?.inquiryId || 'TEST-01';
 
+    let headerImageUrl = customVariables?.headerImageUrl;
+    if (!headerImageUrl && targetRegistration) {
+      try {
+        const program = await Event.findOne({
+          $or: [{ id: targetRegistration.programId }, { slug: targetRegistration.programId }]
+        });
+        const cardRes = await invitationCardService.ensureInvitationCard(targetRegistration, program);
+        if (cardRes && cardRes.cardUrl) {
+          headerImageUrl = cardRes.cardUrl;
+        }
+      } catch (_) {}
+      if (!headerImageUrl) {
+        headerImageUrl = targetRegistration.couplePhoto || 'https://www.ekdujekeliye.in/sample_couple.png';
+      }
+    }
+
+    const statusText = targetRegistration?.isVip
+      ? 'VIP Pass Confirmed'
+      : (targetRegistration ? 'Payment Confirmed' : (customVariables?.statusText || 'Registration Confirmed'));
+
     const result = await sendUtilityTemplate({
       recipientPhone: cleanPhone,
       templateKey: tplKey,
@@ -104,10 +130,11 @@ export const sendTestMessage = async (req, res) => {
         venue,
         feeAmount,
         inquiryId,
-        statusText: 'Payment Confirmed'
+        statusText,
+        headerImageUrl
       },
       idempotencyKey: `MANUAL_${targetRegistration ? 'REAL' : 'TEST'}:${tplKey}:${cleanPhone}:${Date.now()}`,
-      trigger: targetRegistration ? 'manual_admin_resend' : 'manual_admin_test',
+      trigger: targetRegistration ? (targetRegistration.isVip ? 'vip_invitation_pass' : 'manual_admin_resend') : 'manual_admin_test',
       registrationId: targetRegistration?._id,
       inquiryId: targetRegistration?.inquiryId
     });
@@ -774,36 +801,64 @@ export const getEventRegistrationsCommunication = async (req, res) => {
         templateName: nextPending.templateName
       } : null;
 
-      // Deterministic Health Status
-      let health = 'HEALTHY';
+      // Deterministic Health Status: GOOD, WAITING, ACTION_NEEDED
+      let health = 'GOOD';
       if (totals.failed > 0 || (!isPaid && reg.payment?.status === 'failed')) {
         health = 'ACTION_NEEDED';
       } else if (totals.pending > 0 || (!isPaid && reg.status === 'pending')) {
-        health = 'PENDING';
+        health = 'WAITING';
       }
 
-      // Reason if missing helper
+      // Reason if missing helper with standard lifecycle why-not-sent enums
+      const eventStartAt = communicationSchedulerService.parseEventDateTime(event?.date, event?.time || '8:30 PM');
+      const now = new Date();
+      const remainingMinutes = eventStartAt ? (eventStartAt.getTime() - now.getTime()) / (60 * 1000) : 999999;
+
       const getReason = (type) => {
         if (!optIn) return 'WHATSAPP_OPT_OUT';
         if (!reg.phoneNumber) return 'PHONE_MISSING';
-        if (type === 'registration') {
-          return isPaid ? 'NOT_REQUIRED' : 'NOT_YET_DUE';
-        }
-        if (type === 'payment_confirmation' || type === 'invitation' || type === 'reminder') {
-          if (!isPaid) return 'PAYMENT_NOT_COMPLETE';
-          if (type === 'invitation' && (!pass || pass.status !== 'ACTIVE')) return 'PASS_NOT_ACTIVE';
+        if (event?.status === 'cancelled') return 'EVENT_CANCELLED';
+        if (eventStartAt && now >= eventStartAt) {
+          if (type === 'pass_reminder_48h' || type === 'invitation_24h' || type === 'payment_reminder') {
+            return 'EVENT_STARTED';
+          }
         }
         if (type === 'payment_reminder') {
           if (isPaid) return 'NOT_REQUIRED';
           if (event?.isPaymentEnabled === false || event?.earlyRegistrationMode === true) return 'PAYMENT_NOT_OPEN';
+          return 'PAYMENT_PENDING';
         }
-        if (type === 'feedback' || type === 'gallery') {
+        if (type === 'payment_confirmed') {
+          if (!isPaid) return 'PAYMENT_NOT_COMPLETE';
+          if (!pass || pass.status !== 'ACTIVE') return 'PASS_NOT_ACTIVE';
+        }
+        if (type === 'pass_reminder_48h') {
+          if (!isPaid) return 'PAYMENT_NOT_COMPLETE';
+          if (remainingMinutes <= 48 * 60) return '48H_WINDOW_EXPIRED';
+        }
+        if (type === 'invitation_24h') {
+          if (!isPaid) return 'PAYMENT_NOT_COMPLETE';
+          if (event?.personalizedInvitationEnabled === false) return 'DISABLED_FOR_EVENT';
+          if (remainingMinutes < 120) return 'TOO_CLOSE_TO_EVENT';
+          if (remainingMinutes < 24 * 60) return 'LATE_INVITATION_SCHEDULED';
+        }
+        if (type === 'post_event') {
           if (!isPresent) return 'NO_ATTENDANCE';
+          const midnight = calculateEventMidnightIST(event?.date);
+          if (midnight && now < midnight) return 'NOT_YET_DUE';
         }
         return 'NOT_YET_DUE';
       };
 
       const isPaymentNotOpen = Boolean(!isPaid && (event?.isPaymentEnabled === false || event?.earlyRegistrationMode === true));
+
+      const mPostCombined = regMsgs.find(m =>
+        m.messageType === 'post_event' ||
+        m.templateName === 'edkl_post_event_memories_feedback_v1' ||
+        m.trigger === 'post_event_memories_feedback' ||
+        m.messageType === 'gallery_ready' ||
+        m.messageType === 'feedback_request'
+      );
 
       return {
         inquiryId: reg.inquiryId,
@@ -816,15 +871,6 @@ export const getEventRegistrationsCommunication = async (req, res) => {
         whatsappOptIn: optIn,
         attendance: isPresent ? 'PRESENT' : 'ABSENT',
         messages: {
-          registration: mReg ? {
-            status: mReg.status,
-            sentAt: mReg.sentAt,
-            deliveredAt: mReg.deliveredAt,
-            readAt: mReg.readAt,
-            failedAt: mReg.failedAt,
-            reasonIfMissing: null
-          } : { status: 'NOT_SENT', reasonIfMissing: getReason('registration') },
-
           paymentReminder: {
             count: mPayReminders.length,
             status: mPayReminders.length > 0
@@ -841,19 +887,9 @@ export const getEventRegistrationsCommunication = async (req, res) => {
             readAt: mPayConf.readAt,
             failedAt: mPayConf.failedAt,
             reasonIfMissing: null
-          } : { status: isPaid ? 'PENDING' : 'NOT_SENT', reasonIfMissing: getReason('payment_confirmation') },
+          } : { status: isPaid ? 'PENDING' : 'NOT_SENT', reasonIfMissing: getReason('payment_confirmed') },
 
-          invitation48h: mInv ? {
-            status: mInv.status,
-            scheduledFor: mInv.scheduledFor,
-            sentAt: mInv.sentAt,
-            deliveredAt: mInv.deliveredAt,
-            readAt: mInv.readAt,
-            failedAt: mInv.failedAt,
-            reasonIfMissing: null
-          } : { status: isPaid ? 'SCHEDULED' : 'WAITING_PAYMENT', reasonIfMissing: getReason('invitation') },
-
-          reminder24h: mRem ? {
+          passReminder48h: mRem ? {
             status: mRem.status,
             scheduledFor: mRem.scheduledFor,
             sentAt: mRem.sentAt,
@@ -861,27 +897,34 @@ export const getEventRegistrationsCommunication = async (req, res) => {
             readAt: mRem.readAt,
             failedAt: mRem.failedAt,
             reasonIfMissing: null
-          } : { status: isPaid ? 'SCHEDULED' : 'WAITING_PAYMENT', reasonIfMissing: getReason('reminder') },
+          } : { status: isPaid && remainingMinutes > 48 * 60 ? 'SCHEDULED' : 'SKIPPED', reasonIfMissing: getReason('pass_reminder_48h') },
 
-          feedback: mFb ? {
-            status: mFb.status,
-            scheduledFor: mFb.scheduledFor,
-            sentAt: mFb.sentAt,
-            deliveredAt: mFb.deliveredAt,
-            readAt: mFb.readAt,
-            failedAt: mFb.failedAt,
+          invitation24h: mInv ? {
+            status: mInv.status,
+            scheduledFor: mInv.scheduledFor,
+            sentAt: mInv.sentAt,
+            deliveredAt: mInv.deliveredAt,
+            readAt: mInv.readAt,
+            failedAt: mInv.failedAt,
             reasonIfMissing: null
-          } : { status: isPresent ? 'SCHEDULED' : 'WAITING_EVENT', reasonIfMissing: getReason('feedback') },
+          } : { status: isPaid && remainingMinutes >= 120 ? 'SCHEDULED' : 'SKIPPED', reasonIfMissing: getReason('invitation_24h') },
 
-          gallery: mGal ? {
-            status: mGal.status,
-            scheduledFor: mGal.scheduledFor,
-            sentAt: mGal.sentAt,
-            deliveredAt: mGal.deliveredAt,
-            readAt: mGal.readAt,
-            failedAt: mGal.failedAt,
+          postEvent: mPostCombined ? {
+            status: mPostCombined.status,
+            scheduledFor: mPostCombined.scheduledFor,
+            sentAt: mPostCombined.sentAt,
+            deliveredAt: mPostCombined.deliveredAt,
+            readAt: mPostCombined.readAt,
+            failedAt: mPostCombined.failedAt,
             reasonIfMissing: null
-          } : { status: 'NOT_READY', reasonIfMissing: getReason('gallery') }
+          } : { status: isPresent ? 'WAITING' : 'NOT_ELIGIBLE', reasonIfMissing: getReason('post_event') },
+
+          // Backwards compatible aliases
+          registration: mReg ? { status: mReg.status, sentAt: mReg.sentAt, deliveredAt: mReg.deliveredAt, readAt: mReg.readAt, failedAt: mReg.failedAt, reasonIfMissing: null } : { status: 'NOT_REQUIRED', reasonIfMissing: 'NOT_REQUIRED' },
+          invitation48h: mInv ? { status: mInv.status, scheduledFor: mInv.scheduledFor, sentAt: mInv.sentAt, deliveredAt: mInv.deliveredAt, readAt: mInv.readAt, failedAt: mInv.failedAt, reasonIfMissing: null } : { status: isPaid && remainingMinutes >= 120 ? 'SCHEDULED' : 'SKIPPED', reasonIfMissing: getReason('invitation_24h') },
+          reminder24h: mRem ? { status: mRem.status, scheduledFor: mRem.scheduledFor, sentAt: mRem.sentAt, deliveredAt: mRem.deliveredAt, readAt: mRem.readAt, failedAt: mRem.failedAt, reasonIfMissing: null } : { status: isPaid && remainingMinutes > 48 * 60 ? 'SCHEDULED' : 'SKIPPED', reasonIfMissing: getReason('pass_reminder_48h') },
+          feedback: mPostCombined ? { status: mPostCombined.status } : { status: isPresent ? 'WAITING' : 'NOT_ELIGIBLE', reasonIfMissing: getReason('post_event') },
+          gallery: mPostCombined ? { status: mPostCombined.status } : { status: isPresent ? 'WAITING' : 'NOT_ELIGIBLE', reasonIfMissing: getReason('post_event') }
         },
         totals,
         lastCommunication,
@@ -1096,6 +1139,392 @@ export const triggerGalleryReady = async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Error queueing gallery notifications.', details: err.message });
+  }
+};
+
+/**
+ * Calculate Local Midnight (00:00 Asia/Kolkata) on the calendar day following the event date
+ */
+export function calculateEventMidnightIST(eventDateStr) {
+  if (!eventDateStr || eventDateStr.toUpperCase() === 'TBD') return null;
+  const parts = eventDateStr.split('-').map(Number);
+  if (parts.length !== 3) return null;
+  const [year, month, day] = parts;
+  // Local 00:00:00 IST on (day + 1) in UTC is previous day 18:30:00 UTC
+  const midnightUtcMs = Date.UTC(year, month - 1, day + 1, 0, 0, 0) - (5.5 * 60 * 60 * 1000);
+  return new Date(midnightUtcMs);
+}
+
+/**
+ * Get Post-Event Communication Readiness Status and Attendee Counts
+ */
+export const getPostEventStatus = async (req, res) => {
+  const { eventId } = req.params;
+  try {
+    const event = await Event.findOne({ $or: [{ id: eventId }, { slug: eventId }] }).lean();
+    if (!event) return res.status(404).json({ error: 'Event not found.' });
+
+    const midnightAt = calculateEventMidnightIST(event.date);
+    const now = new Date();
+    const isPastMidnight = midnightAt ? now >= midnightAt : false;
+
+    // Count PRESENT attendees
+    const matchEvent = {
+      programId: { $in: [event.id, event.slug, event.date].filter(Boolean) },
+      status: 'approved',
+      $or: [{ attendance: 'PRESENT' }, { attendance: 'present' }, { attendance: true }],
+      isDeleted: false
+    };
+
+    const presentCount = await Registration.countDocuments(matchEvent);
+    const eligibleWhatsappCount = await Registration.countDocuments({ ...matchEvent, whatsappOptIn: true });
+
+    const alreadySentCount = await WhatsappMessage.countDocuments({
+      eventId: { $in: [event.id, event.slug] },
+      $or: [
+        { messageType: 'post_event' },
+        { messageType: 'gallery_ready' },
+        { templateName: 'edkl_post_event_memories_feedback_v1' }
+      ],
+      status: { $in: ['QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'READ'] }
+    });
+
+    let lifecycleStatus = 'NOT_READY';
+    if (alreadySentCount > 0 && alreadySentCount >= eligibleWhatsappCount && eligibleWhatsappCount > 0) {
+      lifecycleStatus = 'SENT';
+    } else if (isPastMidnight) {
+      lifecycleStatus = 'READY_TO_SEND';
+    }
+
+    res.json({
+      success: true,
+      eventId: event.id,
+      eventName: event.name,
+      eventDate: event.date,
+      midnightAt,
+      isPastMidnight,
+      lifecycleStatus,
+      presentCount,
+      eligibleWhatsappCount,
+      alreadySentCount,
+      defaultGalleryUrl: 'https://www.ekdujekeliye.in/gallery',
+      feedbackEnabled: event.feedbackEnabled !== false
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch post-event status.', details: err.message });
+  }
+};
+
+/**
+ * Trigger Combined Post-Event Communication (Thank you + Gallery + Feedback) to PRESENT attendees only
+ */
+export const triggerPostEventSend = async (req, res) => {
+  const { eventId } = req.params;
+  const { galleryUrl, forceSend } = req.body || {};
+  if (!eventId) return res.status(400).json({ error: 'Event ID is required.' });
+
+  try {
+    const event = await Event.findOne({ $or: [{ id: eventId }, { slug: eventId }] }).lean();
+    if (!event) return res.status(404).json({ error: 'Event not found.' });
+
+    const midnightAt = calculateEventMidnightIST(event.date);
+    const now = new Date();
+
+    if (midnightAt && now < midnightAt && !forceSend) {
+      return res.status(400).json({
+        error: 'Post-event communications become ready at midnight following the event date.',
+        midnightAt,
+        currentTime: now
+      });
+    }
+
+    // Strictly PRESENT attendees only
+    const attendees = await Registration.find({
+      programId: { $in: [event.id, event.slug, event.date].filter(Boolean) },
+      status: 'approved',
+      $or: [{ attendance: 'PRESENT' }, { attendance: 'present' }, { attendance: true }],
+      whatsappOptIn: true,
+      isDeleted: false
+    }).lean();
+
+    let queuedCount = 0;
+    let alreadySentCount = 0;
+
+    for (const reg of attendees) {
+      const cleanPhone = reg.phoneNumber ? normalizePhoneNumber(reg.phoneNumber) : '';
+      if (!cleanPhone) continue;
+
+      const idempotencyKey = `POST_EVENT:${event.id || event.slug}:${reg._id}:v1`;
+
+      const existing = await WhatsappMessage.findOne({ idempotencyKey }).lean();
+      if (existing) {
+        alreadySentCount++;
+        continue;
+      }
+
+      const customerName = `${reg.husbandName || ''} & ${reg.wifeName || ''}`.trim() || 'Valued Couple';
+      const fb = await ensureFeedbackToken(reg.inquiryId, event.id || event.slug, customerName);
+
+      await WhatsappMessage.create({
+        messageId: `WA-POST-${crypto.randomBytes(8).toString('hex')}`,
+        eventId: event.id || event.slug,
+        registrationId: reg._id,
+        inquiryId: reg.inquiryId,
+        recipientPhone: cleanPhone,
+        recipientMasked: maskPhoneNumber(cleanPhone),
+        templateName: 'edkl_post_event_memories_feedback_v1',
+        templateLanguage: 'en_US',
+        templateCategory: 'UTILITY',
+        messageType: 'post_event',
+        trigger: 'post_event_memories_feedback',
+        executionSource: 'NORMAL',
+        providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
+        idempotencyKey,
+        status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
+        scheduledFor: now,
+        templateParameters: {
+          customerName,
+          eventName: event.name || 'Ek Duje Ke Liye Seminar',
+          registrationId: reg.inquiryId,
+          galleryToken: reg.inquiryId,
+          feedbackToken: fb?.token || reg.inquiryId
+        }
+      });
+      queuedCount++;
+    }
+
+    res.json({
+      success: true,
+      message: `Post-event memories & feedback queued for ${queuedCount} attendees. (${alreadySentCount} already sent/idempotent).`,
+      queuedCount,
+      alreadySentCount,
+      totalAttendees: attendees.length
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error queueing post-event communications.', details: err.message });
+  }
+};
+
+/**
+ * Preview Specific-Number Bulk Audience with 24h Meta Customer Service Window Detection
+ */
+export const previewSpecificBroadcast = async (req, res) => {
+  const { eventId, rawNumbers, messageMode = 'TEMPLATE', templateKey } = req.body || {};
+  if (!eventId || !rawNumbers) {
+    return res.status(400).json({ error: 'eventId and rawNumbers are required.' });
+  }
+
+  try {
+    const rawList = String(rawNumbers)
+      .split(/[\n,;\t]+/)
+      .map(s => s.trim().replace(/\D/g, ''))
+      .filter(s => s.length >= 10);
+
+    const uniqueNumbers = [...new Set(rawList.map(num => normalizePhoneNumber(num)))];
+
+    // Find registrations matching this event
+    const event = await Event.findOne({ $or: [{ id: eventId }, { slug: eventId }] }).lean();
+    const eventIds = [eventId, event?.id, event?.slug, event?.date].filter(Boolean);
+
+    const matchedRegistrations = await Registration.find({
+      programId: { $in: eventIds },
+      isDeleted: false
+    }).lean();
+
+    const phoneToRegMap = new Map();
+    for (const reg of matchedRegistrations) {
+      if (reg.phoneNumber) {
+        const norm = normalizePhoneNumber(reg.phoneNumber);
+        phoneToRegMap.set(norm, reg);
+      }
+    }
+
+    // Check 24-hour service window per recipient
+    const now = new Date();
+    const recipients = [];
+    let windowOpenCount = 0;
+    let windowClosedCount = 0;
+    let optedOutCount = 0;
+    let matchedCount = 0;
+
+    for (const phone of uniqueNumbers) {
+      const reg = phoneToRegMap.get(phone);
+      if (!reg) continue;
+      matchedCount++;
+
+      if (reg.whatsappOptIn === false) {
+        optedOutCount++;
+        continue;
+      }
+
+      // Check conversation window
+      const conv = await WhatsappConversation.findOne({ customerPhone: phone }).lean();
+      const isWindowOpen = Boolean(
+        conv && (conv.isCustomerServiceWindowOpen || (conv.customerServiceWindowExpiresAt && new Date(conv.customerServiceWindowExpiresAt) > now))
+      );
+
+      if (isWindowOpen) windowOpenCount++;
+      else windowClosedCount++;
+
+      recipients.push({
+        phone,
+        maskedPhone: maskPhoneNumber(phone),
+        inquiryId: reg.inquiryId,
+        customerName: `${reg.husbandName || ''} & ${reg.wifeName || ''}`.trim(),
+        paymentStatus: reg.status === 'approved' || reg.payment?.status === 'captured' ? 'PAID' : 'PENDING',
+        isWindowOpen,
+        windowExpiresAt: conv?.customerServiceWindowExpiresAt || null
+      });
+    }
+
+    const eligibleCount = messageMode === 'FREE_TEXT' ? windowOpenCount : recipients.length;
+
+    res.json({
+      success: true,
+      inputCount: uniqueNumbers.length,
+      matchedCount,
+      unmatchedCount: uniqueNumbers.length - matchedCount,
+      windowOpenCount,
+      windowClosedCount,
+      optedOutCount,
+      eligibleCount,
+      messageMode,
+      recipients
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to calculate broadcast preview.', details: err.message });
+  }
+};
+
+/**
+ * Dispatch Specific Bulk Messages with Strict 24h Window Protections
+ */
+export const sendSpecificBroadcast = async (req, res) => {
+  const { eventId, rawNumbers, messageMode = 'TEMPLATE', templateKey, customMessage } = req.body || {};
+  if (!eventId || !rawNumbers) {
+    return res.status(400).json({ error: 'eventId and rawNumbers are required.' });
+  }
+  if (messageMode === 'TEMPLATE' && !templateKey) {
+    return res.status(400).json({ error: 'templateKey is required for TEMPLATE mode.' });
+  }
+  if (messageMode === 'FREE_TEXT' && !customMessage) {
+    return res.status(400).json({ error: 'customMessage is required for FREE_TEXT mode.' });
+  }
+
+  try {
+    const rawList = String(rawNumbers)
+      .split(/[\n,;\t]+/)
+      .map(s => s.trim().replace(/\D/g, ''))
+      .filter(s => s.length >= 10);
+
+    const uniqueNumbers = [...new Set(rawList.map(num => normalizePhoneNumber(num)))];
+    const event = await Event.findOne({ $or: [{ id: eventId }, { slug: eventId }] }).lean();
+    const eventIds = [eventId, event?.id, event?.slug, event?.date].filter(Boolean);
+
+    const matchedRegistrations = await Registration.find({
+      programId: { $in: eventIds },
+      isDeleted: false
+    }).lean();
+
+    const phoneToRegMap = new Map();
+    for (const reg of matchedRegistrations) {
+      if (reg.phoneNumber) {
+        phoneToRegMap.set(normalizePhoneNumber(reg.phoneNumber), reg);
+      }
+    }
+
+    const now = new Date();
+    let queuedCount = 0;
+    let skippedClosedWindowCount = 0;
+    let skippedOptOutCount = 0;
+
+    for (const phone of uniqueNumbers) {
+      const reg = phoneToRegMap.get(phone);
+      if (!reg) continue;
+
+      if (reg.whatsappOptIn === false) {
+        skippedOptOutCount++;
+        continue;
+      }
+
+      const conv = await WhatsappConversation.findOne({ customerPhone: phone }).lean();
+      const isWindowOpen = Boolean(
+        conv && (conv.isCustomerServiceWindowOpen || (conv.customerServiceWindowExpiresAt && new Date(conv.customerServiceWindowExpiresAt) > now))
+      );
+
+      // In FREE_TEXT mode, strictly exclude closed-window recipients
+      if (messageMode === 'FREE_TEXT') {
+        if (!isWindowOpen) {
+          skippedClosedWindowCount++;
+          continue;
+        }
+
+        const idempotencyKey = `BCAST_FREE:${eventId}:${reg._id}:${Date.now()}`;
+        await WhatsappMessage.create({
+          messageId: `WA-BCAST-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+          eventId: event.id || event.slug,
+          registrationId: reg._id,
+          inquiryId: reg.inquiryId,
+          recipientPhone: phone,
+          recipientMasked: maskPhoneNumber(phone),
+          templateName: 'free_text',
+          templateLanguage: 'en_US',
+          templateCategory: 'UTILITY',
+          messageType: 'custom',
+          trigger: 'manual_broadcast_freetext',
+          executionSource: 'NORMAL',
+          providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
+          idempotencyKey,
+          content: customMessage,
+          status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
+          scheduledFor: now
+        });
+        queuedCount++;
+      } else {
+        // TEMPLATE mode
+        const idempotencyKey = `BCAST_TPL:${eventId}:${templateKey}:${reg._id}:${Date.now()}`;
+        const customerName = `${reg.husbandName || ''} & ${reg.wifeName || ''}`.trim() || 'Valued Couple';
+
+        await WhatsappMessage.create({
+          messageId: `WA-BCAST-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+          eventId: event.id || event.slug,
+          registrationId: reg._id,
+          inquiryId: reg.inquiryId,
+          recipientPhone: phone,
+          recipientMasked: maskPhoneNumber(phone),
+          templateName: templateKey,
+          templateLanguage: 'en_US',
+          templateCategory: 'UTILITY',
+          messageType: 'custom',
+          trigger: 'manual_broadcast_template',
+          executionSource: 'NORMAL',
+          providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
+          idempotencyKey,
+          status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
+          scheduledFor: now,
+          templateParameters: {
+            customerName,
+            eventName: event?.name || 'Ek Duje Ke Liye Seminar',
+            eventDate: event?.date || '',
+            eventTime: event?.time || '8:30 PM',
+            venue: event?.venue || 'Sardar Smruti Bhavan, Surat',
+            registrationId: reg.inquiryId,
+            inquiryId: reg.inquiryId
+          }
+        });
+        queuedCount++;
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Bulk message queued for ${queuedCount} recipients.`,
+      queuedCount,
+      skippedClosedWindowCount,
+      skippedOptOutCount
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error sending specific bulk broadcast.', details: err.message });
   }
 };
 

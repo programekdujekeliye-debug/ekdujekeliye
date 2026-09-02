@@ -4,13 +4,15 @@
  */
 
 export const CORE_TEMPLATES = {
-  // 1. Payment Confirmed + Digital Pass (Primary Pass Delivery)
+  // 1. Payment Confirmed + Digital Pass (Primary Pass Delivery - v1 Fallback)
   edkl_payment_confirmed_pass_v1: {
     key: 'edkl_payment_confirmed_pass_v1',
     metaName: 'edkl_payment_confirmed_pass_v1',
     category: 'UTILITY',
+    section: 'FALLBACK',
+    isFallbackOnly: true,
     language: 'en_US',
-    purpose: 'Sent immediately after payment is captured/verified to deliver registration confirmation & digital pass',
+    purpose: 'Sent immediately after payment is captured/verified to deliver registration confirmation & digital pass (v1 Fallback)',
     trigger: 'payment_verified',
     bodyVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
     buttonVariables: ['inquiryId'],
@@ -51,6 +53,7 @@ export const CORE_TEMPLATES = {
     key: 'edkl_polite_payment_pending_v1',
     metaName: 'edkl_polite_payment_pending_v1',
     category: 'UTILITY',
+    section: 'CORE',
     language: 'en_US',
     purpose: 'Polite bilingual Gujarati and English registration confirmation with direct payment link',
     trigger: 'registration_created',
@@ -89,54 +92,12 @@ export const CORE_TEMPLATES = {
     ]
   },
 
-  // 2b. Registration Received & Payment Pending (Standard Bilingual)
-  edkl_payment_pending_v1: {
-    key: 'edkl_payment_pending_v1',
-    metaName: 'edkl_payment_pending_v1',
-    category: 'UTILITY',
-    language: 'en_US',
-    purpose: 'Sent immediately when an attendee submits registration with pending payment, delivering direct payment link',
-    trigger: 'registration_created',
-    bodyVariables: ['customerName', 'eventName', 'registrationId', 'eventDate', 'eventTime', 'venue', 'feeAmount'],
-    buttonVariables: ['inquiryId'],
-    requiredVariables: ['customerName', 'eventName', 'registrationId', 'eventDate', 'eventTime', 'venue', 'feeAmount', 'inquiryId'],
-    components: [
-      {
-        type: 'BODY',
-        text: 'Hello {{1}},\n\nYour registration for {{2}} has been received and your payment is pending.\n(તમારી રજીસ્ટ્રેશન વિગતો મળી ગયેલ છે અને ફી બાકી છે.)\n\nRegistration ID: {{3}}\nDate: {{4}}\nTime: {{5}}\nVenue: {{6}}\nFee: {{7}}\n\nKindly complete your payment to confirm your couple pass.\n(કૃપા કરીને તમારો પાસ કન્ફર્મ કરવા પેમેન્ટ પૂર્ણ કરો.)\n\nEk Duje Ke Liye',
-        example: {
-          body_text: [
-            [
-              'Jaynesh & Pooja',
-              'Ek Duje Ke Liye Seminar',
-              'EK01-02',
-              '15 September 2026',
-              '8:30 PM',
-              'Sardar Smruti Bhavan, Surat',
-              '₹1500'
-            ]
-          ]
-        }
-      },
-      {
-        type: 'BUTTONS',
-        buttons: [
-          {
-            type: 'URL',
-            text: 'Complete Payment',
-            url: 'https://www.ekdujekeliye.in/payment/{{1}}',
-            example: ['EK01-02']
-          }
-        ]
-      }
-    ]
-  },
-
   // 2b. Registration Received (Standard)
   edkl_registration_received_v1: {
     key: 'edkl_registration_received_v1',
     metaName: 'edkl_registration_received_v1',
     category: 'UTILITY',
+    section: 'OPERATIONS',
     language: 'en_US',
     purpose: 'Sent immediately after a user submits an EDKL registration form',
     trigger: 'registration_submitted',
@@ -169,6 +130,7 @@ export const CORE_TEMPLATES = {
     key: 'edkl_payment_failed_v1',
     metaName: 'edkl_payment_failed_v1',
     category: 'UTILITY',
+    section: 'OPERATIONS',
     language: 'en_US',
     purpose: 'Sent when online payment fails or is dismissed without completing transaction',
     trigger: 'payment_failed',
@@ -203,13 +165,15 @@ export const CORE_TEMPLATES = {
     ]
   },
 
-  // 4. Event Reminder (Confirmed attendees only)
+  // 4. Event Reminder (v1 Fallback for edkl_event_pass_reminder_v2)
   edkl_event_reminder_v1: {
     key: 'edkl_event_reminder_v1',
     metaName: 'edkl_event_reminder_v1',
     category: 'UTILITY',
+    section: 'FALLBACK',
+    isFallbackOnly: true,
     language: 'en_US',
-    purpose: 'Reminder sent only to confirmed registered participants before the event',
+    purpose: 'Reminder sent only to confirmed registered participants before the event (v1 Fallback)',
     trigger: 'event_reminder',
     bodyVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
     buttonVariables: ['inquiryId'],
@@ -250,6 +214,7 @@ export const CORE_TEMPLATES = {
     key: 'edkl_event_update_v1',
     metaName: 'edkl_event_update_v1',
     category: 'UTILITY',
+    section: 'OPERATIONS',
     language: 'en_US',
     purpose: 'Notification when event schedule or venue details are updated for existing registrations',
     trigger: 'event_details_updated',
@@ -292,6 +257,7 @@ export const CORE_TEMPLATES = {
     key: 'edkl_event_cancelled_v1',
     metaName: 'edkl_event_cancelled_v1',
     category: 'UTILITY',
+    section: 'OPERATIONS',
     language: 'en_US',
     purpose: 'Notification when an event batch is cancelled with factual instructions',
     trigger: 'event_cancelled',
@@ -321,6 +287,7 @@ export const CORE_TEMPLATES = {
     key: 'edkl_pass_reissued_v1',
     metaName: 'edkl_pass_reissued_v1',
     category: 'UTILITY',
+    section: 'OPERATIONS',
     language: 'en_US',
     purpose: 'Notification when a pass or token is re-issued for security or attendee correction',
     trigger: 'pass_reissued',
@@ -355,13 +322,15 @@ export const CORE_TEMPLATES = {
     ]
   },
 
-  // 8. 48-Hour Personalized Couple Invitation
+  // 8. 48-Hour Personalized Couple Invitation (v1 Fallback for edkl_personal_invitation_24h_v2)
   edkl_personal_invitation_48h_v1: {
     key: 'edkl_personal_invitation_48h_v1',
     metaName: 'edkl_personal_invitation_48h_v1',
     category: 'UTILITY',
+    section: 'FALLBACK',
+    isFallbackOnly: true,
     language: 'en_US',
-    purpose: 'Sent approximately 48 hours before event with personalized couple invitation card attached as header image',
+    purpose: 'Sent approximately 48 hours before event with personalized couple invitation card attached as header image (v1 Fallback)',
     trigger: 'invitation_48h',
     headerType: 'IMAGE',
     bodyVariables: ['customerName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
@@ -397,13 +366,15 @@ export const CORE_TEMPLATES = {
     ]
   },
 
-  // 11. Post-Event Feedback Request (Attended Only)
+  // 11. Post-Event Feedback Request (DEPRECATED - Replaced by edkl_post_event_memories_feedback_v1)
   edkl_event_feedback_v1: {
     key: 'edkl_event_feedback_v1',
     metaName: 'edkl_event_feedback_v1',
     category: 'UTILITY',
+    section: 'DEPRECATED',
+    isDeprecated: true,
     language: 'en_US',
-    purpose: 'Sent 3 hours post-event to attendees who were present for feedback and review',
+    purpose: 'Deprecated standalone feedback template (Replaced by edkl_post_event_memories_feedback_v1)',
     trigger: 'event_feedback',
     bodyVariables: ['customerName', 'eventName', 'registrationId'],
     buttonVariables: ['feedbackToken'],
@@ -428,6 +399,197 @@ export const CORE_TEMPLATES = {
           {
             type: 'URL',
             text: 'Share Feedback',
+            url: 'https://www.ekdujekeliye.in/feedback/{{1}}',
+            example: ['fb-789a6b12']
+          }
+        ]
+      }
+    ]
+  },
+
+  // =========================================================================
+  // CORE LIFECYCLE V2 TEMPLATES (Mixed Gujarati + English & Evergreen Invitation)
+  // =========================================================================
+
+  // Core 2: Payment Confirmed + Digital Pass (Mixed Gujarati + English)
+  edkl_payment_confirmed_pass_v2: {
+    key: 'edkl_payment_confirmed_pass_v2',
+    metaName: 'edkl_payment_confirmed_pass_v2',
+    category: 'UTILITY',
+    section: 'CORE',
+    language: 'en_US',
+    purpose: 'Authoritative payment confirmation and Digital Pass delivery (Mixed Gujarati + English)',
+    trigger: 'payment_verified',
+    bodyVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
+    buttonVariables: ['inquiryId'],
+    requiredVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId', 'inquiryId'],
+    fallbackTemplateKey: 'edkl_payment_confirmed_pass_v1',
+    components: [
+      {
+        type: 'BODY',
+        text: 'નમસ્તે {{1}},\n\n{{2}} માટે તમારું રજીસ્ટ્રેશન અને પેમેન્ટ સફળતાપૂર્વક કન્ફર્મ થઈ ગયું છે.\n(Your registration and payment have been successfully confirmed.)\n\nતારીખ (Date): {{3}}\nસમય (Time): {{4}}\nસ્થળ (Venue): {{5}}\nRegistration ID: {{6}}\n\nતમારી સીટ કન્ફર્મ છે. કૃપા કરીને કાર્યક્રમમાં પ્રવેશ સમયે તમારો Digital QR Pass તૈયાર રાખશો.\n(Your seat is confirmed. Please keep your Digital QR Pass ready at the event entrance.)\n\nઆભાર,\nએક દુજે કે લિયે\nEk Duje Ke Liye',
+        example: {
+          body_text: [
+            [
+              'Jaynesh & Pooja',
+              'Ek Duje Ke Liye Seminar',
+              '7 September 2026',
+              '8:30 PM',
+              'Sardar Patel Smruti Bhavan, Surat',
+              'EK06-02'
+            ]
+          ]
+        }
+      },
+      {
+        type: 'BUTTONS',
+        buttons: [
+          {
+            type: 'URL',
+            text: 'View Digital Pass',
+            url: 'https://www.ekdujekeliye.in/pass/{{1}}',
+            example: ['EK06-02']
+          }
+        ]
+      }
+    ]
+  },
+
+  // Core 3: 48-Hour Pass / Event Reminder (Mixed Gujarati + English)
+  edkl_event_pass_reminder_v2: {
+    key: 'edkl_event_pass_reminder_v2',
+    metaName: 'edkl_event_pass_reminder_v2',
+    category: 'UTILITY',
+    section: 'CORE',
+    language: 'en_US',
+    purpose: '48-hour event reminder with digital pass check-in link (Mixed Gujarati + English)',
+    trigger: 'scheduled_48h_pass_reminder',
+    bodyVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
+    buttonVariables: ['inquiryId'],
+    requiredVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId', 'inquiryId'],
+    fallbackTemplateKey: 'edkl_event_reminder_v1',
+    components: [
+      {
+        type: 'BODY',
+        text: 'નમસ્તે {{1}},\n\n{{2}} માટે હવે માત્ર 48 કલાક બાકી છે.\n(Your Ek Duje Ke Liye event is coming up in 48 hours.)\n\nતારીખ (Date): {{3}}\nસમય (Time): {{4}}\nસ્થળ (Venue): {{5}}\nRegistration ID: {{6}}\n\nકૃપા કરીને તમારો Digital QR Pass તૈયાર રાખશો.\n(Please keep your Digital QR Pass ready for entry.)\n\nઆભાર,\nએક દુજે કે લિયે\nEk Duje Ke Liye',
+        example: {
+          body_text: [
+            [
+              'Jaynesh & Pooja',
+              'Ek Duje Ke Liye Seminar',
+              '7 September 2026',
+              '8:30 PM',
+              'Sardar Patel Smruti Bhavan, Surat',
+              'EK06-02'
+            ]
+          ]
+        }
+      },
+      {
+        type: 'BUTTONS',
+        buttons: [
+          {
+            type: 'URL',
+            text: 'View Digital Pass',
+            url: 'https://www.ekdujekeliye.in/pass/{{1}}',
+            example: ['EK06-02']
+          }
+        ]
+      }
+    ]
+  },
+
+  // Core 4: 24-Hour / Catch-Up Personalized Invitation with IMAGE HEADER (Evergreen wording, NO "tomorrow")
+  edkl_personal_invitation_24h_v2: {
+    key: 'edkl_personal_invitation_24h_v2',
+    metaName: 'edkl_personal_invitation_24h_v2',
+    category: 'UTILITY',
+    section: 'CORE',
+    language: 'en_US',
+    purpose: '24-hour & late-registration catch-up invitation with rendered IMAGE header card',
+    trigger: 'scheduled_24h_invitation',
+    headerType: 'IMAGE',
+    bodyVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
+    buttonVariables: ['inquiryId'],
+    requiredVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId', 'inquiryId'],
+    fallbackTemplateKey: 'edkl_personal_invitation_48h_v1',
+    components: [
+      {
+        type: 'HEADER',
+        format: 'IMAGE',
+        example: {
+          header_handle: ['https://www.ekdujekeliye.in/sample_couple.png']
+        }
+      },
+      {
+        type: 'BODY',
+        text: 'નમસ્તે {{1}},\n\n{{2}} કાર્યક્રમમાં આપનું હાર્દિક સ્વાગત છે.\n(We look forward to welcoming you to your Ek Duje Ke Liye event.)\n\nતારીખ (Date): {{3}}\nસમય (Time): {{4}}\nસ્થળ (Venue): {{5}}\nRegistration ID: {{6}}\n\nતમારા માટે ખાસ તૈયાર કરેલું Personalized Invitation ઉપર આપેલ છે.\n(Your personalized invitation is attached above.)\n\nકૃપા કરીને પ્રવેશ સમયે તમારો Digital QR Pass તૈયાર રાખશો.\n(Please keep your Digital QR Pass ready at entry.)\n\nઆભાર,\nએક દુજે કે લિયે\nEk Duje Ke Liye',
+        example: {
+          body_text: [
+            [
+              'Jaynesh & Pooja',
+              'Ek Duje Ke Liye Seminar',
+              '7 September 2026',
+              '8:30 PM',
+              'Sardar Patel Smruti Bhavan, Surat',
+              'EK06-02'
+            ]
+          ]
+        }
+      },
+      {
+        type: 'BUTTONS',
+        buttons: [
+          {
+            type: 'URL',
+            text: 'View Digital Pass',
+            url: 'https://www.ekdujekeliye.in/pass/{{1}}',
+            example: ['EK06-02']
+          }
+        ]
+      }
+    ]
+  },
+
+  // Core 5: Combined Post-Event Memories + Feedback (Sent ONLY to PRESENT Attendees)
+  edkl_post_event_memories_feedback_v1: {
+    key: 'edkl_post_event_memories_feedback_v1',
+    metaName: 'edkl_post_event_memories_feedback_v1',
+    category: 'UTILITY',
+    section: 'CORE',
+    language: 'en_US',
+    purpose: 'Single post-event message sent to present attendees combining thank you, photo gallery, and feedback',
+    trigger: 'post_event_memories_feedback',
+    bodyVariables: ['customerName', 'eventName', 'registrationId'],
+    buttonVariables: ['galleryToken', 'feedbackToken'],
+    requiredVariables: ['customerName', 'eventName', 'registrationId', 'galleryToken', 'feedbackToken'],
+    fallbackTemplateKey: 'edkl_event_feedback_v1',
+    components: [
+      {
+        type: 'BODY',
+        text: 'નમસ્તે {{1}},\n\n{{2}} કાર્યક્રમમાં જોડાવા બદલ આપનો દિલથી આભાર.\n(Thank you for being part of the event.)\n\nતમારી સાથે વિતાવેલી સુંદર પળોની યાદો હવે તૈયાર છે.\n(Your event memories are now available.)\n\nRegistration ID: {{3}}\n\nતમારા ફોટા જોવા માટે નીચેના "View Event Photos" બટનનો ઉપયોગ કરો. તમારો અનુભવ અમારે માટે મહત્વનો છે. કૃપા કરીને "Give Feedback" દ્વારા તમારો પ્રતિભાવ આપશો.\n(Your feedback is valuable to us.)\n\nઆભાર,\nએક દુજે કે લિયે\nEk Duje Ke Liye',
+        example: {
+          body_text: [
+            [
+              'Jaynesh & Pooja',
+              'Ek Duje Ke Liye Seminar',
+              'EK06-02'
+            ]
+          ]
+        }
+      },
+      {
+        type: 'BUTTONS',
+        buttons: [
+          {
+            type: 'URL',
+            text: 'View Event Photos',
+            url: 'https://www.ekdujekeliye.in/gallery/{{1}}',
+            example: ['EK06-02']
+          },
+          {
+            type: 'URL',
+            text: 'Give Feedback',
             url: 'https://www.ekdujekeliye.in/feedback/{{1}}',
             example: ['fb-789a6b12']
           }

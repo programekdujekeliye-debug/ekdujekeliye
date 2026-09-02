@@ -105,7 +105,7 @@ export async function runAutomaticWhatsAppWorker() {
 
         const res = await sendUtilityTemplate({
           recipientPhone: reg.phoneNumber,
-          templateKey: 'edkl_event_reminder_v1', // Or edkl_personal_invitation_48h_v1
+          templateKey: 'edkl_event_pass_reminder_v2',
           languageCode: 'en_US',
           variables: {
             customerName,
@@ -146,7 +146,7 @@ export async function runAutomaticWhatsAppWorker() {
 
         const res = await sendUtilityTemplate({
           recipientPhone: reg.phoneNumber,
-          templateKey: 'edkl_event_reminder_v1',
+          templateKey: 'edkl_personal_invitation_24h_v2',
           languageCode: 'en_US',
           variables: {
             customerName,
@@ -191,7 +191,7 @@ export async function runAutomaticWhatsAppWorker() {
 
         const res = await sendUtilityTemplate({
           recipientPhone: reg.phoneNumber,
-          templateKey: 'edkl_event_reminder_v1',
+          templateKey: 'edkl_post_event_memories_feedback_v1',
           languageCode: 'en_US',
           variables: {
             customerName,

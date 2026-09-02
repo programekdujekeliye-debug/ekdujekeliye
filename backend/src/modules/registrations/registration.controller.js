@@ -7,6 +7,7 @@ import { eventService } from '../events/event.service.js';
 import { Counter, getNextSequence } from '../../models/Counter.js';
 import { storageService } from '../../services/storage.service.js';
 import { qrPassService } from '../passes/qrPass.service.js';
+import { invitationCardService } from '../../services/invitationCard.service.js';
 import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
 
 export const submitRegistration = async (req, res) => {
@@ -250,11 +251,22 @@ export const manualInviteeRegistration = async (req, res) => {
 
     // Authoritative Cryptographic Pass Generation for VIP Guest (Async Non-Blocking)
     qrPassService.ensurePass(sub, program)
-      .then(() => {
+      .then(async () => {
         const customerName = `${husbandName} & ${wifeName}`.trim();
+        // Generate personalized invitation card for VIP (pass & invitation message, NO payment confirmation)
+        let headerImageUrl = sub.couplePhoto || 'https://www.ekdujekeliye.in/sample_couple.png';
+        try {
+          const cardRes = await invitationCardService.ensureInvitationCard(sub, program);
+          if (cardRes && cardRes.cardUrl) {
+            headerImageUrl = cardRes.cardUrl;
+          }
+        } catch (cardErr) {
+          console.warn('[ManualInvitee] Invitation card generation warning:', cardErr.message);
+        }
+
         return sendUtilityTemplate({
           recipientPhone: phoneNumber,
-          templateKey: 'edkl_payment_confirmed_pass_v1',
+          templateKey: 'edkl_personal_invitation_24h_v2',
           languageCode: 'en_US',
           variables: {
             customerName,
@@ -263,13 +275,14 @@ export const manualInviteeRegistration = async (req, res) => {
             eventTime: program.time || '8:30 PM',
             venue: program.venue || 'Sardar Smruti Bhavan, Surat',
             registrationId: inquiryId,
-            inquiryId
+            inquiryId,
+            headerImageUrl
           },
-          idempotencyKey: `VIP_PASS:${sub._id}:${inquiryId}`,
+          idempotencyKey: `VIP_INVITATION_PASS:${sub._id}:${inquiryId}`,
           registrationId: sub._id,
           eventId: program.id,
           inquiryId,
-          trigger: 'payment_verified'
+          trigger: 'vip_invitation_pass'
         });
       })
       .catch(passErr => console.warn('[ManualInvitee] Background Pass or WhatsApp notice:', passErr.message));

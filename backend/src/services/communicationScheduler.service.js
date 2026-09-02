@@ -4,10 +4,10 @@ import { Registration, hasOperationalWhatsappConsent } from '../models/Registrat
 import { Event } from '../models/Event.js';
 import { qrPassService } from '../modules/passes/qrPass.service.js';
 import { WhatsappMessage, WHATSAPP_MESSAGE_STATUSES } from '../models/WhatsappMessage.js';
-import { sendUtilityTemplate, maskPhoneNumber } from '../integrations/whatsapp/whatsapp.service.js';
-import { getCachedMetaTemplateStatus } from '../integrations/whatsapp/whatsapp.service.js';
+import { sendUtilityTemplate, maskPhoneNumber, getCachedMetaTemplateStatus } from '../integrations/whatsapp/whatsapp.service.js';
 import { ensureFeedbackToken } from '../modules/feedback/feedback.controller.js';
 import { invitationCardService } from './invitationCard.service.js';
+import { TEMPLATE_REGISTRY } from '../integrations/whatsapp/templateRegistry.js';
 
 let isWorkerRunning = false;
 
@@ -56,8 +56,10 @@ export class CommunicationSchedulerService {
   /**
    * Calculate lifecycle target schedule timestamps for an event
    */
-  calculateScheduleTimes(event) {
-    const eventStartAt = this.parseEventDateTime(event.date, event.time);
+  calculateScheduleTimes(eventOrDate, timeStr) {
+    const date = (typeof eventOrDate === 'object' && eventOrDate !== null) ? eventOrDate.date : eventOrDate;
+    const time = (typeof eventOrDate === 'object' && eventOrDate !== null) ? eventOrDate.time : (timeStr || '8:30 PM');
+    const eventStartAt = this.parseEventDateTime(date, time);
     if (!eventStartAt) return null;
 
     // Default duration 3.5 hours
@@ -66,8 +68,11 @@ export class CommunicationSchedulerService {
     return {
       eventStartAt,
       eventEndAt,
-      invitationSendAt: new Date(eventStartAt.getTime() - 48 * 60 * 60 * 1000),
-      reminderSendAt: new Date(eventStartAt.getTime() - 24 * 60 * 60 * 1000),
+      passReminder48hSendAt: new Date(eventStartAt.getTime() - 48 * 60 * 60 * 1000),
+      invitation24hSendAt: new Date(eventStartAt.getTime() - 24 * 60 * 60 * 1000),
+      // Backwards compatible aliases
+      invitationSendAt: new Date(eventStartAt.getTime() - 24 * 60 * 60 * 1000),
+      reminderSendAt: new Date(eventStartAt.getTime() - 48 * 60 * 60 * 1000),
       feedbackSendAt: new Date(eventEndAt.getTime() + 3 * 60 * 60 * 1000)
     };
   }
@@ -75,7 +80,21 @@ export class CommunicationSchedulerService {
   /**
    * Schedule all future lifecycle communications for a confirmed registration
    */
-  async scheduleRegistrationLifecycle(registration, event, options = {}) {
+  async scheduleRegistrationLifecycle(registrationOrParams, eventParam, options = {}) {
+    let registration = registrationOrParams;
+    let event = eventParam;
+    let opts = options;
+
+    if (registrationOrParams && registrationOrParams.registration) {
+      registration = registrationOrParams.registration;
+      event = registrationOrParams.event || eventParam;
+      opts = { ...options, ...registrationOrParams };
+    }
+
+    if (!event && registration) {
+      event = await Event.findOne({ id: registration.eventId || registration.programId });
+    }
+
     if (!registration || !event) return { success: false, reason: 'MISSING_DATA' };
 
     const schedules = this.calculateScheduleTimes(event);
@@ -83,7 +102,7 @@ export class CommunicationSchedulerService {
       return { success: false, reason: 'EVENT_DATE_TBD' };
     }
 
-    const { invitationSendAt, reminderSendAt, feedbackSendAt } = schedules;
+    const { eventStartAt, passReminder48hSendAt, invitation24hSendAt } = schedules;
     const inquiryId = registration.inquiryId;
     const phone = registration.phoneNumber;
     const customerName = `${registration.husbandName || ''} & ${registration.wifeName || ''}`.trim() || 'Respected Couple';
@@ -91,60 +110,35 @@ export class CommunicationSchedulerService {
     const eventDate = event.date || '';
     const eventTime = event.time || '8:30 PM';
     const venue = event.venue || '';
-    const executionSource = options.executionSource || 'NORMAL';
+    const executionSource = opts.executionSource || 'NORMAL';
 
     const results = {};
-    const now = new Date();
-    const isInvitationDisabled = event.personalizedInvitationEnabled === false;
+    const now = opts.simulatedNow ? new Date(opts.simulatedNow) : new Date();
+    const remainingMs = eventStartAt.getTime() - now.getTime();
+    const remainingMinutes = remainingMs / (60 * 1000);
 
-    // 1. Schedule 48h Personalized Invitation (Only if enabled for event and in future)
-    if (!isInvitationDisabled && invitationSendAt > now) {
-      const invitationVersion = registration.invitationVersion || 1;
-      const invIdempotencyKey = `INVITATION_48H:${event.id || event.slug}:${registration._id}:v${invitationVersion}`;
+    let skipped48hReminder = false;
+    let isLateInvitationCatchUp = false;
+    let skippedInvitationReason = null;
 
-      results.invitation = await WhatsappMessage.findOneAndUpdate(
-        { idempotencyKey: invIdempotencyKey },
-        {
-          $setOnInsert: {
-            messageId: `WA-SCH-${crypto.randomBytes(8).toString('hex')}`,
-            eventId: event.id || event.slug,
-            registrationId: registration._id,
-            inquiryId,
-            recipientPhone: normalizePhoneNumber(phone),
-            recipientMasked: maskPhoneNumber(phone),
-            templateName: 'edkl_personal_invitation_48h_v1',
-            templateLanguage: 'en_US',
-            templateCategory: 'UTILITY',
-            messageType: 'invitation',
-            trigger: 'scheduled_48h_invitation',
-            executionSource,
-            providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
-            idempotencyKey: invIdempotencyKey,
-            status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
-            scheduledFor: invitationSendAt,
-            templateParameters: {
-              customerName,
-              eventDate,
-              eventTime,
-              venue,
-              registrationId: inquiryId,
-              inquiryId
-            }
-          }
-        },
-        { upsert: true, returnDocument: 'after' }
-      );
-    } else if (isInvitationDisabled) {
-      console.log(`[CommunicationScheduler] Skipping 48h invitation for ${inquiryId}: disabled for event (${event.id || event.slug})`);
-    } else {
-      console.log(`[CommunicationScheduler] Skipping expired 48h invitation for ${inquiryId} (scheduled time was ${invitationSendAt.toISOString()})`);
+    // If event has already started, do not schedule any future milestone communications
+    if (remainingMinutes <= 0) {
+      return {
+        success: true,
+        schedules,
+        skipped: true,
+        reason: 'EVENT_STARTED',
+        skipped48hReminder: true,
+        isLateInvitationCatchUp: false,
+        skippedInvitationReason: 'EVENT_STARTED'
+      };
     }
 
-    // 2. Schedule 24h Event Reminder (Only if reminderSendAt is in the future)
-    if (reminderSendAt > now) {
-      const remIdempotencyKey = `REMINDER_24H:${event.id || event.slug}:${registration._id}`;
+    // 1. Milestone: 48h Pass Reminder (Only if > 48h before event and enabled)
+    if (event.passReminderEnabled !== false && passReminder48hSendAt > now) {
+      const remIdempotencyKey = `REMINDER_48H:${event.id || event.slug}:${registration._id}`;
 
-      results.reminder = await WhatsappMessage.findOneAndUpdate(
+      results.passReminder = await WhatsappMessage.findOneAndUpdate(
         { idempotencyKey: remIdempotencyKey },
         {
           $setOnInsert: {
@@ -154,16 +148,16 @@ export class CommunicationSchedulerService {
             inquiryId,
             recipientPhone: normalizePhoneNumber(phone),
             recipientMasked: maskPhoneNumber(phone),
-            templateName: 'edkl_event_reminder_v1',
+            templateName: 'edkl_event_pass_reminder_v2',
             templateLanguage: 'en_US',
             templateCategory: 'UTILITY',
             messageType: 'reminder',
-            trigger: 'scheduled_24h_reminder',
+            trigger: 'scheduled_48h_pass_reminder',
             executionSource,
             providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
             idempotencyKey: remIdempotencyKey,
             status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
-            scheduledFor: reminderSendAt,
+            scheduledFor: passReminder48hSendAt,
             templateParameters: {
               customerName,
               eventName,
@@ -178,45 +172,104 @@ export class CommunicationSchedulerService {
         { upsert: true, returnDocument: 'after' }
       );
     } else {
-      console.log(`[CommunicationScheduler] Skipping expired 24h reminder for ${inquiryId} (scheduled time was ${reminderSendAt.toISOString()})`);
+      skipped48hReminder = true;
+      console.log(`[CommunicationScheduler] 48h pass reminder skipped for ${inquiryId}: 48H_WINDOW_EXPIRED (remaining: ${Math.round(remainingMinutes)} mins)`);
     }
 
-    // 3. Schedule Post-Event Feedback (Requires attendance check at execution time)
-    const fbFeedback = await ensureFeedbackToken(inquiryId, event.id || event.slug, customerName);
-    const fbIdempotencyKey = `FEEDBACK:${event.id || event.slug}:${registration._id}`;
+    // 2. Milestone: 24h Personalized Invitation with IMAGE Header (or Catch-Up)
+    const isInvitationDisabled = event.personalizedInvitationEnabled === false;
+    if (!isInvitationDisabled) {
+      const invitationVersion = registration.invitationVersion || 1;
+      const invIdempotencyKey = `INVITATION_24H:${event.id || event.slug}:${registration._id}:v${invitationVersion}`;
 
-    results.feedback = await WhatsappMessage.findOneAndUpdate(
-      { idempotencyKey: fbIdempotencyKey },
-      {
-        $setOnInsert: {
-          messageId: `WA-SCH-${crypto.randomBytes(8).toString('hex')}`,
-          eventId: event.id || event.slug,
-          registrationId: registration._id,
-          inquiryId,
-          recipientPhone: normalizePhoneNumber(phone),
-          recipientMasked: maskPhoneNumber(phone),
-          templateName: 'edkl_event_feedback_v1',
-          templateLanguage: 'en_US',
-          templateCategory: 'UTILITY',
-          messageType: 'feedback_request',
-          trigger: 'scheduled_post_event_feedback',
-          executionSource,
-          providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
-          idempotencyKey: fbIdempotencyKey,
-          status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
-          scheduledFor: feedbackSendAt,
-          templateParameters: {
-            customerName,
-            eventName,
-            registrationId: inquiryId,
-            feedbackToken: fbFeedback.token
-          }
+      // Check if registration already has an active invitation to enforce max 1 logical invitation
+      const existingActiveInv = await WhatsappMessage.findOne({
+        inquiryId,
+        messageType: 'invitation',
+        status: { $in: ['QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'READ'] }
+      }).select('_id status scheduledFor').lean();
+
+      if (!existingActiveInv) {
+        let scheduledFor = null;
+        let trigger = 'scheduled_24h_invitation';
+
+        if (invitation24hSendAt > now) {
+          // Case A & B: Paid > 24h before event -> Scheduled for normal T-24h
+          scheduledFor = invitation24hSendAt;
+          trigger = 'scheduled_24h_invitation';
+          isLateInvitationCatchUp = false;
+        } else if (remainingMinutes >= 120) {
+          // Case C & D: Paid between 2h and 24h before event (including Event Day)
+          // -> Send as CATCH-UP after a 10-minute cooldown
+          const cooldownMins = event.lateInvitationCooldownMinutes !== undefined ? event.lateInvitationCooldownMinutes : 10;
+          scheduledFor = new Date(now.getTime() + cooldownMins * 60 * 1000);
+          trigger = 'invitation_24h_catchup';
+          isLateInvitationCatchUp = true;
+          console.log(`[CommunicationScheduler] Scheduling 24h invitation catch-up for ${inquiryId} at ${scheduledFor.toISOString()}`);
+        } else {
+          // Case E & F: Paid < 2 hours before event -> Skip to avoid spamming customer
+          skippedInvitationReason = 'TOO_CLOSE_TO_EVENT';
+          console.log(`[CommunicationScheduler] Skipping personalized invitation for ${inquiryId}: TOO_CLOSE_TO_EVENT (${Math.round(remainingMinutes)}m remaining)`);
         }
-      },
-      { upsert: true, returnDocument: 'after' }
-    );
 
-    return { success: true, schedules, results };
+        if (scheduledFor) {
+          // Resolve couple photo URL or safe brand fallback
+          const couplePhotoUrl = registration.couplePhoto || 'https://www.ekdujekeliye.in/sample_couple.png';
+
+          results.invitation = await WhatsappMessage.findOneAndUpdate(
+            { idempotencyKey: invIdempotencyKey },
+            {
+              $setOnInsert: {
+                messageId: `WA-SCH-${crypto.randomBytes(8).toString('hex')}`,
+                eventId: event.id || event.slug,
+                registrationId: registration._id,
+                inquiryId,
+                recipientPhone: normalizePhoneNumber(phone),
+                recipientMasked: maskPhoneNumber(phone),
+                templateName: 'edkl_personal_invitation_24h_v2',
+                templateLanguage: 'gu',
+                templateCategory: 'UTILITY',
+                messageType: 'invitation',
+                trigger,
+                executionSource,
+                providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
+                idempotencyKey: invIdempotencyKey,
+                status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
+                scheduledFor,
+                templateParameters: {
+                  customerName,
+                  eventName,
+                  eventDate,
+                  eventTime,
+                  venue,
+                  registrationId: inquiryId,
+                  inquiryId,
+                  headerImageUrl: couplePhotoUrl,
+                  imageUrl: couplePhotoUrl,
+                  invitationImageUrl: couplePhotoUrl
+                }
+              }
+            },
+            { upsert: true, returnDocument: 'after' }
+          );
+        }
+      }
+    } else {
+      skippedInvitationReason = 'DISABLED_FOR_EVENT';
+      console.log(`[CommunicationScheduler] Skipping 24h invitation for ${inquiryId}: DISABLED_FOR_EVENT`);
+    }
+
+    // 3. Post-event feedback is NOT auto-queued here.
+    // Instead, at next-day midnight (Asia/Kolkata), status becomes READY TO SEND for admin review and manual trigger.
+
+    return {
+      success: true,
+      schedules,
+      results,
+      skipped48hReminder,
+      isLateInvitationCatchUp,
+      skippedInvitationReason
+    };
   }
 
   /**
@@ -327,6 +380,32 @@ export class CommunicationSchedulerService {
         continue;
       }
 
+      // Revalidate: Event Start Cutoff (Do not dispatch reminders, invitations, or payment pending after start)
+      const eventStartAt = this.parseEventDateTime(event.date, event.time || '8:30 PM');
+      const currentNow = new Date();
+
+      if (eventStartAt && currentNow >= eventStartAt) {
+        if (job.messageType === 'payment_pending' || job.messageType === 'reminder' || job.messageType === 'invitation') {
+          job.status = WHATSAPP_MESSAGE_STATUSES.CANCELLED;
+          job.lastErrorMessage = 'EVENT_STARTED';
+          await job.save();
+          summary.skippedIneligible++;
+          continue;
+        }
+      }
+
+      // Revalidate: Lead time remaining for invitation catch-up (< 2 hours remaining -> TOO_CLOSE_TO_EVENT)
+      if (job.messageType === 'invitation' && eventStartAt) {
+        const leadMins = (eventStartAt.getTime() - currentNow.getTime()) / (60 * 1000);
+        if (leadMins < 120 && job.trigger === 'invitation_24h_catchup') {
+          job.status = WHATSAPP_MESSAGE_STATUSES.CANCELLED;
+          job.lastErrorMessage = 'TOO_CLOSE_TO_EVENT';
+          await job.save();
+          summary.skippedIneligible++;
+          continue;
+        }
+      }
+
       // Revalidate: Payment Pending messages
       if (job.messageType === 'payment_pending') {
         const isPaid = registration.status === 'approved' || registration.payment?.status === 'captured';
@@ -369,24 +448,54 @@ export class CommunicationSchedulerService {
         }
       }
 
-      // Check Meta Template approval status
-      const templateStatus = await getCachedMetaTemplateStatus(job.templateName, job.templateLanguage || 'en_US');
+      // Re-verify couple photo for invitation dispatch
+      let effectiveVariables = { ...job.templateParameters };
+      if (job.messageType === 'invitation') {
+        try {
+          await invitationCardService.ensureInvitationCard(registration.inquiryId);
+          const photo = registration.couplePhoto || 'https://www.ekdujekeliye.in/sample_couple.png';
+          effectiveVariables.headerImageUrl = photo;
+          effectiveVariables.imageUrl = photo;
+          effectiveVariables.invitationImageUrl = photo;
+        } catch (_) {
+          effectiveVariables.headerImageUrl = 'https://www.ekdujekeliye.in/sample_couple.png';
+        }
+      }
+
+      // Check Meta Template approval status with graceful fallback
+      let effectiveTemplate = job.templateName;
+      const templateStatus = await getCachedMetaTemplateStatus(effectiveTemplate, job.templateLanguage || 'en_US');
 
       if (templateStatus && templateStatus !== 'APPROVED') {
-        job.status = WHATSAPP_MESSAGE_STATUSES.BLOCKED_TEMPLATE_PENDING;
-        job.lastErrorMessage = `Meta template '${job.templateName}' status is ${templateStatus}.`;
-        await job.save();
-        summary.blockedPendingTemplate++;
-        continue;
+        const tplDef = TEMPLATE_REGISTRY[effectiveTemplate];
+        if (tplDef && tplDef.fallbackTemplateKey) {
+          const fallbackStatus = await getCachedMetaTemplateStatus(tplDef.fallbackTemplateKey, job.templateLanguage || 'en_US');
+          if (fallbackStatus === 'APPROVED' || !fallbackStatus) {
+            console.log(`[CommunicationScheduler] '${effectiveTemplate}' status is ${templateStatus}. Using approved fallback '${tplDef.fallbackTemplateKey}'.`);
+            effectiveTemplate = tplDef.fallbackTemplateKey;
+          } else {
+            job.status = WHATSAPP_MESSAGE_STATUSES.BLOCKED_TEMPLATE_PENDING;
+            job.lastErrorMessage = `Meta template '${effectiveTemplate}' status is ${templateStatus}.`;
+            await job.save();
+            summary.blockedPendingTemplate++;
+            continue;
+          }
+        } else {
+          job.status = WHATSAPP_MESSAGE_STATUSES.BLOCKED_TEMPLATE_PENDING;
+          job.lastErrorMessage = `Meta template '${effectiveTemplate}' status is ${templateStatus}.`;
+          await job.save();
+          summary.blockedPendingTemplate++;
+          continue;
+        }
       }
 
       // Dispatch message
       try {
         const sendResult = await sendUtilityTemplate({
           recipientPhone: job.recipientPhone,
-          templateKey: job.templateName,
+          templateKey: effectiveTemplate,
           languageCode: job.templateLanguage || 'en_US',
-          variables: job.templateParameters,
+          variables: effectiveVariables,
           idempotencyKey: job.idempotencyKey,
           registrationId: registration._id,
           eventId: job.eventId,

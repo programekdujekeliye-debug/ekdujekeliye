@@ -91,7 +91,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({
   const [composerMode, setComposerMode] = useState<'reply' | 'note'>('reply');
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
-  const [selectedTemplateKey, setSelectedTemplateKey] = useState('edkl_payment_confirmed_pass_v1');
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState('edkl_payment_confirmed_pass_v2');
   const [sendingTemplate, setSendingTemplate] = useState(false);
 
   // 6. Modals: Start New Chat / Check Number & Webhook Simulator

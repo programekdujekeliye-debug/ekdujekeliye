@@ -6,12 +6,13 @@ import { Counter, getNextSequence } from '../../models/Counter.js';
 import { storageService } from '../../services/storage.service.js';
 import { mediaService } from '../media/media.service.js';
 import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
+import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
 
 export class RegistrationService {
   /**
    * Submit a new Couple Registration
    */
-  async createRegistration({ husbandName, wifeName, surname, phoneNumber, programId, couplePhotoFile, whatsappOptIn = true }) {
+  async createRegistration({ husbandName, wifeName, surname, phoneNumber, programId, couplePhotoFile, whatsappOptIn = true }, options = {}) {
     // 1. Fetch Program & verify capacity
     const program = await eventService.getEventBySlug(programId) || await Event.findOne({
       $or: [{ id: programId }, { slug: programId }, { date: programId }]
@@ -26,6 +27,18 @@ export class RegistrationService {
       const err = new Error('Registrations for this seminar date are currently full/closed (Housefull).');
       err.status = 400;
       throw err;
+    }
+
+    // Cutoff Guard: Close public registration once event has started
+    if (program.date && program.date.toUpperCase() !== 'TBD') {
+      const eventStartAt = communicationSchedulerService.parseEventDateTime(program.date, program.time || '8:30 PM');
+      const now = (options && options.simulatedNow) ? new Date(options.simulatedNow) : new Date();
+      if (eventStartAt && now >= eventStartAt) {
+        const err = new Error('Registration closed. This event has already started or concluded.');
+        err.status = 400;
+        err.code = 'EVENT_STARTED';
+        throw err;
+      }
     }
 
     const progIdentifiers = [program.id, program.slug, program.date].filter(Boolean);
@@ -182,31 +195,10 @@ export class RegistrationService {
         console.warn('[RegistrationService] Early registration WhatsApp dispatch notice:', msgErr.message);
       }
     } else {
-      // Standard Registration with Active Online Payment & Communications: Send payment link button (Async Non-Blocking)
-      try {
-        await sendUtilityTemplate({
-          recipientPhone: phoneNumber,
-          templateKey: 'edkl_payment_pending_v1',
-          languageCode: 'en_US',
-          variables: {
-            customerName,
-            eventName,
-            registrationId: inquiryId,
-            eventDate,
-            eventTime,
-            venue,
-            feeAmount,
-            inquiryId
-          },
-          idempotencyKey: `REGISTRATION_PENDING:${newRegistration._id}:${inquiryId}`,
-          registrationId: newRegistration._id,
-          eventId: program.id,
-          inquiryId,
-          trigger: 'registration_created'
-        });
-      } catch (msgErr) {
-        console.warn('[RegistrationService] Background WhatsApp dispatch notice:', msgErr.message);
-      }
+      // Standard Registration with Active Online Payment:
+      // Attendee is directed straight to Razorpay online payment on website.
+      // Zero immediate WhatsApp noise while user is in active checkout.
+      // If customer leaves unpaid, automated 10-minute polite reminder will handle it gracefully.
     }
 
 

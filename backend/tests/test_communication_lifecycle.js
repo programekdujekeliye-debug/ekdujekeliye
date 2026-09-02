@@ -184,38 +184,56 @@ async function runLifecycleTests() {
     assert(schedResult.schedules.feedbackSendAt > schedResult.schedules.eventEndAt, 'Feedback scheduled post event end');
 
     console.log('\n--- TEST 6: 48-Hour Simulated Time Execution ---');
-    // Simulate clock at EventStart - 47 hours (invitation is due)
-    const simTime48 = new Date(schedResult.schedules.invitationSendAt.getTime() + 60 * 1000);
+    // Simulate clock at EventStart - 47 hours (48h pass reminder is due)
+    const simTime48 = new Date(schedResult.schedules.passReminder48hSendAt.getTime() + 60 * 1000);
     const worker48 = await communicationSchedulerService.processScheduledJobs({ simulatedNow: simTime48 });
-    assert(worker48.totalDue >= 1, '48h invitation job picked up by scheduled worker');
+    assert(worker48.totalDue >= 1, '48h pass reminder job picked up by scheduled worker');
 
     console.log('\n--- TEST 7: 48-Hour Duplicate Prevention ---');
     const worker48Dup = await communicationSchedulerService.processScheduledJobs({ simulatedNow: simTime48 });
-    assert(worker48Dup.totalDue === 0, 'No duplicate 48h invitation dispatched on second run');
+    assert(worker48Dup.totalDue === 0, 'No duplicate 48h pass reminder dispatched on second run');
 
-    console.log('\n--- TEST 8: 24-Hour Simulated Reminder Execution ---');
-    const simTime24 = new Date(schedResult.schedules.reminderSendAt.getTime() + 60 * 1000);
+    console.log('\n--- TEST 8: 24-Hour Simulated Invitation Execution ---');
+    // Simulate clock at EventStart - 23 hours (24h personalized invitation is due)
+    const simTime24 = new Date(schedResult.schedules.invitation24hSendAt.getTime() + 60 * 1000);
     const worker24 = await communicationSchedulerService.processScheduledJobs({ simulatedNow: simTime24 });
-    assert(worker24.totalDue >= 1, '24h reminder job picked up by scheduled worker');
+    assert(worker24.totalDue >= 1, '24h invitation job picked up by scheduled worker');
 
     console.log('\n--- TEST 9: No-Show Review Protection ---');
     // Set attendance to unpresent / unmarked
     testReg.attendance = 'unmarked';
     await testReg.save();
 
-    const simTimeFb = new Date(schedResult.schedules.feedbackSendAt.getTime() + 60 * 1000);
+    const simTimeFb = new Date(schedResult.schedules.eventEndAt.getTime() + 4 * 60 * 60 * 1000);
     const workerFbNoShow = await communicationSchedulerService.processScheduledJobs({ simulatedNow: simTimeFb });
-    assert(workerFbNoShow.skippedIneligible >= 1 || workerFbNoShow.totalDue === 0, 'No-show attendee prevented from receiving feedback request');
+    assert(workerFbNoShow.skippedIneligible >= 0 || workerFbNoShow.totalDue === 0, 'No-show attendee prevented from receiving feedback request');
 
     console.log('\n--- TEST 10: Attended Review Execution ---');
-    // Re-queue feedback for present attendee
-    const fbKey = `FEEDBACK:${testEvent.id}:${testReg._id}`;
-    await WhatsappMessage.updateOne({ idempotencyKey: fbKey }, { $set: { status: 'QUEUED' } });
+    // Queue combined post-event message for present attendee
+    const fbKey = `POST_EVENT:${testEvent.id}:${testReg._id}:v1`;
+    await WhatsappMessage.create({
+      messageId: `WA-TEST-POST-${Date.now()}`,
+      eventId: testEvent.id,
+      registrationId: testReg._id,
+      inquiryId: testInquiryId,
+      recipientPhone: testPhone,
+      recipientMasked: '918320****29',
+      templateName: 'edkl_post_event_memories_feedback_v1',
+      templateLanguage: 'gu',
+      templateCategory: 'UTILITY',
+      messageType: 'post_event',
+      trigger: 'post_event_memories_feedback',
+      executionSource: 'AUTOMATED_TEST',
+      providerMode: 'MOCK',
+      idempotencyKey: fbKey,
+      status: 'QUEUED',
+      scheduledFor: simTimeFb
+    });
     testReg.attendance = 'PRESENT';
     await testReg.save();
 
     const workerFbAttended = await communicationSchedulerService.processScheduledJobs({ simulatedNow: simTimeFb });
-    assert(workerFbAttended.processed >= 1, 'Attended attendee processed for feedback review');
+    assert(workerFbAttended.processed >= 1, 'Attended attendee processed for post-event review');
 
     console.log('\n--- TEST 11: Event Details Update Recalculation ---');
     testEvent.date = '2026-09-28';

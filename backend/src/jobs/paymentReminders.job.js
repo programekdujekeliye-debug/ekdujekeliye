@@ -6,6 +6,8 @@ import { normalizePhoneNumber, env } from '../config/env.js';
 import { maskPhoneNumber } from '../integrations/whatsapp/whatsapp.service.js';
 import { logger } from '../utils/logger.js';
 
+import { communicationSchedulerService } from '../services/communicationScheduler.service.js';
+
 export const runPaymentReminders = async () => {
   logger.info('[Payment Reminders Job] Scanning for pending unpaid registrations eligible for automated reminders...');
   const now = Date.now();
@@ -33,6 +35,7 @@ export const runPaymentReminders = async () => {
     programId: { $in: activeEventIds },
     status: 'pending',
     'payment.status': { $ne: 'captured' },
+    isVip: { $ne: true },
     createdAt: { $lte: tenMinutesAgo },
     isDeleted: { $ne: true }
   }).limit(100);
@@ -42,6 +45,12 @@ export const runPaymentReminders = async () => {
   for (const reg of pendingSubmissions) {
     const event = activeEventMap.get(reg.programId);
     if (!event || !reg.phoneNumber || String(reg.phoneNumber).trim().length < 10) continue;
+
+    // Check Event Start Cutoff: Do not schedule reminders after event starts
+    const eventStartAt = communicationSchedulerService.parseEventDateTime(event.date, event.time || '8:30 PM');
+    if (eventStartAt && now >= eventStartAt.getTime()) {
+      continue; // Event has already started or concluded
+    }
 
     const customerName = `${reg.husbandName || ''} & ${reg.wifeName || ''}`.trim() || 'Valued Couple';
     const eventName = event.name || '';
@@ -55,80 +64,86 @@ export const runPaymentReminders = async () => {
     const paymentOpenedAt = event.paymentOpenedAt ? new Date(event.paymentOpenedAt).getTime() : 0;
     const regCreatedAt = new Date(reg.createdAt).getTime();
 
-    // Reminder #1: 10-Minute Reminder (For new registrations >= 10m old)
+    // Reminder #1: 10-Minute Reminder (For new registrations >= 10m old and event >= 2h away)
     if (regCreatedAt >= paymentOpenedAt || !event.paymentOpenedAt) {
       const tenMinKey = `REMINDER_10M:${event.id}:${reg._id}`;
       const existing10m = await WhatsappMessage.findOne({ idempotencyKey: tenMinKey }).select('_id status').lean();
 
       if (!existing10m) {
-        await WhatsappMessage.create({
-          messageId: `WA-REM10-${crypto.randomBytes(8).toString('hex')}`,
-          eventId: event.id,
-          registrationId: reg._id,
-          inquiryId,
-          recipientPhone: normalizePhoneNumber(reg.phoneNumber),
-          recipientMasked: maskPhoneNumber(reg.phoneNumber),
-          templateName: 'edkl_payment_pending_v1',
-          templateLanguage: 'en_US',
-          templateCategory: 'UTILITY',
-          messageType: 'payment_pending',
-          trigger: 'payment_reminder_10m',
-          executionSource: 'NORMAL',
-          providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
-          idempotencyKey: tenMinKey,
-          status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
-          scheduledFor: new Date(),
-          templateParameters: {
-            customerName,
-            eventName,
-            registrationId: inquiryId,
-            eventDate,
-            eventTime,
-            venue,
-            feeAmount,
-            inquiryId
-          }
-        });
-        queuedCount++;
-        continue;
+        // Only send 10m reminder if event starts at least 2 hours in the future
+        if (!eventStartAt || (eventStartAt.getTime() - now) >= 2 * 60 * 60 * 1000) {
+          await WhatsappMessage.create({
+            messageId: `WA-REM10-${crypto.randomBytes(8).toString('hex')}`,
+            eventId: event.id,
+            registrationId: reg._id,
+            inquiryId,
+            recipientPhone: normalizePhoneNumber(reg.phoneNumber),
+            recipientMasked: maskPhoneNumber(reg.phoneNumber),
+            templateName: 'edkl_polite_payment_pending_v1',
+            templateLanguage: 'en_US',
+            templateCategory: 'UTILITY',
+            messageType: 'payment_pending',
+            trigger: 'payment_reminder_10m',
+            executionSource: 'NORMAL',
+            providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
+            idempotencyKey: tenMinKey,
+            status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
+            scheduledFor: new Date(),
+            templateParameters: {
+              customerName,
+              eventName,
+              registrationId: inquiryId,
+              eventDate,
+              eventTime,
+              venue,
+              feeAmount,
+              inquiryId
+            }
+          });
+          queuedCount++;
+          continue;
+        }
       }
     }
 
-    // Reminder #2: 24-Hour Reminder (For unpaid registrations >= 24h old)
+    // Reminder #2: 24-Hour Reminder (For unpaid registrations >= 24h old, strictly before event starts)
     if (new Date(reg.createdAt) <= twentyFourHoursAgo) {
       const twentyFourHourKey = `REMINDER_24H:${event.id}:${reg._id}`;
       const existing24h = await WhatsappMessage.findOne({ idempotencyKey: twentyFourHourKey }).select('_id status').lean();
 
       if (!existing24h) {
-        await WhatsappMessage.create({
-          messageId: `WA-REM24-${crypto.randomBytes(8).toString('hex')}`,
-          eventId: event.id,
-          registrationId: reg._id,
-          inquiryId,
-          recipientPhone: normalizePhoneNumber(reg.phoneNumber),
-          recipientMasked: maskPhoneNumber(reg.phoneNumber),
-          templateName: 'edkl_payment_pending_v1',
-          templateLanguage: 'en_US',
-          templateCategory: 'UTILITY',
-          messageType: 'payment_pending',
-          trigger: 'payment_reminder_24h',
-          executionSource: 'NORMAL',
-          providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
-          idempotencyKey: twentyFourHourKey,
-          status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
-          scheduledFor: new Date(),
-          templateParameters: {
-            customerName,
-            eventName,
-            registrationId: inquiryId,
-            eventDate,
-            eventTime,
-            venue,
-            feeAmount,
-            inquiryId
-          }
-        });
-        queuedCount++;
+        // Enforce maximum 2 reminders and ensure event has not passed
+        if (!eventStartAt || now < eventStartAt.getTime()) {
+          await WhatsappMessage.create({
+            messageId: `WA-REM24-${crypto.randomBytes(8).toString('hex')}`,
+            eventId: event.id,
+            registrationId: reg._id,
+            inquiryId,
+            recipientPhone: normalizePhoneNumber(reg.phoneNumber),
+            recipientMasked: maskPhoneNumber(reg.phoneNumber),
+            templateName: 'edkl_polite_payment_pending_v1',
+            templateLanguage: 'en_US',
+            templateCategory: 'UTILITY',
+            messageType: 'payment_pending',
+            trigger: 'payment_reminder_24h',
+            executionSource: 'NORMAL',
+            providerMode: env.WHATSAPP_MODE === 'test' ? 'MOCK' : 'META',
+            idempotencyKey: twentyFourHourKey,
+            status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
+            scheduledFor: new Date(),
+            templateParameters: {
+              customerName,
+              eventName,
+              registrationId: inquiryId,
+              eventDate,
+              eventTime,
+              venue,
+              feeAmount,
+              inquiryId
+            }
+          });
+          queuedCount++;
+        }
       }
     }
   }

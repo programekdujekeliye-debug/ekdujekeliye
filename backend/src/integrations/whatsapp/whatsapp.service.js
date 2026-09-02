@@ -205,7 +205,7 @@ export async function sendWhatsAppMessage({
   }
 
   // 5. Template Registry Existence & Schema Check
-  const templateDef = TEMPLATE_REGISTRY[templateKey];
+  let templateDef = TEMPLATE_REGISTRY[templateKey];
   if (!templateDef) {
     return {
       success: false,
@@ -214,10 +214,24 @@ export async function sendWhatsAppMessage({
     };
   }
 
+  // Graceful fallback to approved version if v2 is pending or not created on Meta WABA
+  if (templateDef.fallbackTemplateKey) {
+    try {
+      const metaStatus = await getCachedMetaTemplateStatus(templateDef.metaName, templateDef.language || 'en_US');
+      if (!metaStatus || metaStatus !== 'APPROVED') {
+        const fallbackDef = TEMPLATE_REGISTRY[templateDef.fallbackTemplateKey];
+        if (fallbackDef) {
+          console.log(`[WhatsAppService] Template '${templateDef.metaName}' status is ${metaStatus || 'NOT_FOUND'}. Using approved fallback '${fallbackDef.metaName}'.`);
+          templateDef = fallbackDef;
+        }
+      }
+    } catch (_) {}
+  }
+
   const resolvedLang = languageCode || templateDef.language || 'en_US';
 
   // 6. Template Variable Validation
-  const varValidation = validateTemplateVariables(templateKey, variables);
+  const varValidation = validateTemplateVariables(templateDef.key, variables);
   if (!varValidation.valid) {
     return {
       success: false,
@@ -240,7 +254,7 @@ export async function sendWhatsAppMessage({
   }
 
   // 7.5. Render Human-Readable Template Body for Live Chat Thread Preview
-  const renderedContent = renderTemplatePreview(templateKey, variables);
+  const renderedContent = renderTemplatePreview(templateDef.key, variables);
 
   // Match Customer to Registration (Prefer active/upcoming, then latest)
   const clean10Phone = normalizedPhone.replace(/^91/, '');
@@ -429,7 +443,31 @@ export async function sendWhatsAppMessage({
     });
   }
 
-  if (buttonComponent && (variables.inquiryId || variables.registrationId)) {
+  if (buttonComponent && Array.isArray(buttonComponent.buttons) && buttonComponent.buttons.length > 0) {
+    buttonComponent.buttons.forEach((btn, btnIdx) => {
+      if (btn.type === 'URL') {
+        let btnVal = '';
+        if (btnIdx === 0) {
+          btnVal = String(variables.inquiryId || variables.registrationId || variables.galleryToken || '');
+        } else if (btnIdx === 1) {
+          btnVal = String(variables.feedbackToken || variables.inquiryId || '');
+        }
+        if (btnVal) {
+          componentsPayload.push({
+            type: 'button',
+            sub_type: 'url',
+            index: String(btnIdx),
+            parameters: [
+              {
+                type: 'text',
+                text: btnVal
+              }
+            ]
+          });
+        }
+      }
+    });
+  } else if (buttonComponent && (variables.inquiryId || variables.registrationId)) {
     const buttonValue = String(variables.inquiryId || variables.registrationId || '');
     componentsPayload.push({
       type: 'button',

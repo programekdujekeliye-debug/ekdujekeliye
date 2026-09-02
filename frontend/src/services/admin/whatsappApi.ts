@@ -87,7 +87,7 @@ export interface RegistrationCommunicationRow {
   };
   lastCommunication: { messageType: string; status: string; at: string; templateName?: string } | null;
   nextCommunication: { messageType: string; scheduledFor: string; templateName?: string } | null;
-  health: 'HEALTHY' | 'PENDING' | 'ACTION_NEEDED';
+  health: 'GOOD' | 'HEALTHY' | 'WAITING' | 'PENDING' | 'ACTION_NEEDED';
 }
 
 export interface RegistrationCommunicationListResponse {
@@ -229,6 +229,90 @@ export const whatsappApi = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ simulatedNow })
+    });
+  },
+
+
+  async getPostEventStatus(eventId: string): Promise<{
+    success: boolean;
+    eventId: string;
+    eventName: string;
+    eventDate: string;
+    midnightAt: string;
+    isPastMidnight: boolean;
+    lifecycleStatus: 'NOT_READY' | 'READY_TO_SEND' | 'SENT';
+    presentCount: number;
+    eligibleWhatsappCount: number;
+    alreadySentCount: number;
+    defaultGalleryUrl: string;
+    feedbackEnabled: boolean;
+  }> {
+    return apiClient(`/api/whatsapp/events/${eventId}/post-event-status`);
+  },
+
+  async triggerPostEventSend(eventId: string, payload: { galleryUrl?: string; forceSend?: boolean }): Promise<{
+    success: boolean;
+    message: string;
+    queuedCount: number;
+    alreadySentCount: number;
+    totalAttendees: number;
+  }> {
+    return apiClient(`/api/whatsapp/events/${eventId}/post-event-send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  async previewSpecificBroadcast(payload: {
+    eventId: string;
+    rawNumbers: string;
+    messageMode?: 'FREE_TEXT' | 'TEMPLATE';
+    templateKey?: string;
+  }): Promise<{
+    success: boolean;
+    inputCount: number;
+    matchedCount: number;
+    unmatchedCount: number;
+    windowOpenCount: number;
+    windowClosedCount: number;
+    optedOutCount: number;
+    eligibleCount: number;
+    messageMode: string;
+    recipients: Array<{
+      phone: string;
+      maskedPhone: string;
+      inquiryId: string;
+      customerName: string;
+      paymentStatus: string;
+      isWindowOpen: boolean;
+      windowExpiresAt: string | null;
+    }>;
+  }> {
+    return apiClient('/api/whatsapp/broadcasts/specific-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  async sendSpecificBroadcast(payload: {
+    eventId: string;
+    rawNumbers: string;
+    messageMode?: 'FREE_TEXT' | 'TEMPLATE';
+    templateKey?: string;
+    customMessage?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    queuedCount: number;
+    skippedClosedWindowCount: number;
+    skippedOptOutCount: number;
+  }> {
+    return apiClient('/api/whatsapp/broadcasts/specific-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
   },
 

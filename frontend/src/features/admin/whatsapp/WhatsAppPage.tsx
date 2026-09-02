@@ -72,7 +72,24 @@ export const WhatsAppPage = () => {
   const [previewingBroadcast, setPreviewingBroadcast] = useState(false);
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
 
-  // Gallery Modal
+  // Post-Event Communication Modal
+  const [showPostEventModal, setShowPostEventModal] = useState(false);
+  const [postEventStatus, setPostEventStatus] = useState<any>(null);
+  const [loadingPostEventStatus, setLoadingPostEventStatus] = useState(false);
+  const [sendingPostEvent, setSendingPostEvent] = useState(false);
+  const [postEventGalleryUrl, setPostEventGalleryUrl] = useState('https://www.ekdujekeliye.in/gallery');
+
+  // Specific Bulk Numbers Modal
+  const [showSpecificBroadcastModal, setShowSpecificBroadcastModal] = useState(false);
+  const [rawSpecificNumbers, setRawSpecificNumbers] = useState('');
+  const [specificBroadcastMode, setSpecificBroadcastMode] = useState<'TEMPLATE' | 'FREE_TEXT'>('TEMPLATE');
+  const [specificBroadcastTemplate, setSpecificBroadcastTemplate] = useState('edkl_event_update_v1');
+  const [specificBroadcastMessage, setSpecificBroadcastMessage] = useState('');
+  const [specificPreviewData, setSpecificPreviewData] = useState<any>(null);
+  const [loadingSpecificPreview, setLoadingSpecificPreview] = useState(false);
+  const [sendingSpecificBroadcast, setSendingSpecificBroadcast] = useState(false);
+
+  // Gallery Modal (Legacy Fallback)
   const [showGalleryModal, setShowGalleryModal] = useState(false);
   const [galleryUrl, setGalleryUrl] = useState('https://www.ekdujekeliye.in/gallery');
   const [sendingGallery, setSendingGallery] = useState(false);
@@ -83,7 +100,7 @@ export const WhatsAppPage = () => {
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string>('');
   const [customPhone, setCustomPhone] = useState('918320594829');
   const [customName, setCustomName] = useState('Jaynesh & Partner');
-  const [selectedTemplateKey, setSelectedTemplateKey] = useState('edkl_payment_confirmed_pass_v1');
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState('edkl_payment_confirmed_pass_v2');
   const [sendingTest, setSendingTest] = useState(false);
   const [dispatchResult, setDispatchResult] = useState<{ success?: boolean; message?: string } | null>(null);
 
@@ -290,6 +307,102 @@ export const WhatsAppPage = () => {
       toast.error(`Failed to trigger gallery: ${err.message}`);
     } finally {
       setSendingGallery(false);
+    }
+  };
+
+  // Open Post-Event Communication Modal & Check Midnight Readiness
+  const handleOpenPostEventModal = async () => {
+    if (!selectedEventId || selectedEventId === 'all') {
+      toast.error('Please select a specific event slot first.');
+      return;
+    }
+    setShowPostEventModal(true);
+    setLoadingPostEventStatus(true);
+    try {
+      const res = await whatsappApi.getPostEventStatus(selectedEventId);
+      setPostEventStatus(res);
+      if (res.defaultGalleryUrl) setPostEventGalleryUrl(res.defaultGalleryUrl);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to fetch post-event readiness status');
+    } finally {
+      setLoadingPostEventStatus(false);
+    }
+  };
+
+  // Dispatch Combined Post-Event Memories + Feedback
+  const handleSendPostEvent = async () => {
+    if (!selectedEventId) return;
+    if (!confirm('Confirm dispatching combined memories + feedback WhatsApp to all PRESENT attendees?')) return;
+    setSendingPostEvent(true);
+    try {
+      const res = await whatsappApi.triggerPostEventSend(selectedEventId, {
+        galleryUrl: postEventGalleryUrl,
+        forceSend: false
+      });
+      toast.success(res.message || 'Post-event communications queued successfully.');
+      setShowPostEventModal(false);
+      fetchDashboardData(selectedEventId);
+      fetchRegistrations(selectedEventId, pagination.page);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to dispatch post-event communications');
+    } finally {
+      setSendingPostEvent(false);
+    }
+  };
+
+  // Preview Specific Numbers Bulk Audience
+  const handlePreviewSpecific = async () => {
+    if (!selectedEventId || selectedEventId === 'all') {
+      toast.error('Please select an event slot first.');
+      return;
+    }
+    if (!rawSpecificNumbers.trim()) {
+      toast.error('Please enter at least one phone number.');
+      return;
+    }
+    setLoadingSpecificPreview(true);
+    try {
+      const res = await whatsappApi.previewSpecificBroadcast({
+        eventId: selectedEventId,
+        rawNumbers: rawSpecificNumbers,
+        messageMode: specificBroadcastMode,
+        templateKey: specificBroadcastTemplate
+      });
+      setSpecificPreviewData(res);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to preview audience');
+    } finally {
+      setLoadingSpecificPreview(false);
+    }
+  };
+
+  // Dispatch Specific Bulk Broadcast
+  const handleSendSpecific = async () => {
+    if (!selectedEventId) return;
+    if (!specificPreviewData || specificPreviewData.eligibleCount === 0) {
+      toast.error('No eligible recipients to send to.');
+      return;
+    }
+    if (!confirm(`Confirm sending to ${specificPreviewData.eligibleCount} recipients?`)) return;
+    setSendingSpecificBroadcast(true);
+    try {
+      const res = await whatsappApi.sendSpecificBroadcast({
+        eventId: selectedEventId,
+        rawNumbers: rawSpecificNumbers,
+        messageMode: specificBroadcastMode,
+        templateKey: specificBroadcastTemplate,
+        customMessage: specificBroadcastMessage
+      });
+      toast.success(res.message || 'Broadcast queued successfully.');
+      setShowSpecificBroadcastModal(false);
+      setRawSpecificNumbers('');
+      setSpecificPreviewData(null);
+      fetchDashboardData(selectedEventId);
+      fetchRegistrations(selectedEventId, pagination.page);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to dispatch broadcast');
+    } finally {
+      setSendingSpecificBroadcast(false);
     }
   };
 
@@ -557,15 +670,28 @@ export const WhatsAppPage = () => {
                 className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
               >
                 <MessageCircleIcon className="w-3.5 h-3.5" />
-                <span>Broadcast</span>
+                <span>Audience Broadcast</span>
               </button>
 
               <button
-                onClick={() => setShowGalleryModal(true)}
+                onClick={() => {
+                  setShowSpecificBroadcastModal(true);
+                  setSpecificPreviewData(null);
+                }}
+                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Send WhatsApp message to specific attendee phone numbers"
+              >
+                <UsersIcon className="w-3.5 h-3.5" />
+                <span>Specific Numbers</span>
+              </button>
+
+              <button
+                onClick={handleOpenPostEventModal}
                 className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Review post-event readiness and dispatch combined memories + feedback"
               >
                 <CameraIcon className="w-3.5 h-3.5" />
-                <span>Gallery Link</span>
+                <span>Post-Event Communication</span>
               </button>
             </div>
           </div>
@@ -678,15 +804,15 @@ export const WhatsAppPage = () => {
             </div>
           </div>
 
-          {/* Lifecycle Message Performance Matrix */}
+          {/* Event WhatsApp Status (5 Core Stages) */}
           <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
                   <ActivityIcon className="w-4 h-4 text-rose-700" />
-                  <span>Lifecycle Milestone Performance Breakdown</span>
+                  <span>Event WhatsApp Status</span>
                 </h3>
-                <p className="text-xs text-slate-500 font-medium">Automated milestone dispatch, delivery rate, and read funnel.</p>
+                <p className="text-xs text-slate-500 font-medium">Automated milestone dispatch, delivery rate, and read funnel across the 5 core lifecycle stages.</p>
               </div>
               {summary?.totalMessagesScheduled ? (
                 <span className="px-3 py-1 bg-amber-50 text-amber-900 border border-amber-200 rounded-full text-xs font-bold self-start sm:self-auto flex items-center gap-1">
@@ -700,25 +826,34 @@ export const WhatsAppPage = () => {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider bg-slate-50/70">
-                    <th className="py-2.5 px-3">Milestone Type</th>
+                    <th className="py-2.5 px-3">Stage</th>
                     <th className="py-2.5 px-2.5 text-center">Eligible</th>
-                    <th className="py-2.5 px-2.5 text-center">Queued / Due</th>
-                    <th className="py-2.5 px-2.5 text-center">Sent</th>
                     <th className="py-2.5 px-2.5 text-center">Delivered</th>
                     <th className="py-2.5 px-2.5 text-center">Read</th>
                     <th className="py-2.5 px-2.5 text-center">Failed</th>
+                    <th className="py-2.5 px-2.5 text-center">Waiting (Queued)</th>
                     <th className="py-2.5 px-3">Delivery Rate</th>
                     <th className="py-2.5 px-3">Read Rate</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                  {dashboardData?.messageTypeStats &&
-                    Object.entries(dashboardData.messageTypeStats).map(([msgType, m]) => (
-                      <tr key={msgType} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="py-2.5 px-3 font-bold text-slate-900 capitalize">
-                          {msgType.replace(/_/g, ' ')}
+                  {[
+                    { key: 'payment_pending', label: 'Payment Reminder', eligible: summary?.paymentPendingRegistrations ?? 0, stats: dashboardData?.messageTypeStats?.['payment_pending'] },
+                    { key: 'payment_confirmation', label: 'Payment Confirmed', eligible: summary?.confirmedRegistrations ?? 0, stats: dashboardData?.messageTypeStats?.['payment_confirmation'] || dashboardData?.messageTypeStats?.['pass_delivery'] },
+                    { key: 'reminder', label: '48h Pass Reminder', eligible: summary?.confirmedRegistrations ?? 0, stats: dashboardData?.messageTypeStats?.['reminder'] },
+                    { key: 'invitation', label: '24h Invitation (Image Header)', eligible: summary?.confirmedRegistrations ?? 0, stats: dashboardData?.messageTypeStats?.['invitation'] },
+                    { key: 'post_event', label: 'Post Event (Photos + Feedback)', eligible: summary?.attendedRegistrations ?? 0, stats: dashboardData?.messageTypeStats?.['post_event'] || dashboardData?.messageTypeStats?.['gallery_ready'] || dashboardData?.messageTypeStats?.['feedback_request'] }
+                  ].map((row) => {
+                    const m = row.stats || { queued: 0, sent: 0, delivered: 0, read: 0, failed: 0, deliveryRate: 0, readRate: 0 };
+                    return (
+                      <tr key={row.key} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-2.5 px-3 font-bold text-slate-900">
+                          {row.label}
                         </td>
-                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-slate-600">{m.eligible}</td>
+                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-slate-600">{row.eligible}</td>
+                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-emerald-700">{m.delivered}</td>
+                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-sky-700">{m.read}</td>
+                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-rose-700">{m.failed}</td>
                         <td className="py-2.5 px-2.5 text-center">
                           {m.queued > 0 ? (
                             <span className="px-2 py-0.5 bg-amber-100 text-amber-900 font-bold rounded text-[10px]">
@@ -728,10 +863,6 @@ export const WhatsAppPage = () => {
                             <span className="text-slate-400 font-mono">0</span>
                           )}
                         </td>
-                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-blue-700">{m.sent}</td>
-                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-emerald-700">{m.delivered}</td>
-                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-sky-700">{m.read}</td>
-                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-rose-700">{m.failed}</td>
                         <td className="py-2.5 px-3">
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-emerald-700 w-8">{m.deliveryRate}%</span>
@@ -749,7 +880,8 @@ export const WhatsAppPage = () => {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -830,12 +962,11 @@ export const WhatsAppPage = () => {
                     <th className="py-2.5 px-3">Phone</th>
                     <th className="py-2.5 px-3">Payment</th>
                     <th className="py-2.5 px-3">Pass</th>
-                    <th className="py-2.5 px-3">Registration</th>
-                    <th className="py-2.5 px-3">Payment Link</th>
-                    <th className="py-2.5 px-3">Confirmation</th>
-                    <th className="py-2.5 px-3">48h Invite</th>
-                    <th className="py-2.5 px-3">24h Reminder</th>
-                    <th className="py-2.5 px-3">Feedback</th>
+                    <th className="py-2.5 px-3">Payment Reminder</th>
+                    <th className="py-2.5 px-3">Payment Confirmed</th>
+                    <th className="py-2.5 px-3">48h Pass Reminder</th>
+                    <th className="py-2.5 px-3">24h Invitation</th>
+                    <th className="py-2.5 px-3">Post Event</th>
                     <th className="py-2.5 px-3">Health</th>
                     <th className="py-2.5 px-3 text-center">Timeline</th>
                   </tr>
@@ -843,14 +974,14 @@ export const WhatsAppPage = () => {
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
                   {loadingRegistrations ? (
                     <tr>
-                      <td colSpan={12} className="py-12 text-center text-slate-400 text-xs">
+                      <td colSpan={11} className="py-12 text-center text-slate-400 text-xs">
                         <RefreshCwIcon className="w-5 h-5 mx-auto animate-spin mb-2 text-rose-600" />
                         Loading attendee ledger...
                       </td>
                     </tr>
                   ) : registrations.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="py-8 text-center text-slate-400 text-xs">
+                      <td colSpan={11} className="py-8 text-center text-slate-400 text-xs">
                         No attendees match current filters.
                       </td>
                     </tr>
@@ -896,22 +1027,21 @@ export const WhatsAppPage = () => {
                           )}
                         </td>
 
-                        <td className="py-2.5 px-3">{renderStatusBadge(row.messages.registration.status, row.messages.registration.reasonIfMissing)}</td>
-                        <td className="py-2.5 px-3">{renderStatusBadge(row.messages.paymentReminder.status, row.messages.paymentReminder.reasonIfMissing)}</td>
-                        <td className="py-2.5 px-3">{renderStatusBadge(row.messages.paymentConfirmed.status, row.messages.paymentConfirmed.reasonIfMissing)}</td>
-                        <td className="py-2.5 px-3">{renderStatusBadge(row.messages.invitation48h.status, row.messages.invitation48h.reasonIfMissing)}</td>
-                        <td className="py-2.5 px-3">{renderStatusBadge(row.messages.reminder24h.status, row.messages.reminder24h.reasonIfMissing)}</td>
-                        <td className="py-2.5 px-3">{renderStatusBadge(row.messages.feedback.status, row.messages.feedback.reasonIfMissing)}</td>
+                        <td className="py-2.5 px-3">{renderStatusBadge(row.messages?.paymentReminder?.status, row.messages?.paymentReminder?.reasonIfMissing)}</td>
+                        <td className="py-2.5 px-3">{renderStatusBadge(row.messages?.paymentConfirmed?.status, row.messages?.paymentConfirmed?.reasonIfMissing)}</td>
+                        <td className="py-2.5 px-3">{renderStatusBadge((row.messages as any)?.passReminder48h?.status || row.messages?.reminder24h?.status, (row.messages as any)?.passReminder48h?.reasonIfMissing || row.messages?.reminder24h?.reasonIfMissing)}</td>
+                        <td className="py-2.5 px-3">{renderStatusBadge((row.messages as any)?.invitation24h?.status || row.messages?.invitation48h?.status, (row.messages as any)?.invitation24h?.reasonIfMissing || row.messages?.invitation48h?.reasonIfMissing)}</td>
+                        <td className="py-2.5 px-3">{renderStatusBadge((row.messages as any)?.postEvent?.status || row.messages?.feedback?.status, (row.messages as any)?.postEvent?.reasonIfMissing || row.messages?.feedback?.reasonIfMissing)}</td>
 
                         <td className="py-2.5 px-3">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                            row.health === 'HEALTHY'
-                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                              : row.health === 'ACTION_NEEDED'
+                            row.health === 'ACTION_NEEDED'
                               ? 'bg-rose-50 text-rose-800 border border-rose-300'
-                              : 'bg-amber-50 text-amber-800 border border-amber-300'
+                              : (row.health === 'WAITING' || (row.health as any) === 'PENDING')
+                              ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                              : 'bg-emerald-50 text-emerald-800 border border-emerald-300'
                           }`}>
-                            {row.health.replace(/_/g, ' ')}
+                            {row.health === 'ACTION_NEEDED' ? 'ACTION NEEDED' : (row.health === 'WAITING' || (row.health as any) === 'PENDING') ? 'WAITING' : 'GOOD'}
                           </span>
                         </td>
 
@@ -1412,7 +1542,7 @@ export const WhatsAppPage = () => {
                   onChange={(val) => setBroadcastTemplateKey(val)}
                   options={[
                     { value: 'edkl_event_update_v1', label: 'edkl_event_update_v1', badge: 'EVENT UPDATE', sublabel: 'Event Update Notification' },
-                    { value: 'edkl_event_reminder_v1', label: 'edkl_event_reminder_v1', badge: 'REMINDER', sublabel: 'Event Reminder' }
+                    { value: 'edkl_event_pass_reminder_v2', label: 'edkl_event_pass_reminder_v2', badge: 'REMINDER', sublabel: '48h Pass Reminder' }
                   ]}
                   placeholder="Choose template..."
                   variant="card"
@@ -1452,46 +1582,295 @@ export const WhatsAppPage = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* GALLERY READY MODAL */}
+      {/* POST-EVENT COMMUNICATION MODAL */}
       {/* ========================================================================= */}
-      {showGalleryModal && (
+      {showPostEventModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 max-w-md w-full shadow-2xl space-y-4">
+          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 max-w-lg w-full shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-xs sm:text-sm font-black text-slate-900">Publish Event Photo Gallery</h3>
-              <button onClick={() => setShowGalleryModal(false)} className="text-slate-400 hover:text-slate-700 font-bold">
+              <div>
+                <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
+                  <CameraIcon className="w-4 h-4 text-rose-600" />
+                  <span>Post-Event Communication (Memories & Feedback)</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Single combined WhatsApp with Photo Gallery URL button and Feedback Form URL button.
+                </p>
+              </div>
+              <button onClick={() => setShowPostEventModal(false)} className="text-slate-400 hover:text-slate-700 font-bold">
                 <XIcon className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <p className="text-slate-600 font-medium">
-                Dispatches gallery access link to all verified seminar attendees (Gate attendance verified).
-              </p>
-              <div>
-                <label className="font-extrabold text-slate-700 block mb-1">Gallery URL:</label>
-                <input
-                  type="text"
-                  value={galleryUrl}
-                  onChange={(e) => setGalleryUrl(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900"
-                />
+            {loadingPostEventStatus ? (
+              <div className="py-8 text-center text-slate-500 text-xs flex items-center justify-center gap-2">
+                <RefreshCwIcon className="w-4 h-4 animate-spin text-rose-600" />
+                <span>Checking midnight schedule & attendee counts...</span>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-3 text-xs">
+                {/* Status Alert */}
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <span className="font-bold text-slate-700">Lifecycle Status:</span>
+                  {postEventStatus?.lifecycleStatus === 'READY_TO_SEND' ? (
+                    <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-extrabold flex items-center gap-1.5">
+                      <CheckIcon className="w-3.5 h-3.5 text-emerald-600" />
+                      READY TO SEND (Past Midnight)
+                    </span>
+                  ) : postEventStatus?.lifecycleStatus === 'SENT' ? (
+                    <span className="px-2.5 py-1 bg-sky-100 text-sky-800 border border-sky-300 rounded-lg text-xs font-extrabold flex items-center gap-1.5">
+                      <CheckIcon className="w-3.5 h-3.5 text-sky-600" />
+                      SENT ({postEventStatus.alreadySentCount} queued)
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-extrabold flex items-center gap-1.5">
+                      <ClockIcon className="w-3.5 h-3.5 text-amber-700" />
+                      NOT READY (Available next day 00:00 IST)
+                    </span>
+                  )}
+                </div>
+
+                {/* Attendee Metrics */}
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    <span className="text-[10px] text-slate-500 font-bold block uppercase">Present Gate</span>
+                    <span className="text-base font-black text-slate-900">{postEventStatus?.presentCount ?? 0}</span>
+                  </div>
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+                    <span className="text-[10px] text-emerald-700 font-bold block uppercase">Eligible WhatsApp</span>
+                    <span className="text-base font-black text-emerald-700">{postEventStatus?.eligibleWhatsappCount ?? 0}</span>
+                  </div>
+                  <div className="p-2.5 bg-sky-50 border border-sky-200 rounded-xl">
+                    <span className="text-[10px] text-sky-700 font-bold block uppercase">Already Queued</span>
+                    <span className="text-base font-black text-sky-700">{postEventStatus?.alreadySentCount ?? 0}</span>
+                  </div>
+                </div>
+
+                {/* Gallery URL Input */}
+                <div>
+                  <label className="font-extrabold text-slate-700 block mb-1">Official Event Gallery URL:</label>
+                  <input
+                    type="text"
+                    value={postEventGalleryUrl}
+                    onChange={(e) => setPostEventGalleryUrl(e.target.value)}
+                    placeholder="https://www.ekdujekeliye.in/gallery"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900 focus:outline-none focus:border-rose-500"
+                  />
+                  <span className="text-[10px] text-slate-500 block mt-1">
+                    Button 1 opens this URL. Button 2 opens the personalized attendee feedback form.
+                  </span>
+                </div>
+
+                {/* Message Template Preview */}
+                <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl space-y-1.5">
+                  <span className="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider block">
+                    Message Preview (edkl_post_event_memories_feedback_v1)
+                  </span>
+                  <p className="text-[11px] text-slate-700 italic leading-relaxed">
+                    &ldquo;નમસ્તે [Jaynesh &amp; Pooja], {postEventStatus?.eventName || 'Seminar'} કાર્યક્રમમાં જોડાવા બદલ આપનો દિલથી આભાર. આશા છે કે આ સંગમ આપના દાંપત્યજીવન માટે યાદગાર બન્યો હશે...&rdquo;
+                  </p>
+                  <div className="flex gap-2 pt-1">
+                    <span className="flex-1 text-center py-1 bg-white border border-slate-300 rounded text-[10px] font-bold text-sky-700">
+                      [View Event Photos]
+                    </span>
+                    <span className="flex-1 text-center py-1 bg-white border border-slate-300 rounded text-[10px] font-bold text-sky-700">
+                      [Give Feedback]
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
-                onClick={() => setShowGalleryModal(false)}
+                onClick={() => setShowPostEventModal(false)}
                 className="px-3.5 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200"
               >
                 Cancel
               </button>
               <button
-                disabled={sendingGallery}
-                onClick={handleTriggerGallery}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold"
+                disabled={sendingPostEvent || (postEventStatus?.eligibleWhatsappCount ?? 0) === 0}
+                onClick={handleSendPostEvent}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-50 flex items-center gap-1.5"
               >
-                {sendingGallery ? 'Queueing...' : 'Dispatch Gallery Link'}
+                <CameraIcon className="w-3.5 h-3.5" />
+                <span>{sendingPostEvent ? 'Queueing...' : `Send to ${postEventStatus?.eligibleWhatsappCount ?? 0} Attended`}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SPECIFIC NUMBERS BULK BROADCAST MODAL */}
+      {/* ========================================================================= */}
+      {showSpecificBroadcastModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 max-w-lg w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
+                  <UsersIcon className="w-4 h-4 text-indigo-600" />
+                  <span>Send Specific Numbers Broadcast</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Safely targets specific attendee phone numbers with 24-hour Meta service window protection.
+                </p>
+              </div>
+              <button onClick={() => setShowSpecificBroadcastModal(false)} className="text-slate-400 hover:text-slate-700 font-bold">
+                <XIcon className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              {/* Phone Numbers Input */}
+              <div>
+                <label className="font-extrabold text-slate-700 block mb-1">
+                  Recipient Phone Numbers (one per line or comma-separated):
+                </label>
+                <textarea
+                  rows={3}
+                  value={rawSpecificNumbers}
+                  onChange={(e) => {
+                    setRawSpecificNumbers(e.target.value);
+                    setSpecificPreviewData(null);
+                  }}
+                  placeholder={'918320594829\n9876543210\n+91 99887 76655'}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900 focus:outline-none focus:border-indigo-500 resize-none"
+                />
+              </div>
+
+              {/* Message Mode Toggle */}
+              <div className="space-y-1">
+                <label className="font-extrabold text-slate-700 block">Message Mode:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSpecificBroadcastMode('TEMPLATE');
+                      setSpecificPreviewData(null);
+                    }}
+                    className={`p-2.5 rounded-xl border text-left font-bold transition-all cursor-pointer ${
+                      specificBroadcastMode === 'TEMPLATE'
+                        ? 'bg-indigo-50 border-indigo-500 text-indigo-900 ring-1 ring-indigo-500/30'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="block text-xs">Approved Template</span>
+                    <span className="text-[10px] font-normal text-slate-500">Allowed outside 24h window</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSpecificBroadcastMode('FREE_TEXT');
+                      setSpecificPreviewData(null);
+                    }}
+                    className={`p-2.5 rounded-xl border text-left font-bold transition-all cursor-pointer ${
+                      specificBroadcastMode === 'FREE_TEXT'
+                        ? 'bg-indigo-50 border-indigo-500 text-indigo-900 ring-1 ring-indigo-500/30'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="block text-xs">Free Text Message</span>
+                    <span className="text-[10px] font-normal text-slate-500">Only 24h window-open</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Template Select or Free Text Input */}
+              {specificBroadcastMode === 'TEMPLATE' ? (
+                <div>
+                  <label className="font-extrabold text-slate-700 block mb-1">Select Meta Template:</label>
+                  <LuxurySelect
+                    value={specificBroadcastTemplate}
+                    onChange={(val) => {
+                      setSpecificBroadcastTemplate(val);
+                      setSpecificPreviewData(null);
+                    }}
+                    options={metaTemplates.map(t => ({
+                      value: t.key,
+                      label: t.metaName,
+                      badge: t.category,
+                      sublabel: t.purpose || t.trigger
+                    }))}
+                    placeholder="Select approved template..."
+                    searchable
+                    variant="card"
+                    size="sm"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5 p-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900 font-medium">
+                    <AlertTriangleIcon className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                    <span>Free-text messages are strictly delivered to recipients whose 24-hour customer service window is open. Closed-window numbers will be skipped.</span>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={specificBroadcastMessage}
+                    onChange={(e) => setSpecificBroadcastMessage(e.target.value)}
+                    placeholder="Type custom text message to send..."
+                    className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-indigo-500 resize-none"
+                  />
+                </div>
+              )}
+
+              {/* Preview Audience Button & Stats */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={handlePreviewSpecific}
+                  disabled={loadingSpecificPreview || !rawSpecificNumbers.trim()}
+                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold border border-slate-200 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <EyeIcon className={`w-3.5 h-3.5 ${loadingSpecificPreview ? 'animate-spin text-indigo-600' : ''}`} />
+                  <span>{loadingSpecificPreview ? 'Checking 24h Window Status...' : 'Preview Audience & 24h Window Status'}</span>
+                </button>
+              </div>
+
+              {specificPreviewData && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider block">Audience Breakdown</span>
+                  <div className="grid grid-cols-4 gap-1.5 text-center text-[10px]">
+                    <div className="p-1.5 bg-white border border-slate-200 rounded-lg">
+                      <span className="text-slate-400 block font-bold">Input</span>
+                      <span className="text-xs font-black text-slate-900">{specificPreviewData.inputCount}</span>
+                    </div>
+                    <div className="p-1.5 bg-white border border-slate-200 rounded-lg">
+                      <span className="text-slate-400 block font-bold">Matched</span>
+                      <span className="text-xs font-black text-indigo-700">{specificPreviewData.matchedCount}</span>
+                    </div>
+                    <div className="p-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+                      <span className="text-emerald-700 block font-bold">Window Open</span>
+                      <span className="text-xs font-black text-emerald-700">{specificPreviewData.windowOpenCount}</span>
+                    </div>
+                    <div className="p-1.5 bg-amber-50 border border-amber-200 rounded-lg">
+                      <span className="text-amber-800 block font-bold">Closed</span>
+                      <span className="text-xs font-black text-amber-800">{specificPreviewData.windowClosedCount}</span>
+                    </div>
+                  </div>
+                  <div className="text-center pt-1 border-t border-slate-200/60 font-bold text-xs">
+                    Final Eligible Recipients: <span className="text-indigo-700 font-extrabold">{specificPreviewData.eligibleCount}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                onClick={() => setShowSpecificBroadcastModal(false)}
+                className="px-3.5 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={sendingSpecificBroadcast || !specificPreviewData || specificPreviewData.eligibleCount === 0}
+                onClick={handleSendSpecific}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <UsersIcon className="w-3.5 h-3.5" />
+                <span>{sendingSpecificBroadcast ? 'Dispatching...' : `Send to ${specificPreviewData?.eligibleCount ?? 0} Recipients`}</span>
               </button>
             </div>
           </div>

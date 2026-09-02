@@ -10,7 +10,11 @@ import {
   getEventRegistrationsCommunication,
   previewBroadcastAudience,
   createEventBroadcast,
+  previewSpecificBroadcast,
+  sendSpecificBroadcast,
   triggerGalleryReady,
+  getPostEventStatus,
+  triggerPostEventSend,
   runSchedulerWorker,
   resendMessage,
   getTemplates,
@@ -62,6 +66,10 @@ whatsappRouter.get('/dashboard/events/:eventId', requireAuth, getEventCommunicat
 whatsappRouter.get('/dashboard/events/:eventId/registrations', requireAuth, getEventRegistrationsCommunication);
 whatsappRouter.post('/broadcasts/preview', requireAuth, previewBroadcastAudience);
 whatsappRouter.post('/broadcasts', requireAuth, createEventBroadcast);
+whatsappRouter.post('/broadcasts/specific-preview', requireAuth, previewSpecificBroadcast);
+whatsappRouter.post('/broadcasts/specific-send', requireAuth, sendSpecificBroadcast);
+whatsappRouter.get('/events/:eventId/post-event-status', requireAuth, getPostEventStatus);
+whatsappRouter.post('/events/:eventId/post-event-send', requireAuth, triggerPostEventSend);
 whatsappRouter.post('/events/:eventId/gallery-ready', requireAuth, triggerGalleryReady);
 whatsappRouter.post('/resend', requireAuth, resendMessage);
 whatsappRouter.post('/run-worker', requireCronAuth, runSchedulerWorker);
