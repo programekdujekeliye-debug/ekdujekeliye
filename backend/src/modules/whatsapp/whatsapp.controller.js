@@ -704,14 +704,46 @@ export const getEventRegistrationsCommunication = async (req, res) => {
       const isPresent = reg.attendance === 'PRESENT' || reg.attendance === 'present' || reg.attendance === true;
       const optIn = reg.whatsappOptIn !== false;
 
-      // Extract specific lifecycle messages
-      const mReg = regMsgs.find(m => m.messageType === 'registration_received');
-      const mPayReminders = regMsgs.filter(m => m.messageType === 'payment_pending');
-      const mPayConf = regMsgs.find(m => m.messageType === 'payment_confirmation');
-      const mInv = regMsgs.find(m => m.messageType === 'invitation');
-      const mRem = regMsgs.find(m => m.messageType === 'reminder');
-      const mFb = regMsgs.find(m => m.messageType === 'feedback_request');
-      const mGal = regMsgs.find(m => m.messageType === 'gallery_ready');
+      // Extract specific lifecycle messages with robust matching across templateName, trigger, and messageType
+      const mReg = regMsgs.find(m =>
+        m.messageType === 'registration_received' ||
+        m.templateName?.includes('registration_received') ||
+        m.trigger === 'registration_received'
+      );
+      const mPayReminders = regMsgs.filter(m =>
+        m.messageType === 'payment_pending' ||
+        m.templateName?.includes('payment_pending') ||
+        m.templateName?.includes('polite_payment') ||
+        m.trigger === 'payment_pending' ||
+        m.trigger === 'registration_created'
+      );
+      const mPayConf = regMsgs.find(m =>
+        (m.messageType === 'payment_confirmation' ||
+         m.templateName?.includes('payment_confirmed') ||
+         m.trigger === 'payment_verified' ||
+         m.trigger === 'manual_approval') &&
+        !(m.templateName && (m.templateName.includes('payment_pending') || m.templateName.includes('polite_payment')))
+      );
+      const mInv = regMsgs.find(m =>
+        m.messageType === 'invitation' ||
+        m.templateName?.includes('invitation') ||
+        m.trigger === 'invitation_48h'
+      );
+      const mRem = regMsgs.find(m =>
+        m.messageType === 'reminder' ||
+        m.templateName?.includes('reminder') ||
+        m.trigger === 'reminder_24h'
+      );
+      const mFb = regMsgs.find(m =>
+        m.messageType === 'feedback_request' ||
+        m.templateName?.includes('feedback') ||
+        m.trigger === 'feedback_post_event'
+      );
+      const mGal = regMsgs.find(m =>
+        m.messageType === 'gallery_ready' ||
+        m.templateName?.includes('gallery') ||
+        m.trigger === 'gallery_broadcast'
+      );
 
       // Totals
       const totals = {
@@ -754,6 +786,9 @@ export const getEventRegistrationsCommunication = async (req, res) => {
       const getReason = (type) => {
         if (!optIn) return 'WHATSAPP_OPT_OUT';
         if (!reg.phoneNumber) return 'PHONE_MISSING';
+        if (type === 'registration') {
+          return isPaid ? 'NOT_REQUIRED' : 'NOT_YET_DUE';
+        }
         if (type === 'payment_confirmation' || type === 'invitation' || type === 'reminder') {
           if (!isPaid) return 'PAYMENT_NOT_COMPLETE';
           if (type === 'invitation' && (!pass || pass.status !== 'ACTIVE')) return 'PASS_NOT_ACTIVE';

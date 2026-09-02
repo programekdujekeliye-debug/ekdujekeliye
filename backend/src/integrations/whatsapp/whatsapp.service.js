@@ -88,6 +88,7 @@ export async function sendWhatsAppMessage({
   inquiryId = null,
   customerId = null,
   trigger = 'manual',
+  messageType = null,
   category = 'UTILITY',
   executionSource = 'NORMAL',
   providerMode = 'META'
@@ -312,6 +313,30 @@ export async function sendWhatsAppMessage({
     console.warn('[WhatsApp Service] Warning ensuring conversation record:', convErr.message);
   }
 
+  // Infer canonical messageType from templateKey, trigger, or explicit parameter
+  let resolvedMessageType = messageType;
+  if (!resolvedMessageType) {
+    const tKey = String(templateKey || '').toLowerCase();
+    const trig = String(trigger || '').toLowerCase();
+    if (tKey.includes('registration_received') || trig.includes('registration_received')) {
+      resolvedMessageType = 'registration_received';
+    } else if (tKey.includes('payment_pending') || tKey.includes('polite_payment') || trig.includes('payment_pending') || trig === 'registration_created') {
+      resolvedMessageType = 'payment_pending';
+    } else if (tKey.includes('payment_confirmed') || tKey.includes('pass_ready') || trig.includes('payment_verified') || trig === 'manual_approval') {
+      resolvedMessageType = 'payment_confirmation';
+    } else if (tKey.includes('invitation') || tKey.includes('personal_invitation') || trig.includes('invitation')) {
+      resolvedMessageType = 'invitation';
+    } else if (tKey.includes('reminder') || trig.includes('reminder')) {
+      resolvedMessageType = 'reminder';
+    } else if (tKey.includes('feedback') || trig.includes('feedback')) {
+      resolvedMessageType = 'feedback_request';
+    } else if (tKey.includes('gallery') || trig.includes('gallery')) {
+      resolvedMessageType = 'gallery_ready';
+    } else {
+      resolvedMessageType = 'custom';
+    }
+  }
+
   // 8. Create or Update Ledger Record
   const internalMessageId = existingMsg?.messageId || `WA-MSG-${crypto.randomBytes(8).toString('hex')}`;
   const messageRecord = await WhatsappMessage.findOneAndUpdate(
@@ -332,6 +357,7 @@ export async function sendWhatsAppMessage({
       content: renderedContent,
       contentType: 'template',
       templateName: templateDef.metaName,
+      messageType: resolvedMessageType,
       languageCode: resolvedLang,
       templateLanguage: resolvedLang,
       templateCategory: templateDef.category,

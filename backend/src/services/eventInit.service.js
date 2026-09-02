@@ -1,6 +1,7 @@
 import { Event } from '../models/Event.js';
 import { Counter } from '../models/Counter.js';
 import { Registration } from '../models/Registration.js';
+import { WhatsappMessage } from '../models/WhatsappMessage.js';
 
 /**
  * Startup Event Config Initializer
@@ -217,7 +218,48 @@ export async function ensureEarlyRegistrationEvents() {
     try {
       await Registration.createIndexes();
       await Event.createIndexes();
+      await WhatsappMessage.createIndexes();
     } catch (_) {}
+
+    // 6. Self-heal WhatsApp messageType categorizations
+    try {
+      await WhatsappMessage.updateMany(
+        {
+          $or: [
+            { templateName: { $regex: 'payment_pending|polite_payment', $options: 'i' } },
+            { trigger: 'payment_pending' },
+            { trigger: 'registration_created' }
+          ]
+        },
+        { $set: { messageType: 'payment_pending' } }
+      );
+      await WhatsappMessage.updateMany(
+        {
+          $or: [
+            { templateName: { $regex: 'registration_received', $options: 'i' } },
+            { trigger: 'registration_received' }
+          ]
+        },
+        { $set: { messageType: 'registration_received' } }
+      );
+      await WhatsappMessage.updateMany(
+        {
+          $and: [
+            {
+              $or: [
+                { templateName: { $regex: 'payment_confirmed|pass_ready', $options: 'i' } },
+                { trigger: 'payment_verified' },
+                { trigger: 'manual_approval' }
+              ]
+            },
+            { templateName: { $not: { $regex: 'payment_pending|polite_payment', $options: 'i' } } }
+          ]
+        },
+        { $set: { messageType: 'payment_confirmation' } }
+      );
+    } catch (healErr) {
+      console.warn('[EventInit] WhatsApp message self-heal notice:', healErr.message);
+    }
 
     console.log('[EventInit] Ensured 7 Sep (EK06) & 11 Sep (EK07) event configurations and DB indexes.');
   } catch (err) {

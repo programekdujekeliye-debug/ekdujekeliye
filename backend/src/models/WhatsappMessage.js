@@ -54,7 +54,7 @@ const WhatsappMessageSchema = new mongoose.Schema({
   templateCategory: { type: String, enum: ['UTILITY', 'MARKETING', 'AUTHENTICATION', 'SERVICE'], default: 'UTILITY' },
   messageType: {
     type: String,
-    default: 'payment_confirmation'
+    default: 'custom'
   },
   trigger: { type: String, default: 'manual', index: true },
   executionSource: {
