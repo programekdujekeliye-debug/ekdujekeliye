@@ -11,7 +11,8 @@ import {
   deleteEvent,
   getEnablePaymentPreview,
   enablePaymentAndCommunications,
-  uploadCardTemplate
+  uploadCardTemplate,
+  uploadEventAsset
 } from './event.controller.js';
 import { requireAuth } from '../../middleware/auth.js';
 
@@ -35,5 +36,7 @@ eventRouter.get('/:id/enable-payment-preview', requireAuth, getEnablePaymentPrev
 eventRouter.post('/:id/enable-payment', requireAuth, enablePaymentAndCommunications);
 eventRouter.post('/:id/duplicate', requireAuth, duplicateEvent);
 eventRouter.post('/:id/upload-template', requireAuth, upload.single('templateFile'), uploadCardTemplate);
+eventRouter.post('/:id/upload-asset', requireAuth, upload.single('assetFile'), uploadEventAsset);
+eventRouter.post('/upload-asset', requireAuth, upload.single('assetFile'), uploadEventAsset);
 eventRouter.put('/:id', requireAuth, updateEvent);
 eventRouter.delete('/:id', requireAuth, deleteEvent);

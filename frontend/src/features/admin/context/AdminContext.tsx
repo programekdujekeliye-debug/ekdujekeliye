@@ -162,6 +162,8 @@ export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('adminPassword');
       sessionStorage.removeItem('adminRole');
+      localStorage.removeItem('adminPassword');
+      localStorage.removeItem('adminRole');
     }
     setPassword('');
     setIsAuthenticated(false);

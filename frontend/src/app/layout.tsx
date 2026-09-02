@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans, Cinzel, Noto_Sans_Gujarati } from "next/font/google";
+import { Plus_Jakarta_Sans, Noto_Sans_Gujarati } from "next/font/google";
 import "./globals.css";
 
 export const viewport: Viewport = {
@@ -12,21 +12,14 @@ export const viewport: Viewport = {
 };
 
 const plusJakartaSans = Plus_Jakarta_Sans({
-  variable: "--font-sans",
+  variable: "--font-site-sans",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
   display: "swap",
 });
 
-const cinzel = Cinzel({
-  variable: "--font-serif",
-  subsets: ["latin"],
-  weight: ["600", "700", "800", "900"],
-  display: "swap",
-});
-
 const notoSansGujarati = Noto_Sans_Gujarati({
-  variable: "--font-gujarati",
+  variable: "--font-site-gujarati",
   subsets: ["gujarati"],
   weight: ["400", "500", "600", "700", "800"],
   display: "swap",
@@ -58,7 +51,7 @@ export default function RootLayout({
     <html
       lang="gu"
       style={{ colorScheme: 'light' }}
-      className={`${plusJakartaSans.variable} ${cinzel.variable} ${notoSansGujarati.variable} h-full antialiased light`}
+      className={`${plusJakartaSans.variable} ${notoSansGujarati.variable} h-full antialiased light`}
     >
       <body className="min-h-full flex flex-col font-sans bg-[#FAF9F6] text-stone-900 selection:bg-rose-500/20 selection:text-rose-900" style={{ colorScheme: 'light' }}>
         <ToastProvider />

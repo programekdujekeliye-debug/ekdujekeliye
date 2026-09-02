@@ -257,7 +257,7 @@ export async function prepareOfflineEvent(req, res) {
       eventName: event.name,
       eventDate: event.date,
       eventTime: event.time || '8:30 PM',
-      venue: event.venue || 'Sardar Patel Smruti Bhavan, Varachha, Surat',
+      venue: event.venue || '',
       publicKey: pubKey,
       revokedPassIds: revokedPasses.map(p => p.passId),
       cachedAt: new Date().toISOString()

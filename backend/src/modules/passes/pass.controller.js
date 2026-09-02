@@ -58,7 +58,7 @@ export async function getPassDetails(req, res) {
       programName: event?.name || submission.programName,
       programDate: event?.date || submission.programDate,
       programTime: event?.time || submission.programTime || '8:30 PM',
-      venue: event?.venue || 'Sardar Patel Smruti Bhavan, Varachha, Surat',
+      venue: event?.venue || submission.venue || '',
       venueAddress: event?.venueAddress || '',
       issuedAt: pass.issuedAt
     });

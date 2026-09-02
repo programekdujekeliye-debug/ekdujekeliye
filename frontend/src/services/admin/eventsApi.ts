@@ -45,6 +45,17 @@ export const eventsApi = {
     });
   },
 
+  async uploadEventAsset(id: string | undefined, file: File, assetType: 'heroImage' | 'posterImage' | 'speakerImage' | 'cardTemplate'): Promise<{ success: boolean; message: string; url: string; assetType: string }> {
+    const formData = new FormData();
+    formData.append('assetFile', file);
+    formData.append('assetType', assetType);
+    const endpoint = id && id !== 'new' ? `/api/programs/${id}/upload-asset` : '/api/programs/upload-asset';
+    return apiClient<{ success: boolean; message: string; url: string; assetType: string }>(endpoint, {
+      method: 'POST',
+      body: formData
+    });
+  },
+
   async deleteEvent(id: string): Promise<{ success: boolean; message: string }> {
     return apiClient<{ success: boolean; message: string }>(`/api/programs/${id}`, {
       method: 'DELETE'

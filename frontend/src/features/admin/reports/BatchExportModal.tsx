@@ -361,16 +361,10 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
         'Created Date'
       ],
       ...list.map((s) => {
-        const isOldEvent =
-          s.programDate?.startsWith('2026-08') ||
-          s.inquiryId?.startsWith('EK05') ||
-          s.inquiryId?.startsWith('IP') ||
-          s.inquiryId?.startsWith('EK01') ||
-          s.inquiryId?.startsWith('EK02') ||
-          s.inquiryId?.startsWith('EK03') ||
-          s.inquiryId?.startsWith('EK04');
-        const amt = s.payment?.amount !== undefined ? s.payment.amount : isOldEvent ? 1000 : 1500;
+        const programObj = programs.find((p) => p.id === s.programId || p.slug === s.programId || p.date === s.programDate);
+        const dynamicPrice = programObj?.price !== undefined ? programObj.price : 1500;
         const isVip = s.inquiryId?.startsWith('IP') || Boolean((s as any).isVip);
+        const amt = s.payment?.amount !== undefined ? s.payment.amount : isVip ? 0 : dynamicPrice;
 
         return [
           s.inquiryId,
@@ -418,16 +412,10 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
 
     const rowsHtml = list
       .map((s, idx) => {
-        const isOldEvent =
-          s.programDate?.startsWith('2026-08') ||
-          s.inquiryId?.startsWith('EK05') ||
-          s.inquiryId?.startsWith('IP') ||
-          s.inquiryId?.startsWith('EK01') ||
-          s.inquiryId?.startsWith('EK02') ||
-          s.inquiryId?.startsWith('EK03') ||
-          s.inquiryId?.startsWith('EK04');
-        const amt = s.payment?.amount !== undefined ? s.payment.amount : isOldEvent ? 1000 : 1500;
+        const programObj = programs.find((p) => p.id === s.programId || p.slug === s.programId || p.date === s.programDate);
+        const dynamicPrice = programObj?.price !== undefined ? programObj.price : 1500;
         const isVip = s.inquiryId?.startsWith('IP') || Boolean((s as any).isVip);
+        const amt = s.payment?.amount !== undefined ? s.payment.amount : isVip ? 0 : dynamicPrice;
 
         return `
       <tr style="border-bottom: 1px solid #e2e8f0; height: 22px;">

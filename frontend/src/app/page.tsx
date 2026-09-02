@@ -487,11 +487,10 @@ export default function HomePage() {
                 <button
                   key={city}
                   onClick={() => setSelectedCity(city)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    selectedCity === city
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${selectedCity === city
                       ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20 scale-105'
                       : 'bg-white text-stone-700 hover:bg-stone-200 border border-stone-200'
-                  }`}
+                    }`}
                 >
                   {city === 'All' ? 'All Cities' : city}
                 </button>
@@ -720,31 +719,31 @@ export default function HomePage() {
 
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-center">
             <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-2 shadow-sm">
-              <span className="text-2xl font-extrabold text-rose-600 block font-mono">01</span>
+              <span className="text-2xl font-extrabold text-rose-600 block">01</span>
               <h4 className="text-sm font-bold text-stone-900">શહેર પસંદ કરો</h4>
               <p className="text-[11px] text-stone-600 font-medium">તમારા અનુકૂળ શહેર અને તારીખ પર ક્લિક કરો.</p>
             </div>
 
             <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-2 shadow-sm">
-              <span className="text-2xl font-extrabold text-amber-600 block font-mono">02</span>
+              <span className="text-2xl font-extrabold text-amber-600 block">02</span>
               <h4 className="text-sm font-bold text-stone-900">વિગતો ભરો</h4>
               <p className="text-[11px] text-stone-600 font-medium">પતિ-પત્નીનું નામ અને મોબાઈલ નંબર લખો.</p>
             </div>
 
             <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-2 shadow-sm">
-              <span className="text-2xl font-extrabold text-rose-600 block font-mono">03</span>
+              <span className="text-2xl font-extrabold text-rose-600 block">03</span>
               <h4 className="text-sm font-bold text-stone-900">કપલ ફોટો અપલોડ</h4>
               <p className="text-[11px] text-stone-600 font-medium">પાસ માટે તમારો સુંદર ફોટો પસંદ કરો.</p>
             </div>
 
             <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-2 shadow-sm">
-              <span className="text-2xl font-extrabold text-amber-600 block font-mono">04</span>
+              <span className="text-2xl font-extrabold text-amber-600 block">04</span>
               <h4 className="text-sm font-bold text-stone-900">Razorpay પેમેન્ટ</h4>
               <p className="text-[11px] text-stone-600 font-medium">UPI, Card કે NetBanking થી સુરક્ષિત પેમેન્ટ કરો.</p>
             </div>
 
             <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-2 shadow-sm">
-              <span className="text-2xl font-extrabold text-emerald-600 block font-mono">05</span>
+              <span className="text-2xl font-extrabold text-emerald-600 block">05</span>
               <h4 className="text-sm font-bold text-stone-900">ડિજિટલ પાસ</h4>
               <p className="text-[11px] text-stone-600 font-medium">તરત જ સ્ક્રીન અને WhatsApp પર પાસ મેળવો.</p>
             </div>
@@ -1006,11 +1005,10 @@ export default function HomePage() {
                 <button
                   key={i}
                   onClick={() => setSelectedGalleryIdx(i)}
-                  className={`relative w-10 h-7 md:w-12 md:h-9 rounded-lg overflow-hidden border-2 transition-all cursor-pointer flex-shrink-0 ${
-                    selectedGalleryIdx === i
+                  className={`relative w-10 h-7 md:w-12 md:h-9 rounded-lg overflow-hidden border-2 transition-all cursor-pointer flex-shrink-0 ${selectedGalleryIdx === i
                       ? 'border-rose-500 scale-110 shadow-lg ring-2 ring-rose-400/40'
                       : 'border-white/20 opacity-50 hover:opacity-100'
-                  }`}
+                    }`}
                 >
                   <img src={src} alt={`Thumbnail ${i + 1}`} className="w-full h-full object-cover" />
                 </button>
@@ -1285,9 +1283,8 @@ export default function HomePage() {
 
       {/* Mobile Sticky Booking Bar with Safe Area Support */}
       <div
-        className={`md:hidden fixed bottom-0 left-0 right-0 z-40 px-4 pt-3 pb-safe bg-white/95 backdrop-blur-xl border-t border-stone-200/90 shadow-2xl flex items-center justify-between gap-3 transition-all duration-300 transform ${
-          showStickyBar ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
-        }`}
+        className={`md:hidden fixed bottom-0 left-0 right-0 z-40 px-4 pt-3 pb-safe bg-white/95 backdrop-blur-xl border-t border-stone-200/90 shadow-2xl flex items-center justify-between gap-3 transition-all duration-300 transform ${showStickyBar ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
+          }`}
       >
         <div className="pl-0.5">
           <div className="flex items-center gap-1.5">

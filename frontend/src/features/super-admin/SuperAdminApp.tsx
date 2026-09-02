@@ -37,7 +37,9 @@ const SuperAdminAppContent = () => {
 
   useEffect(() => {
     const checkSavedSession = async () => {
-      const savedPass = typeof window !== 'undefined' ? sessionStorage.getItem('adminPassword') : null;
+      const savedPass = typeof window !== 'undefined'
+        ? (sessionStorage.getItem('adminPassword') || localStorage.getItem('adminPassword'))
+        : null;
       if (savedPass) {
         try {
           const res = await apiClient<{ role: 'superadmin' | 'admin'; authenticated: boolean }>(
@@ -48,10 +50,14 @@ const SuperAdminAppContent = () => {
             setPassword(savedPass);
             setRole(res.role);
             setIsAuthenticated(true);
+            sessionStorage.setItem('adminPassword', savedPass);
+            sessionStorage.setItem('adminRole', res.role);
           }
         } catch (_) {
           sessionStorage.removeItem('adminPassword');
           sessionStorage.removeItem('adminRole');
+          localStorage.removeItem('adminPassword');
+          localStorage.removeItem('adminRole');
         }
       }
       setCheckingAuth(false);

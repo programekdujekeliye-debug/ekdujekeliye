@@ -239,22 +239,21 @@ export class RegistrationService {
 
     let program = null;
 
-    // 1. Precise Prefix Mapping for 7 Sep (EK06) and 11 Sep (EK07)
-    const inq = (submission.inquiryId || '').toUpperCase();
-    if (inq.startsWith('EK06') || inq.startsWith('EK-06') || inq.startsWith('EK 06')) {
-      program = await Event.findOne({
-        $or: [{ id: 'prog-2026-09-07' }, { date: '2026-09-07' }, { slug: 'surat-7-september-2026' }]
-      }).lean();
-    } else if (inq.startsWith('EK07') || inq.startsWith('EK-07') || inq.startsWith('EK 07')) {
-      program = await Event.findOne({
-        $or: [{ id: 'prog-2026-09-11' }, { date: '2026-09-11' }, { slug: 'surat-11-september-2026' }]
-      }).lean();
-    }
-
-    // 2. Fallback to programId or programDate
-    if (!program && submission.programId) {
+    // 1. Dynamic lookup by programId / slug
+    if (submission.programId) {
       program = await eventService.getEventBySlug(submission.programId);
     }
+
+    // 2. Dynamic lookup by sequence prefix (e.g. EK06-xx -> sequenceNumber: 6)
+    if (!program && submission.inquiryId) {
+      const match = String(submission.inquiryId).toUpperCase().match(/^EK(\d{1,2})-/);
+      if (match) {
+        const seqNum = parseInt(match[1], 10);
+        program = await Event.findOne({ sequenceNumber: seqNum }).lean();
+      }
+    }
+
+    // 3. Dynamic lookup by programDate
     if (!program && submission.programDate) {
       program = await Event.findOne({ date: submission.programDate }).lean();
     }

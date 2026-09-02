@@ -28,6 +28,8 @@ export const AdminLogin = () => {
         if (typeof window !== 'undefined') {
           sessionStorage.setItem('adminPassword', inputPass);
           sessionStorage.setItem('adminRole', res.role);
+          localStorage.setItem('adminPassword', inputPass);
+          localStorage.setItem('adminRole', res.role);
         }
         setPassword(inputPass);
         setRole(res.role);
@@ -107,7 +109,7 @@ export const AdminLogin = () => {
                   value={inputPass}
                   onChange={(e) => setInputPass(e.target.value)}
                   placeholder="Enter administrator password..."
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 rounded-2xl text-slate-900 text-base font-mono outline-none transition-all"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 rounded-2xl text-slate-900 text-base outline-none transition-all"
                 />
               </div>
             </div>

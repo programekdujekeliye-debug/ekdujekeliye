@@ -88,6 +88,8 @@ export class EventService {
 
     if (!events || events.length === 0) return [];
 
+    let selectedEvents = [];
+
     // 1. Calculate start datetime for dated events and filter future events
     const datedEventsWithTime = events
       .filter(e => {
@@ -103,22 +105,15 @@ export class EventService {
       .filter(e => e.eventStartAt && e.eventStartAt.getTime() > now.getTime())
       .sort((a, b) => a.eventStartAt.getTime() - b.eventStartAt.getTime() || (a.sequenceNumber || 0) - (b.sequenceNumber || 0));
 
-    let selectedEvents = [];
+    // 2. Filter valid published TBD events
+    const tbdEvents = events
+      .filter(e => {
+        return e.date === 'TBA' || e.date === 'TBD' || e.isDateFinal === false || !e.date || e.status === 'date_tba';
+      })
+      .sort((a, b) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0));
 
-    if (datedEventsWithTime.length >= 1) {
-      // Step 2 & 4: Return ONLY future dated events, max 2 (DO NOT append TBD)
-      selectedEvents = datedEventsWithTime.slice(0, 2);
-    } else {
-      // Step 5: ONLY when future dated count = 0, query valid published TBD events (max 2)
-      const tbdEvents = events
-        .filter(e => {
-          return e.date === 'TBA' || e.date === 'TBD' || e.isDateFinal === false || !e.date || e.status === 'date_tba';
-        })
-        .sort((a, b) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0))
-        .slice(0, 2);
-
-      selectedEvents = tbdEvents;
-    }
+    // Combine: Future dated events first, followed by active TBD slots
+    selectedEvents = [...datedEventsWithTime, ...tbdEvents];
 
     if (selectedEvents.length === 0) return [];
 
@@ -451,13 +446,11 @@ export class EventService {
     event.isPaymentEnabled = true;
     event.communicationsEnabled = true;
     event.earlyRegistrationMode = false;
-    if (event.sequenceNumber === 6 || event.sequenceNumber === 7 || event.id === 'prog-2026-09-07' || event.id === 'prog-2026-09-11' || event.id === 'prog-2026-09-12') {
-      event.personalizedInvitationEnabled = false;
-
+    if (event.personalizedInvitationEnabled === false) {
       // Cancel any future queued invitation jobs for this event
       await WhatsappMessage.updateMany(
         {
-          eventId: { $in: [event.id, event.slug, 'prog-2026-09-07', 'prog-2026-09-11', 'prog-2026-09-12'] },
+          eventId: { $in: [event.id, event.slug].filter(Boolean) },
           messageType: 'invitation',
           status: { $in: ['QUEUED', 'SENDING'] }
         },
@@ -483,7 +476,7 @@ export class EventService {
       isDeleted: { $ne: true }
     });
 
-    const feeAmount = `₹${event.price || 1500}`;
+    const feeAmount = `₹${event.price !== undefined ? event.price : 1500}`;
     let queuedOpenMessages = 0;
     let scheduledReminders = 0;
 
@@ -491,10 +484,10 @@ export class EventService {
       if (!reg.phoneNumber || String(reg.phoneNumber).trim().length < 10) continue;
 
       const customerName = `${reg.husbandName || ''} & ${reg.wifeName || ''}`.trim() || 'Valued Couple';
-      const eventName = event.name || 'Ek Duje Ke Liye Seminar';
+      const eventName = event.name || '';
       const eventDate = event.date || '';
       const eventTime = event.time || '8:30 PM';
-      const venue = event.venue || 'Sardar Patel Smruti Bhavan, Surat';
+      const venue = event.venue || '';
       const inquiryId = reg.inquiryId;
 
       // 1. Idempotent Payment Open Message (Queued immediately)

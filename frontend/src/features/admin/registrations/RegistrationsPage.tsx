@@ -484,8 +484,9 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                       const isPaid = sub.payment?.status === 'captured' || sub.status === 'approved' || isVip;
                       const isPaymentFailed = sub.payment?.status === 'failed';
                       const cleanDigits = getCleanDigits(sub.phoneNumber);
-                      const isOldEvent = sub.programDate?.startsWith('2026-08') || sub.inquiryId?.startsWith('EK05') || sub.inquiryId?.startsWith('IP') || sub.inquiryId?.startsWith('EK01') || sub.inquiryId?.startsWith('EK02') || sub.inquiryId?.startsWith('EK03') || sub.inquiryId?.startsWith('EK04');
-                      const displayAmount = sub.payment?.amount !== undefined ? sub.payment.amount : (isVip ? 0 : isOldEvent ? 1000 : 1500);
+                      const programObj = programs.find((p) => p.id === sub.programId || p.slug === sub.programId || p.date === sub.programDate);
+                      const dynamicPrice = programObj?.price !== undefined ? programObj.price : 1500;
+                      const displayAmount = sub.payment?.amount !== undefined ? sub.payment.amount : (isVip ? 0 : dynamicPrice);
 
                       return (
                         <tr key={sub.inquiryId} className={`hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-rose-50/40' : ''}`}>
@@ -782,17 +783,11 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                   const isPaid = sub.payment?.status === 'captured' || sub.status === 'approved';
                   const isPaymentFailed = sub.payment?.status === 'failed';
                   const cleanDigits = getCleanDigits(sub.phoneNumber);
-                  const isOldEvent =
-                    sub.programDate?.startsWith('2026-08') ||
-                    sub.inquiryId?.startsWith('EK05') ||
-                    sub.inquiryId?.startsWith('IP') ||
-                    sub.inquiryId?.startsWith('EK01') ||
-                    sub.inquiryId?.startsWith('EK02') ||
-                    sub.inquiryId?.startsWith('EK03') ||
-                    sub.inquiryId?.startsWith('EK04');
+                  const programObj = programs.find((p) => p.id === sub.programId || p.slug === sub.programId || p.date === sub.programDate);
+                  const dynamicPrice = programObj?.price !== undefined ? programObj.price : 1500;
+                  const isVip = sub.inquiryId?.startsWith('IP') || Boolean((sub as any).isVip);
                   const displayAmount =
-                    sub.payment?.amount !== undefined ? sub.payment.amount : isOldEvent ? 1000 : 1500;
-                  const isVip = sub.inquiryId?.startsWith('IP');
+                    sub.payment?.amount !== undefined ? sub.payment.amount : isVip ? 0 : dynamicPrice;
 
                   return (
                     <div

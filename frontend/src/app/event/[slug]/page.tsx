@@ -484,7 +484,7 @@ export default function EventDetailPage() {
               <span className="text-[11px] font-bold text-rose-900 uppercase tracking-widest block">
                 Registration ID (નોંધણી નંબર)
               </span>
-              <span className="text-3xl md:text-4xl font-extrabold text-rose-700 font-mono tracking-wider block select-all">
+              <span className="text-3xl md:text-4xl font-extrabold text-rose-700 tracking-tight block select-all">
                 {createdInquiryId}
               </span>
               <span className="text-xs text-stone-600 block font-medium">
@@ -560,7 +560,7 @@ export default function EventDetailPage() {
               <span className="text-[11px] font-bold text-amber-900 uppercase tracking-widest block">
                 તમારો રજીસ્ટ્રેશન નંબર (Registration Pass ID)
               </span>
-              <span className="text-3xl md:text-4xl font-extrabold text-amber-700 font-mono tracking-wider block select-all">
+              <span className="text-3xl md:text-4xl font-extrabold text-amber-700 tracking-tight block select-all">
                 {createdInquiryId}
               </span>
               <span className="text-xs text-stone-600 block font-medium">

@@ -44,11 +44,11 @@ export const runPaymentReminders = async () => {
     if (!event || !reg.phoneNumber || String(reg.phoneNumber).trim().length < 10) continue;
 
     const customerName = `${reg.husbandName || ''} & ${reg.wifeName || ''}`.trim() || 'Valued Couple';
-    const eventName = event.name || 'Ek Duje Ke Liye Seminar';
+    const eventName = event.name || '';
     const eventDate = event.date || '';
     const eventTime = event.time || '8:30 PM';
-    const venue = event.venue || 'Sardar Patel Smruti Bhavan, Surat';
-    const feeAmount = `₹${event.price || 1500}`;
+    const venue = event.venue || '';
+    const feeAmount = `₹${event.price !== undefined ? event.price : 1500}`;
     const inquiryId = reg.inquiryId;
 
     // Check if registration was created after payment opened (New Registration Cohort)

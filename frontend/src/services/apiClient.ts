@@ -37,7 +37,7 @@ export async function apiClient<T = any>(endpoint: string, options: RequestOptio
   const method = (customConfig.method || 'GET').toUpperCase();
 
   const activeAuth = authPassword || 
-    (typeof window !== 'undefined' ? sessionStorage.getItem('adminPassword') || '' : '');
+    (typeof window !== 'undefined' ? (sessionStorage.getItem('adminPassword') || localStorage.getItem('adminPassword') || '') : '');
 
   const reqHeaders: Record<string, string> = {
     ...(headers as Record<string, string> || {})

@@ -124,7 +124,7 @@ export default function PersonalizedInvitationPage() {
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 6;
     ctx.lineJoin = 'round';
-    ctx.font = 'bold 30px "Oswald", "Impact", "Arial Narrow", sans-serif';
+    ctx.font = 'bold 30px "Plus Jakarta Sans", system-ui, -apple-system, sans-serif';
     ctx.strokeText(sub.inquiryId, textX, textY);
 
     // Gold text fill
@@ -380,7 +380,7 @@ export default function PersonalizedInvitationPage() {
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex flex-col items-center justify-start p-3 sm:p-6 select-none print:bg-white print:text-black">
-      
+
       {/* Top Breadcrumb & Actions Bar */}
       <div className="w-full max-w-sm mb-3 flex items-center justify-between print:hidden">
         <Link
@@ -400,7 +400,7 @@ export default function PersonalizedInvitationPage() {
 
       {/* Main Card Container */}
       <div className="w-full max-w-sm bg-white text-stone-900 rounded-3xl shadow-2xl overflow-hidden border border-stone-200/90 flex flex-col items-center p-4 sm:p-5 space-y-4">
-        
+
         {/* Title Header */}
         <div className="text-center space-y-1">
           <div className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-900 px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-widest mb-1">
@@ -411,7 +411,7 @@ export default function PersonalizedInvitationPage() {
             {coupleDisplayName}
           </h1>
           <p className="text-xs text-stone-500 font-medium">
-            Registration ID: <span className="font-bold text-amber-700 font-mono">{submission.inquiryId}</span>
+            Registration ID: <span className="font-bold text-amber-700">{submission.inquiryId}</span>
           </p>
         </div>
 
@@ -467,7 +467,7 @@ export default function PersonalizedInvitationPage() {
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="text-[10px] font-bold text-stone-600 uppercase tracking-wider">Zoom (મોટો/નાનો કરો)</label>
-                <span className="text-[10px] font-mono text-stone-500 font-semibold">{userZoom.toFixed(2)}x</span>
+                <span className="text-[10px] text-stone-500 font-semibold">{userZoom.toFixed(2)}x</span>
               </div>
               <input
                 type="range"
@@ -483,7 +483,7 @@ export default function PersonalizedInvitationPage() {
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="text-[10px] font-bold text-stone-600 uppercase tracking-wider">Position (ઉપર/નીચે કરો)</label>
-                <span className="text-[10px] font-mono text-stone-500 font-semibold">{userOffsetY}px</span>
+                <span className="text-[10px] text-stone-500 font-semibold">{userOffsetY}px</span>
               </div>
               <input
                 type="range"
@@ -501,18 +501,18 @@ export default function PersonalizedInvitationPage() {
         {/* Event Schedule Info */}
         <div className="w-full bg-stone-50/80 border border-stone-200/80 rounded-2xl p-3 text-left space-y-1.5 text-xs text-stone-700">
           <div className="font-bold text-stone-900 text-xs leading-snug">
-            {submission.program?.name || submission.programName || 'Ek Duje Ke Liye Seminar'}
+            {submission.program?.name || submission.programName || ''}
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-stone-600">
             <CalendarIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
-            <span>{submission.program?.date || submission.programDate || '11 September 2026'}</span>
+            <span>{submission.program?.date || submission.programDate || ''}</span>
             <span className="text-stone-300">&bull;</span>
             <ClockIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
             <span>{submission.program?.time || submission.programTime || '8:30 PM'}</span>
           </div>
           <div className="flex items-start gap-1.5 text-[11px] text-stone-600">
             <MapPinIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0 mt-0.5" />
-            <span className="leading-tight">{submission.program?.venue || submission.venue || 'Sardar Patel Smruti Bhavan, Varachha, Surat'}</span>
+            <span className="leading-tight">{submission.program?.venue || submission.venue || ''}</span>
           </div>
         </div>
 

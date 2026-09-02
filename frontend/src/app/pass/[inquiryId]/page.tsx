@@ -158,7 +158,7 @@ export default function DigitalPassPage() {
             <span className="text-[11px] font-black text-amber-900 uppercase tracking-widest block">
               REGISTRATION NUMBER
             </span>
-            <div className="text-2xl sm:text-3xl font-black font-mono tracking-wider text-amber-950 my-0.5">
+            <div className="text-2xl sm:text-3xl font-black tracking-tight text-amber-950 my-0.5">
               {pass.inquiryId}
             </div>
             <span className="text-[10px] text-amber-800/80 font-semibold block">
@@ -229,7 +229,7 @@ export default function DigitalPassPage() {
           <div className="w-full bg-stone-100 border border-stone-200 rounded-xl p-2.5 text-center text-stone-600">
             <div className="flex items-center justify-between text-[11px]">
               <span className="text-stone-500 font-medium">Pass Security ID:</span>
-              <span className="font-mono font-bold text-stone-800">{pass.passId}</span>
+              <span className="font-bold text-stone-800">{pass.passId}</span>
             </div>
             <span className="text-[9px] text-stone-400 block mt-0.5 font-medium">
               (For gate coordinator use only if camera scanner fails)

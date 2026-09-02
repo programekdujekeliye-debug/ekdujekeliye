@@ -87,15 +87,15 @@ export class CommunicationSchedulerService {
     const inquiryId = registration.inquiryId;
     const phone = registration.phoneNumber;
     const customerName = `${registration.husbandName || ''} & ${registration.wifeName || ''}`.trim() || 'Respected Couple';
-    const eventName = event.name || 'Ek Duje Ke Liye Seminar';
+    const eventName = event.name || '';
     const eventDate = event.date || '';
     const eventTime = event.time || '8:30 PM';
-    const venue = event.venue || 'Sardar Smruti Bhavan, Surat';
+    const venue = event.venue || '';
     const executionSource = options.executionSource || 'NORMAL';
 
     const results = {};
     const now = new Date();
-    const isInvitationDisabled = event.personalizedInvitationEnabled === false || ['prog-2026-09-07', 'prog-2026-09-11', 'surat-7-september-2026', 'surat-11-september-2026'].includes(event.id) || ['prog-2026-09-07', 'prog-2026-09-11', 'surat-7-september-2026', 'surat-11-september-2026'].includes(event.slug);
+    const isInvitationDisabled = event.personalizedInvitationEnabled === false;
 
     // 1. Schedule 48h Personalized Invitation (Only if enabled for event and in future)
     if (!isInvitationDisabled && invitationSendAt > now) {

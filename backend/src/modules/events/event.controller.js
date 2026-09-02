@@ -367,3 +367,52 @@ export const uploadCardTemplate = async (req, res) => {
   }
 };
 
+export const uploadEventAsset = async (req, res) => {
+  const { id } = req.params;
+  const assetType = req.body.assetType || 'heroImage';
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided.' });
+    }
+
+    const base64Data = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    const uploadedUrl = await storageService.upload({
+      data: base64Data,
+      folder: 'event-assets',
+      filename: `event_${assetType}_${id || Date.now()}_${Date.now()}`
+    });
+
+    if (id && id !== 'new') {
+      const event = await Event.findOne({
+        $or: [
+          { id },
+          { slug: id },
+          { date: id },
+          ...(typeof id === 'string' && id.match(/^[0-9a-fA-F]{24}$/) ? [{ _id: id }] : [])
+        ]
+      });
+      if (event) {
+        if (assetType === 'heroImage') event.heroImage = uploadedUrl;
+        else if (assetType === 'posterImage') event.posterImage = uploadedUrl;
+        else if (assetType === 'speakerImage') event.speakerImage = uploadedUrl;
+        else if (assetType === 'cardTemplate') {
+          event.cardTemplate = uploadedUrl;
+          event.cardTemplateUrl = uploadedUrl;
+        }
+        await event.save();
+        eventService.invalidateCache();
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Image uploaded successfully.',
+      url: uploadedUrl,
+      assetType
+    });
+  } catch (err) {
+    console.error('[uploadEventAsset Error]:', err);
+    res.status(500).json({ error: err.message || 'Failed to upload image.' });
+  }
+};
+

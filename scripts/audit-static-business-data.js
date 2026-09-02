@@ -28,12 +28,15 @@ let totalIssues = 0;
 function scanFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf-8');
   const relPath = path.relative(rootDir, filePath);
+  const lines = content.split('\n');
 
-  SUSPICIOUS_PATTERNS.forEach(pattern => {
-    if (pattern.regex.test(content)) {
-      console.error(`[AUDIT VIOLATION] ${pattern.name} found in: ${relPath}`);
-      totalIssues++;
-    }
+  lines.forEach((line, idx) => {
+    SUSPICIOUS_PATTERNS.forEach(pattern => {
+      if (pattern.regex.test(line)) {
+        console.error(`[AUDIT VIOLATION] ${pattern.name} in ${relPath}:${idx + 1} -> ${line.trim()}`);
+        totalIssues++;
+      }
+    });
   });
 }
 

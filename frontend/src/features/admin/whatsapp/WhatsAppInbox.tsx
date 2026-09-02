@@ -42,7 +42,7 @@ interface WhatsAppInboxProps {
 const QUICK_REPLIES = [
   'Payment received, thank you! Your seat is confirmed.',
   'Please refresh your Digital Pass page to view your QR code.',
-  'The venue is Sardar Patel Smruti Bhavan, Surat.',
+  'Please check your pass for the exact venue address and directions.',
   'Parking is available near the main auditorium entrance.',
   'Please share a screenshot of the issue you are facing.',
   'Our support team is checking this for you right now.'

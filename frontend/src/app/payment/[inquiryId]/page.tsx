@@ -240,7 +240,7 @@ export default function PaymentRetryPage() {
               <span className="text-[11px] font-bold text-amber-900 uppercase tracking-widest block">
                 રજીસ્ટ્રેશન નંબર (Registration Pass ID)
               </span>
-              <span className="text-2xl sm:text-3xl font-extrabold text-amber-700 font-mono tracking-wider block select-all">
+              <span className="text-2xl sm:text-3xl font-extrabold text-amber-700 tracking-tight block select-all">
                 {statusData.inquiryId}
               </span>
               <span className="text-[10px] text-stone-600 block font-medium">Save this ID for reference &amp; venue check-in</span>
@@ -260,7 +260,7 @@ export default function PaymentRetryPage() {
                     <PhoneIcon className="w-3.5 h-3.5 text-stone-400" />
                     <span>Mobile Number:</span>
                   </span>
-                  <span className="font-bold font-mono text-stone-900">{statusData.phoneNumber}</span>
+                  <span className="font-bold text-stone-900">{statusData.phoneNumber}</span>
                 </div>
               )}
               <div className="flex justify-between items-center">
@@ -315,7 +315,7 @@ export default function PaymentRetryPage() {
             <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 sm:p-5 text-xs space-y-3 text-stone-700">
               <div className="flex justify-between items-center border-b border-stone-200/60 pb-2">
                 <span className="text-stone-500 font-medium">Inquiry / Token ID:</span>
-                <span className="font-mono font-extrabold text-sm text-rose-700">{statusData.inquiryId}</span>
+                <span className="font-extrabold text-sm text-rose-700">{statusData.inquiryId}</span>
               </div>
 
               {/* Couple Name Highlighted */}
@@ -334,7 +334,7 @@ export default function PaymentRetryPage() {
                     <PhoneIcon className="w-3.5 h-3.5 text-stone-400" />
                     <span>Mobile Number:</span>
                   </span>
-                  <span className="font-extrabold font-mono text-stone-900">{statusData.phoneNumber}</span>
+                  <span className="font-extrabold text-stone-900">{statusData.phoneNumber}</span>
                 </div>
               )}
 
@@ -366,7 +366,7 @@ export default function PaymentRetryPage() {
 
               <div className="flex justify-between items-center pt-1">
                 <span className="text-stone-500 font-bold uppercase tracking-wider">Couple Seminar Fee:</span>
-                <span className="text-lg font-extrabold text-stone-900 font-mono">
+                <span className="text-lg font-extrabold text-stone-900">
                   ₹{statusData.price !== undefined ? statusData.price : (statusData.amount || 1500)}
                 </span>
               </div>

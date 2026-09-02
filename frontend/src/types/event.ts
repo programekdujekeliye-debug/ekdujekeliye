@@ -38,6 +38,7 @@ export interface Program {
   capacity: number;
   isDateFinal?: boolean;
   cardTemplate?: string | null;
+  cardTemplateUrl?: string;
   heartX?: number;
   heartY?: number;
   heartWidth?: number;
