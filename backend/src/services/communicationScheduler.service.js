@@ -114,6 +114,14 @@ export class CommunicationSchedulerService {
 
     const results = {};
     const now = opts.simulatedNow ? new Date(opts.simulatedNow) : new Date();
+
+    // Purge any obsolete legacy text reminder previously queued for this registration
+    await WhatsappMessage.deleteMany({
+      inquiryId,
+      trigger: 'scheduled_24h_reminder',
+      templateName: 'edkl_event_reminder_v1',
+      status: 'QUEUED'
+    }).catch(() => {});
     const remainingMs = eventStartAt.getTime() - now.getTime();
     const remainingMinutes = remainingMs / (60 * 1000);
 
