@@ -24,7 +24,7 @@ export class InvitationCardService {
     const eventDate = event?.date || registration.programDate || '';
     const eventTime = event?.time || registration.programTime || '';
     const venue = event?.venue || '';
-    const designVersion = 'v1_rose_gold_luxury';
+    const designVersion = 'v2_official_heart_template';
 
     return crypto
       .createHash('sha256')
@@ -228,6 +228,151 @@ export class InvitationCardService {
   }
 
   /**
+   * Generate official EDKL invitation card buffer by compositing the card template PNG,
+   * the couple's photo inside the transparent heart window, and gold CPL inquiryId text
+   */
+  async generateOfficialCardBuffer(registration, event) {
+    const width = 576;
+    const height = 1024;
+
+    const hX = event?.heartX ?? 157;
+    const hY = event?.heartY ?? 91;
+    const hW = event?.heartWidth ?? 260;
+    const hH = event?.heartHeight ?? 312;
+
+    // 1. Resolve and prepare template image with transparent heart cutout
+    let templateBuf = null;
+    const tplUrl = event?.cardTemplateUrl || event?.cardTemplate;
+    if (tplUrl && tplUrl.startsWith('http')) {
+      try {
+        const res = await fetch(tplUrl);
+        if (res.ok) templateBuf = Buffer.from(await res.arrayBuffer());
+      } catch (_) {}
+    }
+    if (!templateBuf) {
+      const localTpl = path.resolve(process.cwd(), '..', 'frontend', 'public', 'card_template.png');
+      if (fs.existsSync(localTpl)) {
+        templateBuf = fs.readFileSync(localTpl);
+      }
+    }
+
+    let transparentTemplateBuf = null;
+    if (templateBuf) {
+      try {
+        // Resize template to canvas dimensions with alpha channel
+        const { data: tplPixels } = await sharp(templateBuf)
+          .resize(width, height, { fit: 'fill' })
+          .ensureAlpha()
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+
+        // Cut out the white/cream heart area so couple photo shows through cleanly
+        for (let y = hY; y < hY + hH && y < height; y++) {
+          for (let x = hX; x < hX + hW && x < width; x++) {
+            const idx = (y * width + x) * 4;
+            const r = tplPixels[idx];
+            const g = tplPixels[idx + 1];
+            const b = tplPixels[idx + 2];
+            if (r > 215 && g > 215 && b > 215) {
+              tplPixels[idx + 3] = 0; // Transparent
+            }
+          }
+        }
+
+        transparentTemplateBuf = await sharp(tplPixels, {
+          raw: { width, height, channels: 4 }
+        }).png().toBuffer();
+      } catch (err) {
+        console.warn('[InvitationCardService] Error preparing transparent template:', err.message);
+        transparentTemplateBuf = templateBuf;
+      }
+    }
+
+    // 2. Resolve couple photo buffer
+    let photoBuf = null;
+    const photoSrc = registration.couplePhoto;
+    if (photoSrc && photoSrc.startsWith('http')) {
+      try {
+        const res = await fetch(photoSrc);
+        if (res.ok) photoBuf = Buffer.from(await res.arrayBuffer());
+      } catch (_) {}
+    }
+    if (!photoBuf) {
+      const localPhoto = path.resolve(process.cwd(), '..', 'frontend', 'public', 'sample_couple.png');
+      if (fs.existsSync(localPhoto)) {
+        photoBuf = fs.readFileSync(localPhoto);
+      }
+    }
+
+    // 3. Resize couple photo to cover the heart area
+    let resizedPhotoBuf;
+    if (photoBuf) {
+      resizedPhotoBuf = await sharp(photoBuf)
+        .resize(hW, hH, { fit: 'cover', position: 'center' })
+        .toBuffer();
+    } else {
+      resizedPhotoBuf = await sharp({
+        create: { width: hW, height: hH, channels: 4, background: { r: 255, g: 241, b: 242, alpha: 1 } }
+      }).png().toBuffer();
+    }
+
+    // 4. Gold CPL text overlay
+    const inquiryId = registration.inquiryId || 'EDKL';
+    const textX = Math.round(hX + hW / 2);
+    const textY = Math.max(32, hY - 18);
+
+    const textSvg = `
+      <svg width="${width}" height="${height}">
+        <text
+          x="${textX}"
+          y="${textY}"
+          text-anchor="middle"
+          dominant-baseline="middle"
+          font-family="sans-serif"
+          font-size="28"
+          font-weight="900"
+          stroke="#000000"
+          stroke-width="5"
+          stroke-linejoin="round"
+          fill="#D4AF37"
+        >${inquiryId}</text>
+        <text
+          x="${textX}"
+          y="${textY}"
+          text-anchor="middle"
+          dominant-baseline="middle"
+          font-family="sans-serif"
+          font-size="28"
+          font-weight="900"
+          fill="#D4AF37"
+        >${inquiryId}</text>
+      </svg>
+    `;
+    const textBuf = Buffer.from(textSvg);
+
+    // 5. Composite layers
+    const layers = [
+      { input: resizedPhotoBuf, left: hX, top: hY }
+    ];
+    if (transparentTemplateBuf) {
+      layers.push({ input: transparentTemplateBuf, left: 0, top: 0 });
+    }
+    layers.push({ input: textBuf, left: 0, top: 0 });
+
+    return await sharp({
+      create: {
+        width,
+        height,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 1 }
+      }
+    })
+      .composite(layers)
+      .jpeg({ quality: 92 })
+      .toBuffer();
+  }
+
+  /**
    * Ensure a rendered high-resolution JPEG invitation card is uploaded to Cloudinary
    * and return its permanent public image URL for WhatsApp IMAGE headers
    */
@@ -254,13 +399,8 @@ export class InvitationCardService {
       };
     }
 
-    // Generate SVG composed with couple's photo and typography
-    const svgBuf = await this.generateCardBuffer(reg, event);
-
-    // Convert SVG to high-quality JPEG using sharp
-    const jpegBuffer = await sharp(svgBuf)
-      .jpeg({ quality: 90 })
-      .toBuffer();
+    // Generate official EDKL card composite with transparent heart cutout and gold CPL text
+    const jpegBuffer = await this.generateOfficialCardBuffer(reg, event);
 
     // Upload to Cloudinary
     const uploadRes = await storageService.upload({

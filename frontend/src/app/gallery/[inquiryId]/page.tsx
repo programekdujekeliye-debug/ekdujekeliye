@@ -129,6 +129,30 @@ export default function GalleryRedirectPage() {
               <span>Open Photos (Full Access)</span>
               <ExternalLinkIcon className="w-4 h-4" />
             </a>
+
+            {/* Photographer Credits & Social Share */}
+            <div className="pt-3 border-t border-stone-800/90 text-left space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-stone-300">
+                  📸 Sai Photo Surat
+                </span>
+                <a
+                  href="https://www.instagram.com/sai_photo_surat?igsh=MTR1dDlpZ251NWx1Mw=="
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] font-bold text-rose-400 hover:text-rose-300 underline flex items-center gap-1"
+                >
+                  <span>Instagram Profile</span>
+                  <ExternalLinkIcon className="w-3 h-3" />
+                </a>
+              </div>
+              <p className="text-[10px] text-stone-400">
+                Contact: Pradip Lakhani &bull; +91 98982 40505
+              </p>
+              <div className="bg-stone-950/60 p-2.5 rounded-xl border border-stone-800/80 text-[10px] text-stone-400">
+                🔴 Tag & Share: <span className="text-rose-300 font-semibold">@sai_photo_surat</span> and <span className="text-rose-300 font-semibold">#EkDujeKeLiye</span> on Instagram!
+              </div>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">

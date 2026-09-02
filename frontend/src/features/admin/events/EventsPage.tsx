@@ -164,7 +164,8 @@ export const EventsPage: React.FC = () => {
     heartWidth: 260,
     heartHeight: 312,
     photoZoom: 0.55,
-    photoOffsetY: 0
+    photoOffsetY: 0,
+    photoLink: ''
   });
 
   const [error, setError] = useState('');
@@ -222,7 +223,8 @@ export const EventsPage: React.FC = () => {
       heartWidth: 260,
       heartHeight: 312,
       photoZoom: 0.55,
-      photoOffsetY: 0
+      photoOffsetY: 0,
+      photoLink: ''
     });
     setEditingProgram(null);
     setActiveSection('schedule');
@@ -251,7 +253,8 @@ export const EventsPage: React.FC = () => {
       price: prog.price !== undefined ? prog.price : 1500,
       capacity: prog.capacity || 1000,
       cardTemplate: prog.cardTemplate || prog.cardTemplateUrl || '',
-      cardTemplateUrl: prog.cardTemplateUrl || prog.cardTemplate || ''
+      cardTemplateUrl: prog.cardTemplateUrl || prog.cardTemplate || '',
+      photoLink: prog.photoLink || ''
     });
     setActiveSection('schedule');
     setMobileOpenSections({
@@ -762,6 +765,41 @@ export const EventsPage: React.FC = () => {
           {formData.posterImage && (
             <div className="relative w-full h-28 sm:h-32 rounded-xl overflow-hidden border border-stone-300">
               <img src={formData.posterImage} alt="Poster" className="w-full h-full object-cover" />
+            </div>
+          )}
+        </div>
+
+        {/* Event Photo Memories / Photographer Album Link */}
+        <div className="sm:col-span-2 p-4 bg-rose-50/70 rounded-2xl border border-rose-200 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-rose-950 flex items-center gap-1.5">
+              📸 Event Digital Memories / Photo Album Link
+            </span>
+            <span className="text-[10px] font-extrabold text-rose-700 bg-rose-100/90 px-2 py-0.5 rounded-full uppercase tracking-wider">
+              Post-Event Link
+            </span>
+          </div>
+          <p className="text-[11px] text-stone-600 leading-relaxed">
+            Paste the photographer&apos;s album URL (e.g. BlinkPic with Ucode, Google Drive, or Google Photos). When attendees click &quot;View Event Photos&quot; on WhatsApp, this link will open on their digital memories page.
+          </p>
+          <input
+            type="url"
+            value={formData.photoLink || ''}
+            onChange={(e) => setFormData({ ...formData, photoLink: e.target.value })}
+            placeholder="https://blinkpic.in/auth/login?groupCode=X5ZHM6 or Google Drive link"
+            className="w-full px-3.5 py-2.5 bg-white border border-rose-300 rounded-xl text-base sm:text-xs font-mono text-stone-900 focus:outline-none focus:border-rose-600 focus:ring-1 focus:ring-rose-600"
+          />
+          {formData.photoLink && (
+            <div className="flex items-center justify-between text-[11px] text-rose-800 bg-white/80 px-3 py-1.5 rounded-lg border border-rose-200">
+              <span className="truncate max-w-[280px] sm:max-w-md">Target: {formData.photoLink}</span>
+              <a
+                href={formData.photoLink}
+                target="_blank"
+                rel="noreferrer"
+                className="font-bold underline hover:text-rose-950 shrink-0 ml-2"
+              >
+                Test Link ↗
+              </a>
             </div>
           )}
         </div>

@@ -96,7 +96,8 @@ export const createEvent = async (req, res) => {
     heartWidth,
     heartHeight,
     photoZoom,
-    photoOffsetY
+    photoOffsetY,
+    photoLink
   } = req.body;
 
   if (!name || !date || !capacity) {
@@ -158,7 +159,8 @@ export const createEvent = async (req, res) => {
       heartWidth: heartWidth !== undefined ? Number(heartWidth) : 260,
       heartHeight: heartHeight !== undefined ? Number(heartHeight) : 312,
       photoZoom: photoZoom !== undefined ? Number(photoZoom) : 0.55,
-      photoOffsetY: photoOffsetY !== undefined ? Number(photoOffsetY) : 0
+      photoOffsetY: photoOffsetY !== undefined ? Number(photoOffsetY) : 0,
+      photoLink: photoLink || ''
     });
 
     await newEvent.save();
