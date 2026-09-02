@@ -16,7 +16,7 @@ export const WHATSAPP_MESSAGE_STATUSES = {
 };
 
 const WhatsappMessageSchema = new mongoose.Schema({
-  messageId: { type: String, unique: true, index: true },
+  messageId: { type: String, unique: true },
   conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'WhatsappConversation', index: true },
   direction: {
     type: String,
@@ -69,14 +69,14 @@ const WhatsappMessageSchema = new mongoose.Schema({
     default: 'META',
     index: true
   },
-  idempotencyKey: { type: String, unique: true, required: true, index: true },
+  idempotencyKey: { type: String, required: true },
   status: {
     type: String,
     enum: Object.values(WHATSAPP_MESSAGE_STATUSES),
     default: WHATSAPP_MESSAGE_STATUSES.QUEUED,
     index: true
   },
-  providerMessageId: { type: String, index: true },
+  providerMessageId: { type: String },
   attemptCount: { type: Number, default: 0 },
   maxAttempts: { type: Number, default: 3 },
   providerErrorCode: { type: String },
