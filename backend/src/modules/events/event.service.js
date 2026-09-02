@@ -252,15 +252,7 @@ export class EventService {
     }
 
     const [programs, regStats] = await Promise.all([
-      Event.find(
-        {},
-        {
-          id: 1, sequenceNumber: 1, name: 1, shortName: 1, slug: 1, city: 1,
-          venue: 1, venueAddress: 1, status: 1, date: 1, time: 1, capacity: 1,
-          bookedSeats: 1, isDateFinal: 1, isInquiryClosed: 1, price: 1, archiveStatus: 1,
-          registrationMode: 1, externalRegistrationUrl: 1, heroImage: 1, posterImage: 1
-        }
-      ).lean(),
+      Event.find({}).lean(),
       Registration.aggregate([
         { $match: { isDeleted: { $ne: true } } },
         {

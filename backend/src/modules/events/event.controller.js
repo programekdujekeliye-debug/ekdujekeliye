@@ -192,6 +192,13 @@ export const updateEvent = async (req, res) => {
     const previousVenue = event.venue;
     const previousName = event.name;
     const previousStatus = event.status;
+    const previousCardTemplate = event.cardTemplate || event.cardTemplateUrl;
+    const previousHeartX = event.heartX;
+    const previousHeartY = event.heartY;
+    const previousHeartWidth = event.heartWidth;
+    const previousHeartHeight = event.heartHeight;
+    const previousPhotoZoom = event.photoZoom;
+    const previousPhotoOffsetY = event.photoOffsetY;
 
     const updates = { ...req.body };
     delete updates.id;
@@ -208,16 +215,42 @@ export const updateEvent = async (req, res) => {
     if (updates.heartHeight !== undefined) updates.heartHeight = Number(updates.heartHeight);
     if (updates.photoZoom !== undefined) updates.photoZoom = Number(updates.photoZoom);
     if (updates.photoOffsetY !== undefined) updates.photoOffsetY = Number(updates.photoOffsetY);
+    if (updates.photoLink !== undefined) updates.photoLink = String(updates.photoLink).trim();
 
     if (updates.cardTemplate !== undefined || updates.cardTemplateUrl !== undefined) {
-      const tpl = updates.cardTemplate || updates.cardTemplateUrl || null;
-      updates.cardTemplate = tpl;
-      updates.cardTemplateUrl = tpl || '';
+      const tpl = updates.cardTemplate || updates.cardTemplateUrl;
+      if (tpl && String(tpl).trim()) {
+        const cleanTpl = String(tpl).trim();
+        updates.cardTemplate = cleanTpl;
+        updates.cardTemplateUrl = cleanTpl;
+      } else if (req.body.clearCardTemplate === true) {
+        updates.cardTemplate = null;
+        updates.cardTemplateUrl = '';
+      } else {
+        delete updates.cardTemplate;
+        delete updates.cardTemplateUrl;
+      }
     }
 
     Object.assign(event, updates);
     await event.save();
     eventService.invalidateCache();
+
+    // Invalidate cached invitation cards so newly uploaded template/coordinates reflect everywhere
+    const cardVisualsChanged = (previousCardTemplate !== (event.cardTemplate || event.cardTemplateUrl)) ||
+      (previousHeartX !== event.heartX) ||
+      (previousHeartY !== event.heartY) ||
+      (previousHeartWidth !== event.heartWidth) ||
+      (previousHeartHeight !== event.heartHeight) ||
+      (previousPhotoZoom !== event.photoZoom) ||
+      (previousPhotoOffsetY !== event.photoOffsetY);
+
+    if (cardVisualsChanged) {
+      await Registration.updateMany(
+        { programId: { $in: [event.id, event.slug, id].filter(Boolean) } },
+        { $set: { invitationHash: null, invitationCardUrl: null } }
+      );
+    }
 
     // Trigger schedule & registration cascades if details changed
     const scheduleOrDetailsChanged = previousDate !== event.date || previousTime !== event.time || previousVenue !== event.venue || previousName !== event.name;
@@ -354,6 +387,10 @@ export const uploadCardTemplate = async (req, res) => {
     event.cardTemplate = uploadedUrl;
     event.cardTemplateUrl = uploadedUrl;
     await event.save();
+    await Registration.updateMany(
+      { programId: { $in: [event.id, event.slug, id].filter(Boolean) } },
+      { $set: { invitationHash: null, invitationCardUrl: null } }
+    );
     eventService.invalidateCache();
 
     res.json({
@@ -400,6 +437,10 @@ export const uploadEventAsset = async (req, res) => {
         else if (assetType === 'cardTemplate') {
           event.cardTemplate = uploadedUrl;
           event.cardTemplateUrl = uploadedUrl;
+          await Registration.updateMany(
+            { programId: { $in: [event.id, event.slug, id].filter(Boolean) } },
+            { $set: { invitationHash: null, invitationCardUrl: null } }
+          );
         }
         await event.save();
         eventService.invalidateCache();

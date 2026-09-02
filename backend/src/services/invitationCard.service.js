@@ -24,11 +24,13 @@ export class InvitationCardService {
     const eventDate = event?.date || registration.programDate || '';
     const eventTime = event?.time || registration.programTime || '';
     const venue = event?.venue || '';
+    const template = event?.cardTemplate || event?.cardTemplateUrl || registration?.cardTemplate || '';
+    const heartCoords = `${event?.heartX ?? 157}_${event?.heartY ?? 91}_${event?.heartWidth ?? 260}_${event?.heartHeight ?? 312}_${event?.photoZoom ?? 0.55}_${event?.photoOffsetY ?? 0}`;
     const designVersion = 'v2_official_heart_template';
 
     return crypto
       .createHash('sha256')
-      .update(`${coupleTitle}|${photo}|${eventName}|${eventDate}|${eventTime}|${venue}|${designVersion}`)
+      .update(`${coupleTitle}|${photo}|${eventName}|${eventDate}|${eventTime}|${venue}|${template}|${heartCoords}|${designVersion}`)
       .digest('hex');
   }
 
