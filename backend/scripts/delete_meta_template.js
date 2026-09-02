@@ -16,7 +16,7 @@ export async function deleteTemplateFromMeta(templateName) {
 }
 
 // Test deleting hello_world
-if (process.argv[1].endsWith('delete_meta_template.js')) {
+if (process.argv[1]?.endsWith('delete_meta_template.js')) {
   const target = process.argv[2] || 'hello_world';
   deleteTemplateFromMeta(target).catch(console.error);
 }

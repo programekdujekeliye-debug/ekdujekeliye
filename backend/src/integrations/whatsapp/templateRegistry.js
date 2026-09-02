@@ -125,89 +125,7 @@ export const CORE_TEMPLATES = {
     ]
   },
 
-  // 3. Payment Failed
-  edkl_payment_failed_v1: {
-    key: 'edkl_payment_failed_v1',
-    metaName: 'edkl_payment_failed_v1',
-    category: 'UTILITY',
-    section: 'OPERATIONS',
-    language: 'en_US',
-    purpose: 'Sent when online payment fails or is dismissed without completing transaction',
-    trigger: 'payment_failed',
-    bodyVariables: ['customerName', 'eventName', 'registrationId'],
-    buttonVariables: ['inquiryId'],
-    requiredVariables: ['customerName', 'eventName', 'registrationId', 'inquiryId'],
-    components: [
-      {
-        type: 'BODY',
-        text: 'Hello {{1}},\n\nWe could not confirm the payment for your registration for {{2}}.\n\nRegistration ID: {{3}}\n\nNo successful payment has been recorded for this registration. You can return to your registration page to check the current payment status.\n\nEk Duje Ke Liye',
-        example: {
-          body_text: [
-            [
-              'Jaynesh',
-              'Ek Duje Ke Liye Seminar',
-              'EK06-02'
-            ]
-          ]
-        }
-      },
-      {
-        type: 'BUTTONS',
-        buttons: [
-          {
-            type: 'URL',
-            text: 'Check Payment Status',
-            url: 'https://www.ekdujekeliye.in/payment/{{1}}',
-            example: ['EK06-02']
-          }
-        ]
-      }
-    ]
-  },
 
-  // 4. Event Reminder (v1 Fallback for edkl_event_pass_reminder_v2)
-  edkl_event_reminder_v1: {
-    key: 'edkl_event_reminder_v1',
-    metaName: 'edkl_event_reminder_v1',
-    category: 'UTILITY',
-    section: 'FALLBACK',
-    isFallbackOnly: true,
-    language: 'en_US',
-    purpose: 'Reminder sent only to confirmed registered participants before the event (v1 Fallback)',
-    trigger: 'event_reminder',
-    bodyVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
-    buttonVariables: ['inquiryId'],
-    requiredVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId', 'inquiryId'],
-    components: [
-      {
-        type: 'BODY',
-        text: 'Hello {{1}},\n\nThis is a reminder for your confirmed registration for {{2}}.\n\nDate: {{3}}\nTime: {{4}}\nVenue: {{5}}\nRegistration ID: {{6}}\n\nPlease keep your digital QR pass ready at entry.\n\nEk Duje Ke Liye',
-        example: {
-          body_text: [
-            [
-              'Jaynesh',
-              'Ek Duje Ke Liye Seminar',
-              '15 September 2026',
-              '8:30 PM',
-              'Sardar Smruti Bhavan, Surat',
-              'EK06-02'
-            ]
-          ]
-        }
-      },
-      {
-        type: 'BUTTONS',
-        buttons: [
-          {
-            type: 'URL',
-            text: 'View Digital Pass',
-            url: 'https://www.ekdujekeliye.in/pass/{{1}}',
-            example: ['EK06-02']
-          }
-        ]
-      }
-    ]
-  },
 
   // 5. Event Update (Date/Time/Venue change for confirmed attendees)
   edkl_event_update_v1: {
@@ -467,7 +385,6 @@ export const CORE_TEMPLATES = {
     bodyVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
     buttonVariables: ['inquiryId'],
     requiredVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId', 'inquiryId'],
-    fallbackTemplateKey: 'edkl_event_reminder_v1',
     components: [
       {
         type: 'BODY',
@@ -512,7 +429,6 @@ export const CORE_TEMPLATES = {
     bodyVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
     buttonVariables: ['inquiryId'],
     requiredVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId', 'inquiryId'],
-    fallbackTemplateKey: 'edkl_personal_invitation_48h_v1',
     components: [
       {
         type: 'HEADER',
@@ -563,7 +479,6 @@ export const CORE_TEMPLATES = {
     bodyVariables: ['customerName', 'eventName', 'registrationId'],
     buttonVariables: ['galleryToken', 'feedbackToken'],
     requiredVariables: ['customerName', 'eventName', 'registrationId', 'galleryToken', 'feedbackToken'],
-    fallbackTemplateKey: 'edkl_event_feedback_v1',
     components: [
       {
         type: 'BODY',
