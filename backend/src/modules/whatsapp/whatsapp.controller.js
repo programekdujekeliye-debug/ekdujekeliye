@@ -1081,6 +1081,13 @@ export const triggerGalleryReady = async (req, res) => {
   if (!eventId) return res.status(400).json({ error: 'Event ID is required.' });
 
   try {
+    if (galleryUrl && typeof galleryUrl === 'string' && galleryUrl.trim()) {
+      await Event.updateOne(
+        { $or: [{ id: eventId }, { slug: eventId }] },
+        { $set: { photoLink: galleryUrl.trim() } }
+      ).catch(() => {});
+    }
+
     const attendees = await Registration.find({
       programId: eventId,
       status: 'approved',
@@ -1207,7 +1214,7 @@ export const getPostEventStatus = async (req, res) => {
       presentCount,
       eligibleWhatsappCount,
       alreadySentCount,
-      defaultGalleryUrl: 'https://www.ekdujekeliye.in/gallery',
+      defaultGalleryUrl: event.photoLink || 'https://www.ekdujekeliye.in/gallery',
       feedbackEnabled: event.feedbackEnabled !== false
     });
   } catch (err) {
@@ -1226,6 +1233,14 @@ export const triggerPostEventSend = async (req, res) => {
   try {
     const event = await Event.findOne({ $or: [{ id: eventId }, { slug: eventId }] }).lean();
     if (!event) return res.status(404).json({ error: 'Event not found.' });
+
+    // Persist photoLink to event for future reference
+    if (galleryUrl && typeof galleryUrl === 'string' && galleryUrl.trim()) {
+      await Event.updateOne(
+        { $or: [{ id: eventId }, { slug: eventId }] },
+        { $set: { photoLink: galleryUrl.trim() } }
+      ).catch(() => {});
+    }
 
     const midnightAt = calculateEventMidnightIST(event.date);
     const now = new Date();
@@ -1533,8 +1548,8 @@ export const sendSpecificBroadcast = async (req, res) => {
  */
 export const runSchedulerWorker = async (req, res) => {
   try {
-    const { simulatedNow } = req.body || {};
-    const summary = await communicationSchedulerService.processScheduledJobs({ simulatedNow });
+    const { simulatedNow, eventId } = req.body || {};
+    const summary = await communicationSchedulerService.processScheduledJobs({ simulatedNow, eventId });
     res.json({ success: true, summary });
   } catch (err) {
     res.status(500).json({ error: 'Error running scheduler worker.', details: err.message });

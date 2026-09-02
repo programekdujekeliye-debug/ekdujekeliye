@@ -310,10 +310,15 @@ export class CommunicationSchedulerService {
       );
 
       // 2. Fetch candidates for current window
-      const candidateJobs = await WhatsappMessage.find({
+      const candidateQuery = {
         status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
         scheduledFor: { $lte: currentNow }
-      })
+      };
+      if (options.eventId && options.eventId !== 'all') {
+        candidateQuery.eventId = options.eventId;
+      }
+
+      const candidateJobs = await WhatsappMessage.find(candidateQuery)
         .sort({ scheduledFor: 1 })
         .limit(batchLimit);
 

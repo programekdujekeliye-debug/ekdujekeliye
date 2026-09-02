@@ -73,7 +73,7 @@ whatsappRouter.post('/events/:eventId/post-event-send', requireAuth, triggerPost
 whatsappRouter.post('/events/:eventId/gallery-ready', requireAuth, triggerGalleryReady);
 whatsappRouter.post('/resend', requireAuth, resendMessage);
 whatsappRouter.post('/run-worker', requireCronAuth, runSchedulerWorker);
-whatsappRouter.post('/run-worker-admin', requireSuperAuth, runSchedulerWorker);
+whatsappRouter.post('/run-worker-admin', requireAuth, runSchedulerWorker);
 
 // Template Management (Custom DB Templates)
 whatsappRouter.get('/templates', requireAuth, getTemplates);

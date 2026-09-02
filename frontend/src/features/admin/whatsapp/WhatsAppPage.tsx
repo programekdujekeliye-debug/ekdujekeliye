@@ -116,10 +116,16 @@ export const WhatsAppPage = () => {
   const handleRunWorker = async () => {
     setRunningWorker(true);
     try {
-      const res = await whatsappApi.runWorker();
+      const isScoped = selectedEventId && selectedEventId !== 'all';
+      const res = await whatsappApi.runWorker({
+        eventId: isScoped ? selectedEventId : undefined
+      });
       if (res?.success) {
         const summary = res.summary || {};
-        toast.success(`Queue worker dispatched. Sent: ${summary.sent ?? 0}, Processed: ${summary.processed ?? 0}`);
+        const eventLabel = isScoped ? 'selected seminar slot' : 'all seminar slots';
+        toast.success(
+          `Queue worker dispatched for ${eventLabel}. Due: ${summary.totalDue ?? 0}, Sent: ${summary.sent ?? 0}, Processed: ${summary.processed ?? 0}`
+        );
         await Promise.all([
           fetchDashboardData(selectedEventId),
           fetchRegistrations(selectedEventId, pagination.page)
