@@ -167,6 +167,59 @@ export async function ensureEarlyRegistrationEvents() {
           }
         }
       );
+
+      // Ensure TBD Event (Date To Be Announced) is active as date_tba and map legacy TBD submissions
+      await Event.findOneAndUpdate(
+        {
+          $or: [
+            { id: 'prog-1785924307713' },
+            { slug: 'ek-duje-ke-liye-date-tba' },
+            { date: 'TBD' }
+          ]
+        },
+        {
+          $set: {
+            id: 'prog-1785924307713',
+            name: 'Ek Duje Ke Liye (Date To Be Announced)',
+            slug: 'ek-duje-ke-liye-date-tba',
+            date: 'TBD',
+            isDateFinal: false,
+            status: 'date_tba',
+            isInquiryClosed: false,
+            isRegistrationOpen: true,
+            isPaymentEnabled: false,
+            earlyRegistrationMode: true,
+            price: 1500
+          },
+          $setOnInsert: {
+            sequenceNumber: 3,
+            capacity: 1000
+          }
+        },
+        { upsert: true }
+      );
+
+      // Map any orphaned TBD submissions to prog-1785924307713
+      await Registration.updateMany(
+        {
+          $or: [
+            { programId: 'prog-1785919856181' },
+            { programId: 'TBD' },
+            { programId: 'tbd' },
+            { programDate: 'TBD' },
+            { programDate: 'TBA' },
+            { programDate: 'tbd' },
+            { programDate: 'tba' }
+          ]
+        },
+        {
+          $set: {
+            programId: 'prog-1785924307713',
+            programDate: 'TBD',
+            programName: 'Ek Duje Ke Liye (Date To Be Announced)'
+          }
+        }
+      );
     } catch (migErr) {
       console.warn('[EventInit] Migration notice:', migErr.message);
     }

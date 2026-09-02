@@ -307,6 +307,8 @@ export const getSubmissionsList = async (req, res) => {
   }
 
   if (programId && programId !== 'all') {
+    const isTbdFilter = programId === 'prog-1785924307713' || programId === 'ek-duje-ke-liye-date-tba' || programId.toLowerCase() === 'tbd' || programId.toLowerCase() === 'tba';
+
     const eventObj = await eventService.getEventBySlug(programId) || await Event.findOne(
       { $or: [{ id: programId }, { slug: programId }, { date: programId }] },
       'id slug date'
@@ -317,11 +319,17 @@ export const getSubmissionsList = async (req, res) => {
       if (eventObj.id && !matchedIds.includes(eventObj.id)) matchedIds.push(eventObj.id);
       if (eventObj.slug && !matchedIds.includes(eventObj.slug)) matchedIds.push(eventObj.slug);
     }
+    if (isTbdFilter) {
+      ['prog-1785924307713', 'prog-1785919856181', 'ek-duje-ke-liye-date-tba', 'TBD', 'TBA', 'tbd', 'tba'].forEach(id => {
+        if (!matchedIds.includes(id)) matchedIds.push(id);
+      });
+    }
 
     andConditions.push({
       $or: [
         { programId: { $in: matchedIds } },
-        ...(eventObj?.date ? [{ programDate: eventObj.date }] : [])
+        ...(eventObj?.date ? [{ programDate: eventObj.date }] : []),
+        ...(isTbdFilter ? [{ programDate: { $in: ['TBD', 'TBA', 'tbd', 'tba'] } }] : [])
       ]
     });
   }
