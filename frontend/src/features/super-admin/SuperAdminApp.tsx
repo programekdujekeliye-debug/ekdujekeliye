@@ -12,6 +12,7 @@ import { VipPassesPage } from '../admin/vip/VipPassesPage';
 import { FinancePage } from '../admin/finance/FinancePage';
 import { WhatsAppPage } from '../admin/whatsapp/WhatsAppPage';
 import { WhatsAppInboxPage } from '../admin/whatsapp/WhatsAppInboxPage';
+import { WhatsAppBroadcastPage } from './whatsapp/WhatsAppBroadcastPage';
 import { SettingsPage } from '../admin/settings/SettingsPage';
 import { ResourcesPage } from '../admin/resources/ResourcesPage';
 import { IntegrationsPage } from '../admin/integrations/IntegrationsPage';
@@ -134,6 +135,7 @@ const SuperAdminAppContent = () => {
       {activeSection === 'storage' && <StoragePage />}
       {activeSection === 'whatsapp' && <WhatsAppPage />}
       {activeSection === 'whatsapp_inbox' && <WhatsAppInboxPage />}
+      {activeSection === 'whatsapp_broadcast' && <WhatsAppBroadcastPage />}
       {activeSection === 'settings' && <SettingsPage />}
       {activeSection === 'resources' && <ResourcesPage />}
       {activeSection === 'integrations' && <IntegrationsPage />}

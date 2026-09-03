@@ -33,6 +33,11 @@ import {
   syncHistoricalConversations,
   simulateInboundMessage
 } from './whatsapp.controller.js';
+import {
+  getBroadcastOverview,
+  getBroadcastLogs,
+  launchBroadcastCampaign
+} from './whatsappBroadcast.controller.js';
 import { requireAuth, requireSuperAuth, requireCronAuth } from '../../middleware/auth.js';
 
 export const whatsappRouter = Router();
@@ -79,4 +84,9 @@ whatsappRouter.post('/run-worker-admin', requireAuth, runSchedulerWorker);
 whatsappRouter.get('/templates', requireAuth, getTemplates);
 whatsappRouter.post('/templates', requireAuth, createTemplate);
 whatsappRouter.post('/templates/:id/use', requireAuth, activateTemplate);
+
+// Super Admin Exclusive WhatsApp Marketing Broadcast & Campaign Management
+whatsappRouter.get('/campaigns/overview', requireSuperAuth, getBroadcastOverview);
+whatsappRouter.get('/campaigns/logs', requireSuperAuth, getBroadcastLogs);
+whatsappRouter.post('/campaigns/launch', requireSuperAuth, launchBroadcastCampaign);
 

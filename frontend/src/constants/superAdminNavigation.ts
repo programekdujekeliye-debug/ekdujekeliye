@@ -54,6 +54,12 @@ export const SUPER_ADMIN_NAVIGATION: SuperAdminNavItem[] = [
     iconName: 'MessageSquareIcon'
   },
   {
+    id: 'whatsapp_broadcast',
+    label: 'Broadcast Campaigns',
+    gujaratiLabel: 'બ્રોડકાસ્ટ કેમ્પેઈન',
+    iconName: 'SendIcon'
+  },
+  {
     id: 'settings',
     label: 'Global Settings',
     iconName: 'SettingsIcon'

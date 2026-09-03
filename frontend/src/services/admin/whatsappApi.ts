@@ -510,8 +510,111 @@ export const whatsappApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
+  },
+
+  async getBroadcastOverview(): Promise<BroadcastCampaignOverviewResponse> {
+    return apiClient<BroadcastCampaignOverviewResponse>('/api/whatsapp/campaigns/overview');
+  },
+
+  async getBroadcastLogs(params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+    campaign?: string;
+  }): Promise<BroadcastLogsResponse> {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.status) query.set('status', params.status);
+    if (params?.search) query.set('search', params.search);
+    if (params?.campaign) query.set('campaign', params.campaign);
+    return apiClient<BroadcastLogsResponse>(`/api/whatsapp/campaigns/logs?${query.toString()}`);
+  },
+
+  async launchBroadcastCampaign(payload: {
+    templateKey: string;
+    audienceCohort: string;
+    testOnly?: boolean;
+    testRecipientPhone?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    recipientCount?: number;
+    mode?: string;
+    providerMessageId?: string;
+  }> {
+    return apiClient('/api/whatsapp/campaigns/launch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
   }
 };
+
+export interface BroadcastCampaignOverviewResponse {
+  summary: {
+    totalCampaigns: number;
+    totalBroadcastMessages: number;
+    sent: number;
+    delivered: number;
+    read: number;
+    failed: number;
+    sending: number;
+    deliveredRate: number;
+    readRate: number;
+  };
+  campaigns: Array<{
+    id: string;
+    templateName: string;
+    title: string;
+    category: string;
+    audience: string;
+    totalRecipients: number;
+    sentCount: number;
+    deliveredCount: number;
+    readCount: number;
+    failedCount: number;
+    sendingCount: number;
+    status: 'SENDING' | 'COMPLETED' | 'QUEUED';
+    startedAt: string;
+    lastSentAt: string;
+  }>;
+  recentActivity: Array<{
+    id: string;
+    recipientPhone: string;
+    recipientMasked: string;
+    customerName: string;
+    status: string;
+    providerMessageId: string;
+    sentAt: string;
+  }>;
+}
+
+export interface BroadcastLogItem {
+  id: string;
+  messageId: string;
+  providerMessageId: string;
+  recipientPhone: string;
+  recipientMasked: string;
+  customerName: string;
+  inquiryId: string;
+  templateName: string;
+  content: string;
+  status: string;
+  sentAt: string;
+  updatedAt: string;
+}
+
+export interface BroadcastLogsResponse {
+  logs: BroadcastLogItem[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
 
 export interface ConversationNote {
   _id?: string;

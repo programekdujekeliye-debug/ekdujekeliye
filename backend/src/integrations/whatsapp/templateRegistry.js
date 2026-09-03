@@ -511,6 +511,41 @@ export const CORE_TEMPLATES = {
         ]
       }
     ]
+  },
+
+  // 11. All Couples Seminar Invitation & Gift Broadcast (Married, Engaged & Committed)
+  edkl_all_couples_invite_v1: {
+    key: 'edkl_all_couples_invite_v1',
+    metaName: 'edkl_all_couples_invite_v1',
+    category: 'MARKETING',
+    section: 'CORE',
+    language: 'en_US',
+    purpose: 'Marketing broadcast to invite all couples (Married, Engaged & Committed), gift to family, or share with friends',
+    trigger: 'marketing_broadcast',
+    bodyVariables: ['customerName'],
+    buttonVariables: [],
+    requiredVariables: ['customerName'],
+    components: [
+      {
+        type: 'BODY',
+        text: "નમસ્તે {{1}},\n\nસંબંધોમાં નવો પ્રેમ, પરસ્પર સમજણ અને ખુશી લાવતો 'એક દુજે કે લિયે' સ્પેશિયલ કપલ સેમિનાર દરેક કપલ (લગ્ન થયેલ, સગાઈ થયેલ કે કમિટેડ) માટે એક યાદગાર અનુભવ છે.\n\nઆ સેમિનારમાં તમે તમારા પાર્ટનર સાથે જોડાઈ શકો છો. સાથે સાથે તમે તમારા પરિવારમાં માતા-પિતા, ભાઈ-ભાભી, બહેન કે નજીકના મિત્રોને પણ આ ખાસ કપલ પાસ ગિફ્ટ કરી શકો છો અથવા તેમની સાથે શેર કરી શકો છો.\n\nઆવનારા સેમિનાર્સની તમામ વિગતો અને સીટ બુકિંગ માટે અમારી ઓફિશિયલ વેબસાઇટની મુલાકાત લો.\n\nNamaste {{1}},\n'Ek Duje Ke Liye' is a special seminar for all couples (Married, Engaged & Committed) to celebrate love, understanding, and lifelong bonding.\nAttend with your partner, or gift this couple pass to your parents, siblings, family members, or friends.\n\nતમામ વિગત અને બુકિંગ માટે નીચે આપેલ બટન પર ક્લિક કરો:\n(For upcoming seminars and pass booking):\n\nઆભાર,\nમનીષ વઘાસીયા અને એક દુજે કે લિયે ટીમ",
+        example: {
+          body_text: [
+            ['Kamlesh & Parul']
+          ]
+        }
+      },
+      {
+        type: 'BUTTONS',
+        buttons: [
+          {
+            type: 'URL',
+            text: 'Visit Website',
+            url: 'https://www.ekdujekeliye.in/'
+          }
+        ]
+      }
+    ]
   }
 };
 

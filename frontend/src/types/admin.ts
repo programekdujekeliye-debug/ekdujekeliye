@@ -9,6 +9,7 @@ export type AdminSection =
   | 'finance'
   | 'whatsapp'
   | 'whatsapp_inbox'
+  | 'whatsapp_broadcast'
   | 'settings'
   | 'resources'
   | 'integrations'
