@@ -3,6 +3,8 @@ if (dns.setDefaultResultOrder) {
   dns.setDefaultResultOrder('ipv4first');
 }
 import mongoose from 'mongoose';
+import fs from 'fs';
+import path from 'path';
 import { env, getMetaGraphApiUrl } from '../src/config/env.js';
 import { sendUtilityTemplate } from '../src/integrations/whatsapp/whatsapp.service.js';
 
@@ -88,15 +90,40 @@ async function runBroadcast() {
     return;
   }
 
+function formatCoupleName(rec) {
+  const h = (rec.husbandName || '').trim();
+  const w = (rec.wifeName || '').trim();
+  const s = (rec.surname || '').trim();
+
+  const validH = h && h !== 'Partner' && h !== '.' ? h : '';
+  const validW = w && w !== 'Partner' && w !== '.' ? w : '';
+
+  let name = '';
+  if (validH && validW) {
+    name = `${validH} & ${validW}`;
+  } else if (validH) {
+    name = validH;
+  } else if (validW) {
+    name = validW;
+  }
+
+  if (s && s !== '.') {
+    name = name ? `${name} ${s}` : s;
+  }
+
+  return name.trim() || 'સ્નેહી મિત્રો';
+}
+
   // --- LIVE BROADCAST ---
   console.log(`\n🔴 STARTING LIVE BROADCAST TO ${uniqueRecipients.length} PAST ATTENDEES...`);
   let sent = 0;
   let failed = 0;
+  const dispatchLogs = [];
 
   for (let i = 0; i < uniqueRecipients.length; i++) {
     const rec = uniqueRecipients[i];
     const phone = String(rec.phoneNumber || '').replace(/\D/g, '').slice(-10);
-    const coupleName = `${rec.husbandName && rec.husbandName !== 'Partner' ? rec.husbandName : ''} ${rec.wifeName && rec.wifeName !== '.' ? `& ${rec.wifeName}` : ''} ${rec.surname || ''}`.trim() || 'સ્નેહી મિત્રો';
+    const coupleName = formatCoupleName(rec);
 
     try {
       const res = await sendUtilityTemplate({
@@ -113,17 +140,21 @@ async function runBroadcast() {
 
       if (res.success) {
         sent++;
+        dispatchLogs.push({ phone, inquiryId: rec.inquiryId, coupleName, status: 'SENT', wamid: res.providerMessageId });
       } else {
         failed++;
-        console.warn(`[FAIL] ${phone}: ${res.error || res.message}`);
+        console.warn(`[FAIL] ${phone} (${coupleName}): ${res.error || res.message}`);
+        dispatchLogs.push({ phone, inquiryId: rec.inquiryId, coupleName, status: 'FAILED', error: res.error || res.message });
       }
     } catch (e) {
       failed++;
       console.error(`[ERROR] ${phone}: ${e.message}`);
+      dispatchLogs.push({ phone, inquiryId: rec.inquiryId, coupleName, status: 'ERROR', error: e.message });
     }
 
     if ((i + 1) % 50 === 0 || i === uniqueRecipients.length - 1) {
-      console.log(`Progress: [${i + 1}/${uniqueRecipients.length}] - Sent: ${sent}, Failed: ${failed}`);
+      const pct = (((i + 1) / uniqueRecipients.length) * 100).toFixed(1);
+      console.log(`Progress: [${i + 1}/${uniqueRecipients.length}] (${pct}%) - Sent: ${sent}, Failed: ${failed}`);
     }
 
     // Rate limiting: 100ms
@@ -133,6 +164,24 @@ async function runBroadcast() {
   console.log('\n====================================================');
   console.log(`BROADCAST COMPLETE! Sent: ${sent}, Failed: ${failed}`);
   console.log('====================================================');
+
+  // Save audit log
+  try {
+    const logDir = path.resolve(process.cwd(), 'backups');
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+    const logPath = path.join(logDir, `broadcast_v3_report_${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+    fs.writeFileSync(logPath, JSON.stringify({
+      campaign: 'edkl_september_gift_share_v3',
+      completedAt: new Date().toISOString(),
+      totalAudience: uniqueRecipients.length,
+      sent,
+      failed,
+      dispatchLogs
+    }, null, 2));
+    console.log(`Audit report saved to: ${logPath}`);
+  } catch (err) {
+    console.warn('Could not save local audit log:', err.message);
+  }
 
   await mongoose.disconnect();
 }

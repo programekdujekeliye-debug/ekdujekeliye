@@ -63,7 +63,16 @@ const RegistrationSchema = new mongoose.Schema({
   invitationCardUrl: { type: String, default: null },
   invitationHash: { type: String, default: null },
   invitationVersion: { type: Number, default: 1 },
-  invitationGeneratedAt: { type: Date, default: null }
+  invitationGeneratedAt: { type: Date, default: null },
+  previousInquiryId: { type: String, default: null, index: true },
+  transferHistory: [{
+    fromProgramId: { type: String },
+    toProgramId: { type: String },
+    oldInquiryId: { type: String },
+    newInquiryId: { type: String },
+    transferredAt: { type: Date, default: Date.now },
+    reason: { type: String, default: '' }
+  }]
 }, {
   collection: 'submission',
   timestamps: true,

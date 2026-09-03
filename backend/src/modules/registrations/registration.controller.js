@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { registrationService } from './registration.service.js';
 import { Registration } from '../../models/Registration.js';
 import { Event } from '../../models/Event.js';
+import { Pass } from '../../models/Pass.js';
 import { MediaArchive } from '../../models/MediaArchive.js';
 import { eventService } from '../events/event.service.js';
 import { Counter, getNextSequence } from '../../models/Counter.js';
@@ -177,25 +178,74 @@ export const bulkMoveSubmissions = async (req, res) => {
   }
 
   try {
-    const targetProgram = await Event.findOne({ id: targetProgramId });
+    const targetProgram = await Event.findOne({
+      $or: [{ id: targetProgramId }, { slug: targetProgramId }]
+    });
     if (!targetProgram) {
       return res.status(404).json({ error: 'Target program slot not found.' });
     }
 
-    await Registration.updateMany(
-      { inquiryId: { $in: inquiryIds } },
-      {
-        $set: {
-          programId: targetProgram.id,
-          programName: targetProgram.name,
-          programDate: targetProgram.date,
-          programTime: targetProgram.time || '8:30 PM'
-        }
-      }
-    );
+    const submissions = await Registration.find({ inquiryId: { $in: inquiryIds }, isDeleted: { $ne: true } });
+    const movedItems = [];
 
-    res.json({ success: true, message: `Moved ${inquiryIds.length} submissions successfully.` });
+    const seqPad = String(targetProgram.sequenceNumber || 1).padStart(2, '0');
+    const counterKey = targetProgram.sequenceNumber ? `inquiryNumber_${targetProgram.id}` : 'inquiryNumber';
+
+    for (const sub of submissions) {
+      // If already assigned to this program, skip ID generation
+      if (sub.programId === targetProgram.id) {
+        continue;
+      }
+
+      // Generate next incremental ID for the target program slot
+      const nextSeq = await getNextSequence(counterKey);
+      const newInquiryId = targetProgram.sequenceNumber
+        ? `EK${seqPad}-${String(nextSeq).padStart(2, '0')}`
+        : `CPL-${nextSeq}`;
+
+      await Registration.updateOne(
+        { _id: sub._id },
+        {
+          $set: {
+            inquiryId: newInquiryId,
+            previousInquiryId: sub.inquiryId,
+            programId: targetProgram.id,
+            programName: targetProgram.name,
+            programDate: targetProgram.date,
+            programTime: targetProgram.time || '8:30 PM',
+            venue: targetProgram.venue || sub.venue,
+            venueAddress: targetProgram.venueAddress || sub.venueAddress,
+            updatedAt: new Date()
+          },
+          $push: {
+            transferHistory: {
+              fromProgramId: sub.programId,
+              toProgramId: targetProgram.id,
+              oldInquiryId: sub.inquiryId,
+              newInquiryId: newInquiryId,
+              transferredAt: new Date(),
+              reason: 'Bulk slot transfer'
+            }
+          }
+        }
+      );
+
+      // Cascade update passes if any exist
+      await Pass.updateMany(
+        { inquiryId: sub.inquiryId },
+        { $set: { inquiryId: newInquiryId, eventId: targetProgram.id } }
+      ).catch(() => {});
+
+      movedItems.push({ oldInquiryId: sub.inquiryId, newInquiryId });
+    }
+
+    res.json({
+      success: true,
+      message: `Transferred ${movedItems.length} submissions to ${targetProgram.name}.`,
+      transferred: movedItems
+    });
   } catch (err) {
+    console.error('[bulkMoveSubmissions] Error:', err);
     res.status(500).json({ error: 'Server error moving submissions.' });
   }
 };
@@ -656,17 +706,45 @@ export const updateSubmission = async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Submission not found.' });
 
 
-    // If transferring event, automatically cascade event name, date, and timing
+    // If transferring event, automatically cascade event name, date, timing, and assign new incremental inquiryId
     if (updateData.programId && updateData.programId !== existing.programId) {
       const eventObj = await eventService.getEventBySlug(updateData.programId) || await Event.findOne({
         $or: [{ id: updateData.programId }, { slug: updateData.programId }, { date: updateData.programId }]
       }).lean();
 
       if (eventObj) {
+        const seqPad = String(eventObj.sequenceNumber || 1).padStart(2, '0');
+        const counterKey = eventObj.sequenceNumber ? `inquiryNumber_${eventObj.id}` : 'inquiryNumber';
+        const nextSeq = await getNextSequence(counterKey);
+        const newInquiryId = eventObj.sequenceNumber
+          ? `EK${seqPad}-${String(nextSeq).padStart(2, '0')}`
+          : `CPL-${nextSeq}`;
+
+        updateData.inquiryId = newInquiryId;
+        updateData.previousInquiryId = existing.inquiryId;
         updateData.programId = eventObj.id || updateData.programId;
         updateData.programName = eventObj.name;
         updateData.programDate = eventObj.date;
-        updateData.programTime = eventObj.time;
+        updateData.programTime = eventObj.time || '8:30 PM';
+        if (eventObj.venue) updateData.venue = eventObj.venue;
+        if (eventObj.venueAddress) updateData.venueAddress = eventObj.venueAddress;
+
+        updateData.$push = {
+          transferHistory: {
+            fromProgramId: existing.programId,
+            toProgramId: eventObj.id,
+            oldInquiryId: existing.inquiryId,
+            newInquiryId: newInquiryId,
+            transferredAt: new Date(),
+            reason: 'Single edit transfer'
+          }
+        };
+
+        // Cascade update passes if any
+        await Pass.updateMany(
+          { inquiryId: existing.inquiryId },
+          { $set: { inquiryId: newInquiryId, eventId: eventObj.id } }
+        ).catch(() => {});
       }
     }
 

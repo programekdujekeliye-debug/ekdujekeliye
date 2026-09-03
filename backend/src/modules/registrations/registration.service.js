@@ -315,7 +315,9 @@ export class RegistrationService {
     const submission = await Registration.findOne({
       $or: [
         { inquiryId: formattedId },
-        { inquiryId: formattedId.toUpperCase() }
+        { inquiryId: formattedId.toUpperCase() },
+        { previousInquiryId: formattedId },
+        { previousInquiryId: formattedId.toUpperCase() }
       ],
       isDeleted: { $ne: true }
     }).lean();

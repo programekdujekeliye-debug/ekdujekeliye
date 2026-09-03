@@ -53,7 +53,10 @@ export async function getPassDetails(req, res) {
     }
 
     const submission = await Registration.findOne({
-      inquiryId: { $regex: new RegExp(`^${cleanInquiryId}$`, 'i') },
+      $or: [
+        { inquiryId: { $regex: new RegExp(`^${cleanInquiryId}$`, 'i') } },
+        { previousInquiryId: { $regex: new RegExp(`^${cleanInquiryId}$`, 'i') } }
+      ],
       isDeleted: { $ne: true }
     });
 
