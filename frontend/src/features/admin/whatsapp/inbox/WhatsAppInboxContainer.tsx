@@ -86,12 +86,12 @@ export const WhatsAppInboxContainer: React.FC<WhatsAppInboxContainerProps> = ({
   };
 
   return (
-    <div className="flex h-[calc(100vh-80px)] min-h-[500px] max-h-[920px] bg-stone-100 rounded-3xl overflow-hidden border border-stone-200/90 shadow-sm relative">
+    <div className="flex h-[calc(100vh-140px)] min-h-[580px] max-h-[900px] bg-white rounded-3xl overflow-hidden border border-slate-200/90 shadow-sm relative w-full">
       {/* ========================================================================= */}
       {/* 1. LEFT PANE: CONVERSATION DIRECTORY SIDEBAR */}
       {/* ========================================================================= */}
       <div
-        className={`w-full md:w-[320px] lg:w-[340px] flex-shrink-0 h-full ${
+        className={`w-full md:w-[340px] flex-shrink-0 h-full ${
           showMobileChat ? 'hidden md:flex' : 'flex'
         }`}
       >
@@ -116,10 +116,10 @@ export const WhatsAppInboxContainer: React.FC<WhatsAppInboxContainerProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. CENTER PANE: ACTIVE CHAT THREAD CANVAS */}
+      {/* 2. CENTER PANE: ACTIVE CHAT CANVAS (ALWAYS FULL FLEX WIDTH) */}
       {/* ========================================================================= */}
       <div
-        className={`flex-1 flex flex-col h-full bg-[#FAF9F6] relative overflow-hidden ${
+        className={`flex-1 min-w-0 flex flex-col h-full bg-[#FAF9F6] relative overflow-hidden ${
           !showMobileChat ? 'hidden md:flex' : 'flex'
         }`}
       >
@@ -129,26 +129,25 @@ export const WhatsAppInboxContainer: React.FC<WhatsAppInboxContainerProps> = ({
             <ChatThreadHeader
               conversation={activeConv}
               onBackToMobileList={() => setShowMobileChat(false)}
-              onToggleInfo={() => setShowContactInfo(!showContactInfo)}
-              showInfo={showContactInfo}
+              onOpenInfo={() => setShowContactInfo(true)}
               onToggleStatus={toggleStatus}
               eventName={getEventName(activeConv.eventId)}
             />
 
-            {/* Message Stream */}
-            <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-2 select-text">
+            {/* WhatsApp Message Canvas */}
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-5 space-y-2 select-text w-full min-w-0">
               {loadingThread && messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-stone-400 space-y-2">
-                  <RefreshCwIcon className="w-5 h-5 animate-spin text-rose-600" />
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-2">
+                  <RefreshCwIcon className="w-5 h-5 animate-spin text-[#881337]" />
                   <span className="text-xs font-medium">Loading WhatsApp messages...</span>
                 </div>
               ) : messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-stone-400 space-y-2">
-                  <div className="w-12 h-12 rounded-2xl bg-stone-100 flex items-center justify-center text-stone-300">
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-2">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-300">
                     <MessageSquareIcon className="w-6 h-6" />
                   </div>
-                  <p className="text-xs font-bold text-stone-600">No messages in this conversation yet.</p>
-                  <p className="text-[11px] text-stone-400 max-w-xs text-center">
+                  <p className="text-xs font-bold text-slate-600">No message history yet.</p>
+                  <p className="text-[11px] text-slate-400 max-w-xs text-center">
                     Type a message below to start chatting with {activeConv.customerName}.
                   </p>
                 </div>
@@ -176,21 +175,21 @@ export const WhatsAppInboxContainer: React.FC<WhatsAppInboxContainerProps> = ({
           </>
         ) : (
           /* Empty State when no conversation is selected */
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-stone-400 space-y-3">
-            <div className="w-16 h-16 rounded-3xl bg-stone-200/60 flex items-center justify-center text-stone-400 shadow-2xs">
-              <MessageSquareIcon className="w-8 h-8" />
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-3">
+            <div className="w-16 h-16 rounded-3xl bg-slate-100 flex items-center justify-center text-slate-400 shadow-2xs">
+              <MessageSquareIcon className="w-8 h-8 text-[#881337]/70" />
             </div>
-            <h3 className="text-base font-black text-stone-800 tracking-tight">
+            <h3 className="text-base font-black text-slate-800 tracking-tight">
               Ek Duje Ke Liye WhatsApp Center
             </h3>
-            <p className="text-xs text-stone-500 max-w-sm leading-relaxed">
-              Select any conversation from the list to view real-time chat history, delivery ticks, and reply directly.
+            <p className="text-xs text-slate-500 max-w-sm leading-relaxed">
+              Select any conversation from the left to view real-time chat history, delivery ticks, and reply directly.
             </p>
             <div className="pt-2">
               <button
                 type="button"
                 onClick={() => setShowNewChatModal(true)}
-                className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                className="px-4 py-2 bg-[#881337] hover:bg-[#9F1239] text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
               >
                 + Start / Search Chat
               </button>
@@ -200,9 +199,9 @@ export const WhatsAppInboxContainer: React.FC<WhatsAppInboxContainerProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. RIGHT PANE: ATTENDEE DOSSIER DRAWER */}
+      {/* 3. SLIDE-OVER ATTENDEE DOSSIER DRAWER (ZERO TEXT OVERLAY COLLISION) */}
       {/* ========================================================================= */}
-      {selectedConvId && activeConv && showContactInfo && (
+      {selectedConvId && activeConv && (
         <ContactDetailsDrawer
           isOpen={showContactInfo}
           onClose={() => setShowContactInfo(false)}
