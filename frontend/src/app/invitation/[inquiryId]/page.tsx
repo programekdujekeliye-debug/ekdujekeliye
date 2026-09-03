@@ -144,18 +144,19 @@ export default function PersonalizedInvitationPage() {
     canvas.height = 1024;
 
     const templateImg = new Image();
-    const templatePath = sub.program?.cardTemplateUrl || sub.program?.cardTemplate || sub.cardTemplate || (sub as any)?.cardTemplateUrl || '/card_template.png';
-    let templateImgSrc = templatePath.startsWith('data:') || templatePath.startsWith('http')
-      ? templatePath
-      : templatePath.startsWith('/')
-        ? templatePath
-        : `${API_BASE_URL}${templatePath}`;
+    const rawTemplate = sub.program?.cardTemplateUrl || sub.program?.cardTemplate || (sub as any)?.cardTemplateUrl || sub.cardTemplate || '';
+    // Completely ignore legacy /card_template.png so old 24 July graphics never appear
+    const templatePath = rawTemplate.includes('card_template.png') ? '' : rawTemplate;
+    let templateImgSrc = templatePath
+      ? (templatePath.startsWith('data:') || templatePath.startsWith('http')
+          ? templatePath
+          : templatePath.startsWith('/')
+            ? templatePath
+            : `${API_BASE_URL}${templatePath}`)
+      : '';
 
     if (templateImgSrc.startsWith('http')) {
       templateImg.crossOrigin = 'anonymous';
-      if (templateImgSrc.includes('cloudinary.com') && !templateImgSrc.includes('cors=')) {
-        templateImgSrc += (templateImgSrc.includes('?') ? '&' : '?') + 'cors=1';
-      }
     }
 
     let templateRetried = false;
@@ -164,8 +165,8 @@ export default function PersonalizedInvitationPage() {
         templateRetried = true;
         templateImg.removeAttribute('crossOrigin');
         templateImg.src = templateImgSrc + (templateImgSrc.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
-      } else if (templateImgSrc !== '/card_template.png') {
-        templateImg.src = '/card_template.png';
+      } else {
+        console.warn('Event template could not be loaded:', templateImgSrc);
       }
     };
 

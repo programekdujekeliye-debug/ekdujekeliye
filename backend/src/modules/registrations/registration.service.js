@@ -329,7 +329,12 @@ export class RegistrationService {
       program = await eventService.getEventBySlug(submission.programId);
     }
 
-    // 2. Dynamic lookup by sequence prefix (e.g. EK06-xx -> sequenceNumber: 6)
+    // 2. Direct lookup by programDate if date is valid
+    if (!program && submission.programDate && submission.programDate !== 'TBD' && submission.programDate !== 'TBA') {
+      program = await Event.findOne({ date: submission.programDate }).lean();
+    }
+
+    // 3. Dynamic lookup by sequence prefix (e.g. EK06-xx -> sequenceNumber: 6)
     if (!program && submission.inquiryId) {
       const match = String(submission.inquiryId).toUpperCase().match(/^EK(\d{1,2})-/);
       if (match) {
@@ -338,23 +343,33 @@ export class RegistrationService {
       }
     }
 
-    // 3. Dynamic lookup by programDate
-    if (!program && submission.programDate) {
-      program = await Event.findOne({ date: submission.programDate }).lean();
+    // 4. Fallback lookup by ID with stripped suffixes
+    if (!program && submission.programId) {
+      program = await Event.findOne({
+        $or: [
+          { id: submission.programId },
+          { id: submission.programId.replace(/-\d+$/, '') },
+          { slug: submission.programId }
+        ]
+      }).lean();
     }
 
     const mediaState = await mediaService.resolveRegistrationMedia(submission);
     // Prioritize the Event's current active card template over any stale registration cardTemplate!
-    const resolvedTemplate = program?.cardTemplateUrl || program?.cardTemplate || submission.cardTemplate || null;
+    // NEVER fall back to legacy /card_template.png with 24 July graphics
+    let resolvedTemplate = program?.cardTemplateUrl || program?.cardTemplate || '';
+    if (!resolvedTemplate && submission.cardTemplate && !submission.cardTemplate.includes('card_template.png')) {
+      resolvedTemplate = submission.cardTemplate;
+    }
 
     return {
       ...submission,
       ...mediaState,
-      cardTemplate: resolvedTemplate,
+      cardTemplate: resolvedTemplate || null,
       program: program ? {
         ...program,
-        cardTemplate: resolvedTemplate,
-        cardTemplateUrl: resolvedTemplate
+        cardTemplate: resolvedTemplate || null,
+        cardTemplateUrl: resolvedTemplate || null
       } : null
     };
   }

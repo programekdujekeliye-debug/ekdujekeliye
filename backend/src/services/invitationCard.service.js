@@ -251,12 +251,7 @@ export class InvitationCardService {
         if (res.ok) templateBuf = Buffer.from(await res.arrayBuffer());
       } catch (_) {}
     }
-    if (!templateBuf) {
-      const localTpl = path.resolve(process.cwd(), '..', 'frontend', 'public', 'card_template.png');
-      if (fs.existsSync(localTpl)) {
-        templateBuf = fs.readFileSync(localTpl);
-      }
-    }
+    // Strictly use event's uploaded template; never fall back to legacy 24 July static PNG
 
     let transparentTemplateBuf = null;
     if (templateBuf) {

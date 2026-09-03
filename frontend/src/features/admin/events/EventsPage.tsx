@@ -954,14 +954,19 @@ export const EventsPage: React.FC = () => {
             Live Card Template Preview
           </span>
           <div className="relative w-[170px] sm:w-[190px] h-[300px] sm:h-[338px] rounded-2xl overflow-hidden border border-stone-300 shadow-md bg-white">
-            <img
-              src={formData.cardTemplate || '/card_template.png'}
-              alt="Template Preview"
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = '/card_template.png';
-              }}
-            />
+            {formData.cardTemplate || formData.cardTemplateUrl ? (
+              <img
+                src={formData.cardTemplate || formData.cardTemplateUrl}
+                alt="Template Preview"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center bg-stone-50 text-stone-400">
+                <ImageIcon className="w-8 h-8 mb-1.5 opacity-40 text-stone-400" />
+                <span className="text-[11px] font-bold text-stone-600">No Custom Card Attached</span>
+                <span className="text-[9px] text-stone-400 mt-1">Upload 576x1024 PNG</span>
+              </div>
+            )}
             {/* Heart cutout photo window frame */}
             <div
               style={{
@@ -979,7 +984,7 @@ export const EventsPage: React.FC = () => {
             </div>
           </div>
           <span className="text-[11px] text-stone-600 mt-2.5 text-center font-semibold">
-            {formData.cardTemplate ? '✓ Custom Event PNG Attached' : 'Default Card Template'}
+            {formData.cardTemplate || formData.cardTemplateUrl ? '✓ Custom Event PNG Attached' : 'No Custom Card Attached'}
           </span>
         </div>
       </div>
@@ -1353,7 +1358,7 @@ export const EventsPage: React.FC = () => {
                       <span>Fee:</span>
                       <span className="text-rose-700 font-extrabold">₹{prog.price !== undefined ? prog.price : 1500} INR</span>
                     </div>
-                    {prog.cardTemplate && (
+                    {(prog.cardTemplate || prog.cardTemplateUrl) && (
                       <span className="text-[10px] bg-rose-50 text-rose-700 px-2 py-0.5 rounded border border-rose-200 font-bold flex items-center gap-1">
                         <SparklesIcon className="w-3 h-3" />
                         <span>Custom Card PNG</span>

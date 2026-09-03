@@ -255,7 +255,7 @@ export class EventService {
     }
 
     const [programs, regStats] = await Promise.all([
-      Event.find({}).select('-cardTemplate').lean(),
+      Event.find({}).lean(),
       Registration.aggregate([
         { $match: { isDeleted: { $ne: true } } },
         {
@@ -273,7 +273,20 @@ export class EventService {
       ])
     ]);
 
-    const sortedPrograms = this.sortEventsCategorized(programs);
+    // Ensure cardTemplate is always populated with the clean CDN URL, never a bloated base64 blob
+    const sanitizedPrograms = programs.map(prog => {
+      let tpl = prog.cardTemplateUrl || prog.cardTemplate || '';
+      if (typeof tpl === 'string' && tpl.startsWith('data:')) {
+        tpl = '';
+      }
+      return {
+        ...prog,
+        cardTemplate: tpl,
+        cardTemplateUrl: tpl
+      };
+    });
+
+    const sortedPrograms = this.sortEventsCategorized(sanitizedPrograms);
 
     const result = sortedPrograms.map(prog => {
       const progIdentifiers = new Set([
