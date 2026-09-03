@@ -10,6 +10,7 @@ import {
   ExternalLinkIcon,
   SparklesIcon
 } from '@/components/Icons';
+import { WhatsAppAvatar } from './WhatsAppAvatar';
 import toast from 'react-hot-toast';
 
 interface ContactDetailsDrawerProps {
@@ -87,10 +88,19 @@ export const ContactDetailsDrawer: React.FC<ContactDetailsDrawerProps> = ({
           {/* Body Content */}
           <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
             {/* Profile Card */}
-            <div className="text-center pb-4 border-b border-slate-100">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#881337] to-[#BE123C] text-white flex items-center justify-center font-black text-xl mx-auto mb-2.5 shadow-xs">
-                {initials}
-              </div>
+            <div className="text-center pb-4 border-b border-slate-100 flex flex-col items-center">
+              <WhatsAppAvatar
+                name={conversation.customerName}
+                photoUrl={
+                  conversation.couplePhoto ||
+                  conversation.registration?.couplePhoto ||
+                  (conversation.registrationId as any)?.couplePhoto ||
+                  null
+                }
+                size="xl"
+                isWindowActive={conversation.isWindowOpen}
+                className="mb-2.5"
+              />
               <h4 className="font-black text-base text-slate-900 leading-tight">
                 {conversation.customerName}
               </h4>

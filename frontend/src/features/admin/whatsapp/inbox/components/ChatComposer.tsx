@@ -79,7 +79,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
   // 2. Active Session: Live Chat Composer
   return (
-    <div className="bg-[#FAF9F6] border-t border-slate-200/90 flex-shrink-0">
+    <div className="bg-[#F0EBE3] border-t border-slate-200/90 flex-shrink-0">
       {/* Quick Replies Bar */}
       {mode === 'reply' && <QuickRepliesBar onSelectReply={handleSelectQuickReply} />}
 

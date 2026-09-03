@@ -664,7 +664,10 @@ export interface WhatsappConversationItem {
     paymentStatus: 'PAID' | 'PENDING' | 'UNKNOWN';
     paymentAmount: number;
     attendance: string;
+    couplePhoto?: string | null;
   } | null;
+  couplePhoto?: string | null;
+  registrationId?: any;
 }
 
 export interface WhatsappThreadMessage {

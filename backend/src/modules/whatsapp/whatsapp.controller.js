@@ -1693,7 +1693,7 @@ export const getConversations = async (req, res) => {
         .limit(limit)
         .populate({
           path: 'registrationId',
-          select: 'inquiryId husbandName wifeName surname coupleName status payment attendance programId programName programDate isVip'
+          select: 'inquiryId husbandName wifeName surname coupleName couplePhoto status payment attendance programId programName programDate isVip'
         })
         .lean(),
       WhatsappConversation.countDocuments(query)
@@ -1733,13 +1733,15 @@ export const getConversations = async (req, res) => {
           _id: reg._id,
           inquiryId: reg.inquiryId,
           coupleName: `${reg.husbandName || ''} & ${reg.wifeName || ''}`.trim() || reg.coupleName,
+          couplePhoto: reg.couplePhoto || null,
           programId: reg.programId,
           programName: reg.programName,
           programDate: reg.programDate,
           paymentStatus,
           paymentAmount: reg.payment?.amount || 1500,
           attendance: reg.attendance || 'unmarked'
-        } : null
+        } : null,
+        couplePhoto: reg?.couplePhoto || null
       };
     });
 
