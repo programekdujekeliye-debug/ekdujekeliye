@@ -48,7 +48,6 @@ export const ChatListSidebar: React.FC<ChatListSidebarProps> = ({
   onRefresh,
   unreadTotal
 }) => {
-  // Format options for LuxurySelect
   const eventSelectOptions = [
     { value: 'all', label: 'All Seminar Slots' },
     ...events.map(evt => ({
@@ -60,19 +59,19 @@ export const ChatListSidebar: React.FC<ChatListSidebarProps> = ({
   ];
 
   return (
-    <div className="flex flex-col h-full bg-white border-r border-slate-200/80 select-none">
+    <div className="flex flex-col h-full w-full bg-white select-none overflow-hidden">
       {/* Top Header Bar */}
-      <div className="p-3.5 border-b border-slate-200/80 bg-[#FAF9F6] flex items-center justify-between gap-2">
+      <div className="p-3.5 border-b border-slate-200/80 bg-[#FAF9F6] flex items-center justify-between gap-2 flex-shrink-0">
         <div>
           <h2 className="text-sm font-black text-slate-900 tracking-tight flex items-center gap-1.5">
-            <span>Support Inbox</span>
+            <span>Conversations</span>
             {unreadTotal > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-[#881337] text-white font-extrabold text-[10px] animate-pulse">
                 {unreadTotal}
               </span>
             )}
           </h2>
-          <p className="text-[10px] text-slate-500 font-medium">WhatsApp Live Chat</p>
+          <p className="text-[10px] text-slate-500 font-medium">WhatsApp Live Ledger</p>
         </div>
 
         <div className="flex items-center gap-1">
@@ -111,7 +110,7 @@ export const ChatListSidebar: React.FC<ChatListSidebarProps> = ({
       </div>
 
       {/* Search & Seminar Slot Filter */}
-      <div className="p-2.5 bg-white border-b border-slate-200/70 space-y-2">
+      <div className="p-3 bg-white border-b border-slate-200/70 space-y-2 flex-shrink-0">
         {/* Search Box */}
         <div className="relative">
           <SearchIcon className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
@@ -171,7 +170,7 @@ export const ChatListSidebar: React.FC<ChatListSidebarProps> = ({
       </div>
 
       {/* Conversation List */}
-      <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {loading && conversations.length === 0 ? (
           <div className="p-8 text-center text-slate-400 text-xs space-y-2">
             <RefreshCwIcon className="w-4 h-4 mx-auto animate-spin text-[#881337]" />

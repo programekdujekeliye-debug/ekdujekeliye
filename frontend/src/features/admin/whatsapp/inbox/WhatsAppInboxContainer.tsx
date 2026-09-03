@@ -12,8 +12,7 @@ import { Program } from '@/types/event';
 import { MetaTemplate } from '@/types/whatsapp';
 import {
   MessageSquareIcon,
-  RefreshCwIcon,
-  SparklesIcon
+  RefreshCwIcon
 } from '@/components/Icons';
 
 interface WhatsAppInboxContainerProps {
@@ -86,12 +85,12 @@ export const WhatsAppInboxContainer: React.FC<WhatsAppInboxContainerProps> = ({
   };
 
   return (
-    <div className="flex h-[calc(100vh-140px)] min-h-[580px] max-h-[900px] bg-white rounded-3xl overflow-hidden border border-slate-200/90 shadow-sm relative w-full">
+    <div className="w-full flex flex-col md:flex-row gap-4 sm:gap-5 h-[calc(100vh-140px)] min-h-[580px] max-h-[900px]">
       {/* ========================================================================= */}
-      {/* 1. LEFT PANE: CONVERSATION DIRECTORY SIDEBAR */}
+      {/* CARD 1: SEPARATE LEFT DIRECTORY CARD (NEVER NESTED OR UNDER CHAT) */}
       {/* ========================================================================= */}
       <div
-        className={`w-full md:w-[340px] flex-shrink-0 h-full ${
+        className={`w-full md:w-[340px] lg:w-[380px] flex-shrink-0 bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden h-full ${
           showMobileChat ? 'hidden md:flex' : 'flex'
         }`}
       >
@@ -116,10 +115,10 @@ export const WhatsAppInboxContainer: React.FC<WhatsAppInboxContainerProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. CENTER PANE: ACTIVE CHAT CANVAS (ALWAYS FULL FLEX WIDTH) */}
+      {/* CARD 2: SEPARATE RIGHT CHAT CANVAS CARD (NEVER OVERLAPS LEFT CARD) */}
       {/* ========================================================================= */}
       <div
-        className={`flex-1 min-w-0 flex flex-col h-full bg-[#FAF9F6] relative overflow-hidden ${
+        className={`flex-1 min-w-0 bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden h-full flex flex-col relative ${
           !showMobileChat ? 'hidden md:flex' : 'flex'
         }`}
       >
@@ -135,7 +134,7 @@ export const WhatsAppInboxContainer: React.FC<WhatsAppInboxContainerProps> = ({
             />
 
             {/* WhatsApp Message Canvas */}
-            <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-5 space-y-2 select-text w-full min-w-0">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-5 space-y-2 select-text w-full min-w-0 bg-[#FAF9F6]">
               {loadingThread && messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-2">
                   <RefreshCwIcon className="w-5 h-5 animate-spin text-[#881337]" />
@@ -175,7 +174,7 @@ export const WhatsAppInboxContainer: React.FC<WhatsAppInboxContainerProps> = ({
           </>
         ) : (
           /* Empty State when no conversation is selected */
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-3">
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-3 bg-[#FAF9F6]">
             <div className="w-16 h-16 rounded-3xl bg-slate-100 flex items-center justify-center text-slate-400 shadow-2xs">
               <MessageSquareIcon className="w-8 h-8 text-[#881337]/70" />
             </div>
@@ -199,7 +198,7 @@ export const WhatsAppInboxContainer: React.FC<WhatsAppInboxContainerProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. SLIDE-OVER ATTENDEE DOSSIER DRAWER (ZERO TEXT OVERLAY COLLISION) */}
+      {/* 3. SLIDE-OVER ATTENDEE DOSSIER DRAWER (MODAL OVERLAY - ZERO COLLISION) */}
       {/* ========================================================================= */}
       {selectedConvId && activeConv && (
         <ContactDetailsDrawer
