@@ -25,7 +25,7 @@ async function runBroadcast() {
   const db = mongoose.connection.db;
 
   // 1. Verify template status on Meta
-  const statusUrl = getMetaGraphApiUrl(`${env.WHATSAPP_WABA_ID}/message_templates?name=edkl_september_gift_share_v2`);
+  const statusUrl = getMetaGraphApiUrl(`${env.WHATSAPP_WABA_ID}/message_templates?name=edkl_september_gift_share_v3`);
   const statusRes = await fetch(statusUrl, {
     headers: { Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}` }
   });
@@ -35,7 +35,7 @@ async function runBroadcast() {
 
   console.log(`Meta Template Variants:`, templates.map(t => `${t.language}: ${t.status}`).join(', ') || 'None found');
   if (!approvedTemplate && isLive && isExecute) {
-    console.error('❌ Cannot dispatch broadcast: Template edkl_september_gift_share_v2 is not yet APPROVED by Meta.');
+    console.error('❌ Cannot dispatch broadcast: Template edkl_september_gift_share_v3 is not yet APPROVED by Meta.');
     await mongoose.disconnect();
     process.exit(1);
   }
@@ -101,12 +101,12 @@ async function runBroadcast() {
     try {
       const res = await sendUtilityTemplate({
         recipientPhone: `91${phone}`,
-        templateKey: 'edkl_september_gift_share_v2',
+        templateKey: 'edkl_september_gift_share_v3',
         languageCode: activeLang,
         variables: {
           customerName: coupleName
         },
-        idempotencyKey: `MKT_SEP_SHARE_V2:${rec.inquiryId || phone}`,
+        idempotencyKey: `MKT_SEP_SHARE_V3:${rec.inquiryId || phone}`,
         trigger: 'marketing_broadcast',
         category: 'MARKETING'
       });

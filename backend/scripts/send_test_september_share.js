@@ -17,7 +17,7 @@ async function sendTestMessage() {
 
   try {
     // 1. Check template status on Meta
-    const statusUrl = getMetaGraphApiUrl(`${env.WHATSAPP_WABA_ID}/message_templates?name=edkl_september_gift_share_v2`);
+    const statusUrl = getMetaGraphApiUrl(`${env.WHATSAPP_WABA_ID}/message_templates?name=edkl_september_gift_share_v3`);
     const statusRes = await fetch(statusUrl, {
       headers: { Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}` }
     });
@@ -39,13 +39,13 @@ async function sendTestMessage() {
     }
 
     const testRecipient = process.argv[2] ? process.argv[2].replace(/\D/g, '') : '919724232835';
-    const coupleName = process.argv[3] || 'Manish and Shital';
+    const coupleName = process.argv[3] || 'દિપક & હેતલ';
     console.log(`\n✅ Template is APPROVED under language: ${approvedTemplate.language}!`);
     console.log(`Dispatching test personalized message with name "${coupleName}" to: +${testRecipient}...`);
 
     const result = await sendUtilityTemplate({
       recipientPhone: testRecipient,
-      templateKey: 'edkl_september_gift_share_v2',
+      templateKey: 'edkl_september_gift_share_v3',
       languageCode: approvedTemplate.language,
       variables: {
         customerName: coupleName

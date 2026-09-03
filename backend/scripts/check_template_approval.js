@@ -2,7 +2,7 @@ import { env } from '../src/config/env.js';
 
 async function checkStatus() {
   const wabaId = env.WHATSAPP_WABA_ID;
-  const url = `https://graph.facebook.com/v25.0/${wabaId}/message_templates?name=edkl_september_gift_share_v2`;
+  const url = `https://graph.facebook.com/v26.0/${wabaId}/message_templates?name=edkl_september_gift_share_v3`;
   const res = await fetch(url, {
     headers: {
       'Authorization': `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`
