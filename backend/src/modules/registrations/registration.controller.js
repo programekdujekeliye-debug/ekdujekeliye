@@ -424,6 +424,21 @@ export const getSubmissionsList = async (req, res) => {
     });
   }
 
+  const { frameExportStatus } = req.query;
+  if (frameExportStatus && frameExportStatus !== 'all') {
+    if (frameExportStatus === 'NOT_EXPORTED') {
+      andConditions.push({
+        $or: [
+          { frameExportStatus: 'NOT_EXPORTED' },
+          { frameExportStatus: { $exists: false } },
+          { frameExportStatus: null }
+        ]
+      });
+    } else {
+      andConditions.push({ frameExportStatus });
+    }
+  }
+
   const query = andConditions.length === 1 ? andConditions[0] : { $and: andConditions };
 
   try {
@@ -692,6 +707,13 @@ export const updateSubmission = async (req, res) => {
       updateData.couplePhoto = couplePhotoUrl;
     }
 
+    // If photo or framing alignment is modified after export, mark as MODIFIED so admin knows it needs reprint
+    if (updateData.photoZoom !== undefined || updateData.photoOffsetY !== undefined || updateData.couplePhoto) {
+      if (existing.frameExportStatus === 'EXPORTED') {
+        updateData.frameExportStatus = 'MODIFIED';
+      }
+    }
+
     const updated = await Registration.findOneAndUpdate(
       { _id: existing._id },
       { $set: updateData },
@@ -722,6 +744,37 @@ export const bulkDeleteSubmissions = async (req, res) => {
     res.json({ success: true, count: inquiryIds.length });
   } catch (err) {
     res.status(500).json({ error: 'Server error deleting submissions.' });
+  }
+};
+
+export const markFramesExported = async (req, res) => {
+  const { inquiryIds, batchNumber } = req.body;
+  if (!Array.isArray(inquiryIds) || inquiryIds.length === 0) {
+    return res.status(400).json({ error: 'No inquiry IDs provided.' });
+  }
+
+  try {
+    const updatePayload = {
+      frameExportStatus: 'EXPORTED',
+      frameExportedAt: new Date()
+    };
+    if (batchNumber !== undefined) {
+      updatePayload.frameExportBatch = Number(batchNumber);
+    }
+
+    const result = await Registration.updateMany(
+      { inquiryId: { $in: inquiryIds } },
+      { $set: updatePayload }
+    );
+
+    res.json({
+      success: true,
+      modifiedCount: result.modifiedCount || inquiryIds.length,
+      exportedAt: updatePayload.frameExportedAt
+    });
+  } catch (err) {
+    console.error('[Registration Controller] Error marking frames exported:', err);
+    res.status(500).json({ error: 'Server error marking frames exported.' });
   }
 };
 

@@ -46,6 +46,14 @@ const RegistrationSchema = new mongoose.Schema({
   rejectionReason: { type: String, default: '' },
   photoZoom: { type: Number, default: 1.0 },
   photoOffsetY: { type: Number, default: 0 },
+  frameExportStatus: {
+    type: String,
+    enum: ['NOT_EXPORTED', 'EXPORTED', 'MODIFIED'],
+    default: 'NOT_EXPORTED',
+    index: true
+  },
+  frameExportedAt: { type: Date, default: null },
+  frameExportBatch: { type: Number, default: 0 },
   paymentReminder: {
     count: { type: Number, default: 0 },
     lastSentAt: { type: Date, default: null },

@@ -25,6 +25,9 @@ export interface Submission {
   photoLink?: string;
   isVip?: boolean;
   isDeleted?: boolean;
+  frameExportStatus?: 'NOT_EXPORTED' | 'EXPORTED' | 'MODIFIED';
+  frameExportedAt?: string;
+  frameExportBatch?: number;
 
   payment?: {
     provider?: string;

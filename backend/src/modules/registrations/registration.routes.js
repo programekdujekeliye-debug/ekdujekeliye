@@ -18,6 +18,7 @@ import {
   softDeleteSubmission,
   updateSubmission,
   bulkDeleteSubmissions,
+  markFramesExported,
   getCouplePhotoRedirect,
   getPaymentScreenshotRedirect
 } from './registration.controller.js';
@@ -46,6 +47,7 @@ registrationRouter.post('/bulk-attendance', requireAuth, bulkUpdateAttendance);
 registrationRouter.post('/attendance-by-absentees', requireAuth, attendanceByAbsentees);
 registrationRouter.post('/bulk-move', requireAuth, bulkMoveSubmissions);
 registrationRouter.post('/bulk-delete', requireAuth, bulkDeleteSubmissions);
+registrationRouter.post('/mark-frame-exported', requireAuth, markFramesExported);
 
 // Admin Single Record Operations
 registrationRouter.post('/:inquiryId/approve', requireAuth, approveRegistration);

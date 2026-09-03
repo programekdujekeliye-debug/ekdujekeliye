@@ -205,6 +205,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
   const [zipProgress, setZipProgress] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedSuccessIds, setSavedSuccessIds] = useState<Record<string, boolean>>({});
+  const [printStatusFilter, setPrintStatusFilter] = useState<'ALL' | 'UNPRINTED' | 'MODIFIED' | 'EXPORTED'>('ALL');
 
   // Sync defaultProgramId on open
   useEffect(() => {
@@ -258,7 +259,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
   }, [isOpen, fetchSubmissionsForFrames]);
 
-  // Filtered submissions based on CPL search query
+  // Filtered submissions based on print status and CPL search query
   const searchedTokens = cplSearchQuery
     .split(/[\s,]+/)
     .map((s) => s.trim().toUpperCase())
@@ -266,10 +267,23 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
   const isBulkSearch = searchedTokens.length > 1;
 
   const filteredSubmissions = submissions.filter((sub) => {
+    // Print Status Filter
+    if (printStatusFilter === 'UNPRINTED') {
+      if (sub.frameExportStatus === 'EXPORTED') return false;
+    } else if (printStatusFilter === 'MODIFIED') {
+      if (sub.frameExportStatus !== 'MODIFIED') return false;
+    } else if (printStatusFilter === 'EXPORTED') {
+      if (sub.frameExportStatus !== 'EXPORTED') return false;
+    }
+
     if (!cplSearchQuery.trim()) return true;
     return searchedTokens.some((token) => matchCplToken(sub.inquiryId, token, isBulkSearch));
   });
 
+  const totalCount = submissions.length;
+  const unprintedCount = submissions.filter((s) => !s.frameExportStatus || s.frameExportStatus === 'NOT_EXPORTED').length;
+  const modifiedCount = submissions.filter((s) => s.frameExportStatus === 'MODIFIED').length;
+  const exportedCount = submissions.filter((s) => s.frameExportStatus === 'EXPORTED').length;
   const selectedCount = submissions.filter((s) => selectedInquiryIds.includes(s.inquiryId)).length;
 
   // Real-time alignment state update
@@ -293,6 +307,18 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         photoOffsetY: sub.photoOffsetY ?? 0
       });
       setSavedSuccessIds((prev) => ({ ...prev, [sub.inquiryId]: true }));
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.inquiryId === sub.inquiryId
+            ? {
+                ...s,
+                photoZoom: sub.photoZoom ?? 1.0,
+                photoOffsetY: sub.photoOffsetY ?? 0,
+                frameExportStatus: s.frameExportStatus === 'EXPORTED' ? 'MODIFIED' : s.frameExportStatus
+              }
+            : s
+        )
+      );
       toast.success(`Alignment saved for ${sub.inquiryId}`);
       setTimeout(() => {
         setSavedSuccessIds((prev) => ({ ...prev, [sub.inquiryId]: false }));
@@ -301,6 +327,41 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       toast.error(err.message || 'Failed to save alignment.');
     } finally {
       setSavingId(null);
+    }
+  };
+
+  // Batch Mark Selected as Exported / Unprinted
+  const handleMarkSelectedExported = async (status: 'EXPORTED' | 'NOT_EXPORTED') => {
+    if (selectedInquiryIds.length === 0) {
+      toast.error('No registrations selected');
+      return;
+    }
+    try {
+      if (status === 'EXPORTED') {
+        await registrationsApi.markFramesExported(selectedInquiryIds);
+        setSubmissions((prev) =>
+          prev.map((s) =>
+            selectedInquiryIds.includes(s.inquiryId)
+              ? { ...s, frameExportStatus: 'EXPORTED', frameExportedAt: new Date().toISOString() }
+              : s
+          )
+        );
+        toast.success(`Marked ${selectedInquiryIds.length} as printed/exported.`);
+      } else {
+        for (const id of selectedInquiryIds) {
+          await registrationsApi.updateSubmission(id, { frameExportStatus: 'NOT_EXPORTED', frameExportedAt: null });
+        }
+        setSubmissions((prev) =>
+          prev.map((s) =>
+            selectedInquiryIds.includes(s.inquiryId)
+              ? { ...s, frameExportStatus: 'NOT_EXPORTED', frameExportedAt: undefined }
+              : s
+          )
+        );
+        toast.success(`Reset ${selectedInquiryIds.length} to unprinted.`);
+      }
+    } catch (err: any) {
+      toast.error('Failed to update status: ' + err.message);
     }
   };
 
@@ -373,12 +434,31 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
       ctx.restore();
 
+      const cleanHusband = (sub.husbandName || '').trim().replace(/\s+/g, '_');
+      const cleanWife = (sub.wifeName || '').trim().replace(/\s+/g, '_');
+      const cleanSurname = (sub.surname || '').trim().replace(/\s+/g, '_');
+      const filename = `${sub.inquiryId}_${cleanHusband}_${cleanWife}_${cleanSurname}.png`.replace(
+        /[^a-zA-Z0-9_.-]/g,
+        '_'
+      );
+
       const a = document.createElement('a');
       a.href = canvas.toDataURL('image/png');
-      a.download = `${sub.inquiryId}_framed.png`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+
+      // Mark single frame exported in DB & local state
+      registrationsApi.markFramesExported([sub.inquiryId]).catch(console.error);
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.inquiryId === sub.inquiryId
+            ? { ...s, frameExportStatus: 'EXPORTED', frameExportedAt: new Date().toISOString() }
+            : s
+        )
+      );
+
       toast.success(`Downloaded frame for ${sub.inquiryId}`);
     } catch (err: any) {
       toast.error('Failed to download framed photo.');
@@ -475,7 +555,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
 
           const dataUrl = canvas.toDataURL('image/png');
           const base64Data = dataUrl.split(',')[1];
-          const filename = `${sub.inquiryId}_${sub.surname || 'Couple'}_${sub.husbandName || 'H'}.png`.replace(
+
+          const cleanHusband = (sub.husbandName || '').trim().replace(/\s+/g, '_');
+          const cleanWife = (sub.wifeName || '').trim().replace(/\s+/g, '_');
+          const cleanSurname = (sub.surname || '').trim().replace(/\s+/g, '_');
+          const filename = `${sub.inquiryId}_${cleanHusband}_${cleanWife}_${cleanSurname}.png`.replace(
             /[^a-zA-Z0-9_.-]/g,
             '_'
           );
@@ -485,12 +569,21 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         }
       }
 
+      // Generate Printing Manifest CSV
+      const curProg = programs.find((p) => p.id === selectedProgramId);
+      const progName = curProg ? curProg.name : 'Event';
+
+      let manifestCsv = "Token ID,Husband Name,Wife Name,Surname,Mobile Number,Print Status,Zoom,Offset Y,Printed Checkbox,Desk Handover Checkbox\n";
+      listToExport.forEach((sub) => {
+        const pStatus = sub.frameExportStatus === 'EXPORTED' ? 'Already Exported' : sub.frameExportStatus === 'MODIFIED' ? 'Adjusted' : 'New';
+        manifestCsv += `"${sub.inquiryId}","${sub.husbandName}","${sub.wifeName}","${sub.surname || ''}","${sub.phoneNumber || ''}","${pStatus}","${sub.photoZoom ?? 1.0}","${sub.photoOffsetY ?? 0}","[  ] Printed","[  ] Handed Over"\n`;
+      });
+      zip.file(`Printing_Manifest_${progName.replace(/\s+/g, '_')}.csv`, manifestCsv);
+
       setZipProgress('Compressing ZIP archive...');
       const content = await zip.generateAsync({ type: 'blob' });
 
       setZipProgress('Downloading...');
-      const curProg = programs.find((p) => p.id === selectedProgramId);
-      const progName = curProg ? curProg.name : 'Event';
       const a = document.createElement('a');
       a.href = URL.createObjectURL(content);
       a.download = `${progName}_framed_photos.zip`.replace(/\s+/g, '_');
@@ -498,7 +591,18 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       a.click();
       document.body.removeChild(a);
 
-      toast.success(`Successfully downloaded ${listToExport.length} framed photos!`);
+      // Automatically mark exported in database and local state
+      const exportedIds = listToExport.map((s) => s.inquiryId);
+      registrationsApi.markFramesExported(exportedIds).catch(console.error);
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          exportedIds.includes(s.inquiryId)
+            ? { ...s, frameExportStatus: 'EXPORTED', frameExportedAt: new Date().toISOString() }
+            : s
+        )
+      );
+
+      toast.success(`Successfully downloaded ${listToExport.length} framed photos and printing manifest!`);
     } catch (err: any) {
       toast.error('Error creating ZIP: ' + err.message);
     } finally {
@@ -643,6 +747,112 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
             </div>
           </div>
 
+          {/* Quick Print Status Filter Pills */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/80">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mr-1">
+                Print Status:
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setPrintStatusFilter('ALL')}
+                className={`px-3 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer ${
+                  printStatusFilter === 'ALL'
+                    ? 'bg-slate-800 text-white shadow-xs'
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-300'
+                }`}
+              >
+                All Photos ({totalCount})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPrintStatusFilter('UNPRINTED');
+                  const unprinted = submissions.filter((s) => !s.frameExportStatus || s.frameExportStatus === 'NOT_EXPORTED');
+                  setSelectedInquiryIds(unprinted.map((s) => s.inquiryId));
+                }}
+                className={`px-3 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer flex items-center gap-1.5 ${
+                  printStatusFilter === 'UNPRINTED'
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200'
+                }`}
+              >
+                <span>New / Unprinted</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  printStatusFilter === 'UNPRINTED' ? 'bg-rose-700 text-white' : 'bg-rose-200 text-rose-800'
+                }`}>
+                  {unprintedCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPrintStatusFilter('MODIFIED');
+                  const modified = submissions.filter((s) => s.frameExportStatus === 'MODIFIED');
+                  setSelectedInquiryIds(modified.map((s) => s.inquiryId));
+                }}
+                className={`px-3 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer flex items-center gap-1.5 ${
+                  printStatusFilter === 'MODIFIED'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
+                }`}
+              >
+                <span>Adjusted (Needs Reprint)</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  printStatusFilter === 'MODIFIED' ? 'bg-amber-700 text-white' : 'bg-amber-200 text-amber-800'
+                }`}>
+                  {modifiedCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPrintStatusFilter('EXPORTED');
+                  const exp = submissions.filter((s) => s.frameExportStatus === 'EXPORTED');
+                  setSelectedInquiryIds(exp.map((s) => s.inquiryId));
+                }}
+                className={`px-3 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer flex items-center gap-1.5 ${
+                  printStatusFilter === 'EXPORTED'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
+                }`}
+              >
+                <span>Already Printed</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  printStatusFilter === 'EXPORTED' ? 'bg-emerald-700 text-white' : 'bg-emerald-200 text-emerald-800'
+                }`}>
+                  {exportedCount}
+                </span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleMarkSelectedExported('EXPORTED')}
+                disabled={selectedCount === 0}
+                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-40 text-emerald-800 border border-emerald-200 rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1"
+                title="Manually mark selected as printed"
+              >
+                <CheckCircleIcon className="w-3 h-3" />
+                <span>Mark as Printed</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMarkSelectedExported('NOT_EXPORTED')}
+                disabled={selectedCount === 0}
+                className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 disabled:opacity-40 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1"
+                title="Reset selected to unprinted status"
+              >
+                <span>Reset to Unprinted</span>
+              </button>
+            </div>
+          </div>
+
           {/* Selection & Action Buttons Row */}
           <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
             <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -761,6 +971,20 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                             <span className="text-[10px] font-extrabold px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md">
                               {sub.inquiryId}
                             </span>
+                            {sub.frameExportStatus === 'EXPORTED' ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                <CheckIcon className="w-2.5 h-2.5" />
+                                <span>Printed</span>
+                              </span>
+                            ) : sub.frameExportStatus === 'MODIFIED' ? (
+                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
+                                ⚠ Adjusted (Needs Reprint)
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                                New (Unprinted)
+                              </span>
+                            )}
                           </div>
                           <p className="text-[11px] text-slate-500 font-medium mt-0.5">
                             Phone: {sub.phoneNumber} &bull; Program: {sub.programName}

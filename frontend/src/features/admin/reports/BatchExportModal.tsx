@@ -238,13 +238,24 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
         const dataUrl = canvas.toDataURL('image/png');
         const base64Data = dataUrl.split(',')[1];
 
-        // Add to zip
-        const filename = `${sub.surname || 'Couple'}_${sub.husbandName || 'H'}_${sub.wifeName || 'W'}_${sub.inquiryId}.png`.replace(/[^a-zA-Z0-9_.-]/g, '_');
+        // Add to zip with clean sequential naming
+        const cleanHusband = (sub.husbandName || '').trim().replace(/\s+/g, '_');
+        const cleanWife = (sub.wifeName || '').trim().replace(/\s+/g, '_');
+        const cleanSurname = (sub.surname || '').trim().replace(/\s+/g, '_');
+        const filename = `${sub.inquiryId}_${cleanHusband}_${cleanWife}_${cleanSurname}.png`.replace(/[^a-zA-Z0-9_.-]/g, '_');
         zip.file(filename, base64Data, { base64: true });
       } catch (err: any) {
         console.error('Error drawing framed photo for submission:', sub.inquiryId, err);
       }
     }
+
+    // Bundle Printing Manifest CSV inside ZIP
+    let manifestCsv = "Token ID,Husband Name,Wife Name,Surname,Mobile Number,Print Status,Printed Checkbox,Desk Handover Checkbox\n";
+    photosList.forEach((sub) => {
+      const pStatus = sub.frameExportStatus === 'EXPORTED' ? 'Already Exported' : sub.frameExportStatus === 'MODIFIED' ? 'Adjusted' : 'New';
+      manifestCsv += `"${sub.inquiryId}","${sub.husbandName}","${sub.wifeName}","${sub.surname || ''}","${sub.phoneNumber || ''}","${pStatus}","[  ] Printed","[  ] Handed Over"\n`;
+    });
+    zip.file(`Printing_Manifest_${progName.replace(/\s+/g, '_')}.csv`, manifestCsv);
 
     setZipProgress('Generating ZIP file...');
     const content = await zip.generateAsync({ type: 'blob' });
@@ -257,6 +268,12 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+
+    // Automatically mark as exported in DB
+    const exportedIds = photosList.map((s) => s.inquiryId);
+    registrationsApi.markFramesExported(exportedIds).catch(console.error);
+
+    toast.success(`Exported ${photosList.length} framed photos and printing manifest!`);
     onClose();
   };
 

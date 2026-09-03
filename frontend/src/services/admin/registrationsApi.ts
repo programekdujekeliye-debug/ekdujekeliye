@@ -10,6 +10,7 @@ export interface GetSubmissionsParams {
   programId?: string;
   attendance?: string;
   isVip?: string;
+  frameExportStatus?: string;
   sortBy?: string;
   sortOrder?: string;
 }
@@ -25,6 +26,7 @@ export const registrationsApi = {
     if (params.programId && params.programId !== 'all') query.append('programId', params.programId);
     if (params.attendance && params.attendance !== 'all') query.append('attendance', params.attendance);
     if (params.isVip) query.append('isVip', params.isVip);
+    if (params.frameExportStatus && params.frameExportStatus !== 'all') query.append('frameExportStatus', params.frameExportStatus);
     if (params.sortBy) query.append('sortBy', params.sortBy);
     if (params.sortOrder) query.append('sortOrder', params.sortOrder);
 
@@ -123,6 +125,14 @@ export const registrationsApi = {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updateData)
+    });
+  },
+
+  async markFramesExported(inquiryIds: string[], batchNumber?: number): Promise<{ success: boolean; modifiedCount: number; exportedAt: string }> {
+    return apiClient('/api/submissions/mark-frame-exported', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inquiryIds, batchNumber })
     });
   }
 };
