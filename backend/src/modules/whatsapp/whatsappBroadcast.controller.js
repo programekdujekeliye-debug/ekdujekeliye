@@ -65,7 +65,7 @@ export const getBroadcastOverview = async (req, res) => {
             $sum: { $cond: [{ $in: ['$status', ['SENT', 'DELIVERED', 'READ']] }, 1, 0] }
           },
           deliveredCount: {
-            $sum: { $cond: [{ $in: ['$status', ['DELIVERED', 'READ']] }, 1, 0] }
+            $sum: { $cond: [{ $in: ['$status', ['SENT', 'DELIVERED', 'READ']] }, 1, 0] }
           },
           readCount: {
             $sum: { $cond: [{ $eq: ['$status', 'READ'] }, 1, 0] }
@@ -85,13 +85,13 @@ export const getBroadcastOverview = async (req, res) => {
 
     const campaigns = campaignsAgg.map(c => {
       const templateDef = TEMPLATE_REGISTRY[c._id];
-      const isLiveNow = c.sendingCount > 0 || (c.lastSentAt && (Date.now() - new Date(c.lastSentAt).getTime()) < 60000);
+      const isLiveNow = c.sendingCount > 0;
       return {
         id: `camp_${c._id || 'general'}`,
         templateName: c._id || 'edkl_all_couples_invite_v1',
         title: templateDef?.purpose || 'General Couple Seminar Invitation & Gift Broadcast',
         category: 'MARKETING',
-        audience: 'TBD & Past Pending Inquiries (Excl. Upcoming)',
+        audience: 'Past Event Attendees (Paid Registrations)',
         totalRecipients: c.totalRecipients,
         sentCount: c.sentCount,
         deliveredCount: c.deliveredCount,
@@ -108,8 +108,8 @@ export const getBroadcastOverview = async (req, res) => {
       summary: {
         totalCampaigns: campaigns.length,
         totalBroadcastMessages: totalMessages,
-        sent: statusCounts.SENT,
-        delivered: statusCounts.DELIVERED,
+        sent: statusCounts.SENT + statusCounts.DELIVERED + statusCounts.READ,
+        delivered: statusCounts.DELIVERED + statusCounts.READ + statusCounts.SENT,
         read: statusCounts.READ,
         failed: statusCounts.FAILED,
         sending: statusCounts.SENDING,
