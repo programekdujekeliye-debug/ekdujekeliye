@@ -546,6 +546,31 @@ export const CORE_TEMPLATES = {
         ]
       }
     ]
+  },
+
+  // 12. September 7 & 11 Couple Seminar Gift & Share Campaign (Personalized, No Buttons)
+  edkl_september_gift_share_v2: {
+    key: 'edkl_september_gift_share_v2',
+    metaName: 'edkl_september_gift_share_v2',
+    category: 'MARKETING',
+    section: 'CORE',
+    language: 'en_US',
+    purpose: 'Marketing broadcast to invite past attendees to share or gift 7 and 11 September seminar to friends/couples',
+    trigger: 'marketing_broadcast',
+    bodyVariables: ['customerName'],
+    buttonVariables: [],
+    requiredVariables: ['customerName'],
+    components: [
+      {
+        type: 'BODY',
+        text: `નમસ્તે {{1}}, કેમ છો દોસ્તો?\n\nતમે “એક દુજે કે લિયે” કાર્યક્રમ માણ્યો છે, તેનો અનુભવ કર્યો છે અને આ કાર્યક્રમ તમારા સંબંધ માટે કેટલો ખાસ બની શકે છે એ તમે સારી રીતે જાણો છો.\n\nહવે જો તમને લાગે કે તમારા કોઈ near and dear વ્યક્તિ, Family Member, Mom Dad, Bhai Bhabhi, Brother Sister, Friend અથવા કોઈ ખાસ Couple ને પણ આ અનુભવ મળવો જોઈએ, તો તમે તેમને “એક દુજે કે લિયે” Gift કરી શકો છો અથવા આ Message તેમની સાથે Share કરી શકો છો.\n\nક્યારેક આપણે આપણા પોતાના માટે કંઈક કરીએ છીએ, પણ ક્યારેક આપણા પ્રિય વ્યક્તિના સંબંધમાં પ્રેમ, સમજણ અને ખુશી વધે એ માટે આપેલી નાની Gift પણ જીવનભર યાદ રહી જાય છે.\n\nજો તમારા મનમાં કોઈ એવું Couple આવે કે જેમણે આ એક સુંદર સાંજ સાથે વિતાવવી જોઈએ, તો તેમને જરૂર કહેજો.\n\n7 અને 11 સપ્ટેમ્બર, 2026\nસાંજે 8:30 વાગ્યે\nસરદાર પટેલ સ્મૃતિ ભવન, મીની બજાર, સુરત\n\nRegistration Fee: ₹1,500 Per Couple\n\nRegistration માટે:\nhttps://www.ekdujekeliye.in/\n\nમાહિતી માટે:  \n8200302328 / 9213532835\n\nકદાચ તમારું એક Share અથવા એક Gift કોઈના સંબંધ માટે ખૂબ સુંદર યાદ બની શકે.\n\nપ્રેમથી,\nમનીષ વાઘાસિયા \nManas Life Coach`,
+        example: {
+          body_text: [
+            ['સ્નેહી મિત્રો']
+          ]
+        }
+      }
+    ]
   }
 };
 
