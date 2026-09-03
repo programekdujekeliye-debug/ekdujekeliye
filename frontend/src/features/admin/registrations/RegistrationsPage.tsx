@@ -506,7 +506,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                           </td>
                           <td className="px-4 py-3.5">
                             <div className="space-y-0.5">
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1 flex-wrap">
                                 <span className={`font-mono font-extrabold text-xs px-1.5 py-0.5 rounded ${
                                   isVip ? 'bg-amber-50 text-amber-900 border border-amber-300' : 'text-rose-700'
                                 }`}>
@@ -517,10 +517,29 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                     VIP
                                   </span>
                                 )}
+                                {sub.previousInquiryId && (
+                                  <span
+                                    className="text-[9px] font-mono font-semibold px-1 py-0.5 bg-slate-100 text-slate-500 rounded border border-slate-200"
+                                    title={`Transferred from ${sub.previousInquiryId}`}
+                                  >
+                                    ex: {sub.previousInquiryId}
+                                  </span>
+                                )}
                               </div>
-                              <span className="text-[10px] text-slate-400 font-medium block whitespace-nowrap">
-                                {formatSubmissionTime(sub.createdAt)}
-                              </span>
+                              {sub.previousInquiryId && sub.updatedAt && sub.updatedAt !== sub.createdAt ? (
+                                <div className="flex flex-col text-[10px]">
+                                  <span className="text-amber-700 font-medium whitespace-nowrap" title="Transferred / Modified Time">
+                                    🔄 {formatSubmissionTime(sub.updatedAt)}
+                                  </span>
+                                  <span className="text-slate-400 text-[9px] whitespace-nowrap" title="Original Submission Time">
+                                    orig: {formatSubmissionTime(sub.createdAt)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 font-medium block whitespace-nowrap">
+                                  {formatSubmissionTime(sub.createdAt)}
+                                </span>
+                              )}
                             </div>
                           </td>
 
@@ -839,11 +858,15 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                         </div>
 
                         <div className="flex items-center gap-2 flex-shrink-0 text-slate-400 text-[10px]">
-                          {sub.createdAt && (
+                          {sub.previousInquiryId && sub.updatedAt && sub.updatedAt !== sub.createdAt ? (
+                            <span className="font-medium text-amber-700 whitespace-nowrap" title="Transferred Time">
+                              🔄 {formatSubmissionTime(sub.updatedAt)}
+                            </span>
+                          ) : sub.createdAt ? (
                             <span className="font-medium text-slate-500 whitespace-nowrap">
                               {formatSubmissionTime(sub.createdAt)}
                             </span>
-                          )}
+                          ) : null}
                           <button
                             onClick={() => handleDelete(sub.inquiryId)}
                             className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"

@@ -41,6 +41,15 @@ export interface Submission {
   };
   createdAt?: string;
   updatedAt?: string;
+  previousInquiryId?: string;
+  transferHistory?: Array<{
+    fromProgramId?: string;
+    toProgramId?: string;
+    oldInquiryId?: string;
+    newInquiryId?: string;
+    transferredAt?: string;
+    reason?: string;
+  }>;
 }
 
 export type Registration = Submission;
