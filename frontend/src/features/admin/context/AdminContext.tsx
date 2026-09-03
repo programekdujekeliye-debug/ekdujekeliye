@@ -107,7 +107,8 @@ export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
   const [activeSection, setActiveSection] = useState<AdminSection>('dashboard');
   const [selectedProgramId, setSelectedProgramIdState] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('admin_selected_program_id') || '';
+      const saved = sessionStorage.getItem('admin_selected_program_id');
+      if (saved && saved !== 'all') return saved;
     }
     return '';
   });
@@ -131,12 +132,13 @@ export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
       const list = data || [];
       setPrograms(list);
 
-
-      // Automatically default to the nearest upcoming event
+      // Automatically default to the nearest upcoming active event
       const defaultEvent = computeDefaultUpcomingEvent(list);
       const savedId = typeof window !== 'undefined' ? sessionStorage.getItem('admin_selected_program_id') : null;
 
-      if (savedId && (savedId === 'all' || list.some((p) => p.id === savedId || p.slug === savedId))) {
+      // If a specific individual event was explicitly chosen, preserve it.
+      // Otherwise (empty or 'all'), automatically focus on the upcoming event!
+      if (savedId && savedId !== 'all' && list.some((p) => p.id === savedId || p.slug === savedId)) {
         setSelectedProgramIdState(savedId);
       } else if (defaultEvent) {
         setSelectedProgramIdState(defaultEvent.id);
@@ -145,6 +147,8 @@ export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
         }
       } else if (list.length > 0) {
         setSelectedProgramIdState(list[0].id);
+      } else {
+        setSelectedProgramIdState('all');
       }
     } catch (err) {
       console.error('Failed to fetch events in context:', err);

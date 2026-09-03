@@ -255,7 +255,7 @@ export class EventService {
     }
 
     const [programs, regStats] = await Promise.all([
-      Event.find({}).lean(),
+      Event.find({}).select('-cardTemplate').lean(),
       Registration.aggregate([
         { $match: { isDeleted: { $ne: true } } },
         {
