@@ -51,7 +51,11 @@ export default function DigitalPassPage() {
         setLoading(true);
         setError(null);
 
-        const res = await fetch(`${API_BASE_URL}/api/passes/${encodeURIComponent(inquiryId)}`);
+        const res = await fetch(`${API_BASE_URL}/api/passes/${encodeURIComponent(inquiryId)}`, {
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
         const data = await res.json();
 
         if (!res.ok) {

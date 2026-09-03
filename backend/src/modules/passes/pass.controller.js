@@ -17,19 +17,28 @@ export async function getPassDetails(req, res) {
     const cleanInquiryId = inquiryId.trim().toUpperCase();
     const publicBaseUrl = env.PUBLIC_APP_URL || 'https://www.ekdujekeliye.in';
 
-    // 1. Direct browser navigation guard:
-    // If someone visits or pastes the raw backend Render URL directly in a browser,
-    // immediately redirect them to the official frontend digital pass page.
-    const acceptsHtml = req.accepts(['html', 'json']) === 'html';
-    const isDocRequest = req.headers['sec-fetch-dest'] === 'document';
-    const hasHtmlInAccept = typeof req.headers.accept === 'string' && req.headers.accept.includes('text/html');
+    // 1. Direct browser address bar navigation guard:
+    // Only redirect if a user is literally visiting the URL directly in a browser tab.
+    // NEVER redirect programmatic fetch / XHR / API calls!
+    const isFetchCall =
+      req.headers['sec-fetch-dest'] === 'empty' ||
+      req.headers['sec-fetch-mode'] === 'cors' ||
+      Boolean(req.headers.origin) ||
+      Boolean(req.headers['x-requested-with']) ||
+      (typeof req.headers.accept === 'string' && req.headers.accept.includes('application/json'));
 
-    if (acceptsHtml || isDocRequest || hasHtmlInAccept) {
+    const isDirectBrowserNavigation =
+      !isFetchCall &&
+      (req.headers['sec-fetch-dest'] === 'document' ||
+       req.headers['sec-fetch-mode'] === 'navigate' ||
+       (typeof req.headers.accept === 'string' && req.headers.accept.includes('text/html')));
+
+    if (isDirectBrowserNavigation) {
       return res.redirect(302, `${publicBaseUrl}/pass/${encodeURIComponent(cleanInquiryId)}`);
     }
 
     // 2. Direct onrender.com host access guard:
-    // Disallow public arbitrary scraping or direct calls to onrender.com host without coming from our official domain
+    // Disallow public arbitrary scraping or direct calls to onrender.com host from unauthorized websites
     const host = String(req.headers.host || '').toLowerCase();
     const origin = String(req.headers.origin || '').toLowerCase();
     const referer = String(req.headers.referer || '').toLowerCase();
@@ -37,6 +46,7 @@ export async function getPassDetails(req, res) {
 
     const isDirectRenderCall = host.includes('onrender.com');
     const isFromAuthorizedDomain =
+      !origin ||
       origin.includes('ekdujekeliye.in') ||
       referer.includes('ekdujekeliye.in') ||
       xForwardedHost.includes('ekdujekeliye.in') ||
@@ -45,7 +55,7 @@ export async function getPassDetails(req, res) {
       host.includes('localhost') ||
       env.NODE_ENV !== 'production';
 
-    if (isDirectRenderCall && !isFromAuthorizedDomain) {
+    if (isDirectRenderCall && origin && !isFromAuthorizedDomain) {
       return res.status(403).json({
         error: 'Direct access to backend API URL is prohibited.',
         message: `Please view digital pass securely via the official portal at ${publicBaseUrl}/pass/${encodeURIComponent(cleanInquiryId)}`
