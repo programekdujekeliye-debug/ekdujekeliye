@@ -83,8 +83,343 @@ export default function DigitalPassPage() {
     loadPass();
   }, [inquiryId]);
 
-  const handlePrint = () => {
-    window.print();
+  const [downloading, setDownloading] = useState<boolean>(false);
+  const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
+  const [passImageDataUrl, setPassImageDataUrl] = useState<string | null>(null);
+  const [showIosModal, setShowIosModal] = useState<boolean>(false);
+
+  /**
+   * Render high-resolution 720x1260 Digital Pass Canvas
+   */
+  const generatePassCanvas = async (data: PassData, qrSrc: string): Promise<HTMLCanvasElement> => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context not available');
+
+    const width = 720;
+    const height = 1260;
+    canvas.width = width;
+    canvas.height = height;
+
+    // 1. Overall Background
+    ctx.fillStyle = '#FAF9F6';
+    ctx.fillRect(0, 0, width, height);
+
+    // Helper: Rounded Rectangle
+    const drawRoundRect = (x: number, y: number, w: number, h: number, r: number) => {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    };
+
+    // 2. Outer Card with Rounded Corners
+    const cardX = 30;
+    const cardY = 30;
+    const cardW = width - 60;
+    const cardH = height - 60;
+    const cardRadius = 32;
+
+    ctx.save();
+    drawRoundRect(cardX, cardY, cardW, cardH, cardRadius);
+    ctx.clip();
+
+    // Fill Card Background
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(cardX, cardY, cardW, cardH);
+
+    // 3. Header Gradient
+    const headerH = 220;
+    const headerGrad = ctx.createLinearGradient(cardX, cardY, cardX + cardW, cardY + headerH);
+    headerGrad.addColorStop(0, '#9f1239'); // rose-700
+    headerGrad.addColorStop(0.5, '#be123c'); // rose-600
+    headerGrad.addColorStop(1, '#b45309'); // amber-700
+    ctx.fillStyle = headerGrad;
+    ctx.fillRect(cardX, cardY, cardW, headerH);
+
+    // Top Subtitle
+    ctx.fillStyle = '#fecdd3';
+    ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('OFFICIAL GATE ENTRY PASS', width / 2, 75);
+
+    // Main Title
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 34px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('EK DUJE KE LIYE', width / 2, 118);
+
+    // Tagline
+    ctx.fillStyle = '#ffe4e6';
+    ctx.font = '500 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('A Special Program for Couples', width / 2, 146);
+
+    // Status Pill: ENTRY APPROVED
+    const pillW = 210;
+    const pillH = 34;
+    const pillX = (width - pillW) / 2;
+    const pillY = 170;
+    ctx.fillStyle = '#10b981';
+    drawRoundRect(pillX, pillY, pillW, pillH, pillH / 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('✓  ENTRY APPROVED', width / 2, pillY + 22);
+
+    ctx.restore(); // Restore from card clip
+
+    // Card border
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 2;
+    drawRoundRect(cardX, cardY, cardW, cardH, cardRadius);
+    ctx.stroke();
+
+    // 4. Hero Registration Number Box
+    const regX = 60;
+    const regY = 275;
+    const regW = width - 120;
+    const regH = 125;
+    ctx.fillStyle = '#fffbeb'; // amber-50
+    drawRoundRect(regX, regY, regW, regH, 20);
+    ctx.fill();
+    ctx.strokeStyle = '#fcd34d'; // amber-300
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.fillStyle = '#78350f'; // amber-900
+    ctx.font = '900 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('REGISTRATION NUMBER', width / 2, regY + 30);
+
+    ctx.fillStyle = '#451a03'; // amber-950
+    ctx.font = '900 48px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(data.inquiryId, width / 2, regY + 82);
+
+    ctx.fillStyle = '#92400e';
+    ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('Please present this number or QR code at entry', width / 2, regY + 108);
+
+    // 5. Couple Details Row
+    const coupleBoxY = 420;
+    const coupleBoxH = 95;
+    ctx.fillStyle = '#fafaf9'; // stone-50
+    drawRoundRect(regX, coupleBoxY, regW, coupleBoxH, 18);
+    ctx.fill();
+    ctx.strokeStyle = '#e7e5e4';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Try loading couple photo safely without tainting canvas
+    let coupleImgLoaded = false;
+    if (data.couplePhoto) {
+      try {
+        const photoPath = data.couplePhoto;
+        const cImg = new Image();
+        cImg.crossOrigin = 'anonymous';
+        await new Promise<void>((res) => {
+          cImg.onload = () => {
+            const photoX = regX + 15;
+            const photoY = coupleBoxY + 12;
+            const photoSize = 71;
+            ctx.save();
+            drawRoundRect(photoX, photoY, photoSize, photoSize, 14);
+            ctx.clip();
+            ctx.drawImage(cImg, photoX, photoY, photoSize, photoSize);
+            ctx.restore();
+            ctx.strokeStyle = '#d6d3d1';
+            ctx.lineWidth = 1;
+            drawRoundRect(photoX, photoY, photoSize, photoSize, 14);
+            ctx.stroke();
+            coupleImgLoaded = true;
+            res();
+          };
+          cImg.onerror = () => res(); // Never fail the pass generation
+          cImg.src = photoPath.startsWith('data:') || photoPath.startsWith('http')
+            ? photoPath
+            : `${API_BASE_URL}${photoPath.startsWith('/') ? photoPath : `/${photoPath}`}`;
+        });
+      } catch (_) {}
+    }
+
+    if (!coupleImgLoaded) {
+      const photoX = regX + 15;
+      const photoY = coupleBoxY + 12;
+      const photoSize = 71;
+      ctx.fillStyle = '#ffe4e6';
+      drawRoundRect(photoX, photoY, photoSize, photoSize, 14);
+      ctx.fill();
+      ctx.fillStyle = '#be123c';
+      ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('EDKL', photoX + photoSize / 2, photoY + 44);
+    }
+
+    // Couple Name
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#be123c';
+    ctx.font = '900 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('ADMIT COUPLE', regX + 105, coupleBoxY + 38);
+
+    ctx.fillStyle = '#1c1917';
+    ctx.font = 'bold 22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    const coupleText = data.coupleName.length > 28 ? data.coupleName.substring(0, 27) + '…' : data.coupleName;
+    ctx.fillText(coupleText, regX + 105, coupleBoxY + 70);
+
+    // 6. Seminar Details Box
+    const evBoxY = 535;
+    const evBoxH = 135;
+    ctx.fillStyle = '#fafaf9';
+    drawRoundRect(regX, evBoxY, regW, evBoxH, 18);
+    ctx.fill();
+    ctx.strokeStyle = '#e7e5e4';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#1c1917';
+    ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    const progText = data.programName.length > 38 ? data.programName.substring(0, 37) + '…' : data.programName;
+    ctx.fillText(progText, regX + 22, evBoxY + 36);
+
+    ctx.fillStyle = '#44403c';
+    ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(`📅  ${data.programDate}    •    ⏰  ${data.programTime}`, regX + 22, evBoxY + 74);
+
+    ctx.fillStyle = '#57534e';
+    ctx.font = '500 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    const venueText = data.venue.length > 44 ? data.venue.substring(0, 43) + '…' : data.venue;
+    ctx.fillText(`📍  ${venueText}`, regX + 22, evBoxY + 110);
+
+    // 7. QR Code Box
+    const qrBoxW = 400;
+    const qrBoxH = 370;
+    const qrBoxX = (width - qrBoxW) / 2;
+    const qrBoxY = 690;
+    ctx.fillStyle = '#FFFFFF';
+    drawRoundRect(qrBoxX, qrBoxY, qrBoxW, qrBoxH, 24);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Draw QR Code
+    if (qrSrc) {
+      const qrImg = new Image();
+      await new Promise<void>((res) => {
+        qrImg.onload = () => {
+          const qrSize = 280;
+          const qrImgX = (width - qrSize) / 2;
+          const qrImgY = qrBoxY + 25;
+          ctx.drawImage(qrImg, qrImgX, qrImgY, qrSize, qrSize);
+          res();
+        };
+        qrImg.onerror = () => res();
+        qrImg.src = qrSrc;
+      });
+    }
+
+    ctx.fillStyle = '#78716c';
+    ctx.font = '800 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('SCAN AT GATE ENTRANCE', width / 2, qrBoxY + 340);
+
+    // 8. Security & Info Footer
+    ctx.fillStyle = '#78716c';
+    ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(`Pass Security ID: ${data.passId}`, width / 2, 1095);
+
+    ctx.fillStyle = '#a8a29e';
+    ctx.font = '500 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('Valid for admission of registered couple only • Please keep screen brightness high', width / 2, 1125);
+
+    ctx.fillStyle = '#d6d3d1';
+    ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('© 2026 Ek Duje Ke Liye • All Rights Reserved', width / 2, 1152);
+
+    return canvas;
+  };
+
+  /**
+   * Helper to trigger direct browser file download
+   */
+  const triggerDirectDownload = (url: string) => {
+    if (!pass) return;
+    const link = document.createElement('a');
+    link.download = `EDKL_Pass_${pass.inquiryId}.png`;
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  /**
+   * Seamless Download & Save to Gallery (Optimized for iPhone / iOS Photos & Android/Desktop)
+   */
+  const handleDownloadPass = async () => {
+    if (!pass || !qrDataUrl) return;
+    setDownloading(true);
+    setDownloadSuccess(false);
+
+    try {
+      const canvas = await generatePassCanvas(pass, qrDataUrl);
+      const dataUrl = canvas.toDataURL('image/png');
+      setPassImageDataUrl(dataUrl);
+
+      const isIos = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent || '');
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          triggerDirectDownload(dataUrl);
+          setDownloading(false);
+          return;
+        }
+
+        const fileName = `EDKL_Pass_${pass.inquiryId}.png`;
+        const file = new File([blob], fileName, { type: 'image/png' });
+
+        // 1. Native Web Share API (Highest quality for iOS / iPhone Photos & Camera Roll)
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: 'Ek Duje Ke Liye Gate Pass',
+              text: `Official Gate Pass for ${pass.coupleName} (${pass.inquiryId})`
+            });
+            setDownloadSuccess(true);
+            setDownloading(false);
+            return;
+          } catch (shareErr: any) {
+            if (shareErr.name === 'AbortError') {
+              // User dismissed sheet
+              setDownloading(false);
+              return;
+            }
+          }
+        }
+
+        // 2. iOS fallback: Show dedicated preview sheet to press & hold "Save to Photos"
+        if (isIos) {
+          setShowIosModal(true);
+          setDownloading(false);
+          return;
+        }
+
+        // 3. Android / Desktop fallback: Instant direct PNG download into Gallery/Downloads
+        triggerDirectDownload(dataUrl);
+        setDownloadSuccess(true);
+        setDownloading(false);
+      }, 'image/png');
+    } catch (err: any) {
+      console.error('Download pass error:', err);
+      setDownloading(false);
+    }
   };
 
   const handleDownloadInvitation = () => {
@@ -243,28 +578,97 @@ export default function DigitalPassPage() {
         </div>
 
         {/* Action Footer */}
-        <div className="bg-stone-50 p-4 border-t border-stone-200 flex flex-col gap-2 print:hidden">
+        <div className="bg-stone-50 p-4 border-t border-stone-200 flex flex-col gap-2.5 print:hidden">
+          {/* Main Download Pass Button */}
+          <button
+            type="button"
+            onClick={handleDownloadPass}
+            disabled={downloading}
+            className="w-full py-3.5 px-4 bg-gradient-to-r from-rose-600 via-rose-700 to-amber-700 hover:from-rose-700 hover:to-amber-800 text-white font-bold rounded-2xl text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-rose-600/25 active:scale-[0.98] cursor-pointer disabled:opacity-75"
+          >
+            {downloading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Preparing Pass Image...</span>
+              </>
+            ) : (
+              <>
+                <DownloadIcon className="w-4.5 h-4.5 text-amber-200" />
+                <span>Download Pass (Save to Gallery)</span>
+              </>
+            )}
+          </button>
+
+          {downloadSuccess && (
+            <div className="flex items-center justify-center gap-1.5 text-xs text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 py-2 px-3 rounded-xl animate-in fade-in duration-200">
+              <CheckCircleIcon className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <span>Pass saved! Check your Photos / Downloads.</span>
+            </div>
+          )}
+
+          {/* Personalized Invitation Secondary Button */}
           <button
             type="button"
             onClick={handleDownloadInvitation}
             className="w-full py-2.5 px-4 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
           >
             <SparklesIcon className="w-4 h-4 text-rose-600" />
-            <span>Download Personalized Photo Invitation</span>
+            <span>Personalized Couple Photo Invitation</span>
             <DownloadIcon className="w-3.5 h-3.5 text-rose-500" />
-          </button>
-
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="w-full py-2.5 px-4 bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-          >
-            <PrinterIcon className="w-4 h-4 text-stone-600" />
-            <span>Print Entry Pass</span>
           </button>
         </div>
 
       </div>
+
+      {/* iOS iPhone Save to Photos Modal */}
+      {showIosModal && passImageDataUrl && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 flex flex-col items-center text-center shadow-2xl relative">
+            <button
+              type="button"
+              onClick={() => setShowIosModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-stone-100 text-stone-600 flex items-center justify-center font-bold text-sm hover:bg-stone-200 cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mb-3">
+              <DownloadIcon className="w-5 h-5" />
+            </div>
+
+            <h3 className="text-base font-bold text-stone-900">Save Pass to iPhone Photos</h3>
+            <p className="text-xs text-stone-600 mt-1 mb-4 leading-relaxed">
+              <strong>Press and hold</strong> the pass image below, then tap <span className="font-bold text-rose-700">"Save to Photos"</span> to keep it directly in your camera roll gallery.
+            </p>
+
+            <div className="w-full max-h-[52vh] overflow-y-auto rounded-2xl border border-stone-200 bg-stone-50 p-2 mb-4">
+              <img
+                src={passImageDataUrl}
+                alt="Digital Pass"
+                className="w-full rounded-xl shadow-xs pointer-events-auto select-auto"
+                style={{ WebkitTouchCallout: 'default' } as React.CSSProperties}
+              />
+            </div>
+
+            <div className="w-full flex gap-2">
+              <button
+                type="button"
+                onClick={() => triggerDirectDownload(passImageDataUrl)}
+                className="flex-1 py-2.5 px-3 bg-stone-900 text-white rounded-xl font-bold text-xs hover:bg-stone-800 cursor-pointer"
+              >
+                Download File
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowIosModal(false)}
+                className="py-2.5 px-4 bg-stone-100 text-stone-700 rounded-xl font-bold text-xs hover:bg-stone-200 cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Brand Watermark */}
       <div className="mt-4 text-center text-xs text-stone-500 font-medium print:hidden">
