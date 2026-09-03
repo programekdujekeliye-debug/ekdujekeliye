@@ -155,6 +155,78 @@ export default function PersonalizedInvitationPage() {
             : `${API_BASE_URL}${templatePath}`)
       : '';
 
+    // Draw procedural card when no custom template is uploaded or if load fails
+    const drawProceduralCard = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      bgGrad.addColorStop(0, '#3b000f');
+      bgGrad.addColorStop(0.35, '#610b1a');
+      bgGrad.addColorStop(0.7, '#7a0c1e');
+      bgGrad.addColorStop(1, '#2c0008');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = '#d4af37';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(18, 18, canvas.width - 36, canvas.height - 36);
+
+      ctx.fillStyle = '#fce7b2';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(sub.program?.name || sub.programName || 'Ek Duje Ke Liye', canvas.width / 2, 72);
+
+      const eventDateStr = sub.program?.date || sub.programDate || '';
+      if (eventDateStr && eventDateStr !== 'TBD') {
+        ctx.font = 'bold 15px sans-serif';
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillText(`Date: ${eventDateStr} • Surat`, canvas.width / 2, 102);
+      }
+
+      const coupleImg = new Image();
+      const photoPath = sub.couplePhoto || '/sample_couple.png';
+      const coupleImgSrc = photoPath.startsWith('data:') || photoPath.startsWith('http')
+        ? photoPath
+        : photoPath.startsWith('/')
+          ? photoPath
+          : `${API_BASE_URL}${photoPath}`;
+
+      if (coupleImgSrc.startsWith('http')) coupleImg.crossOrigin = 'anonymous';
+
+      coupleImg.onload = () => {
+        const cX = canvas.width / 2;
+        const cY = 330;
+        const radius = 175;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cX, cY, radius, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(coupleImg, cX - radius, cY - radius, radius * 2, radius * 2);
+        ctx.restore();
+
+        ctx.strokeStyle = '#d4af37';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(cX, cY, radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        drawTextDetails(ctx, sub);
+
+        try {
+          setCanvasDataUrl(canvas.toDataURL('image/png'));
+        } catch {
+          setUseCanvasDirectly(true);
+        }
+        setCardReady(true);
+      };
+      coupleImg.src = coupleImgSrc;
+    };
+
+    if (!templateImgSrc) {
+      drawProceduralCard();
+      return;
+    }
+
     if (templateImgSrc.startsWith('http')) {
       templateImg.crossOrigin = 'anonymous';
     }
@@ -166,7 +238,8 @@ export default function PersonalizedInvitationPage() {
         templateImg.removeAttribute('crossOrigin');
         templateImg.src = templateImgSrc + (templateImgSrc.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
       } else {
-        console.warn('Event template could not be loaded:', templateImgSrc);
+        console.warn('Custom template load failed, drawing procedural design:', templateImgSrc);
+        drawProceduralCard();
       }
     };
 

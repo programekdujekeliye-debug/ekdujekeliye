@@ -155,9 +155,10 @@ export class EventService {
     if (!slug) return null;
     const normalizedSlug = String(slug).toLowerCase().trim();
 
-    // 1. Fast path: Memory Cache hit (0ms)
-    if (slugCache.has(normalizedSlug)) {
-      return slugCache.get(normalizedSlug);
+    // 1. Fast path: Memory Cache hit (15s TTL)
+    const cached = slugCache.get(normalizedSlug);
+    if (cached && Date.now() < cached.expiry) {
+      return cached.data;
     }
 
     // 2. Database lookup: Try direct indexed slug first, then ID, then Date, then ObjectId
@@ -185,10 +186,11 @@ export class EventService {
       isClosed: event.status === 'registration_closed' || event.isInquiryClosed === true
     };
 
-    // Cache result
-    if (event.slug) slugCache.set(event.slug.toLowerCase(), mapped);
-    if (event.id) slugCache.set(event.id.toLowerCase(), mapped);
-    if (event.date) slugCache.set(event.date.toLowerCase(), mapped);
+    // Cache result with 15-second TTL
+    const cacheEntry = { data: mapped, expiry: Date.now() + (15 * 1000) };
+    if (event.slug) slugCache.set(event.slug.toLowerCase(), cacheEntry);
+    if (event.id) slugCache.set(event.id.toLowerCase(), cacheEntry);
+    if (event.date) slugCache.set(event.date.toLowerCase(), cacheEntry);
 
     return mapped;
   }

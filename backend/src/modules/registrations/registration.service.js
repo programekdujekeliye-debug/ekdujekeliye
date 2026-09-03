@@ -354,6 +354,22 @@ export class RegistrationService {
       }).lean();
     }
 
+    // 5. Fresh DB lookup: If program was resolved but cardTemplate is null/empty, fetch fresh template from DB
+    if (!program?.cardTemplate && !program?.cardTemplateUrl) {
+      const searchConditions = [];
+      if (submission.programId) searchConditions.push({ id: submission.programId });
+      if (submission.programDate && submission.programDate !== 'TBD') searchConditions.push({ date: submission.programDate });
+      if (program?.id) searchConditions.push({ id: program.id });
+      if (program?.date) searchConditions.push({ date: program.date });
+
+      if (searchConditions.length > 0) {
+        const freshEvent = await Event.findOne({ $or: searchConditions }).lean();
+        if (freshEvent && (freshEvent.cardTemplate || freshEvent.cardTemplateUrl)) {
+          program = { ...(program || {}), ...freshEvent };
+        }
+      }
+    }
+
     const mediaState = await mediaService.resolveRegistrationMedia(submission);
     // Prioritize the Event's current active card template over any stale registration cardTemplate!
     // NEVER fall back to legacy /card_template.png with 24 July graphics
