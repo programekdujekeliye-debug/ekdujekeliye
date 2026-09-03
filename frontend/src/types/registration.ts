@@ -21,6 +21,7 @@ export interface Submission {
   attendance?: 'unmarked' | 'present' | 'absent';
   attendanceMarkedAt?: string;
   photoZoom?: number;
+  photoOffsetX?: number;
   photoOffsetY?: number;
   photoLink?: string;
   isVip?: boolean;

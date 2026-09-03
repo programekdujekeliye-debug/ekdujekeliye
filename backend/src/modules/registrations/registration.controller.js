@@ -326,7 +326,7 @@ export const manualInviteeRegistration = async (req, res) => {
 
 export const getSubmissionsList = async (req, res) => {
   const { programId, status, attendance, paymentStatus, isVip, search, sortBy = 'createdAt', sortOrder = 'desc', page = 1, limit = 50 } = req.query;
-  const safeLimit = Math.min(Math.max(1, Number(limit) || 50), 200);
+  const safeLimit = Math.min(Math.max(1, Number(limit) || 50), 10000);
   const safePage = Math.max(1, Number(page) || 1);
 
   const andConditions = [
@@ -708,7 +708,7 @@ export const updateSubmission = async (req, res) => {
     }
 
     // If photo or framing alignment is modified after export, mark as MODIFIED so admin knows it needs reprint
-    if (updateData.photoZoom !== undefined || updateData.photoOffsetY !== undefined || updateData.couplePhoto) {
+    if (updateData.photoZoom !== undefined || updateData.photoOffsetX !== undefined || updateData.photoOffsetY !== undefined || updateData.couplePhoto) {
       if (existing.frameExportStatus === 'EXPORTED') {
         updateData.frameExportStatus = 'MODIFIED';
       }

@@ -141,7 +141,7 @@ const LivePreviewCanvas: React.FC<{
       const zoom = sub.photoZoom ?? 1.0;
       const w = tempW * zoom;
       const h = tempH * zoom;
-      const ox = offsetX - (w - tempW) / 2;
+      const ox = (offsetX - (w - tempW) / 2) + ((sub.photoOffsetX ?? 0) / 2);
       const oy = (offsetY - (h - tempH) / 2) + ((sub.photoOffsetY ?? 0) / 2);
 
       ctx.save();
@@ -171,7 +171,7 @@ const LivePreviewCanvas: React.FC<{
     ctx.textAlign = 'center';
     ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
     ctx.restore();
-  }, [coupleImg, frameImg, sub.photoZoom, sub.photoOffsetY, sub.inquiryId, loadingImg]);
+  }, [coupleImg, frameImg, sub.photoZoom, sub.photoOffsetX, sub.photoOffsetY, sub.inquiryId, loadingImg]);
 
   return (
     <div className="w-[120px] h-[160px] relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 flex-shrink-0 shadow-inner">
@@ -206,6 +206,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedSuccessIds, setSavedSuccessIds] = useState<Record<string, boolean>>({});
   const [printStatusFilter, setPrintStatusFilter] = useState<'ALL' | 'UNPRINTED' | 'MODIFIED' | 'EXPORTED'>('ALL');
+  const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'PENDING'>('PAID');
+
+  // Auto-save debounce ref & map
+  const autoSaveTimerRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const [autoSavingMap, setAutoSavingMap] = useState<Record<string, 'saving' | 'saved'>>({});
 
   // Sync defaultProgramId on open
   useEffect(() => {
@@ -226,7 +231,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     });
   }, [isOpen]);
 
-  // Fetch approved submissions with couple photos for the selected program
+  // Fetch submissions with couple photos for the selected program without the 200 limit
   const fetchSubmissionsForFrames = useCallback(async () => {
     if (!selectedProgramId) {
       setSubmissions([]);
@@ -238,8 +243,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       setLoadingSubmissions(true);
       const res = await registrationsApi.getSubmissions({
         programId: selectedProgramId !== 'all' ? selectedProgramId : undefined,
-        status: 'approved',
-        limit: 1000
+        limit: 5000
       });
 
       const list = (res.submissions || []).filter((s) => Boolean(s.couplePhoto));
@@ -259,7 +263,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
   }, [isOpen, fetchSubmissionsForFrames]);
 
-  // Filtered submissions based on print status and CPL search query
+  // Filtered submissions based on payment status, print status, and search query
   const searchedTokens = cplSearchQuery
     .split(/[\s,]+/)
     .map((s) => s.trim().toUpperCase())
@@ -267,6 +271,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
   const isBulkSearch = searchedTokens.length > 1;
 
   const filteredSubmissions = submissions.filter((sub) => {
+    // Payment Status Filter
+    const isPaid = sub.status === 'approved' || sub.payment?.status === 'captured';
+    if (paymentFilter === 'PAID' && !isPaid) return false;
+    if (paymentFilter === 'PENDING' && isPaid) return false;
+
     // Print Status Filter
     if (printStatusFilter === 'UNPRINTED') {
       if (sub.frameExportStatus === 'EXPORTED') return false;
@@ -280,30 +289,85 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     return searchedTokens.some((token) => matchCplToken(sub.inquiryId, token, isBulkSearch));
   });
 
-  const totalCount = submissions.length;
-  const unprintedCount = submissions.filter((s) => !s.frameExportStatus || s.frameExportStatus === 'NOT_EXPORTED').length;
-  const modifiedCount = submissions.filter((s) => s.frameExportStatus === 'MODIFIED').length;
-  const exportedCount = submissions.filter((s) => s.frameExportStatus === 'EXPORTED').length;
+  const totalAllCount = submissions.length;
+  const paidCount = submissions.filter((s) => s.status === 'approved' || s.payment?.status === 'captured').length;
+  const pendingCount = submissions.filter((s) => s.status !== 'approved' && s.payment?.status !== 'captured').length;
+
+  const currentCohort = submissions.filter((sub) => {
+    const isPaid = sub.status === 'approved' || sub.payment?.status === 'captured';
+    if (paymentFilter === 'PAID') return isPaid;
+    if (paymentFilter === 'PENDING') return !isPaid;
+    return true;
+  });
+
+  const totalCount = currentCohort.length;
+  const unprintedCount = currentCohort.filter((s) => !s.frameExportStatus || s.frameExportStatus === 'NOT_EXPORTED').length;
+  const modifiedCount = currentCohort.filter((s) => s.frameExportStatus === 'MODIFIED').length;
+  const exportedCount = currentCohort.filter((s) => s.frameExportStatus === 'EXPORTED').length;
   const selectedCount = submissions.filter((s) => selectedInquiryIds.includes(s.inquiryId)).length;
 
-  // Real-time alignment state update
-  const updateCoord = (inquiryId: string, field: 'photoZoom' | 'photoOffsetY', value: number) => {
+  // Debounced Auto-Save trigger for real-time framing updates
+  const triggerAutoSave = (sub: Submission) => {
+    if (autoSaveTimerRef.current[sub.inquiryId]) {
+      clearTimeout(autoSaveTimerRef.current[sub.inquiryId]);
+    }
+    setAutoSavingMap((prev) => ({ ...prev, [sub.inquiryId]: 'saving' }));
+    autoSaveTimerRef.current[sub.inquiryId] = setTimeout(async () => {
+      try {
+        await registrationsApi.updateSubmission(sub.inquiryId, {
+          photoZoom: sub.photoZoom ?? 1.0,
+          photoOffsetX: sub.photoOffsetX ?? 0,
+          photoOffsetY: sub.photoOffsetY ?? 0
+        });
+        setAutoSavingMap((prev) => ({ ...prev, [sub.inquiryId]: 'saved' }));
+        setSubmissions((prev) =>
+          prev.map((s) =>
+            s.inquiryId === sub.inquiryId
+              ? {
+                  ...s,
+                  frameExportStatus: s.frameExportStatus === 'EXPORTED' ? 'MODIFIED' : s.frameExportStatus
+                }
+              : s
+          )
+        );
+        setTimeout(() => {
+          setAutoSavingMap((prev) => {
+            const next = { ...prev };
+            delete next[sub.inquiryId];
+            return next;
+          });
+        }, 2200);
+      } catch (err) {
+        console.error('Auto-save error for', sub.inquiryId, err);
+      }
+    }, 600);
+  };
+
+  // Real-time alignment state update with automatic debounced saving
+  const updateCoord = (
+    inquiryId: string,
+    field: 'photoZoom' | 'photoOffsetX' | 'photoOffsetY',
+    value: number
+  ) => {
     setSubmissions((prev) =>
       prev.map((sub) => {
         if (sub.inquiryId === inquiryId) {
-          return { ...sub, [field]: value };
+          const updated = { ...sub, [field]: value };
+          triggerAutoSave(updated);
+          return updated;
         }
         return sub;
       })
     );
   };
 
-  // Save single submission alignment to backend
+  // Save single submission alignment to backend immediately
   const handleSaveSingleAlignment = async (sub: Submission) => {
     try {
       setSavingId(sub.inquiryId);
       await registrationsApi.updateSubmission(sub.inquiryId, {
         photoZoom: sub.photoZoom ?? 1.0,
+        photoOffsetX: sub.photoOffsetX ?? 0,
         photoOffsetY: sub.photoOffsetY ?? 0
       });
       setSavedSuccessIds((prev) => ({ ...prev, [sub.inquiryId]: true }));
@@ -313,6 +377,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
             ? {
                 ...s,
                 photoZoom: sub.photoZoom ?? 1.0,
+                photoOffsetX: sub.photoOffsetX ?? 0,
                 photoOffsetY: sub.photoOffsetY ?? 0,
                 frameExportStatus: s.frameExportStatus === 'EXPORTED' ? 'MODIFIED' : s.frameExportStatus
               }
@@ -412,7 +477,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         const zoom = sub.photoZoom ?? 1.0;
         const w = tempW * zoom;
         const h = tempH * zoom;
-        const ox = offsetX - (w - tempW) / 2;
+        const ox = (offsetX - (w - tempW) / 2) + ((sub.photoOffsetX ?? 0) * (canvas.width / 768));
         const oy = (offsetY - (h - tempH) / 2) + ((sub.photoOffsetY ?? 0) * (canvas.height / 1024));
 
         ctx.save();
@@ -498,6 +563,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         registrationsApi
           .updateSubmission(sub.inquiryId, {
             photoZoom: sub.photoZoom ?? 1.0,
+            photoOffsetX: sub.photoOffsetX ?? 0,
             photoOffsetY: sub.photoOffsetY ?? 0
           })
           .catch(() => {});
@@ -533,7 +599,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
             const zoom = sub.photoZoom ?? 1.0;
             const w = tempW * zoom;
             const h = tempH * zoom;
-            const ox = offsetX - (w - tempW) / 2;
+            const ox = (offsetX - (w - tempW) / 2) + ((sub.photoOffsetX ?? 0) * (canvas.width / 768));
             const oy = (offsetY - (h - tempH) / 2) + ((sub.photoOffsetY ?? 0) * (canvas.height / 1024));
 
             ctx.save();
@@ -721,10 +787,27 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
               />
             </div>
 
-            {/* Multiple CPL Search Filter */}
-            <div className="sm:col-span-8">
+            {/* Payment Filter using LuxurySelect */}
+            <div className="sm:col-span-3">
               <label className="block text-[10px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
-                Search / Filter Tokens (Comma or Space Separated, e.g. EK01-01, EK01-02, 105)
+                Payment Type
+              </label>
+              <LuxurySelect
+                value={paymentFilter}
+                onChange={(val) => setPaymentFilter(val as any)}
+                options={[
+                  { value: 'PAID', label: 'Paid / Approved', badge: String(paidCount) },
+                  { value: 'PENDING', label: 'Payment Pending', badge: String(pendingCount) },
+                  { value: 'ALL', label: 'All Cohort', badge: String(totalAllCount) }
+                ]}
+                variant="outline"
+              />
+            </div>
+
+            {/* Multiple CPL Search Filter */}
+            <div className="sm:col-span-5">
+              <label className="block text-[10px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
+                Search / Filter Tokens
               </label>
               <div className="relative flex items-center bg-white border border-slate-300 rounded-xl px-3 py-1.5 focus-within:border-rose-500 focus-within:ring-2 focus-within:ring-rose-500/10 transition-all">
                 <SearchIcon className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
@@ -929,9 +1012,13 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
               {filteredSubmissions.map((sub) => {
                 const isSelected = selectedInquiryIds.includes(sub.inquiryId);
                 const zoomVal = sub.photoZoom ?? 1.0;
-                const offsetVal = sub.photoOffsetY ?? 0;
+                const offsetValX = sub.photoOffsetX ?? 0;
+                const offsetValY = sub.photoOffsetY ?? 0;
                 const isSaving = savingId === sub.inquiryId;
                 const isSaved = savedSuccessIds[sub.inquiryId];
+                const autoSaveState = autoSavingMap[sub.inquiryId];
+
+                const isPaid = sub.status === 'approved' || sub.payment?.status === 'captured';
 
                 return (
                   <div
@@ -964,13 +1051,31 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                     <div className="flex-1 min-w-0 w-full space-y-3">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <h4 className="font-extrabold text-slate-900 text-sm leading-tight">
                               {sub.husbandName} &amp; {sub.wifeName} {sub.surname}
                             </h4>
                             <span className="text-[10px] font-extrabold px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md">
                               {sub.inquiryId}
                             </span>
+
+                            {/* Payment Status Badge */}
+                            {sub.isVip ? (
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-300">
+                                ★ VIP
+                              </span>
+                            ) : isPaid ? (
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                                <CheckIcon className="w-2.5 h-2.5" />
+                                <span>PAID</span>
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-300">
+                                ⏳ PENDING
+                              </span>
+                            )}
+
+                            {/* Print Status Badge */}
                             {sub.frameExportStatus === 'EXPORTED' ? (
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
                                 <CheckIcon className="w-2.5 h-2.5" />
@@ -978,11 +1083,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                               </span>
                             ) : sub.frameExportStatus === 'MODIFIED' ? (
                               <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
-                                ⚠ Adjusted (Needs Reprint)
+                                ⚠ Adjusted
                               </span>
                             ) : (
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                                New (Unprinted)
+                                New
                               </span>
                             )}
                           </div>
@@ -993,6 +1098,19 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
 
                         {/* Direct Action Buttons per Couple */}
                         <div className="flex items-center gap-1.5">
+                          {/* Auto Save Feedback */}
+                          {autoSaveState === 'saving' ? (
+                            <span className="text-[10px] font-bold text-amber-600 flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                              <div className="w-2 h-2 border border-amber-600 border-t-transparent rounded-full animate-spin" />
+                              <span>Saving...</span>
+                            </span>
+                          ) : autoSaveState === 'saved' ? (
+                            <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              <CheckIcon className="w-2.5 h-2.5" />
+                              <span>Auto-saved</span>
+                            </span>
+                          ) : null}
+
                           <button
                             type="button"
                             onClick={() => handleSaveSingleAlignment(sub)}
@@ -1002,7 +1120,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                 : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                             }`}
-                            title="Save Zoom and Position to Database"
+                            title="Instant Save Zoom and Position"
                           >
                             {isSaving ? (
                               <div className="w-3 h-3 border-2 border-slate-600 border-t-transparent rounded-full animate-spin" />
@@ -1028,8 +1146,8 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Tactile Sliders & Steppers */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 bg-slate-50/80 p-3 rounded-xl border border-slate-200/70">
+                      {/* Tactile Sliders & Steppers (Zoom, Left/Right, Up/Down) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 bg-slate-50/80 p-3 rounded-xl border border-slate-200/70">
                         {/* Zoom Slider */}
                         <div>
                           <div className="flex items-center justify-between mb-1">
@@ -1064,37 +1182,82 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                           />
                         </div>
 
-                        {/* Vertical Shift Slider */}
+                        {/* Horizontal Shift (Left / Right) Slider */}
                         <div>
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
-                              Vertical Shift ({offsetVal}px)
+                              ◄ Left / Right ► ({offsetValX > 0 ? `+${offsetValX}` : offsetValX}px)
                             </span>
                             <div className="flex items-center gap-1">
                               <button
                                 type="button"
-                                onClick={() => updateCoord(sub.inquiryId, 'photoOffsetY', offsetVal - 10)}
+                                onClick={() => updateCoord(sub.inquiryId, 'photoOffsetX', offsetValX - 10)}
                                 className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
-                                title="Move Up"
+                                title="Shift Left"
                               >
-                                ↑
+                                ◄
                               </button>
                               <button
                                 type="button"
-                                onClick={() => updateCoord(sub.inquiryId, 'photoOffsetY', offsetVal + 10)}
+                                onClick={() => updateCoord(sub.inquiryId, 'photoOffsetX', offsetValX + 10)}
+                                className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                title="Shift Right"
+                              >
+                                ►
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateCoord(sub.inquiryId, 'photoOffsetX', 0)}
+                                className="px-1.5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-500 font-bold text-[10px] flex items-center justify-center cursor-pointer"
+                                title="Center Horizontally"
+                              >
+                                0
+                              </button>
+                            </div>
+                          </div>
+                          <input
+                            type="range"
+                            min="-300"
+                            max="300"
+                            step="5"
+                            value={offsetValX}
+                            onChange={(e) => updateCoord(sub.inquiryId, 'photoOffsetX', Number(e.target.value))}
+                            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                          />
+                        </div>
+
+                        {/* Vertical Shift (Up / Down) Slider */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
+                              ▲ Up / Down ▼ ({offsetValY > 0 ? `+${offsetValY}` : offsetValY}px)
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => updateCoord(sub.inquiryId, 'photoOffsetY', offsetValY - 10)}
+                                className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                title="Move Up"
+                              >
+                                ▲
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateCoord(sub.inquiryId, 'photoOffsetY', offsetValY + 10)}
                                 className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
                                 title="Move Down"
                               >
-                                ↓
+                                ▼
                               </button>
                               <button
                                 type="button"
                                 onClick={() => {
                                   updateCoord(sub.inquiryId, 'photoZoom', 1.0);
+                                  updateCoord(sub.inquiryId, 'photoOffsetX', 0);
                                   updateCoord(sub.inquiryId, 'photoOffsetY', 0);
                                 }}
                                 className="px-1.5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-500 font-bold text-[10px] flex items-center justify-center cursor-pointer"
-                                title="Reset"
+                                title="Reset Alignment"
                               >
                                 ↺
                               </button>
@@ -1105,7 +1268,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                             min="-300"
                             max="300"
                             step="5"
-                            value={offsetVal}
+                            value={offsetValY}
                             onChange={(e) => updateCoord(sub.inquiryId, 'photoOffsetY', Number(e.target.value))}
                             className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
                           />

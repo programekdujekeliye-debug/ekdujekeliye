@@ -45,6 +45,7 @@ const RegistrationSchema = new mongoose.Schema({
   deletedAt: { type: Date, default: null },
   rejectionReason: { type: String, default: '' },
   photoZoom: { type: Number, default: 1.0 },
+  photoOffsetX: { type: Number, default: 0 },
   photoOffsetY: { type: Number, default: 0 },
   frameExportStatus: {
     type: String,

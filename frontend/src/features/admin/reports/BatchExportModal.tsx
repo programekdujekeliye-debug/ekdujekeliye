@@ -192,25 +192,33 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         if (coupleImg) {
-          // Object-fit Cover calculation inside target box
           const targetRatio = drawWidth / drawHeight;
           const imgRatio = coupleImg.width / coupleImg.height;
-          let sx = 0, sy = 0, sw = coupleImg.width, sh = coupleImg.height;
+          let tempW = drawWidth;
+          let tempH = drawHeight;
+          let offsetX = 0;
+          let offsetY = 0;
 
           if (imgRatio > targetRatio) {
-            sh = coupleImg.height;
-            sw = sh * targetRatio;
-            sx = (coupleImg.width - sw) / 2;
-            sy = 0;
+            tempW = drawHeight * imgRatio;
+            offsetX = -(tempW - drawWidth) / 2;
           } else {
-            sw = coupleImg.width;
-            sh = sw / targetRatio;
-            sx = 0;
-            sy = (coupleImg.height - sh) / 2;
+            tempH = drawWidth / imgRatio;
+            offsetY = -(tempH - drawHeight) / 2;
           }
 
-          // Draw couple photo inside bounding box
-          ctx.drawImage(coupleImg, sx, sy, sw, sh, startX, startY, drawWidth, drawHeight);
+          const zoom = sub.photoZoom ?? 1.0;
+          const w = tempW * zoom;
+          const h = tempH * zoom;
+          const ox = (offsetX - (w - tempW) / 2) + ((sub.photoOffsetX ?? 0) * (canvas.width / 768));
+          const oy = (offsetY - (h - tempH) / 2) + ((sub.photoOffsetY ?? 0) * (canvas.height / 1024));
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(startX, startY, drawWidth, drawHeight);
+          ctx.clip();
+          ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
+          ctx.restore();
         } else {
           // Placeholder if image failed to load
           ctx.fillStyle = '#E2E8F0';
