@@ -105,9 +105,12 @@ export class EventService {
       .filter(e => e.eventStartAt && e.eventStartAt.getTime() > now.getTime())
       .sort((a, b) => a.eventStartAt.getTime() - b.eventStartAt.getTime() || (a.sequenceNumber || 0) - (b.sequenceNumber || 0));
 
-    // 2. Filter valid published TBD events
+    // 2. Filter valid published TBD events (exclude closed / inactive TBD slots)
     const tbdEvents = events
       .filter(e => {
+        if (e.status === 'registration_closed' || e.isRegistrationOpen === false || e.isInquiryClosed === true || e.isActive === false) {
+          return false;
+        }
         return e.date === 'TBA' || e.date === 'TBD' || e.isDateFinal === false || !e.date || e.status === 'date_tba';
       })
       .sort((a, b) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0));

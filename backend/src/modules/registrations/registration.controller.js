@@ -206,9 +206,38 @@ export const manualInviteeRegistration = async (req, res) => {
     return res.status(400).json({ error: 'All fields are required.' });
   }
 
+  const cleanPhone = String(phoneNumber || '').replace(/\D/g, '').slice(-10);
+  if (!cleanPhone || cleanPhone.length !== 10) {
+    return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number.' });
+  }
+
   try {
-    const program = await Event.findOne({ id: programId });
+    const program = await Event.findOne({
+      $or: [{ id: programId }, { slug: programId }, { date: programId }]
+    });
     if (!program) return res.status(404).json({ error: 'Program not found.' });
+
+    const progIdentifiers = [program.id, program.slug, program.date].filter(Boolean);
+    const eventFilter = {
+      $or: [
+        { programId: { $in: progIdentifiers } },
+        ...(program.date ? [{ programDate: program.date }] : [])
+      ]
+    };
+
+    // Duplicate check for VIP / manual invite
+    const existing = await Registration.findOne({
+      phoneNumber: { $in: [cleanPhone, `91${cleanPhone}`, `+91${cleanPhone}`] },
+      ...eventFilter,
+      status: { $ne: 'rejected' },
+      isDeleted: { $ne: true }
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        error: `This mobile number is already registered for this event date (${existing.inquiryId}).`
+      });
+    }
 
     const counterVal = await getNextSequence('manualInquiryNumber');
     const inquiryId = `IP-${String(counterVal).padStart(2, '0')}`;
@@ -230,7 +259,7 @@ export const manualInviteeRegistration = async (req, res) => {
       husbandName,
       wifeName,
       surname,
-      phoneNumber,
+      phoneNumber: cleanPhone,
       isVip: true,
       programId: program.id,
       programName: program.name,
@@ -518,6 +547,22 @@ export const getDuplicateSubmissions = async (req, res) => {
           label: `Same Phone: ${phone}`,
           submissions: subs
         });
+      }
+    });
+
+    nameMap.forEach((subs, nameKey) => {
+      if (subs.length > 1) {
+        // Only add if not all submissions in this group already have the same phone
+        const distinctPhones = new Set(subs.map(s => String(s.phoneNumber || '').replace(/\D/g, '').slice(-10)));
+        if (distinctPhones.size > 1) {
+          const first = subs[0];
+          duplicateGroups.push({
+            id: `couple_${groupId++}`,
+            type: 'couple',
+            label: `Same Couple (${first.husbandName} & ${first.wifeName} ${first.surname || ''}) - Different Phones`,
+            submissions: subs
+          });
+        }
       }
     });
 

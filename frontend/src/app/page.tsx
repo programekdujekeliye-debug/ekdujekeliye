@@ -221,8 +221,15 @@ export default function HomePage() {
           const data = await eventsRes.value.json();
           const list: Program[] = Array.isArray(data) ? data : (data.programs || []);
 
-          // Sort: upcoming events first, then TBA, then completed events
-          const sorted = [...list].filter(p => p.status !== 'archived' && p.status !== 'cancelled').sort((a, b) => {
+          // Sort: upcoming events first, then TBA, then completed events (exclude closed/inactive TBD slots)
+          const sorted = [...list].filter(p => {
+            if (p.status === 'archived' || p.status === 'cancelled') return false;
+            const isTbd = p.date === 'TBA' || p.date === 'TBD' || p.isDateFinal === false || !p.date || p.status === 'date_tba';
+            if (isTbd && (p.status === 'registration_closed' || p.isRegistrationOpen === false || p.isInquiryClosed === true)) {
+              return false;
+            }
+            return true;
+          }).sort((a, b) => {
             const isACompleted = a.status === 'completed';
             const isBCompleted = b.status === 'completed';
             if (isACompleted && !isBCompleted) return 1;

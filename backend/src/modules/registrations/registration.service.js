@@ -8,6 +8,8 @@ import { mediaService } from '../media/media.service.js';
 import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
 import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
 
+const registrationLocks = new Set();
+
 export class RegistrationService {
   /**
    * Submit a new Couple Registration
@@ -41,42 +43,131 @@ export class RegistrationService {
       }
     }
 
-    const progIdentifiers = [program.id, program.slug, program.date].filter(Boolean);
-    const capacity = program.capacity && program.capacity > 0 ? program.capacity : 1184;
-
-    const activeCount = await Registration.countDocuments({
-      $or: [
-        { programId: { $in: progIdentifiers } },
-        ...(program.date ? [{ programDate: program.date }] : [])
-      ],
-      status: { $in: ['approved', 'pending'] },
-      isDeleted: { $ne: true }
-    });
-
-    if (activeCount >= capacity) {
-      const err = new Error('Housefull: This program slot has reached maximum seating capacity.');
+    // Normalize phone number to clean 10-digit format
+    const rawPhone = String(phoneNumber || '').trim();
+    const cleanPhone = rawPhone.replace(/\D/g, '').slice(-10);
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      const err = new Error('કૃપા કરીને સાચો 10-આંકડાનો મોબાઇલ નંબર દાખલ કરો! (Please enter a valid 10-digit mobile number)');
       err.status = 400;
       throw err;
     }
 
-
-    // 2. Per-event duplicate phone check
-    const existingRegistration = await Registration.findOne({
-      phoneNumber,
-      programId,
-      status: { $ne: 'rejected' },
-      isDeleted: { $ne: true }
-    });
-
-    if (existingRegistration) {
-      const err = new Error(`Already registered for this event date (${existingRegistration.inquiryId}).`);
-      err.status = 400;
-      err.alreadyRegistered = true;
-      err.inquiryId = existingRegistration.inquiryId;
-      err.statusType = existingRegistration.status;
-      err.customerToken = existingRegistration.customerToken;
+    // In-flight concurrency lock to prevent double-click duplicate creation
+    const lockKey = `${cleanPhone}_${program.id}`;
+    if (registrationLocks.has(lockKey)) {
+      const err = new Error('Registration is currently being processed. Please wait a moment.');
+      err.status = 429;
       throw err;
     }
+    registrationLocks.add(lockKey);
+
+    try {
+      const progIdentifiers = [program.id, program.slug, program.date].filter(Boolean);
+      const capacity = program.capacity && program.capacity > 0 ? program.capacity : 1184;
+
+      const eventFilter = {
+        $or: [
+          { programId: { $in: progIdentifiers } },
+          ...(program.date ? [{ programDate: program.date }] : [])
+        ]
+      };
+
+      const activeCount = await Registration.countDocuments({
+        ...eventFilter,
+        status: { $in: ['approved', 'pending'] },
+        isDeleted: { $ne: true }
+      });
+
+      if (activeCount >= capacity) {
+        const err = new Error('Housefull: This program slot has reached maximum seating capacity.');
+        err.status = 400;
+        throw err;
+      }
+
+      // 2. Strict Per-event duplicate phone check (1 mobile = 1 entry)
+      const phoneFilter = {
+        $or: [
+          { phoneNumber: cleanPhone },
+          { phoneNumber: `91${cleanPhone}` },
+          { phoneNumber: `+91${cleanPhone}` }
+        ]
+      };
+
+      const existingRegistration = await Registration.findOne({
+        $and: [
+          phoneFilter,
+          eventFilter
+        ],
+        status: { $ne: 'rejected' },
+        isDeleted: { $ne: true }
+      });
+
+      if (existingRegistration) {
+        const err = new Error(`Already registered for this event date (${existingRegistration.inquiryId}).`);
+        err.status = 400;
+        err.alreadyRegistered = true;
+        err.inquiryId = existingRegistration.inquiryId;
+        err.statusType = existingRegistration.status;
+        err.customerToken = existingRegistration.customerToken;
+        throw err;
+      }
+
+      // 3. Same Couple Duplicate Protection (Same husband + wife + surname on same event)
+      const hNameTrimmed = String(husbandName || '').trim();
+      const wNameTrimmed = String(wifeName || '').trim();
+      const sNameTrimmed = String(surname || '').trim();
+
+      if (hNameTrimmed && wNameTrimmed && sNameTrimmed) {
+        const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const existingByCouple = await Registration.findOne({
+          husbandName: { $regex: new RegExp(`^${escapeRegExp(hNameTrimmed)}$`, 'i') },
+          wifeName: { $regex: new RegExp(`^${escapeRegExp(wNameTrimmed)}$`, 'i') },
+          surname: { $regex: new RegExp(`^${escapeRegExp(sNameTrimmed)}$`, 'i') },
+          ...eventFilter,
+          status: { $ne: 'rejected' },
+          isDeleted: { $ne: true }
+        });
+
+        if (existingByCouple) {
+          // If already approved/paid: completely block re-registering
+          if (existingByCouple.status === 'approved') {
+            const err = new Error(`This couple (${hNameTrimmed} & ${wNameTrimmed} ${sNameTrimmed}) is already registered with a confirmed pass (${existingByCouple.inquiryId}).`);
+            err.status = 400;
+            err.alreadyRegistered = true;
+            err.inquiryId = existingByCouple.inquiryId;
+            err.statusType = existingByCouple.status;
+            err.customerToken = existingByCouple.customerToken;
+            throw err;
+          }
+
+          // If pending/unpaid (e.g., user made a typo in mobile and resubmitted 2 minutes later like Kamlesh):
+          // Automatically update the mobile on the existing inquiry rather than creating a duplicate entry!
+          if (existingByCouple.status === 'pending' || existingByCouple.status === 'inquiry') {
+            existingByCouple.phoneNumber = cleanPhone;
+            if (couplePhotoFile && couplePhotoFile.buffer) {
+              const base64Data = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
+              existingByCouple.couplePhoto = await storageService.upload({
+                data: base64Data,
+                folder: 'couplePhotos',
+                filename: `${existingByCouple.inquiryId}_couple`
+              });
+            }
+            await existingByCouple.save();
+
+            const isEarlyRegistration = Boolean(program.isPaymentEnabled === false || program.earlyRegistrationMode === true || program.communicationsEnabled === false);
+
+            return {
+              registration: existingByCouple,
+              inquiryId: existingByCouple.inquiryId,
+              customerToken: existingByCouple.customerToken,
+              amount: existingByCouple.payment?.amount || (program.price !== undefined ? Number(program.price) : 1500),
+              programName: program.name,
+              earlyRegistration: isEarlyRegistration,
+              isPaymentEnabled: !isEarlyRegistration
+            };
+          }
+        }
+      }
 
     // 3. Generate Guaranteed Unique Inquiry ID
     const generateUniqueInquiryId = async () => {
@@ -123,7 +214,7 @@ export class RegistrationService {
       husbandName,
       wifeName,
       surname,
-      phoneNumber,
+      phoneNumber: cleanPhone,
       whatsappOptIn: Boolean(whatsappOptIn),
       whatsappOptInAt: whatsappOptIn ? new Date() : null,
       whatsappConsentSource: whatsappOptIn ? 'registration_form' : '',
@@ -173,7 +264,7 @@ export class RegistrationService {
       // Early Registration: Send Registration Received Acknowledgment (Payment not open yet)
       try {
         await sendUtilityTemplate({
-          recipientPhone: phoneNumber,
+          recipientPhone: cleanPhone,
           templateKey: 'edkl_registration_received_v1',
           languageCode: 'en_US',
           variables: {
@@ -201,7 +292,6 @@ export class RegistrationService {
       // If customer leaves unpaid, automated 10-minute polite reminder will handle it gracefully.
     }
 
-
     return {
       registration: newRegistration,
       inquiryId,
@@ -211,6 +301,9 @@ export class RegistrationService {
       earlyRegistration: isEarlyRegistration,
       isPaymentEnabled: !isEarlyRegistration
     };
+    } finally {
+      registrationLocks.delete(lockKey);
+    }
   }
 
   /**
