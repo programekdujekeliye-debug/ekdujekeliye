@@ -42,7 +42,7 @@ export const ChatThreadHeader: React.FC<ChatThreadHeaderProps> = ({
   };
 
   return (
-    <div className="bg-white border-b border-slate-200/80 select-none flex-shrink-0">
+    <div className="bg-[#F0EBE3] border-b border-slate-200/90 select-none flex-shrink-0 w-full">
       {/* Primary Header Row */}
       <div className="p-3 sm:px-4 flex items-center justify-between gap-2">
         {/* Left: Mobile Back Button + Avatar + Name */}

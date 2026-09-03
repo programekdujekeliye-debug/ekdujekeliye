@@ -14,6 +14,7 @@ export interface ConversationsFilterState {
 export function useWhatsAppConversations() {
   const [conversations, setConversations] = useState<WhatsappConversationItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [stats, setStats] = useState({
     totalConversations: 0,
@@ -25,7 +26,7 @@ export function useWhatsAppConversations() {
 
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 30,
+    limit: 50,
     total: 0,
     totalPages: 1
   });
@@ -36,7 +37,6 @@ export function useWhatsAppConversations() {
     selectedEventId: 'all'
   });
 
-  // Keep a ref to previous list signature to avoid re-render thrashing during polling
   const prevSignatureRef = useRef<string>('');
 
   const fetchStats = useCallback(async () => {
@@ -57,9 +57,11 @@ export function useWhatsAppConversations() {
 
   const fetchConversations = useCallback(async (
     targetPage = 1,
-    isQuietPoll = false
+    isQuietPoll = false,
+    isAppend = false
   ) => {
-    if (!isQuietPoll) setLoading(true);
+    if (!isQuietPoll && !isAppend) setLoading(true);
+    if (isAppend) setLoadingMore(true);
 
     try {
       const res = await whatsappApi.getConversations({
@@ -70,22 +72,29 @@ export function useWhatsAppConversations() {
         search: filters.search.trim() || undefined
       });
 
-      // Quick signature check
-      const currentSignature = (res.conversations || [])
+      const newConvs = res.conversations || [];
+      const currentSignature = newConvs
         .map(c => `${c._id}:${c.unreadCount}:${c.lastMessageAt}:${c.status}`)
         .join('|');
 
-      if (!isQuietPoll || currentSignature !== prevSignatureRef.current) {
+      if (isAppend) {
+        setConversations(prev => {
+          const existingIds = new Set(prev.map(p => p._id));
+          const filteredNew = newConvs.filter(c => !existingIds.has(c._id));
+          return [...prev, ...filteredNew];
+        });
+      } else if (!isQuietPoll || currentSignature !== prevSignatureRef.current) {
         prevSignatureRef.current = currentSignature;
-        setConversations(res.conversations || []);
-        if (res.pagination) {
-          setPagination({
-            page: res.pagination.page,
-            limit: res.pagination.limit,
-            total: res.pagination.total,
-            totalPages: res.pagination.totalPages
-          });
-        }
+        setConversations(newConvs);
+      }
+
+      if (res.pagination) {
+        setPagination({
+          page: res.pagination.page,
+          limit: res.pagination.limit,
+          total: res.pagination.total,
+          totalPages: res.pagination.totalPages
+        });
       }
     } catch (err: any) {
       if (!isQuietPoll) {
@@ -93,26 +102,33 @@ export function useWhatsAppConversations() {
         toast.error('Failed to load conversations.');
       }
     } finally {
-      if (!isQuietPoll) setLoading(false);
+      if (!isQuietPoll && !isAppend) setLoading(false);
+      if (isAppend) setLoadingMore(false);
     }
   }, [filters, pagination.limit]);
 
-  // Initial load & filter changes
+  // Initial load & when search / filters change
   useEffect(() => {
     fetchStats();
-    fetchConversations(1, false);
+    fetchConversations(1, false, false);
   }, [fetchStats, fetchConversations]);
 
-  // Quiet background sync every 8 seconds (no UI flicker)
+  // Quiet background sync every 10 seconds (no UI flicker)
   useEffect(() => {
     const timer = setInterval(() => {
       fetchStats();
-      fetchConversations(pagination.page, true);
-    }, 8000);
+      fetchConversations(1, true, false);
+    }, 10000);
     return () => clearInterval(timer);
-  }, [fetchStats, fetchConversations, pagination.page]);
+  }, [fetchStats, fetchConversations]);
 
-  // Sync past historical conversations
+  // Load next page of historical chats
+  const loadMore = useCallback(() => {
+    if (loadingMore || pagination.page >= pagination.totalPages) return;
+    fetchConversations(pagination.page + 1, false, true);
+  }, [loadingMore, pagination.page, pagination.totalPages, fetchConversations]);
+
+  // Sync historical conversations
   const syncHistorical = useCallback(async () => {
     try {
       setSyncing(true);
@@ -124,7 +140,7 @@ export function useWhatsAppConversations() {
           { id: 'sync-hist' }
         );
         fetchStats();
-        fetchConversations(1, false);
+        fetchConversations(1, false, false);
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to sync historical messages.', { id: 'sync-hist' });
@@ -133,7 +149,6 @@ export function useWhatsAppConversations() {
     }
   }, [fetchStats, fetchConversations]);
 
-  // Check or open a phone number
   const checkOrCreatePhone = useCallback(async (phone: string, inquiryId?: string) => {
     const res = await whatsappApi.checkOrCreateConversation({
       phone: phone.trim(),
@@ -141,7 +156,7 @@ export function useWhatsAppConversations() {
     });
     if (res.success && res.conversationId) {
       fetchStats();
-      fetchConversations(1, false);
+      fetchConversations(1, false, false);
       return res.conversationId;
     }
     throw new Error((res as any).error || 'Unable to open conversation for this contact.');
@@ -150,15 +165,18 @@ export function useWhatsAppConversations() {
   return {
     conversations,
     loading,
+    loadingMore,
+    hasMore: pagination.page < pagination.totalPages,
     syncing,
     stats,
     pagination,
     filters,
     setFilters,
     setPagination,
+    loadMore,
     refresh: () => {
       fetchStats();
-      fetchConversations(pagination.page, false);
+      fetchConversations(1, false, false);
     },
     syncHistorical,
     checkOrCreatePhone
