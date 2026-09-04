@@ -128,11 +128,11 @@ export const registrationsApi = {
     });
   },
 
-  async markFramesExported(inquiryIds: string[], batchNumber?: number): Promise<{ success: boolean; modifiedCount: number; exportedAt: string }> {
+  async markFramesExported(inquiryIds: string[], batchNumber?: number, status: 'EXPORTED' | 'NOT_EXPORTED' = 'EXPORTED'): Promise<{ success: boolean; modifiedCount: number; exportedAt: string }> {
     return apiClient('/api/submissions/mark-frame-exported', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ inquiryIds, batchNumber })
+      body: JSON.stringify({ inquiryIds, batchNumber, status })
     });
   }
 };

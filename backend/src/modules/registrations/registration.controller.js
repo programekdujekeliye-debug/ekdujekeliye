@@ -826,15 +826,16 @@ export const bulkDeleteSubmissions = async (req, res) => {
 };
 
 export const markFramesExported = async (req, res) => {
-  const { inquiryIds, batchNumber } = req.body;
+  const { inquiryIds, batchNumber, status } = req.body;
   if (!Array.isArray(inquiryIds) || inquiryIds.length === 0) {
     return res.status(400).json({ error: 'No inquiry IDs provided.' });
   }
 
   try {
+    const targetStatus = status === 'NOT_EXPORTED' ? 'NOT_EXPORTED' : 'EXPORTED';
     const updatePayload = {
-      frameExportStatus: 'EXPORTED',
-      frameExportedAt: new Date()
+      frameExportStatus: targetStatus,
+      frameExportedAt: targetStatus === 'EXPORTED' ? new Date() : null
     };
     if (batchNumber !== undefined) {
       updatePayload.frameExportBatch = Number(batchNumber);

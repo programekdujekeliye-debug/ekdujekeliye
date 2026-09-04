@@ -58,8 +58,8 @@ const resolvePhotoUrl = (photoPath: string): string => {
   return `${API_BASE_URL}${photoPath.startsWith('/') ? photoPath : `/${photoPath}`}`;
 };
 
-// Safe image loader
-const loadImage = (src: string): Promise<HTMLImageElement | null> => {
+// Safe image loader with timeout
+const loadImage = (src: string, timeoutMs: number = 10000): Promise<HTMLImageElement | null> => {
   return new Promise((resolve) => {
     let safeSrc = src;
     if (
@@ -71,8 +71,19 @@ const loadImage = (src: string): Promise<HTMLImageElement | null> => {
     }
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
+    const timer = setTimeout(() => {
+      img.onload = null;
+      img.onerror = null;
+      console.warn('Image load timed out in FrameReview:', safeSrc);
+      resolve(null);
+    }, timeoutMs);
+
+    img.onload = () => {
+      clearTimeout(timer);
+      resolve(img);
+    };
     img.onerror = () => {
+      clearTimeout(timer);
       console.warn('Failed to load image in FrameReview:', safeSrc);
       resolve(null);
     };
@@ -248,7 +259,8 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
 
       const list = (res.submissions || []).filter((s) => Boolean(s.couplePhoto));
       setSubmissions(list);
-      setSelectedInquiryIds(list.map((s) => s.inquiryId));
+      // Invalidate filter key so auto-sync immediately selects visible filtered items
+      prevFilterKeyRef.current = '';
     } catch (err) {
       console.error('Failed to fetch submissions for frames:', err);
       toast.error('Failed to load registrations with photos.');
@@ -263,22 +275,34 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
   }, [isOpen, fetchSubmissionsForFrames]);
 
-  // Filtered submissions based on payment status, print status, and search query
+  // 1. Current Cohort filtered by Payment Status
+  const currentCohort = submissions.filter((sub) => {
+    const isPaid = sub.status === 'approved' || sub.payment?.status === 'captured';
+    if (paymentFilter === 'PAID') return isPaid;
+    if (paymentFilter === 'PENDING') return !isPaid;
+    return true;
+  });
+
+  const totalAllCount = submissions.length;
+  const paidCount = submissions.filter((s) => s.status === 'approved' || s.payment?.status === 'captured').length;
+  const pendingCount = submissions.filter((s) => s.status !== 'approved' && s.payment?.status !== 'captured').length;
+
+  const totalCount = currentCohort.length;
+  const unprintedCount = currentCohort.filter((s) => !s.frameExportStatus || s.frameExportStatus === 'NOT_EXPORTED').length;
+  const modifiedCount = currentCohort.filter((s) => s.frameExportStatus === 'MODIFIED').length;
+  const exportedCount = currentCohort.filter((s) => s.frameExportStatus === 'EXPORTED').length;
+
+  // 2. Filtered submissions based on payment status, print status, and search query
   const searchedTokens = cplSearchQuery
     .split(/[\s,]+/)
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean);
   const isBulkSearch = searchedTokens.length > 1;
 
-  const filteredSubmissions = submissions.filter((sub) => {
-    // Payment Status Filter
-    const isPaid = sub.status === 'approved' || sub.payment?.status === 'captured';
-    if (paymentFilter === 'PAID' && !isPaid) return false;
-    if (paymentFilter === 'PENDING' && isPaid) return false;
-
+  const filteredSubmissions = currentCohort.filter((sub) => {
     // Print Status Filter
     if (printStatusFilter === 'UNPRINTED') {
-      if (sub.frameExportStatus === 'EXPORTED') return false;
+      if (sub.frameExportStatus && sub.frameExportStatus !== 'NOT_EXPORTED') return false;
     } else if (printStatusFilter === 'MODIFIED') {
       if (sub.frameExportStatus !== 'MODIFIED') return false;
     } else if (printStatusFilter === 'EXPORTED') {
@@ -289,22 +313,21 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     return searchedTokens.some((token) => matchCplToken(sub.inquiryId, token, isBulkSearch));
   });
 
-  const totalAllCount = submissions.length;
-  const paidCount = submissions.filter((s) => s.status === 'approved' || s.payment?.status === 'captured').length;
-  const pendingCount = submissions.filter((s) => s.status !== 'approved' && s.payment?.status !== 'captured').length;
+  // 3. Selection Scoping: ONLY items in filteredSubmissions that are selected
+  const selectedFilteredSubmissions = filteredSubmissions.filter((s) =>
+    selectedInquiryIds.includes(s.inquiryId)
+  );
+  const selectedCount = selectedFilteredSubmissions.length;
 
-  const currentCohort = submissions.filter((sub) => {
-    const isPaid = sub.status === 'approved' || sub.payment?.status === 'captured';
-    if (paymentFilter === 'PAID') return isPaid;
-    if (paymentFilter === 'PENDING') return !isPaid;
-    return true;
-  });
-
-  const totalCount = currentCohort.length;
-  const unprintedCount = currentCohort.filter((s) => !s.frameExportStatus || s.frameExportStatus === 'NOT_EXPORTED').length;
-  const modifiedCount = currentCohort.filter((s) => s.frameExportStatus === 'MODIFIED').length;
-  const exportedCount = currentCohort.filter((s) => s.frameExportStatus === 'EXPORTED').length;
-  const selectedCount = submissions.filter((s) => selectedInquiryIds.includes(s.inquiryId)).length;
+  // 4. Auto-sync selection whenever active filter criteria change
+  const prevFilterKeyRef = useRef<string>('');
+  useEffect(() => {
+    const currentFilterKey = `${selectedProgramId}_${paymentFilter}_${printStatusFilter}_${cplSearchQuery}_${submissions.length}_${unprintedCount}_${exportedCount}_${modifiedCount}`;
+    if (prevFilterKeyRef.current !== currentFilterKey) {
+      prevFilterKeyRef.current = currentFilterKey;
+      setSelectedInquiryIds(filteredSubmissions.map((s) => s.inquiryId));
+    }
+  }, [selectedProgramId, paymentFilter, printStatusFilter, cplSearchQuery, submissions.length, filteredSubmissions, unprintedCount, exportedCount, modifiedCount]);
 
   // Debounced Auto-Save trigger for real-time framing updates
   const triggerAutoSave = (sub: Submission) => {
@@ -395,36 +418,31 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
   };
 
-  // Batch Mark Selected as Exported / Unprinted
+  // Batch Mark Selected as Exported / Unprinted (operates on active filtered selection)
   const handleMarkSelectedExported = async (status: 'EXPORTED' | 'NOT_EXPORTED') => {
-    if (selectedInquiryIds.length === 0) {
-      toast.error('No registrations selected');
+    const targetIds = selectedFilteredSubmissions.map((s) => s.inquiryId);
+    if (targetIds.length === 0) {
+      toast.error('No registrations selected in the current filter');
       return;
     }
     try {
-      if (status === 'EXPORTED') {
-        await registrationsApi.markFramesExported(selectedInquiryIds);
-        setSubmissions((prev) =>
-          prev.map((s) =>
-            selectedInquiryIds.includes(s.inquiryId)
-              ? { ...s, frameExportStatus: 'EXPORTED', frameExportedAt: new Date().toISOString() }
-              : s
-          )
-        );
-        toast.success(`Marked ${selectedInquiryIds.length} as printed/exported.`);
-      } else {
-        for (const id of selectedInquiryIds) {
-          await registrationsApi.updateSubmission(id, { frameExportStatus: 'NOT_EXPORTED', frameExportedAt: null });
-        }
-        setSubmissions((prev) =>
-          prev.map((s) =>
-            selectedInquiryIds.includes(s.inquiryId)
-              ? { ...s, frameExportStatus: 'NOT_EXPORTED', frameExportedAt: undefined }
-              : s
-          )
-        );
-        toast.success(`Reset ${selectedInquiryIds.length} to unprinted.`);
-      }
+      await registrationsApi.markFramesExported(targetIds, undefined, status);
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          targetIds.includes(s.inquiryId)
+            ? {
+                ...s,
+                frameExportStatus: status,
+                frameExportedAt: status === 'EXPORTED' ? new Date().toISOString() : undefined
+              }
+            : s
+        )
+      );
+      toast.success(
+        status === 'EXPORTED'
+          ? `Marked ${targetIds.length} as printed/exported.`
+          : `Reset ${targetIds.length} to unprinted.`
+      );
     } catch (err: any) {
       toast.error('Failed to update status: ' + err.message);
     }
@@ -530,11 +548,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
   };
 
-  // Batch Framed Photos ZIP Generation
+  // Batch Framed Photos ZIP Generation (scoped strictly to visible filtered selection)
   const handleDownloadFramedZip = async () => {
-    const listToExport = submissions.filter((s) => selectedInquiryIds.includes(s.inquiryId));
+    const listToExport = filteredSubmissions.filter((s) => selectedInquiryIds.includes(s.inquiryId));
     if (listToExport.length === 0) {
-      toast.error('No selected registrations to download.');
+      toast.error('No selected registrations to download in current filter.');
       return;
     }
 
@@ -547,38 +565,33 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       const frameImg = globalFrameImg || (await loadImage('/frame_template.png'));
       if (!frameImg) throw new Error('Could not load frame template');
 
-      const canvas = document.createElement('canvas');
-      canvas.width = frameImg.naturalWidth || 768;
-      canvas.height = frameImg.naturalHeight || 1024;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Could not get 2D canvas context');
-
-      const startX = canvas.width * 0.08;
-      const startY = canvas.height * 0.08;
-      const drawWidth = canvas.width * 0.84;
-      const drawHeight = canvas.height * 0.84;
-
-      // Save modified alignments in background
-      for (const sub of listToExport) {
-        registrationsApi
-          .updateSubmission(sub.inquiryId, {
-            photoZoom: sub.photoZoom ?? 1.0,
-            photoOffsetX: sub.photoOffsetX ?? 0,
-            photoOffsetY: sub.photoOffsetY ?? 0
-          })
-          .catch(() => {});
-      }
+      const successfullyExportedIds: string[] = [];
 
       for (let i = 0; i < listToExport.length; i++) {
         const sub = listToExport[i];
         setZipProgress(`Processing ${i + 1} of ${listToExport.length} (${sub.inquiryId})...`);
 
-        try {
-          const photoPath = sub.couplePhoto!;
-          const fullPhotoUrl = resolvePhotoUrl(photoPath);
-          const coupleImg = await loadImage(fullPhotoUrl);
+        // Yield to browser UI thread every photo to prevent frozen tabs/errors
+        await new Promise((r) => setTimeout(r, 20));
 
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        try {
+          let coupleImg: HTMLImageElement | null = null;
+          if (sub.couplePhoto) {
+            const fullPhotoUrl = resolvePhotoUrl(sub.couplePhoto);
+            coupleImg = await loadImage(fullPhotoUrl, 12000);
+          }
+
+          // Dedicated canvas per photo to completely prevent tainted canvas cascading errors
+          const canvas = document.createElement('canvas');
+          canvas.width = frameImg.naturalWidth || 768;
+          canvas.height = frameImg.naturalHeight || 1024;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) continue;
+
+          const startX = canvas.width * 0.08;
+          const startY = canvas.height * 0.08;
+          const drawWidth = canvas.width * 0.84;
+          const drawHeight = canvas.height * 0.84;
 
           if (coupleImg) {
             const imgAspect = coupleImg.width / coupleImg.height;
@@ -608,10 +621,20 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
             ctx.clip();
             ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
             ctx.restore();
+          } else {
+            // Safe fallback placeholder inside frame
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(startX, startY, drawWidth, drawHeight);
+            ctx.fillStyle = '#64748b';
+            ctx.font = 'bold 22px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Photo Pending / Unavailable', canvas.width / 2, canvas.height / 2);
           }
 
+          // Overlay frame
           ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
 
+          // Token text
           ctx.save();
           ctx.fillStyle = '#7a0c0c';
           ctx.font = 'bold 22px sans-serif';
@@ -619,9 +642,29 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
           ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
           ctx.restore();
 
-          const dataUrl = canvas.toDataURL('image/png');
-          const base64Data = dataUrl.split(',')[1];
+          let dataUrl: string;
+          try {
+            dataUrl = canvas.toDataURL('image/png');
+          } catch (canvasErr) {
+            console.warn(`Canvas tainted for ${sub.inquiryId}, falling back to frame placeholder`, canvasErr);
+            // Re-render clean frame without tainted remote photo
+            const cleanCanvas = document.createElement('canvas');
+            cleanCanvas.width = canvas.width;
+            cleanCanvas.height = canvas.height;
+            const cCtx = cleanCanvas.getContext('2d');
+            if (cCtx) {
+              cCtx.drawImage(frameImg, 0, 0, cleanCanvas.width, cleanCanvas.height);
+              cCtx.fillStyle = '#7a0c0c';
+              cCtx.font = 'bold 22px sans-serif';
+              cCtx.textAlign = 'center';
+              cCtx.fillText(sub.inquiryId, cleanCanvas.width / 2, cleanCanvas.height * 0.95);
+              dataUrl = cleanCanvas.toDataURL('image/png');
+            } else {
+              throw canvasErr;
+            }
+          }
 
+          const base64Data = dataUrl.split(',')[1];
           const cleanHusband = (sub.husbandName || '').trim().replace(/\s+/g, '_');
           const cleanWife = (sub.wifeName || '').trim().replace(/\s+/g, '_');
           const cleanSurname = (sub.surname || '').trim().replace(/\s+/g, '_');
@@ -630,6 +673,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
             '_'
           );
           zip.file(filename, base64Data, { base64: true });
+          successfullyExportedIds.push(sub.inquiryId);
         } catch (subErr) {
           console.error('Error framing photo for submission:', sub.inquiryId, subErr);
         }
@@ -647,7 +691,12 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       zip.file(`Printing_Manifest_${progName.replace(/\s+/g, '_')}.csv`, manifestCsv);
 
       setZipProgress('Compressing ZIP archive...');
-      const content = await zip.generateAsync({ type: 'blob' });
+      const content = await zip.generateAsync(
+        { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 5 } },
+        (metadata) => {
+          setZipProgress(`Compressing ZIP: ${Math.round(metadata.percent)}%`);
+        }
+      );
 
       setZipProgress('Downloading...');
       const a = document.createElement('a');
@@ -657,18 +706,19 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       a.click();
       document.body.removeChild(a);
 
-      // Automatically mark exported in database and local state
-      const exportedIds = listToExport.map((s) => s.inquiryId);
-      registrationsApi.markFramesExported(exportedIds).catch(console.error);
-      setSubmissions((prev) =>
-        prev.map((s) =>
-          exportedIds.includes(s.inquiryId)
-            ? { ...s, frameExportStatus: 'EXPORTED', frameExportedAt: new Date().toISOString() }
-            : s
-        )
-      );
+      // Automatically mark exported in database and local state for successful items
+      if (successfullyExportedIds.length > 0) {
+        registrationsApi.markFramesExported(successfullyExportedIds, undefined, 'EXPORTED').catch(console.error);
+        setSubmissions((prev) =>
+          prev.map((s) =>
+            successfullyExportedIds.includes(s.inquiryId)
+              ? { ...s, frameExportStatus: 'EXPORTED', frameExportedAt: new Date().toISOString() }
+              : s
+          )
+        );
+      }
 
-      toast.success(`Successfully downloaded ${listToExport.length} framed photos and printing manifest!`);
+      toast.success(`Successfully downloaded ${successfullyExportedIds.length} framed photos and printing manifest!`);
     } catch (err: any) {
       toast.error('Error creating ZIP: ' + err.message);
     } finally {
@@ -677,11 +727,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
   };
 
-  // Raw Photos ZIP Download
+  // Raw Photos ZIP Download (scoped strictly to visible filtered selection)
   const handleDownloadRawZip = async () => {
-    const listToExport = submissions.filter((s) => selectedInquiryIds.includes(s.inquiryId));
+    const listToExport = filteredSubmissions.filter((s) => selectedInquiryIds.includes(s.inquiryId));
     if (listToExport.length === 0) {
-      toast.error('No selected registrations to download.');
+      toast.error('No selected registrations to download in current filter.');
       return;
     }
 
@@ -694,25 +744,67 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         const sub = listToExport[i];
         setZipProgress(`Fetching raw photo ${i + 1} of ${listToExport.length} (${sub.inquiryId})...`);
 
+        // Yield to event loop
+        await new Promise((r) => setTimeout(r, 20));
+
+        if (!sub.couplePhoto) continue;
+
         try {
-          const photoUrl = resolvePhotoUrl(sub.couplePhoto!);
-          const res = await fetch(photoUrl);
-          if (!res.ok) throw new Error('Fetch failed');
-          const blob = await res.blob();
+          const photoUrl = resolvePhotoUrl(sub.couplePhoto);
+          let blob: Blob | null = null;
+          let ext = 'jpg';
 
-          let ext = 'png';
-          const contentType = res.headers.get('content-type');
-          if (contentType?.includes('jpeg') || contentType?.includes('jpg')) ext = 'jpg';
-          else if (contentType?.includes('webp')) ext = 'webp';
+          // Attempt 1: Direct fetch
+          try {
+            const res = await fetch(photoUrl);
+            if (res.ok) {
+              blob = await res.blob();
+              const contentType = res.headers.get('content-type');
+              if (contentType?.includes('png')) ext = 'png';
+              else if (contentType?.includes('webp')) ext = 'webp';
+              else if (contentType?.includes('jpeg') || contentType?.includes('jpg')) ext = 'jpg';
+            }
+          } catch {
+            // Direct fetch may fail due to CORS preflight, fall through to image tag
+          }
 
-          zip.file(`${sub.inquiryId}.${ext}`, blob);
+          // Attempt 2: HTML Image tag fallback
+          if (!blob) {
+            const img = await loadImage(photoUrl, 10000);
+            if (img) {
+              const rawCanvas = document.createElement('canvas');
+              rawCanvas.width = img.naturalWidth || img.width;
+              rawCanvas.height = img.naturalHeight || img.height;
+              const rawCtx = rawCanvas.getContext('2d');
+              if (rawCtx) {
+                rawCtx.drawImage(img, 0, 0);
+                try {
+                  const dataUrl = rawCanvas.toDataURL('image/jpeg', 0.95);
+                  const base64 = dataUrl.split(',')[1];
+                  zip.file(`${sub.inquiryId}.jpg`, base64, { base64: true });
+                  continue;
+                } catch {
+                  // Fallback unable to convert
+                }
+              }
+            }
+          }
+
+          if (blob) {
+            zip.file(`${sub.inquiryId}.${ext}`, blob);
+          }
         } catch (err) {
           console.error('Error fetching raw photo:', sub.inquiryId, err);
         }
       }
 
       setZipProgress('Compressing ZIP archive...');
-      const content = await zip.generateAsync({ type: 'blob' });
+      const content = await zip.generateAsync(
+        { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 5 } },
+        (metadata) => {
+          setZipProgress(`Compressing raw photos: ${Math.round(metadata.percent)}%`);
+        }
+      );
 
       const curProg = programs.find((p) => p.id === selectedProgramId);
       const progName = curProg ? curProg.name : 'Event';
@@ -725,7 +817,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
 
       toast.success(`Downloaded ${listToExport.length} raw photos.`);
     } catch (err: any) {
-      toast.error('Failed to download raw photos ZIP.');
+      toast.error('Failed to download raw photos ZIP: ' + err.message);
     } finally {
       setZipping(false);
       setZipProgress('');
@@ -942,12 +1034,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  const filteredIds = filteredSubmissions.map((s) => s.inquiryId);
-                  setSelectedInquiryIds((prev) => Array.from(new Set([...prev, ...filteredIds])));
+                  setSelectedInquiryIds(filteredSubmissions.map((s) => s.inquiryId));
                 }}
                 className="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-2xs"
               >
-                Select All Filtered
+                Select All Filtered ({filteredSubmissions.length})
               </button>
               <button
                 type="button"
@@ -959,13 +1050,19 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
               >
                 Deselect Filtered
               </button>
-              <button
-                type="button"
-                onClick={() => setSelectedInquiryIds(submissions.map((s) => s.inquiryId))}
-                className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-xl font-bold transition-all text-xs cursor-pointer"
-              >
-                Select All ({submissions.length})
-              </button>
+              {filteredSubmissions.length !== submissions.length && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintStatusFilter('ALL');
+                    setPaymentFilter('ALL');
+                    setCplSearchQuery('');
+                  }}
+                  className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 rounded-xl font-bold transition-all text-xs cursor-pointer"
+                >
+                  Reset Filters
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setSelectedInquiryIds([])}
@@ -977,11 +1074,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
 
             <div className="text-xs font-bold text-slate-600 flex items-center gap-2">
               <span>
-                Selected: <strong className="text-rose-700">{selectedCount}</strong> / {submissions.length}
+                Selected: <strong className="text-rose-700">{selectedCount}</strong> / {filteredSubmissions.length}
               </span>
               {filteredSubmissions.length !== submissions.length && (
                 <span className="text-[11px] text-slate-400">
-                  (Showing {filteredSubmissions.length} filtered)
+                  ({submissions.length} total in event)
                 </span>
               )}
             </div>
@@ -1304,7 +1401,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
               className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
             >
               <DownloadIcon className="w-3.5 h-3.5" />
-              <span>Raw Photos ZIP</span>
+              <span>Raw Photos ZIP ({selectedCount})</span>
             </button>
 
             <button
