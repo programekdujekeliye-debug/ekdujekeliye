@@ -98,8 +98,6 @@ export default function FeedbackPage() {
     'communication',
     'appreciation'
   ]);
-  const [speakerRating, setSpeakerRating] = useState<number>(5);
-  const [contentRating, setContentRating] = useState<number>(5);
   const [venueRating, setVenueRating] = useState<number>(5);
   const [wouldRecommend, setWouldRecommend] = useState<boolean>(true);
   const [recommendLevel, setRecommendLevel] = useState<'DEFINITELY' | 'YES' | 'NEUTRAL'>('DEFINITELY');
@@ -122,8 +120,6 @@ export default function FeedbackPage() {
 
         setData(result);
         if (result.overallRating) setOverallRating(result.overallRating);
-        if (result.speakerRating) setSpeakerRating(result.speakerRating);
-        if (result.contentRating) setContentRating(result.contentRating);
         if (result.venueRating) setVenueRating(result.venueRating);
         if (result.wouldRecommend !== undefined) setWouldRecommend(result.wouldRecommend);
         if (result.feedbackText) setFeedbackText(result.feedbackText);
@@ -131,11 +127,14 @@ export default function FeedbackPage() {
           setSelectedTakeaways(result.keyTakeaways);
         }
         if (result.connectionRating) setConnectionRating(result.connectionRating);
-        if (result.isTestimonialAllowed !== undefined) {
-          setIsTestimonialAllowed(result.isTestimonialAllowed);
-        }
         if (result.isSubmitted) {
           setSubmitted(true);
+          if (result.isTestimonialAllowed !== undefined) {
+            setIsTestimonialAllowed(result.isTestimonialAllowed);
+          }
+        } else {
+          // Auto-select website testimonial permission by default
+          setIsTestimonialAllowed(true);
         }
       } catch (err: any) {
         setError(err.message || 'Feedback form is currently not available.');
@@ -166,8 +165,8 @@ export default function FeedbackPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           overallRating,
-          contentRating,
-          speakerRating,
+          contentRating: 5,
+          speakerRating: 5,
           venueRating,
           wouldRecommend: recommendLevel !== 'NEUTRAL',
           feedbackText,
@@ -501,32 +500,18 @@ export default function FeedbackPage() {
               </div>
             </div>
 
-            {/* Question 4: Detailed Component Ratings */}
+            {/* Question 4: Venue & Hospitality Ratings */}
             <div className="space-y-3 pt-2">
               <div className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-rose-900 text-white font-bold text-xs flex items-center justify-center">
                   4
                 </span>
                 <span className="text-sm font-bold text-stone-900">
-                  Specific Seminar Ratings (વિશેષ મૂલ્યાંકન)
+                  Venue & Hospitality (સ્થળ અને વ્યવસ્થા)
                 </span>
               </div>
 
               <div className="space-y-3">
-                {renderStarPicker(
-                  speakerRating,
-                  setSpeakerRating,
-                  'Speaker & Storytelling Guidance',
-                  'વક્તાનું માર્ગદર્શન અને વાર્તાશૈલી'
-                )}
-
-                {renderStarPicker(
-                  contentRating,
-                  setContentRating,
-                  'Content Depth & Practical Real-Life Advice',
-                  'વિષયોની ઉપયોગિતા અને વ્યવહારુ ઉદાહરણો'
-                )}
-
                 {renderStarPicker(
                   venueRating,
                   setVenueRating,
@@ -601,18 +586,20 @@ export default function FeedbackPage() {
                   className="w-full bg-[#FAF9F5] border border-stone-300 rounded-2xl p-3.5 text-xs text-stone-900 placeholder:text-stone-400 focus:bg-white focus:border-rose-800 focus:outline-none focus:ring-1 focus:ring-rose-800 transition-all leading-relaxed"
                 />
 
-                {/* Testimonial Consent Checkbox */}
-                <label className="flex items-start gap-2.5 p-3 bg-stone-50 rounded-xl border border-stone-200 cursor-pointer">
+                {/* Testimonial Consent Checkbox - Auto-selected by default */}
+                <label className="flex items-start gap-2.5 p-3.5 bg-rose-50/50 hover:bg-rose-50/80 rounded-2xl border border-rose-200/80 cursor-pointer transition-all">
                   <input
                     type="checkbox"
                     checked={isTestimonialAllowed}
                     onChange={(e) => setIsTestimonialAllowed(e.target.checked)}
-                    className="mt-0.5 w-4 h-4 rounded text-rose-800 focus:ring-rose-700 border-stone-300"
+                    className="mt-0.5 w-4 h-4 rounded text-rose-800 focus:ring-rose-800 border-rose-300 accent-rose-800 cursor-pointer"
                   />
-                  <span className="text-[11px] text-stone-600 leading-tight">
-                    અમારા પ્રતિભાવને અન્ય દંપતીઓની પ્રેરણા માટે વેબસાઇટ પર મૂકવા માટે અમારી સંમતિ છે.
-                    <span className="block text-stone-400 text-[10px] mt-0.5">
-                      (Permission to feature our review anonymously as an inspiring couple testimonial.)
+                  <span className="text-xs text-stone-700 leading-snug select-none">
+                    <span className="font-semibold text-rose-950 block mb-0.5">
+                      અમારા પ્રતિભાવને અન્ય દંપતીઓની પ્રેરણા માટે વેબસાઇટ પર મૂકવા માટે અમારી સંમતિ છે.
+                    </span>
+                    <span className="text-stone-500 text-[11px] block font-normal">
+                      (Permission to publish our feedback on the Ek Duje Ke Liye website to inspire newlywed couples.)
                     </span>
                   </span>
                 </label>

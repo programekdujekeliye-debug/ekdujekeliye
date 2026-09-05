@@ -13,7 +13,7 @@ const FeedbackSchema = new mongoose.Schema({
   feedbackText: { type: String, default: '' },
   keyTakeaways: { type: [String], default: [] },
   connectionRating: { type: String, default: 'MUCH_CLOSER' },
-  isTestimonialAllowed: { type: Boolean, default: false },
+  isTestimonialAllowed: { type: Boolean, default: true },
   isSubmitted: { type: Boolean, default: false },
   submittedAt: { type: Date, default: null }
 }, {

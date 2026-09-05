@@ -57,7 +57,7 @@ export async function getFeedbackForm(req, res) {
       feedbackText: feedback.feedbackText || '',
       keyTakeaways: feedback.keyTakeaways || [],
       connectionRating: feedback.connectionRating || 'MUCH_CLOSER',
-      isTestimonialAllowed: feedback.isTestimonialAllowed || false
+      isTestimonialAllowed: feedback.isSubmitted ? (feedback.isTestimonialAllowed ?? true) : true
     });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to retrieve feedback form.' });
