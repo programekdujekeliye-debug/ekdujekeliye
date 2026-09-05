@@ -12,9 +12,30 @@ export async function getFeedbackForm(req, res) {
   if (!token) return res.status(400).json({ error: 'Token is required' });
 
   try {
-    const feedback = await Feedback.findOne({ token });
+    const rawClean = String(token).trim();
+    let feedback = await Feedback.findOne({
+      $or: [{ token: rawClean }, { inquiryId: rawClean.toUpperCase() }]
+    });
+
     if (!feedback) {
-      return res.status(404).json({ error: 'Feedback form not found or expired.' });
+      // Automatic lookup via Registration inquiryId or customerToken
+      const reg = await Registration.findOne({
+        $or: [
+          { inquiryId: rawClean.toUpperCase() },
+          { customerToken: rawClean }
+        ],
+        isDeleted: { $ne: true }
+      });
+
+      if (!reg) {
+        return res.status(404).json({ error: 'Feedback form not found or link has expired.' });
+      }
+
+      const coupleName = reg.husbandName && reg.wifeName
+        ? `${reg.husbandName} & ${reg.wifeName} ${reg.surname || ''}`.trim()
+        : (reg.husbandName || reg.wifeName || 'Respected Couple');
+
+      feedback = await ensureFeedbackToken(reg.inquiryId, reg.programId, coupleName);
     }
 
     const event = await eventService.getEventBySlug(feedback.eventId);
@@ -25,13 +46,18 @@ export async function getFeedbackForm(req, res) {
       coupleName: feedback.coupleName,
       eventName: event?.name || 'Ek Duje Ke Liye Seminar',
       eventDate: event?.date || '',
+      eventTime: event?.time || '8:30 PM',
+      eventVenue: event?.venue || 'Sardar Patel Smruti Bhavan, Surat',
       isSubmitted: feedback.isSubmitted,
-      overallRating: feedback.overallRating,
-      contentRating: feedback.contentRating,
-      speakerRating: feedback.speakerRating,
-      venueRating: feedback.venueRating,
-      wouldRecommend: feedback.wouldRecommend,
-      feedbackText: feedback.feedbackText
+      overallRating: feedback.overallRating || 5,
+      contentRating: feedback.contentRating || 5,
+      speakerRating: feedback.speakerRating || 5,
+      venueRating: feedback.venueRating || 5,
+      wouldRecommend: feedback.wouldRecommend !== false,
+      feedbackText: feedback.feedbackText || '',
+      keyTakeaways: feedback.keyTakeaways || [],
+      connectionRating: feedback.connectionRating || 'MUCH_CLOSER',
+      isTestimonialAllowed: feedback.isTestimonialAllowed || false
     });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to retrieve feedback form.' });
@@ -43,20 +69,58 @@ export async function getFeedbackForm(req, res) {
  */
 export async function submitFeedback(req, res) {
   const { token } = req.params;
-  const { overallRating, contentRating, speakerRating, venueRating, wouldRecommend, feedbackText } = req.body;
+  const {
+    overallRating,
+    contentRating,
+    speakerRating,
+    venueRating,
+    wouldRecommend,
+    feedbackText,
+    keyTakeaways,
+    connectionRating,
+    isTestimonialAllowed
+  } = req.body;
 
   try {
-    const feedback = await Feedback.findOne({ token });
+    const rawClean = String(token).trim();
+    let feedback = await Feedback.findOne({
+      $or: [{ token: rawClean }, { inquiryId: rawClean.toUpperCase() }]
+    });
+
+    if (!feedback) {
+      const reg = await Registration.findOne({
+        $or: [
+          { inquiryId: rawClean.toUpperCase() },
+          { customerToken: rawClean }
+        ]
+      });
+      if (reg) {
+        const coupleName = `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim();
+        feedback = await ensureFeedbackToken(reg.inquiryId, reg.programId, coupleName);
+      }
+    }
+
     if (!feedback) {
       return res.status(404).json({ error: 'Feedback form not found.' });
     }
 
-    feedback.overallRating = Number(overallRating) || 5;
-    feedback.contentRating = Number(contentRating) || 5;
-    feedback.speakerRating = Number(speakerRating) || 5;
-    feedback.venueRating = Number(venueRating) || 5;
+    feedback.overallRating = Math.max(1, Math.min(5, Number(overallRating) || 5));
+    feedback.contentRating = Math.max(1, Math.min(5, Number(contentRating) || 5));
+    feedback.speakerRating = Math.max(1, Math.min(5, Number(speakerRating) || 5));
+    feedback.venueRating = Math.max(1, Math.min(5, Number(venueRating) || 5));
     feedback.wouldRecommend = wouldRecommend !== false;
     feedback.feedbackText = String(feedbackText || '').trim();
+
+    if (Array.isArray(keyTakeaways)) {
+      feedback.keyTakeaways = keyTakeaways.map(t => String(t).trim()).filter(Boolean);
+    }
+    if (connectionRating) {
+      feedback.connectionRating = String(connectionRating).trim();
+    }
+    if (isTestimonialAllowed !== undefined) {
+      feedback.isTestimonialAllowed = Boolean(isTestimonialAllowed);
+    }
+
     feedback.isSubmitted = true;
     feedback.submittedAt = new Date();
 
