@@ -11,7 +11,6 @@ import {
   XIcon,
   SearchIcon,
   DownloadIcon,
-  SparklesIcon,
   CheckCircleIcon,
   CameraIcon,
   CheckIcon
@@ -150,10 +149,11 @@ export const loadSafeCanvasImage = async (
 };
 
 /**
- * Smart AI Auto-Framing Engine:
- * Analyzes photo aspect ratio, facial regions (via FaceDetector when available),
+ * Enhanced Auto-Framing & Centering Engine:
+ * Analyzes photo aspect ratio, facial bounding boxes (via FaceDetector when available),
  * and human subject/skin tone clusters to automatically calculate the optimal
- * photoZoom, photoOffsetX, and photoOffsetY for a flawless couple portrait inside the frame.
+ * photoZoom (zooming out if too big/close-up, zooming in if far away),
+ * photoOffsetX (mathematical horizontal centering), and photoOffsetY (golden portrait headroom).
  */
 export const calculateSmartAutoFraming = async (
   img: HTMLImageElement
@@ -162,39 +162,51 @@ export const calculateSmartAutoFraming = async (
   const naturalH = img.naturalHeight || img.height;
 
   if (!naturalW || !naturalH) {
-    return { photoZoom: 1.15, photoOffsetX: 0, photoOffsetY: -20 };
+    return { photoZoom: 1.0, photoOffsetX: 0, photoOffsetY: -15 };
   }
 
-  let detectedCenter: { x: number; y: number; count: number } | null = null;
+  const imgAspect = naturalW / naturalH;
+  // In the 768x1024 template, the photo cutout is 645.12 x 860.16 (aspect ratio 0.75)
+  const targetAspect = 0.75;
+  const baseW = imgAspect > targetAspect ? 860 * imgAspect : 645;
+  const baseH = imgAspect > targetAspect ? 860 : 645 / imgAspect;
+
+  let detectedCenter: { x: number; y: number } | null = null;
+  let detectedFaceSpanX = 0;
+  let detectedFaceSpanY = 0;
+  let detectedAvgFaceH = 0;
 
   // 1. Try Native Browser FaceDetector if supported (Chrome, Edge, Chromium Android)
   if (typeof window !== 'undefined' && 'FaceDetector' in window) {
     try {
-      const detector = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 4 });
+      const detector = new (window as any).FaceDetector({ fastMode: false, maxDetectedFaces: 4 });
       const faces = await detector.detect(img);
       if (faces && faces.length > 0) {
-        let totalX = 0;
-        let totalY = 0;
-        let totalWeight = 0;
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minY = Infinity;
+        let maxY = -Infinity;
+        let totalFaceH = 0;
+
         faces.forEach((face: any) => {
           const box = face.boundingBox;
-          const cx = box.x + box.width / 2;
-          const cy = box.y + box.height / 2;
-          const weight = Math.max(1, box.width * box.height);
-          totalX += cx * weight;
-          totalY += cy * weight;
-          totalWeight += weight;
+          minX = Math.min(minX, box.x);
+          maxX = Math.max(maxX, box.x + box.width);
+          minY = Math.min(minY, box.y);
+          maxY = Math.max(maxY, box.y + box.height);
+          totalFaceH += box.height;
         });
-        if (totalWeight > 0) {
-          detectedCenter = {
-            x: (totalX / totalWeight) / naturalW,
-            y: (totalY / totalWeight) / naturalH,
-            count: faces.length
-          };
-        }
+
+        detectedCenter = {
+          x: ((minX + maxX) / 2) / naturalW,
+          y: ((minY + maxY) / 2) / naturalH
+        };
+        detectedFaceSpanX = (maxX - minX) / naturalW;
+        detectedFaceSpanY = (maxY - minY) / naturalH;
+        detectedAvgFaceH = (totalFaceH / faces.length) / naturalH;
       }
     } catch {
-      // Fall through to Canvas saliency
+      // Fall through to Canvas skin & saliency detector
     }
   }
 
@@ -202,7 +214,7 @@ export const calculateSmartAutoFraming = async (
   if (!detectedCenter) {
     try {
       const sampleCanvas = document.createElement('canvas');
-      const sampleW = 120;
+      const sampleW = 160;
       const sampleH = Math.round((sampleW / naturalW) * naturalH);
       sampleCanvas.width = sampleW;
       sampleCanvas.height = sampleH;
@@ -215,11 +227,15 @@ export const calculateSmartAutoFraming = async (
         let skinX = 0;
         let skinY = 0;
         let skinCount = 0;
+        let minX = sampleW;
+        let maxX = 0;
+        let minY = sampleH;
+        let maxY = 0;
 
-        // Focus on upper 65% of photo where couple heads are located
-        const maxScanY = Math.round(sampleH * 0.65);
-        for (let y = Math.round(sampleH * 0.06); y < maxScanY; y += 2) {
-          for (let x = Math.round(sampleW * 0.08); x < Math.round(sampleW * 0.92); x += 2) {
+        // Focus on upper 72% of photo where couple heads & shoulders are located
+        const maxScanY = Math.round(sampleH * 0.72);
+        for (let y = Math.round(sampleH * 0.05); y < maxScanY; y += 2) {
+          for (let x = Math.round(sampleW * 0.05); x < Math.round(sampleW * 0.95); x += 2) {
             const idx = (y * sampleW + x) * 4;
             const r = data[idx];
             const g = data[idx + 1];
@@ -227,28 +243,34 @@ export const calculateSmartAutoFraming = async (
 
             // Robust skin tone detection across Indian skin tones
             const isSkin =
-              r > 80 &&
-              g > 40 &&
-              b > 25 &&
+              r > 75 &&
+              g > 35 &&
+              b > 20 &&
               r > g &&
               r > b &&
-              r - g > 10 &&
+              r - g > 8 &&
               Math.abs(r - g) < 140;
 
             if (isSkin) {
               skinX += x;
               skinY += y;
               skinCount++;
+              minX = Math.min(minX, x);
+              maxX = Math.max(maxX, x);
+              minY = Math.min(minY, y);
+              maxY = Math.max(maxY, y);
             }
           }
         }
 
-        if (skinCount > 25) {
+        if (skinCount > 30) {
           detectedCenter = {
             x: (skinX / skinCount) / sampleW,
-            y: (skinY / skinCount) / sampleH,
-            count: skinCount
+            y: (skinY / skinCount) / sampleH
           };
+          detectedFaceSpanX = (maxX - minX) / sampleW;
+          detectedFaceSpanY = (maxY - minY) / sampleH;
+          detectedAvgFaceH = detectedFaceSpanY / 1.5;
         }
       }
     } catch (err) {
@@ -256,46 +278,86 @@ export const calculateSmartAutoFraming = async (
     }
   }
 
-  // 3. Compute optimal zoom, offsetX, offsetY
-  const imgAspect = naturalW / naturalH;
-  let photoZoom = 1.15;
+  // 3. Mathematical Centering, Headroom & Dynamic Zoom Calculation
+  let photoZoom = 1.0;
   let photoOffsetX = 0;
-  let photoOffsetY = -20; // Default headroom nudge
+  let photoOffsetY = -15;
 
   if (detectedCenter) {
     const { x: faceX, y: faceY } = detectedCenter;
 
-    // Horizontal centering:
-    photoOffsetX = Math.round((0.50 - faceX) * 320);
-    photoOffsetX = Math.max(-180, Math.min(180, photoOffsetX));
+    // A. HORIZONTAL AUTO-CENTERING
+    // Shift image so that face center (faceX) moves to frame center (0.50)
+    photoOffsetX = Math.round((0.50 - faceX) * baseW);
+    const maxShiftX = Math.max(80, Math.round((baseW - 645) / 2 + 100));
+    photoOffsetX = Math.max(-maxShiftX, Math.min(maxShiftX, photoOffsetX));
 
-    // Vertical positioning:
-    // Target face center is 38% down from top of frame (well above Hindi logo)
-    photoOffsetY = Math.round((0.38 - faceY) * 380);
-    photoOffsetY = Math.max(-180, Math.min(180, photoOffsetY));
+    // B. ZOOM CALCULATION (Handles "too big -> zoom out" and "far away -> zoom in")
+    const faceSize = detectedAvgFaceH || (detectedFaceSpanY / 1.5);
+    const spanWidth = detectedFaceSpanX;
 
-    // Smart Zoom calculation
-    if (imgAspect > 1.2) {
-      photoZoom = 1.25;
-    } else if (imgAspect < 0.72) {
-      photoZoom = 1.08;
+    if (faceSize > 0.30 || spanWidth > 0.60) {
+      // Very close selfie / big portrait - ZOOM OUT so couple isn't cropped!
+      if (faceSize > 0.40 || spanWidth > 0.72) {
+        photoZoom = 0.78;
+      } else if (faceSize > 0.35 || spanWidth > 0.65) {
+        photoZoom = 0.84;
+      } else {
+        photoZoom = 0.90;
+      }
+    } else if (faceSize > 0.22 || spanWidth > 0.48) {
+      // Moderately close portrait - gentle zoom out to ensure natural margins
+      photoZoom = 0.95;
+    } else if (faceSize < 0.11 && faceSize > 0) {
+      // Distant full-body shot - zoom in so couple's faces are prominent!
+      if (faceSize < 0.08) {
+        photoZoom = 1.35;
+      } else {
+        photoZoom = 1.22;
+      }
+    } else if (faceSize < 0.16 && faceSize > 0) {
+      // Three-quarter shot - slight zoom in
+      photoZoom = 1.10;
     } else {
-      photoZoom = 1.16;
+      // Standard half-body portrait
+      photoZoom = 1.02;
     }
+
+    // Aspect ratio adjustment: If wide landscape, prevent over-zooming
+    if (imgAspect > 1.35 && photoZoom > 1.05 && spanWidth > 0.35) {
+      photoZoom = Math.min(photoZoom, 1.05);
+    }
+
+    // C. VERTICAL AUTO-POSITIONING (Headroom & Logo Clearance)
+    // Target face center: 36% down from the top of the 860px cutout
+    photoOffsetY = Math.round((0.36 - faceY) * baseH);
+
+    // If zoomed out, slightly adjust vertical center to keep natural headroom
+    if (photoZoom < 0.90) {
+      photoOffsetY -= 15;
+    } else if (photoZoom > 1.15) {
+      photoOffsetY -= 25;
+    }
+
+    // Bound vertical offset
+    photoOffsetY = Math.max(-140, Math.min(100, photoOffsetY));
   } else {
-    // Aspect ratio-based heuristics
-    if (imgAspect > 1.2) {
-      photoZoom = 1.25;
-      photoOffsetY = -25;
+    // Aspect ratio-based fallback when no face/skin detected
+    if (imgAspect > 1.25) {
+      photoZoom = 1.05;
+      photoOffsetY = -20;
+    } else if (imgAspect < 0.70) {
+      photoZoom = 0.95;
+      photoOffsetY = -10;
     } else {
-      photoZoom = 1.12;
+      photoZoom = 1.0;
       photoOffsetY = -15;
     }
   }
 
   return {
     photoZoom: Number(photoZoom.toFixed(2)),
-    photoOffsetX: Math.round(photoOffsetX / 5) * 5, // Snap to clean 5px steps
+    photoOffsetX: Math.round(photoOffsetX / 5) * 5, // Clean 5px increments
     photoOffsetY: Math.round(photoOffsetY / 5) * 5
   };
 };
@@ -353,7 +415,7 @@ const LivePreviewCard: React.FC<{
             decoding="async"
             onError={() => setLoadError(true)}
             style={{
-              transform: `scale(${zoomVal}) translate(${offsetValX / 2.5}px, ${offsetValY / 2.5}px)`,
+              transform: `translate(${offsetValX * (124 / 768)}px, ${offsetValY * (165 / 1024)}px) scale(${zoomVal})`,
               transformOrigin: 'center center'
             }}
             className="w-full h-full object-cover transition-transform duration-75 pointer-events-none select-none"
@@ -680,7 +742,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
   };
 
-  // AI Single Couple Smart Auto-Frame
+  // Single Couple Smart Auto-Frame & Centering
   const handleAiAutoFrameSingle = async (sub: Submission) => {
     if (!sub.couplePhoto) {
       toast.error('No photo available to analyze.');
@@ -696,15 +758,15 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       updateCoord(sub.inquiryId, 'photoZoom', result.photoZoom);
       updateCoord(sub.inquiryId, 'photoOffsetX', result.photoOffsetX);
       updateCoord(sub.inquiryId, 'photoOffsetY', result.photoOffsetY);
-      toast.success(`✨ AI auto-framed ${sub.inquiryId} (${result.photoZoom}x, ${result.photoOffsetY > 0 ? `+${result.photoOffsetY}` : result.photoOffsetY}px)`);
+      toast.success(`Auto-aligned ${sub.inquiryId} (${result.photoZoom}x, ${result.photoOffsetY > 0 ? `+${result.photoOffsetY}` : result.photoOffsetY}px)`);
     } catch (err: any) {
-      toast.error('AI Framing failed: ' + (err.message || 'Unknown error'));
+      toast.error('Auto-alignment failed: ' + (err.message || 'Unknown error'));
     } finally {
       setAiAnalyzingIds((prev) => ({ ...prev, [sub.inquiryId]: false }));
     }
   };
 
-  // AI Batch Auto-Frame All in current filter (processed with gentle concurrency to never overload server)
+  // Batch Auto-Frame All in current filter (processed with gentle concurrency to never overload server)
   const handleAiAutoFrameAll = async () => {
     const targetList = filteredSubmissions.filter((s) => s.couplePhoto);
     if (targetList.length === 0) {
@@ -749,7 +811,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
             });
           }
         } catch (err) {
-          console.warn('AI frame error for', sub.inquiryId, err);
+          console.warn('Auto-alignment error for', sub.inquiryId, err);
         } finally {
           completed++;
           setAiBatchProgress(`${completed}/${targetList.length}...`);
@@ -762,9 +824,9 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         await registrationsApi.bulkUpdateFrameAlignments(pendingAlignments);
       }
 
-      toast.success(`✨ AI Auto-framed all ${completed} photos successfully!`);
+      toast.success(`Auto-aligned all ${completed} photos successfully!`);
     } catch (err: any) {
-      toast.error('AI batch framing error: ' + err.message);
+      toast.error('Auto-alignment batch error: ' + err.message);
     } finally {
       setIsAiBatchRunning(false);
       setAiBatchProgress('');
@@ -1396,23 +1458,29 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                 Clear
               </button>
 
-              {/* ✨ AI Auto-Frame All Button */}
+              {/* Auto-Center All Button */}
               <button
                 type="button"
                 onClick={handleAiAutoFrameAll}
                 disabled={isAiBatchRunning || filteredSubmissions.length === 0}
-                className="px-3 py-1 bg-gradient-to-r from-purple-600 via-indigo-600 to-rose-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold transition-all text-xs cursor-pointer shadow-xs flex items-center gap-1.5 active:scale-95"
-                title="Automatically analyze and frame all visible couple photos with AI"
+                className="px-3 py-1 bg-slate-900 hover:bg-black disabled:opacity-50 text-white rounded-xl font-bold transition-all text-xs cursor-pointer shadow-xs flex items-center gap-1.5 active:scale-95"
+                title="Automatically center, adjust headroom, and align all visible couple photos"
               >
                 {isAiBatchRunning ? (
                   <>
                     <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>AI Framing {aiBatchProgress}</span>
+                    <span>Auto-Centering {aiBatchProgress}</span>
                   </>
                 ) : (
                   <>
-                    <SparklesIcon className="w-3.5 h-3.5 text-amber-300" />
-                    <span>✨ AI Auto-Frame All ({filteredSubmissions.length})</span>
+                    <svg className="w-3.5 h-3.5 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="22" y1="12" x2="18" y2="12" />
+                      <line x1="6" y1="12" x2="2" y2="12" />
+                      <line x1="12" y1="6" x2="12" y2="2" />
+                      <line x1="12" y1="22" x2="12" y2="18" />
+                    </svg>
+                    <span>Auto-Center All ({filteredSubmissions.length})</span>
                   </>
                 )}
               </button>
@@ -1534,7 +1602,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
 
                               {/* Payment Status Badge */}
                               {sub.isVip ? (
-                                <span className="text-[10px] font-black px-1.5 py-0.2 rounded-md bg-purple-100 text-purple-800 border border-purple-300">
+                                <span className="text-[10px] font-black px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-900 border border-amber-300">
                                   ★ VIP
                                 </span>
                               ) : isPaid ? (
@@ -1555,18 +1623,20 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                                   <span>Printed</span>
                                 </span>
                               ) : sub.frameExportStatus === 'MODIFIED' ? (
-                                <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
-                                  ⚠ Adjusted
+                                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-0.5">
+                                  <span>Modified</span>
                                 </span>
                               ) : (
                                 <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                                  New
+                                  Unprinted
                                 </span>
                               )}
                             </div>
-                            <p className="text-[11px] text-slate-500 font-medium mt-0.5 truncate">
-                              Phone: {sub.phoneNumber} &bull; {sub.programName}
-                            </p>
+                            <div className="flex items-center gap-2 mt-0.5 text-slate-500 text-xs">
+                              <span>Batch #{sub.frameExportBatch || 1}</span>
+                              <span>•</span>
+                              <span>{sub.programName || defaultProgramId || 'Session'}</span>
+                            </div>
                           </div>
                         </div>
 
@@ -1584,20 +1654,26 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                             </span>
                           ) : null}
 
-                          {/* ✨ AI Auto-Frame Single Button */}
+                          {/* Auto-Center Single Button */}
                           <button
                             type="button"
                             onClick={() => handleAiAutoFrameSingle(sub)}
                             disabled={isAiAnalyzing}
-                            className="px-2 sm:px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-extrabold shadow-2xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
-                            title="AI Auto-Frame: Automatically zoom, center, and position this couple"
+                            className="px-2 sm:px-2.5 py-1 bg-slate-900 hover:bg-black disabled:opacity-50 text-white rounded-lg text-xs font-extrabold shadow-2xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                            title="Auto-Center: Automatically zoom, center, and position this couple"
                           >
                             {isAiAnalyzing ? (
                               <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                             ) : (
-                              <SparklesIcon className="w-3 h-3 text-amber-300" />
+                              <svg className="w-3 h-3 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="22" y1="12" x2="18" y2="12" />
+                                <line x1="6" y1="12" x2="2" y2="12" />
+                                <line x1="12" y1="6" x2="12" y2="2" />
+                                <line x1="12" y1="22" x2="12" y2="18" />
+                              </svg>
                             )}
-                            <span>AI Auto</span>
+                            <span>Auto Center</span>
                           </button>
 
                           <button
@@ -1822,15 +1898,31 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                                 Presets:
                               </span>
 
-                              {/* ✨ AI Auto Preset */}
+                              {/* Auto Center Preset */}
                               <button
                                 type="button"
                                 onClick={() => handleAiAutoFrameSingle(sub)}
                                 disabled={isAiAnalyzing}
-                                className="px-2 py-0.5 bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 rounded-md text-[10px] font-extrabold cursor-pointer transition-all flex items-center gap-1"
+                                className="px-2 py-0.5 bg-slate-900 hover:bg-black text-white rounded-md text-[10px] font-extrabold cursor-pointer transition-all flex items-center gap-1"
+                                title="Automatically center, adjust headroom and auto zoom"
                               >
-                                <SparklesIcon className="w-2.5 h-2.5 text-purple-700" />
-                                <span>AI Fit</span>
+                                <svg className="w-2.5 h-2.5 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <circle cx="12" cy="12" r="10" />
+                                  <line x1="22" y1="12" x2="18" y2="12" />
+                                  <line x1="6" y1="12" x2="2" y2="12" />
+                                  <line x1="12" y1="6" x2="12" y2="2" />
+                                  <line x1="12" y1="22" x2="12" y2="18" />
+                                </svg>
+                                <span>Auto Fit</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => updateCoord(sub.inquiryId, 'photoZoom', 0.85)}
+                                className="px-2 py-0.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-md text-[10px] font-bold cursor-pointer transition-all"
+                                title="Zoom out if couple is too big or close-up"
+                              >
+                                Zoom Out (0.85x)
                               </button>
 
                               <button
@@ -1946,7 +2038,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
               type="button"
               onClick={handleDownloadRawZip}
               disabled={zipping || selectedCount === 0}
-              className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"
             >
               <DownloadIcon className="w-3.5 h-3.5" />
               <span>Raw ZIP ({selectedCount})</span>
@@ -1965,7 +2057,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                 </>
               ) : (
                 <>
-                  <SparklesIcon className="w-4 h-4" />
+                  <DownloadIcon className="w-4 h-4" />
                   <span>Download Framed ZIP ({selectedCount})</span>
                 </>
               )}
