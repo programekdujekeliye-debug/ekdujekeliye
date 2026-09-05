@@ -14,8 +14,7 @@ import {
   SparklesIcon,
   CheckCircleIcon,
   CameraIcon,
-  CheckIcon,
-  UsersIcon
+  CheckIcon
 } from '../../../components/Icons';
 import { LuxurySelect } from '../../../components/LuxurySelect';
 import toast from 'react-hot-toast';
@@ -62,7 +61,7 @@ export const resolvePhotoUrl = (photoPath: string): string => {
  * Cloudinary fast thumbnail / preview optimizer:
  * Converts raw 5-15MB camera uploads into super-fast ~25KB WebP/JPEGs
  */
-export const getOptimizedPhotoUrl = (url: string, width = 360, height = 480): string => {
+export const getOptimizedPhotoUrl = (url: string, width = 384, height = 512): string => {
   if (!url) return '';
   const full = resolvePhotoUrl(url);
   if (full.includes('res.cloudinary.com') && full.includes('/image/upload/')) {
@@ -76,7 +75,7 @@ export const getOptimizedPhotoUrl = (url: string, width = 360, height = 480): st
   return full;
 };
 
-// Global memory cache for loaded images to eliminate network re-fetching
+// Global memory cache for loaded images to eliminate redundant network fetches
 const imageMemoryCache = new Map<string, HTMLImageElement>();
 
 /**
@@ -158,7 +157,7 @@ export const loadSafeCanvasImage = async (
 };
 
 /**
- * Concurrency helper for batch tasks
+ * Concurrency helper for batch tasks to prevent Cloudinary rate limits and browser memory overload
  */
 async function asyncPool<T, R>(
   poolLimit: number,
@@ -181,6 +180,185 @@ async function asyncPool<T, R>(
   return Promise.all(ret);
 }
 
+/**
+ * Optimized LivePreviewCanvas:
+ * Uses IntersectionObserver so offscreen cards NEVER make network calls or run 2D canvas context renders.
+ * Only visible cards render live frame composites.
+ */
+const LivePreviewCanvas: React.FC<{
+  sub: Submission;
+  frameImg: HTMLImageElement | null;
+}> = ({ sub, frameImg }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [coupleImg, setCoupleImg] = useState<HTMLImageElement | null>(null);
+  const [loadingImg, setLoadingImg] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadTrigger, setReloadTrigger] = useState(0);
+
+  // Lazy visibility observer: only load when scrolled into view
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setIsVisible(true);
+            observer.disconnect();
+          }
+        });
+      },
+      { rootMargin: '250px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Fetch photo when visible
+  useEffect(() => {
+    if (!isVisible) return;
+    let isMounted = true;
+    if (!sub.couplePhoto) {
+      setCoupleImg(null);
+      setLoadingImg(false);
+      setLoadError(false);
+      return;
+    }
+
+    setLoadingImg(true);
+    setLoadError(false);
+    const optimizedUrl = getOptimizedPhotoUrl(sub.couplePhoto, 384, 512);
+
+    loadSafeCanvasImage(optimizedUrl, 12000).then((img) => {
+      if (!isMounted) return;
+      if (img) {
+        setCoupleImg(img);
+        setLoadError(false);
+      } else {
+        setCoupleImg(null);
+        setLoadError(true);
+      }
+      setLoadingImg(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isVisible, sub.couplePhoto, reloadTrigger]);
+
+  // Render on canvas
+  useEffect(() => {
+    if (!isVisible) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = 384;
+    canvas.height = 512;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const startX = canvas.width * 0.08;
+    const startY = canvas.height * 0.08;
+    const drawWidth = canvas.width * 0.84;
+    const drawHeight = canvas.height * 0.84;
+
+    if (coupleImg) {
+      const imgAspect = coupleImg.width / coupleImg.height;
+      const targetAspect = drawWidth / drawHeight;
+      let tempW = drawWidth;
+      let tempH = drawHeight;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (imgAspect > targetAspect) {
+        tempW = drawHeight * imgAspect;
+        offsetX = -(tempW - drawWidth) / 2;
+      } else {
+        tempH = drawWidth / imgAspect;
+        offsetY = -(tempH - drawHeight) / 2;
+      }
+
+      const zoom = sub.photoZoom ?? 1.0;
+      const w = tempW * zoom;
+      const h = tempH * zoom;
+      const ox = offsetX - (w - tempW) / 2 + (sub.photoOffsetX ?? 0) / 2;
+      const oy = offsetY - (h - tempH) / 2 + (sub.photoOffsetY ?? 0) / 2;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(startX, startY, drawWidth, drawHeight);
+      ctx.clip();
+      ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(startX, startY, drawWidth, drawHeight);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      if (loadingImg) {
+        ctx.fillText('Loading...', canvas.width / 2, canvas.height / 2);
+      } else if (loadError) {
+        ctx.fillStyle = '#f43f5e';
+        ctx.fillText('Load failed', canvas.width / 2, canvas.height / 2 - 8);
+        ctx.font = '9px sans-serif';
+        ctx.fillText('Tap to retry', canvas.width / 2, canvas.height / 2 + 10);
+      } else {
+        ctx.fillText('No photo', canvas.width / 2, canvas.height / 2);
+      }
+    }
+
+    // Draw frame overlay
+    if (frameImg) {
+      ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+    }
+
+    // Draw Token ID text at bottom
+    ctx.save();
+    ctx.fillStyle = '#7a0c0c';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
+    ctx.restore();
+  }, [isVisible, coupleImg, frameImg, sub.photoZoom, sub.photoOffsetX, sub.photoOffsetY, sub.inquiryId, loadingImg, loadError]);
+
+  return (
+    <div
+      ref={containerRef}
+      onClick={() => {
+        if (loadError) {
+          if (sub.couplePhoto) {
+            imageMemoryCache.delete(getOptimizedPhotoUrl(sub.couplePhoto, 384, 512));
+          }
+          setReloadTrigger((v) => v + 1);
+        }
+      }}
+      className={`w-[110px] h-[146px] sm:w-[124px] sm:h-[165px] relative rounded-2xl overflow-hidden border bg-slate-900 shrink-0 shadow-inner ${
+        loadError ? 'border-rose-300 cursor-pointer' : 'border-slate-200'
+      }`}
+      title={loadError ? 'Click to retry loading photo' : 'Live Frame Preview'}
+    >
+      {isVisible ? (
+        <canvas ref={canvasRef} className="w-full h-full object-contain block" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-slate-100">
+          <div className="w-4 h-4 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
+      {loadingImg && isVisible && (
+        <div className="absolute inset-0 bg-slate-900/40 flex items-center justify-center">
+          <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
   isOpen,
   onClose,
@@ -195,29 +373,25 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     return () => setMounted(false);
   }, []);
 
-  // Body scroll lock to prevent outer blank area scrollbars
+  // Lock body scroll completely while modal is open to eliminate outer blank area scrollbars
   useEffect(() => {
     if (!isOpen) return;
-    const originalOverflow = document.body.style.overflow;
+    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = originalOverflow;
+      document.body.style.overflow = prevOverflow;
     };
   }, [isOpen]);
 
-  // View state
-  const [viewMode, setViewMode] = useState<'studio' | 'gallery'>('studio');
-  const [mobileTab, setMobileTab] = useState<'queue' | 'studio'>('studio');
-
-  // Filter state
+  // Selection & Filtering state
   const [selectedProgramId, setSelectedProgramId] = useState<string>(defaultProgramId || '');
   const [cplSearchQuery, setCplSearchQuery] = useState('');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedInquiryIds, setSelectedInquiryIds] = useState<string[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
 
-  // Focused couple in Studio
-  const [activeInquiryId, setActiveInquiryId] = useState<string>('');
+  // Expanded sliders state for mobile responsiveness
+  const [expandedAlignIds, setExpandedAlignIds] = useState<Record<string, boolean>>({});
 
   // Global Frame Image
   const [globalFrameImg, setGlobalFrameImg] = useState<HTMLImageElement | null>(null);
@@ -254,12 +428,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     });
   }, [isOpen]);
 
-  // Fetch submissions for selected program
+  // Fetch submissions with couple photos
   const fetchSubmissionsForFrames = useCallback(async () => {
     if (!selectedProgramId) {
       setSubmissions([]);
       setSelectedInquiryIds([]);
-      setActiveInquiryId('');
       return;
     }
 
@@ -283,12 +456,6 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       });
 
       setSubmissions(list);
-      if (list.length > 0) {
-        setActiveInquiryId((prev) => {
-          const exists = list.some((item) => item.inquiryId === prev);
-          return exists ? prev : list[0].inquiryId;
-        });
-      }
     } catch (err) {
       console.error('Failed to fetch submissions for frames:', err);
       toast.error('Failed to load registrations with photos.');
@@ -303,7 +470,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
   }, [isOpen, fetchSubmissionsForFrames]);
 
-  // Cohort strictly filtered by Payment Status
+  // Cohort filtered by Payment Status
   const currentCohort = useMemo(() => {
     return submissions.filter((sub) => {
       const isPaid = sub.status === 'approved' || sub.payment?.status === 'captured';
@@ -322,7 +489,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
   const modifiedCount = currentCohort.filter((s) => s.frameExportStatus === 'MODIFIED').length;
   const exportedCount = currentCohort.filter((s) => s.frameExportStatus === 'EXPORTED').length;
 
-  // Filtered submissions based on payment status, print status, and search tokens
+  // Filtered submissions based on search tokens
   const searchedTokens = useMemo(() => {
     return cplSearchQuery
       .split(/[\s,]+/)
@@ -347,13 +514,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     });
   }, [currentCohort, printStatusFilter, cplSearchQuery, searchedTokens, isBulkSearch]);
 
-  // Active focused submission in Studio
-  const activeSubmission = useMemo(() => {
-    if (!activeInquiryId) return filteredSubmissions[0] || null;
-    return filteredSubmissions.find((s) => s.inquiryId === activeInquiryId) || filteredSubmissions[0] || null;
-  }, [filteredSubmissions, activeInquiryId]);
-
-  // Selection Scoping
+  // Selected items in current filter
   const selectedFilteredSubmissions = useMemo(() => {
     const idSet = new Set(selectedInquiryIds);
     return filteredSubmissions.filter((s) => idSet.has(s.inquiryId));
@@ -368,9 +529,6 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     if (prevCohortKeyRef.current !== cohortKey) {
       prevCohortKeyRef.current = cohortKey;
       setSelectedInquiryIds(filteredSubmissions.map((s) => s.inquiryId));
-      if (filteredSubmissions.length > 0) {
-        setActiveInquiryId(filteredSubmissions[0].inquiryId);
-      }
     }
   }, [selectedProgramId, paymentFilter, filteredSubmissions]);
 
@@ -429,7 +587,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     );
   };
 
-  // Instant manual save
+  // Save single submission alignment immediately
   const handleSaveSingleAlignment = async (sub: Submission) => {
     try {
       setSavingId(sub.inquiryId);
@@ -452,7 +610,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
             : s
         )
       );
-      toast.success(`Saved alignment for ${sub.inquiryId}`);
+      toast.success(`Alignment saved for ${sub.inquiryId}`);
       setTimeout(() => {
         setSavedSuccessIds((prev) => ({ ...prev, [sub.inquiryId]: false }));
       }, 2500);
@@ -463,33 +621,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
   };
 
-  // Toggle Print status
-  const handleToggleSinglePrintStatus = async (sub: Submission) => {
-    const newStatus = sub.frameExportStatus === 'EXPORTED' ? 'NOT_EXPORTED' : 'EXPORTED';
-    try {
-      await registrationsApi.markFramesExported([sub.inquiryId], undefined, newStatus);
-      setSubmissions((prev) =>
-        prev.map((s) =>
-          s.inquiryId === sub.inquiryId
-            ? {
-                ...s,
-                frameExportStatus: newStatus,
-                frameExportedAt: newStatus === 'EXPORTED' ? new Date().toISOString() : undefined
-              }
-            : s
-        )
-      );
-      toast.success(newStatus === 'EXPORTED' ? `Marked ${sub.inquiryId} as Printed` : `Reset ${sub.inquiryId} to Unprinted`);
-    } catch (err: any) {
-      toast.error('Failed to update status: ' + err.message);
-    }
-  };
-
   // Batch Mark Selected as Exported / Unprinted
   const handleMarkSelectedExported = async (status: 'EXPORTED' | 'NOT_EXPORTED') => {
     const targetIds = selectedFilteredSubmissions.map((s) => s.inquiryId);
     if (targetIds.length === 0) {
-      toast.error('No registrations selected');
+      toast.error('No registrations selected in the current filter');
       return;
     }
     try {
@@ -507,7 +643,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       );
       toast.success(
         status === 'EXPORTED'
-          ? `Marked ${targetIds.length} as printed.`
+          ? `Marked ${targetIds.length} as printed/exported.`
           : `Reset ${targetIds.length} to unprinted.`
       );
     } catch (err: any) {
@@ -523,7 +659,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
 
     try {
-      const toastId = toast.loading(`Rendering high-res frame for ${sub.inquiryId}...`);
+      const toastId = toast.loading(`Preparing frame for ${sub.inquiryId}...`);
       const highResUrl = getOptimizedPhotoUrl(sub.couplePhoto, 1200, 1600);
       const coupleImg = await loadSafeCanvasImage(highResUrl);
       const frameImg = globalFrameImg || (await loadSafeCanvasImage('/frame_template.png'));
@@ -567,8 +703,8 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         const zoom = sub.photoZoom ?? 1.0;
         const w = tempW * zoom;
         const h = tempH * zoom;
-        const ox = offsetX - (w - tempW) / 2 + ((sub.photoOffsetX ?? 0) * (canvas.width / 768));
-        const oy = offsetY - (h - tempH) / 2 + ((sub.photoOffsetY ?? 0) * (canvas.height / 1024));
+        const ox = offsetX - (w - tempW) / 2 + (sub.photoOffsetX ?? 0) * (canvas.width / 768);
+        const oy = offsetY - (h - tempH) / 2 + (sub.photoOffsetY ?? 0) * (canvas.height / 1024);
 
         ctx.save();
         ctx.beginPath();
@@ -601,7 +737,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       toast.dismiss(toastId);
 
       if (!blob) {
-        toast.error('Failed to create framed image.');
+        toast.error('Failed to create frame.');
         return;
       }
 
@@ -630,7 +766,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
   };
 
-  // High-Speed, Memory-Safe Batch ZIP Exporter
+  // High-Speed, Memory-Safe Batch Framed Photos ZIP Generation
   const handleDownloadFramedZip = async () => {
     const listToExport = filteredSubmissions.filter((s) => selectedInquiryIds.includes(s.inquiryId));
     if (listToExport.length === 0) {
@@ -640,7 +776,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
 
     try {
       setZipping(true);
-      setZipProgress('Initializing archive...');
+      setZipProgress('Starting...');
       setZipPercent(0);
       const zip = new JSZip();
 
@@ -689,8 +825,8 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
             const zoom = sub.photoZoom ?? 1.0;
             const w = tempW * zoom;
             const h = tempH * zoom;
-            const ox = offsetX - (w - tempW) / 2 + ((sub.photoOffsetX ?? 0) * (canvas.width / 768));
-            const oy = offsetY - (h - tempH) / 2 + ((sub.photoOffsetY ?? 0) * (canvas.height / 1024));
+            const ox = offsetX - (w - tempW) / 2 + (sub.photoOffsetX ?? 0) * (canvas.width / 768);
+            const oy = offsetY - (h - tempH) / 2 + (sub.photoOffsetY ?? 0) * (canvas.height / 1024);
 
             ctx.save();
             ctx.beginPath();
@@ -718,7 +854,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
           ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
           ctx.restore();
 
-          // Direct Blob conversion - zero base64 memory overhead!
+          // Direct Blob streaming - zero base64 memory overhead!
           const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
           if (blob) {
             const cleanHusband = (sub.husbandName || '').trim().replace(/\s+/g, '_');
@@ -731,13 +867,13 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
             zip.file(filename, blob);
             successfullyExportedIds.push(sub.inquiryId);
           }
-        } catch (err) {
-          console.error('Batch framing error for:', sub.inquiryId, err);
+        } catch (subErr) {
+          console.error('Error framing photo for submission:', sub.inquiryId, subErr);
         } finally {
           completedCount++;
           const pct = Math.round((completedCount / listToExport.length) * 80);
           setZipPercent(pct);
-          setZipProgress(`Framed ${completedCount} of ${listToExport.length} (${sub.inquiryId})`);
+          setZipProgress(`Processing ${completedCount} of ${listToExport.length} (${sub.inquiryId})...`);
         }
       });
 
@@ -746,7 +882,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       const progName = curProg ? curProg.name : 'Event';
 
       let manifestCsv =
-        'Token ID,Husband Name,Wife Name,Surname,Mobile Number,Print Status,Payment Status,Zoom,Offset X,Offset Y,Printed Checkbox,Desk Handover Checkbox\n';
+        'Token ID,Husband Name,Wife Name,Surname,Mobile Number,Print Status,Payment Status,Zoom,Offset Y,Printed Checkbox,Desk Handover Checkbox\n';
       listToExport.forEach((sub) => {
         const pStatus =
           sub.frameExportStatus === 'EXPORTED'
@@ -757,19 +893,17 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         const payStatus = sub.status === 'approved' || sub.payment?.status === 'captured' ? 'PAID' : 'PENDING';
         manifestCsv += `"${sub.inquiryId}","${sub.husbandName}","${sub.wifeName}","${sub.surname || ''}","${
           sub.phoneNumber || ''
-        }","${pStatus}","${payStatus}","${sub.photoZoom ?? 1.0}","${sub.photoOffsetX ?? 0}","${
-          sub.photoOffsetY ?? 0
-        }","[  ] Printed","[  ] Handed Over"\n`;
+        }","${pStatus}","${payStatus}","${sub.photoZoom ?? 1.0}","${sub.photoOffsetY ?? 0}","[  ] Printed","[  ] Handed Over"\n`;
       });
       zip.file(`Printing_Manifest_${progName.replace(/\s+/g, '_')}.csv`, manifestCsv);
 
       setZipProgress('Compressing ZIP archive...');
-      // Fast compression level 2 (4x faster, identical size for images)
+      // Fast compression level 2 (4x faster, minimal memory)
       const content = await zip.generateAsync(
         { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 2 } },
         (metadata) => {
           setZipPercent(80 + Math.round((metadata.percent / 100) * 20));
-          setZipProgress(`Compressing: ${Math.round(metadata.percent)}%`);
+          setZipProgress(`Compressing ZIP: ${Math.round(metadata.percent)}%`);
         }
       );
 
@@ -814,7 +948,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
 
     try {
       setZipping(true);
-      setZipProgress('Starting raw photo download...');
+      setZipProgress('Starting...');
       setZipPercent(0);
       const zip = new JSZip();
       let completedCount = 0;
@@ -830,45 +964,45 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
           if (res.ok) {
             const blob = await res.blob();
             let ext = 'jpg';
-            const ct = res.headers.get('content-type') || '';
-            if (ct.includes('png')) ext = 'png';
-            else if (ct.includes('webp')) ext = 'webp';
+            const contentType = res.headers.get('content-type');
+            if (contentType?.includes('png')) ext = 'png';
+            else if (contentType?.includes('webp')) ext = 'webp';
             zip.file(`${sub.inquiryId}.${ext}`, blob);
           }
         } catch (err) {
-          console.error('Error fetching raw photo for:', sub.inquiryId, err);
+          console.error('Error fetching raw photo:', sub.inquiryId, err);
         } finally {
           completedCount++;
           const pct = Math.round((completedCount / listToExport.length) * 80);
           setZipPercent(pct);
-          setZipProgress(`Downloaded raw photo ${completedCount} of ${listToExport.length}`);
+          setZipProgress(`Fetching photo ${completedCount} of ${listToExport.length}...`);
         }
       });
 
-      setZipProgress('Compressing raw photos archive...');
+      setZipProgress('Compressing ZIP archive...');
       const content = await zip.generateAsync(
         { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 2 } },
         (metadata) => {
           setZipPercent(80 + Math.round((metadata.percent / 100) * 20));
-          setZipProgress(`Compressing: ${Math.round(metadata.percent)}%`);
+          setZipProgress(`Compressing raw photos: ${Math.round(metadata.percent)}%`);
         }
       );
 
       const curProg = programs.find((p) => p.id === selectedProgramId);
       const progName = curProg ? curProg.name : 'Event';
-      const payTag = paymentFilter === 'PAID' ? 'PAID' : paymentFilter === 'PENDING' ? 'PENDING' : 'ALL';
       const a = document.createElement('a');
       const blobUrl = URL.createObjectURL(content);
       a.href = blobUrl;
+      const payTag = paymentFilter === 'PAID' ? 'PAID' : paymentFilter === 'PENDING' ? 'PENDING' : 'ALL';
       a.download = `${progName}_${payTag}_raw_photos.zip`.replace(/\s+/g, '_');
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
 
-      toast.success(`Downloaded raw photos ZIP`);
+      toast.success(`Downloaded ${listToExport.length} raw photos.`);
     } catch (err: any) {
-      toast.error('Failed to download raw photos: ' + err.message);
+      toast.error('Failed to download raw photos ZIP: ' + err.message);
     } finally {
       setZipping(false);
       setZipProgress('');
@@ -876,1068 +1010,636 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
   };
 
-  // Keyboard navigation for Studio (Arrow Left/Right)
-  useEffect(() => {
-    if (!isOpen || viewMode !== 'studio' || filteredSubmissions.length === 0) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (['input', 'textarea', 'select'].includes((e.target as HTMLElement)?.tagName?.toLowerCase())) {
-        return;
-      }
-      const currentIndex = filteredSubmissions.findIndex((s) => s.inquiryId === activeInquiryId);
-      if (e.key === 'ArrowLeft' || e.key === 'k') {
-        e.preventDefault();
-        const prevIndex = currentIndex > 0 ? currentIndex - 1 : filteredSubmissions.length - 1;
-        setActiveInquiryId(filteredSubmissions[prevIndex].inquiryId);
-      } else if (e.key === 'ArrowRight' || e.key === 'j') {
-        e.preventDefault();
-        const nextIndex = currentIndex < filteredSubmissions.length - 1 ? currentIndex + 1 : 0;
-        setActiveInquiryId(filteredSubmissions[nextIndex].inquiryId);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, viewMode, filteredSubmissions, activeInquiryId]);
-
   if (!isOpen || !mounted) return null;
 
   const modalContent = (
-    <div className="fixed inset-0 z-[9999] flex flex-col h-[100dvh] w-full bg-slate-950/80 backdrop-blur-md overflow-hidden text-slate-100 animate-in fade-in duration-200">
-      
-      {/* 1. Ultra-Clean Top Bar */}
-      <header className="h-14 sm:h-16 px-3 sm:px-5 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between shrink-0 gap-2">
-        {/* Left: Branding & Event Dropdown */}
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-amber-500 to-rose-600 text-white flex items-center justify-center shadow-md shrink-0">
-            <CameraIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <h2 className="text-xs sm:text-base font-extrabold text-white tracking-tight truncate">
-                Frame Review Studio
-              </h2>
-              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
-                PRO
-              </span>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-sm overflow-hidden animate-in fade-in duration-200">
+      <div className="bg-white rounded-none sm:rounded-3xl shadow-2xl border-0 sm:border border-slate-200 w-full max-w-5xl h-full sm:max-h-[92vh] flex flex-col overflow-hidden text-slate-800">
+        
+        {/* Modal Header */}
+        <div className="p-3.5 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-50/60 via-white to-rose-50/60 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-100/80 border border-amber-200 text-amber-700 flex items-center justify-center shadow-xs shrink-0">
+              <CameraIcon className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <p className="text-[10px] text-slate-400 font-medium truncate hidden sm:block">
-              Inspect alignment, drag &amp; zoom photo, and export crisp framed prints.
-            </p>
-          </div>
-        </div>
-
-        {/* Center: Program Selector */}
-        <div className="hidden md:flex items-center gap-2 max-w-xs w-full">
-          <select
-            value={selectedProgramId}
-            onChange={(e) => setSelectedProgramId(e.target.value)}
-            className="w-full bg-slate-800 border border-slate-700 text-xs text-white rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-amber-500 font-bold"
-          >
-            {programs.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({p.date || 'TBA'})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Right: View Switcher & Close */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* View Mode Switcher (Desktop) */}
-          <div className="hidden sm:flex bg-slate-800 p-0.5 rounded-xl border border-slate-700">
-            <button
-              type="button"
-              onClick={() => setViewMode('studio')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                viewMode === 'studio' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Studio
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('gallery')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                viewMode === 'gallery' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Gallery ({filteredSubmissions.length})
-            </button>
-          </div>
-
-          {/* Mobile Tab Switcher */}
-          <div className="flex sm:hidden bg-slate-800 p-0.5 rounded-xl border border-slate-700">
-            <button
-              type="button"
-              onClick={() => setMobileTab('studio')}
-              className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                mobileTab === 'studio' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'
-              }`}
-            >
-              Studio
-            </button>
-            <button
-              type="button"
-              onClick={() => setMobileTab('queue')}
-              className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                mobileTab === 'queue' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'
-              }`}
-            >
-              Queue ({filteredSubmissions.length})
-            </button>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h2 className="text-sm sm:text-lg font-extrabold text-slate-900 tracking-tight truncate">
+                  Photo Frame Review &amp; Export
+                </h2>
+                <span className="text-[9px] sm:text-[10px] font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
+                  Live Canvas
+                </span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate hidden sm:block">
+                Inspect, align with zoom &amp; shift, and download high-resolution framed photos individually or in bulk ZIP.
+              </p>
+            </div>
           </div>
 
           <button
             onClick={onClose}
-            className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
-            aria-label="Close"
+            className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+            aria-label="Close Modal"
           >
-            <XIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-          </button>
-        </div>
-      </header>
-
-      {/* 2. Secondary Filter & Cohort Bar */}
-      <div className="px-3 sm:px-5 py-2 sm:py-2.5 border-b border-slate-800/80 bg-slate-900/60 flex flex-wrap items-center justify-between gap-2 shrink-0">
-        {/* Payment Cohort Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-          <button
-            type="button"
-            onClick={() => setPaymentFilter('PAID')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              paymentFilter === 'PAID'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700/60'
-            }`}
-          >
-            <span>Paid</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-700 text-white font-black">
-              {paidCount}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setPaymentFilter('PENDING')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              paymentFilter === 'PENDING'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700/60'
-            }`}
-          >
-            <span>Pending</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-700 text-white font-black">
-              {pendingCount}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setPaymentFilter('ALL')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer shrink-0 ${
-              paymentFilter === 'ALL'
-                ? 'bg-slate-700 text-white'
-                : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700/60'
-            }`}
-          >
-            All ({totalAllCount})
+            <XIcon className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Print Status Chips */}
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-          <button
-            type="button"
-            onClick={() => setPrintStatusFilter('ALL')}
-            className={`px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer shrink-0 ${
-              printStatusFilter === 'ALL' ? 'bg-slate-200 text-slate-900' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            All ({totalCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setPrintStatusFilter('UNPRINTED')}
-            className={`px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer shrink-0 flex items-center gap-1 ${
-              printStatusFilter === 'UNPRINTED'
-                ? 'bg-rose-500 text-white'
-                : 'text-rose-400 hover:bg-rose-500/10'
-            }`}
-          >
-            <span>New</span>
-            <span className="text-[9px] px-1 rounded-full bg-rose-900/60 text-white">{unprintedCount}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setPrintStatusFilter('MODIFIED')}
-            className={`px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer shrink-0 flex items-center gap-1 ${
-              printStatusFilter === 'MODIFIED'
-                ? 'bg-amber-500 text-slate-950 font-black'
-                : 'text-amber-400 hover:bg-amber-500/10'
-            }`}
-          >
-            <span>Adjusted</span>
-            <span className="text-[9px] px-1 rounded-full bg-amber-900/60 text-white">{modifiedCount}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setPrintStatusFilter('EXPORTED')}
-            className={`px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer shrink-0 flex items-center gap-1 ${
-              printStatusFilter === 'EXPORTED'
-                ? 'bg-emerald-500 text-slate-950 font-black'
-                : 'text-emerald-400 hover:bg-emerald-500/10'
-            }`}
-          >
-            <span>Printed</span>
-            <span className="text-[9px] px-1 rounded-full bg-emerald-900/60 text-white">{exportedCount}</span>
-          </button>
-        </div>
-
-        {/* Search Bar */}
-        <div className="relative flex items-center bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1 w-full sm:w-56">
-          <SearchIcon className="w-3.5 h-3.5 text-slate-400 mr-1.5 shrink-0" />
-          <input
-            type="text"
-            value={cplSearchQuery}
-            onChange={(e) => setCplSearchQuery(e.target.value)}
-            placeholder="Search token, name..."
-            className="w-full bg-transparent text-xs text-white placeholder-slate-500 outline-none font-medium"
-          />
-          {cplSearchQuery && (
-            <button
-              onClick={() => setCplSearchQuery('')}
-              className="text-xs text-slate-400 hover:text-white p-0.5"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 3. Main Body Container (Pure Flex Child with Zero Outer Overflow) */}
-      <div className="flex-1 min-h-0 flex flex-col md:flex-row bg-slate-950 overflow-hidden">
-        
-        {loadingSubmissions ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-3">
-            <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-xs font-bold text-slate-400">Loading registrations with photos...</p>
-          </div>
-        ) : filteredSubmissions.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-slate-800 text-slate-400 flex items-center justify-center">
-              <CameraIcon className="w-6 h-6" />
+        {/* Top Controls Bar */}
+        <div className="p-3 sm:p-4 border-b border-slate-100 bg-slate-50/80 space-y-2.5 shrink-0">
+          {/* Responsive Selector Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+            {/* Program Session Selector */}
+            <div className="sm:col-span-4">
+              <label className="block text-[10px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
+                Event Session Slot
+              </label>
+              <LuxurySelect
+                value={selectedProgramId}
+                onChange={(val) => setSelectedProgramId(val)}
+                options={programs.map((p) => ({
+                  value: p.id,
+                  label: `${p.name} (${p.date || 'TBA'})`
+                }))}
+                variant="outline"
+              />
             </div>
-            <h3 className="text-sm font-bold text-white">No Matching Registrations</h3>
-            <p className="text-xs text-slate-400 max-w-sm">
-              No photos found matching the selected filter criteria or search query.
-            </p>
+
+            {/* Payment Filter using LuxurySelect with live counts */}
+            <div className="sm:col-span-3">
+              <label className="block text-[10px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
+                Payment Type
+              </label>
+              <LuxurySelect
+                value={paymentFilter}
+                onChange={(val) => setPaymentFilter(val as any)}
+                options={[
+                  { value: 'PAID', label: 'Paid / Approved', badge: String(paidCount) },
+                  { value: 'PENDING', label: 'Payment Pending', badge: String(pendingCount) },
+                  { value: 'ALL', label: 'All Cohort', badge: String(totalAllCount) }
+                ]}
+                variant="outline"
+              />
+            </div>
+
+            {/* Token / Name Search */}
+            <div className="sm:col-span-5">
+              <label className="block text-[10px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
+                Search / Filter Tokens
+              </label>
+              <div className="relative flex items-center bg-white border border-slate-300 rounded-xl px-2.5 sm:px-3 py-1.5 focus-within:border-rose-500 focus-within:ring-2 focus-within:ring-rose-500/10 transition-all">
+                <SearchIcon className="w-3.5 h-3.5 text-slate-400 mr-2 shrink-0" />
+                <input
+                  type="text"
+                  value={cplSearchQuery}
+                  onChange={(e) => setCplSearchQuery(e.target.value)}
+                  placeholder="Paste tokens, couple name, phone..."
+                  className="w-full bg-transparent text-xs text-slate-900 placeholder-slate-400 outline-none font-medium"
+                />
+                {cplSearchQuery && (
+                  <button
+                    onClick={() => setCplSearchQuery('')}
+                    className="text-xs text-slate-400 hover:text-slate-600 p-0.5 font-bold"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
-        ) : viewMode === 'gallery' ? (
-          /* =================== GALLERY GRID VIEW =================== */
-          <div className="flex-1 overflow-y-auto p-3 sm:p-5">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+
+          {/* Print Status Filter Pills - Horizontally scrollable on mobile */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1.5 border-t border-slate-200/70">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
+              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider shrink-0 mr-0.5">
+                Print Status:
+              </span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPrintStatusFilter('ALL');
+                  setSelectedInquiryIds(currentCohort.map((s) => s.inquiryId));
+                }}
+                className={`px-2.5 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer shrink-0 ${
+                  printStatusFilter === 'ALL'
+                    ? 'bg-slate-800 text-white shadow-xs'
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-300'
+                }`}
+              >
+                All ({totalCount})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPrintStatusFilter('UNPRINTED');
+                  const unprinted = currentCohort.filter((s) => !s.frameExportStatus || s.frameExportStatus === 'NOT_EXPORTED');
+                  setSelectedInquiryIds(unprinted.map((s) => s.inquiryId));
+                }}
+                className={`px-2.5 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                  printStatusFilter === 'UNPRINTED'
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200'
+                }`}
+              >
+                <span>New / Unprinted</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  printStatusFilter === 'UNPRINTED' ? 'bg-rose-700 text-white' : 'bg-rose-200 text-rose-800'
+                }`}>
+                  {unprintedCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPrintStatusFilter('MODIFIED');
+                  const modified = currentCohort.filter((s) => s.frameExportStatus === 'MODIFIED');
+                  setSelectedInquiryIds(modified.map((s) => s.inquiryId));
+                }}
+                className={`px-2.5 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                  printStatusFilter === 'MODIFIED'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
+                }`}
+              >
+                <span>Adjusted</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  printStatusFilter === 'MODIFIED' ? 'bg-amber-700 text-white' : 'bg-amber-200 text-amber-800'
+                }`}>
+                  {modifiedCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPrintStatusFilter('EXPORTED');
+                  const exp = currentCohort.filter((s) => s.frameExportStatus === 'EXPORTED');
+                  setSelectedInquiryIds(exp.map((s) => s.inquiryId));
+                }}
+                className={`px-2.5 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                  printStatusFilter === 'EXPORTED'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
+                }`}
+              >
+                <span>Already Printed</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  printStatusFilter === 'EXPORTED' ? 'bg-emerald-700 text-white' : 'bg-emerald-200 text-emerald-800'
+                }`}>
+                  {exportedCount}
+                </span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleMarkSelectedExported('EXPORTED')}
+                disabled={selectedCount === 0}
+                className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-40 text-emerald-800 border border-emerald-200 rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1"
+                title="Manually mark selected as printed"
+              >
+                <CheckCircleIcon className="w-3 h-3" />
+                <span>Mark Printed</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMarkSelectedExported('NOT_EXPORTED')}
+                disabled={selectedCount === 0}
+                className="px-2 py-1 bg-slate-50 hover:bg-slate-100 disabled:opacity-40 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1"
+                title="Reset selected to unprinted status"
+              >
+                <span>Reset Status</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Selection Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setSelectedInquiryIds(filteredSubmissions.map((s) => s.inquiryId))}
+                className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-2xs"
+              >
+                Select All ({filteredSubmissions.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const filteredIds = new Set(filteredSubmissions.map((s) => s.inquiryId));
+                  setSelectedInquiryIds((prev) => prev.filter((id) => !filteredIds.has(id)));
+                }}
+                className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-2xs"
+              >
+                Deselect
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedInquiryIds([])}
+                className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-xl font-bold transition-all text-xs cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+
+            <div className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+              <span>
+                Selected: <strong className="text-rose-700">{selectedCount}</strong> / {filteredSubmissions.length}
+              </span>
+              {filteredSubmissions.length !== submissions.length && (
+                <span className="text-[10px] text-slate-400">
+                  ({submissions.length} total)
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Main List Area with Lazy-Loaded Real-Time Frame Canvases */}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-3 bg-slate-100/60 min-h-0">
+          {loadingSubmissions ? (
+            <div className="py-20 text-center space-y-3">
+              <div className="w-8 h-8 border-3 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-xs font-bold text-slate-600">Loading registrations with photos...</p>
+            </div>
+          ) : filteredSubmissions.length === 0 ? (
+            <div className="py-16 sm:py-20 text-center space-y-3 bg-white rounded-2xl border border-slate-200 p-6 sm:p-8">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                <CameraIcon className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-extrabold text-slate-900">No Registrations with Photos Found</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                {cplSearchQuery.trim()
+                  ? 'No registrations match your search criteria. Try modifying your search or clearing the query.'
+                  : `There are no ${paymentFilter === 'PAID' ? 'paid' : paymentFilter === 'PENDING' ? 'pending' : ''} registrations with couple photos for the selected session.`}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
               {filteredSubmissions.map((sub) => {
                 const isSelected = selectedInquiryIds.includes(sub.inquiryId);
-                const isActive = activeSubmission?.inquiryId === sub.inquiryId;
-                const isPrinted = sub.frameExportStatus === 'EXPORTED';
-                const isModified = sub.frameExportStatus === 'MODIFIED';
-                const thumbUrl = getOptimizedPhotoUrl(sub.couplePhoto, 300, 400);
+                const zoomVal = sub.photoZoom ?? 1.0;
+                const offsetValX = sub.photoOffsetX ?? 0;
+                const offsetValY = sub.photoOffsetY ?? 0;
+                const isSaving = savingId === sub.inquiryId;
+                const isSaved = savedSuccessIds[sub.inquiryId];
+                const autoSaveState = autoSavingMap[sub.inquiryId];
+                const isPaid = sub.status === 'approved' || sub.payment?.status === 'captured';
+                const isAlignOpen = Boolean(expandedAlignIds[sub.inquiryId]);
 
                 return (
                   <div
                     key={sub.inquiryId}
-                    className={`bg-slate-900 border rounded-2xl p-2.5 flex flex-col justify-between gap-2 transition-all group ${
-                      isActive
-                        ? 'border-amber-500 ring-2 ring-amber-500/30'
-                        : isSelected
-                        ? 'border-slate-700 bg-slate-900/90'
-                        : 'border-slate-800/80 opacity-85 hover:opacity-100'
+                    className={`bg-white border rounded-2xl p-3 sm:p-4 transition-all shadow-xs flex flex-col gap-3 ${
+                      isSelected
+                        ? 'border-amber-400 ring-1 ring-amber-500/20 bg-gradient-to-r from-amber-50/20 to-white'
+                        : 'border-slate-200/90 opacity-85 hover:opacity-100'
                     }`}
                   >
-                    {/* Top: Selection + Badge */}
-                    <div className="flex items-center justify-between gap-1">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => {
-                          setSelectedInquiryIds((prev) =>
-                            isSelected ? prev.filter((id) => id !== sub.inquiryId) : [...prev, sub.inquiryId]
-                          );
-                        }}
-                        className="w-3.5 h-3.5 rounded text-amber-500 accent-amber-500 cursor-pointer"
-                      />
-                      <span
-                        className={`text-[9px] font-black px-1.5 py-0.2 rounded-md ${
-                          isPrinted
-                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                            : isModified
-                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                            : 'bg-slate-800 text-slate-400 border border-slate-700'
-                        }`}
-                      >
-                        {isPrinted ? 'Printed' : isModified ? 'Adjusted' : 'New'}
-                      </span>
-                    </div>
+                    {/* Top Row: Checkbox + Names + Badges */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {
+                            setSelectedInquiryIds((prev) =>
+                              isSelected
+                                ? prev.filter((id) => id !== sub.inquiryId)
+                                : [...prev, sub.inquiryId]
+                            );
+                          }}
+                          className="w-4 h-4 rounded text-amber-600 accent-amber-600 cursor-pointer mt-0.5 shrink-0"
+                          aria-label={`Select ${sub.inquiryId}`}
+                        />
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm leading-tight truncate">
+                              {sub.husbandName} &amp; {sub.wifeName} {sub.surname}
+                            </h4>
+                            <span className="text-[10px] font-extrabold px-1.5 py-0.2 bg-rose-50 text-rose-700 border border-rose-200 rounded-md shrink-0">
+                              {sub.inquiryId}
+                            </span>
 
-                    {/* Image Preview with Frame Border */}
-                    <div
-                      onClick={() => {
-                        setActiveInquiryId(sub.inquiryId);
-                        setViewMode('studio');
-                      }}
-                      className="relative aspect-[3/4] w-full rounded-xl overflow-hidden bg-slate-950 border border-slate-800 cursor-pointer group-hover:border-amber-500/60 transition-colors"
-                    >
-                      <img
-                        src={thumbUrl}
-                        alt={sub.inquiryId}
-                        loading="lazy"
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 to-transparent p-1.5 text-center">
-                        <span className="text-[10px] font-black text-white">{sub.inquiryId}</span>
+                            {/* Payment Status Badge */}
+                            {sub.isVip ? (
+                              <span className="text-[10px] font-black px-1.5 py-0.2 rounded-md bg-purple-100 text-purple-800 border border-purple-300">
+                                ★ VIP
+                              </span>
+                            ) : isPaid ? (
+                              <span className="text-[10px] font-black px-1.5 py-0.2 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-0.5">
+                                <CheckIcon className="w-2.5 h-2.5" />
+                                <span>PAID</span>
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-black px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-800 border border-amber-300">
+                                ⏳ PENDING
+                              </span>
+                            )}
+
+                            {/* Print Status Badge */}
+                            {sub.frameExportStatus === 'EXPORTED' ? (
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-0.5">
+                                <CheckIcon className="w-2.5 h-2.5" />
+                                <span>Printed</span>
+                              </span>
+                            ) : sub.frameExportStatus === 'MODIFIED' ? (
+                              <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                ⚠ Adjusted
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                                New
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 font-medium mt-0.5 truncate">
+                            Phone: {sub.phoneNumber} &bull; {sub.programName}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Action buttons on Top Right */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {autoSaveState === 'saving' ? (
+                          <span className="text-[9px] font-bold text-amber-600 flex items-center gap-1 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            <div className="w-2 h-2 border border-amber-600 border-t-transparent rounded-full animate-spin" />
+                            <span>Saving...</span>
+                          </span>
+                        ) : autoSaveState === 'saved' ? (
+                          <span className="text-[9px] font-bold text-emerald-700 flex items-center gap-0.5 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            <CheckIcon className="w-2.5 h-2.5" />
+                            <span>Saved</span>
+                          </span>
+                        ) : null}
+
+                        <button
+                          type="button"
+                          onClick={() => handleSaveSingleAlignment(sub)}
+                          disabled={isSaving}
+                          className={`px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 border cursor-pointer ${
+                            isSaved
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                          }`}
+                          title="Instant Save Zoom and Position"
+                        >
+                          {isSaving ? (
+                            <div className="w-3 h-3 border-2 border-slate-600 border-t-transparent rounded-full animate-spin" />
+                          ) : isSaved ? (
+                            <>
+                              <CheckIcon className="w-3 h-3 text-emerald-600" />
+                              <span className="hidden sm:inline">Saved</span>
+                            </>
+                          ) : (
+                            <span>Save</span>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadSingleFrame(sub)}
+                          className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                          title="Download single high-res framed PNG"
+                        >
+                          <DownloadIcon className="w-3 h-3" />
+                          <span className="hidden sm:inline">PNG</span>
+                        </button>
+
+                        {/* Mobile Toggle Alignment Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExpandedAlignIds((prev) => ({
+                              ...prev,
+                              [sub.inquiryId]: !prev[sub.inquiryId]
+                            }));
+                          }}
+                          className={`px-2 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1 sm:hidden ${
+                            isAlignOpen
+                              ? 'bg-amber-600 text-white border-amber-700'
+                              : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+                          }`}
+                          title="Toggle Alignment Sliders"
+                        >
+                          <span>{isAlignOpen ? 'Hide' : 'Align ⚙️'}</span>
+                        </button>
                       </div>
                     </div>
 
-                    {/* Name */}
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-bold text-white truncate">
-                        {sub.husbandName} &amp; {sub.wifeName}
-                      </p>
-                    </div>
+                    {/* Middle: Canvas + Sliders */}
+                    <div className="flex flex-col sm:flex-row items-start gap-3 w-full">
+                      {/* Live Canvas */}
+                      <LivePreviewCanvas sub={sub} frameImg={globalFrameImg} />
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-1 pt-1 border-t border-slate-800">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveInquiryId(sub.inquiryId);
-                          setViewMode('studio');
-                        }}
-                        className="flex-1 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-lg text-[10px] font-bold cursor-pointer text-center"
-                      >
-                        Adjust
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadSingleFrame(sub)}
-                        className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg cursor-pointer"
-                        title="Download PNG"
-                      >
-                        <DownloadIcon className="w-3 h-3" />
-                      </button>
+                      {/* Sliders Container: Always visible on desktop, toggleable on mobile */}
+                      <div className={`flex-1 w-full ${isAlignOpen ? 'block' : 'hidden sm:block'}`}>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50/90 p-2.5 sm:p-3 rounded-xl border border-slate-200/80">
+                          {/* Zoom Slider */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
+                                Zoom ({zoomVal.toFixed(2)}x)
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoZoom', Math.max(0.5, Number((zoomVal - 0.05).toFixed(2))))}
+                                  className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                >
+                                  −
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoZoom', Math.min(2.5, Number((zoomVal + 0.05).toFixed(2))))}
+                                  className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                >
+                                  +
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoZoom', 1.0)}
+                                  className="px-1.5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-500 font-bold text-[10px] flex items-center justify-center cursor-pointer"
+                                  title="Reset Zoom"
+                                >
+                                  1x
+                                </button>
+                              </div>
+                            </div>
+                            <input
+                              type="range"
+                              min="0.5"
+                              max="2.5"
+                              step="0.05"
+                              value={zoomVal}
+                              onChange={(e) => updateCoord(sub.inquiryId, 'photoZoom', Number(e.target.value))}
+                              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-600"
+                            />
+                          </div>
+
+                          {/* Left / Right Slider */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
+                                ◄ Left / Right ► ({offsetValX > 0 ? `+${offsetValX}` : offsetValX}px)
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoOffsetX', offsetValX - 10)}
+                                  className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                  title="Shift Left"
+                                >
+                                  ◄
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoOffsetX', offsetValX + 10)}
+                                  className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                  title="Shift Right"
+                                >
+                                  ►
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoOffsetX', 0)}
+                                  className="px-1.5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-500 font-bold text-[10px] flex items-center justify-center cursor-pointer"
+                                  title="Center Horizontally"
+                                >
+                                  0
+                                </button>
+                              </div>
+                            </div>
+                            <input
+                              type="range"
+                              min="-300"
+                              max="300"
+                              step="5"
+                              value={offsetValX}
+                              onChange={(e) => updateCoord(sub.inquiryId, 'photoOffsetX', Number(e.target.value))}
+                              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                            />
+                          </div>
+
+                          {/* Up / Down Slider */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
+                                ▲ Up / Down ▼ ({offsetValY > 0 ? `+${offsetValY}` : offsetValY}px)
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoOffsetY', offsetValY - 10)}
+                                  className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                  title="Move Up"
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoOffsetY', offsetValY + 10)}
+                                  className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                  title="Move Down"
+                                >
+                                  ▼
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    updateCoord(sub.inquiryId, 'photoZoom', 1.0);
+                                    updateCoord(sub.inquiryId, 'photoOffsetX', 0);
+                                    updateCoord(sub.inquiryId, 'photoOffsetY', 0);
+                                  }}
+                                  className="px-1.5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-500 font-bold text-[10px] flex items-center justify-center cursor-pointer"
+                                  title="Reset Alignment"
+                                >
+                                  ↺
+                                </button>
+                              </div>
+                            </div>
+                            <input
+                              type="range"
+                              min="-300"
+                              max="300"
+                              step="5"
+                              value={offsetValY}
+                              onChange={(e) => updateCoord(sub.inquiryId, 'photoOffsetY', Number(e.target.value))}
+                              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
-        ) : (
-          /* =================== STUDIO SPLIT VIEW =================== */
-          <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
-            
-            {/* Left Column: Attendee Queue (Hidden on mobile if studio tab is active) */}
-            <div
-              className={`w-full md:w-80 lg:w-96 border-r border-slate-800 flex flex-col bg-slate-900/70 shrink-0 ${
-                mobileTab === 'queue' ? 'flex flex-1' : 'hidden md:flex'
-              }`}
-            >
-              {/* Queue Header & Select All Controls */}
-              <div className="p-2.5 sm:p-3 border-b border-slate-800 flex items-center justify-between gap-2 shrink-0 bg-slate-900">
-                <span className="text-xs font-extrabold text-slate-300">
-                  Queue ({filteredSubmissions.length})
-                </span>
-                <div className="flex items-center gap-1.5 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedInquiryIds(filteredSubmissions.map((s) => s.inquiryId))}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
-                  >
-                    Select All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedInquiryIds([])}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-
-              {/* Queue Scroll List */}
-              <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60 p-1.5 space-y-1">
-                {filteredSubmissions.map((sub) => {
-                  const isSelected = selectedInquiryIds.includes(sub.inquiryId);
-                  const isActive = activeSubmission?.inquiryId === sub.inquiryId;
-                  const isPrinted = sub.frameExportStatus === 'EXPORTED';
-                  const isModified = sub.frameExportStatus === 'MODIFIED';
-                  const thumbUrl = getOptimizedPhotoUrl(sub.couplePhoto, 160, 200);
-
-                  return (
-                    <div
-                      key={sub.inquiryId}
-                      onClick={() => {
-                        setActiveInquiryId(sub.inquiryId);
-                        setMobileTab('studio');
-                      }}
-                      className={`p-2 rounded-xl flex items-center gap-2.5 transition-all cursor-pointer ${
-                        isActive
-                          ? 'bg-amber-500/15 border border-amber-500/50 shadow-sm'
-                          : 'hover:bg-slate-800/70 border border-transparent'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          setSelectedInquiryIds((prev) =>
-                            isSelected ? prev.filter((id) => id !== sub.inquiryId) : [...prev, sub.inquiryId]
-                          );
-                        }}
-                        className="w-3.5 h-3.5 rounded text-amber-500 accent-amber-500 cursor-pointer shrink-0"
-                      />
-
-                      {/* Mini Thumbnail */}
-                      <div className="w-10 h-13 rounded-lg overflow-hidden bg-slate-950 border border-slate-800 shrink-0">
-                        <img
-                          src={thumbUrl}
-                          alt=""
-                          loading="lazy"
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-
-                      {/* Info */}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-black text-white truncate">
-                            {sub.inquiryId}
-                          </span>
-                          {isPrinted ? (
-                            <span className="text-[8px] font-black px-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
-                              PRINTED
-                            </span>
-                          ) : isModified ? (
-                            <span className="text-[8px] font-black px-1 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
-                              ADJUSTED
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="text-[11px] font-bold text-slate-300 truncate">
-                          {sub.husbandName} &amp; {sub.wifeName} {sub.surname}
-                        </p>
-                        <p className="text-[10px] text-slate-500 truncate">
-                          {sub.phoneNumber || 'No phone'}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Right Column: Interactive Framing Studio (Hidden on mobile if queue tab is active) */}
-            <div
-              className={`flex-1 flex flex-col bg-slate-950 overflow-y-auto ${
-                mobileTab === 'studio' ? 'flex' : 'hidden md:flex'
-              }`}
-            >
-              {activeSubmission ? (
-                <InteractiveFramingStudio
-                  sub={activeSubmission}
-                  frameImg={globalFrameImg}
-                  onUpdateCoord={updateCoord}
-                  onSaveAlignment={() => handleSaveSingleAlignment(activeSubmission)}
-                  onTogglePrintStatus={() => handleToggleSinglePrintStatus(activeSubmission)}
-                  onDownloadFrame={() => handleDownloadSingleFrame(activeSubmission)}
-                  isSaving={savingId === activeSubmission.inquiryId}
-                  isSaved={Boolean(savedSuccessIds[activeSubmission.inquiryId])}
-                  autoSaveState={autoSavingMap[activeSubmission.inquiryId]}
-                  onPrev={() => {
-                    const idx = filteredSubmissions.findIndex((s) => s.inquiryId === activeSubmission.inquiryId);
-                    const prevIdx = idx > 0 ? idx - 1 : filteredSubmissions.length - 1;
-                    setActiveInquiryId(filteredSubmissions[prevIdx].inquiryId);
-                  }}
-                  onNext={() => {
-                    const idx = filteredSubmissions.findIndex((s) => s.inquiryId === activeSubmission.inquiryId);
-                    const nextIdx = idx < filteredSubmissions.length - 1 ? idx + 1 : 0;
-                    setActiveInquiryId(filteredSubmissions[nextIdx].inquiryId);
-                  }}
-                  currentIndex={filteredSubmissions.findIndex((s) => s.inquiryId === activeSubmission.inquiryId) + 1}
-                  totalCount={filteredSubmissions.length}
-                />
-              ) : (
-                <div className="flex-1 flex items-center justify-center p-8 text-slate-500 text-xs font-bold">
-                  Select a couple from the queue to start framing.
-                </div>
-              )}
-            </div>
-
-          </div>
-        )}
-      </div>
-
-      {/* 4. Bottom Sticky Action Bar (Batch Export Operations) */}
-      <footer className="p-3 sm:p-4 border-t border-slate-800 bg-slate-900 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-2 text-xs text-slate-400 font-medium w-full sm:w-auto justify-between sm:justify-start">
-          <span>
-            Selected: <strong className="text-amber-400 font-extrabold">{selectedCount}</strong> / {filteredSubmissions.length}
-          </span>
-          {zipping && (
-            <span className="text-[11px] font-bold text-amber-300 animate-pulse">
-              {zipProgress}
-            </span>
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto">
-          {/* Quick Mark Batch Status */}
-          <button
-            type="button"
-            onClick={() => handleMarkSelectedExported('EXPORTED')}
-            disabled={selectedCount === 0 || zipping}
-            className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer"
-          >
-            Mark Printed ({selectedCount})
-          </button>
-
-          {/* Raw Photos ZIP */}
-          <button
-            type="button"
-            onClick={handleDownloadRawZip}
-            disabled={zipping || selectedCount === 0}
-            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
-          >
-            <DownloadIcon className="w-3.5 h-3.5" />
-            <span>Raw ZIP ({selectedCount})</span>
-          </button>
-
-          {/* Main Framed ZIP Button */}
-          <button
-            type="button"
-            onClick={handleDownloadFramedZip}
-            disabled={zipping || selectedCount === 0}
-            className="px-4 py-2.5 bg-gradient-to-r from-amber-500 via-rose-600 to-amber-600 hover:from-amber-600 hover:to-rose-700 disabled:opacity-50 text-white font-extrabold rounded-xl text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 active:scale-95"
-          >
-            {zipping ? (
-              <>
-                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>{zipProgress || (zipPercent !== null ? `Zipping (${zipPercent}%)...` : 'Processing...')}</span>
-              </>
-            ) : (
-              <>
-                <SparklesIcon className="w-4 h-4" />
-                <span>Export Framed ZIP ({selectedCount})</span>
-              </>
+        {/* Modal Footer with High-Speed Batch Actions */}
+        <div className="p-3 sm:p-4 border-t border-slate-200 bg-white flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+          <div className="text-xs text-slate-600 font-medium text-center sm:text-left w-full sm:w-auto">
+            Ready to export: <strong className="text-slate-900 font-extrabold">{selectedCount}</strong> framed photos
+            {paymentFilter !== 'ALL' && (
+              <span className="text-slate-400 ml-1">({paymentFilter})</span>
             )}
-          </button>
-        </div>
-      </footer>
+            {zipping && (
+              <span className="ml-2 text-rose-600 font-bold animate-pulse">
+                {zipProgress}
+              </span>
+            )}
+          </div>
 
+          <div className="flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3.5 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer flex-1 sm:flex-initial"
+            >
+              Close
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownloadRawZip}
+              disabled={zipping || selectedCount === 0}
+              className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"
+            >
+              <DownloadIcon className="w-3.5 h-3.5" />
+              <span>Raw ZIP ({selectedCount})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownloadFramedZip}
+              disabled={zipping || selectedCount === 0}
+              className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-700 hover:to-rose-700 disabled:opacity-50 text-white font-extrabold rounded-xl text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 active:scale-95"
+            >
+              {zipping ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>{zipProgress || (zipPercent !== null ? `Zipping (${zipPercent}%)...` : 'Processing...')}</span>
+                </>
+              ) : (
+                <>
+                  <SparklesIcon className="w-4 h-4" />
+                  <span>Download Framed ZIP ({selectedCount})</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 
   return createPortal(modalContent, document.body);
-};
-
-/**
- * High-Precision Interactive Framing Studio Component
- * Supports direct touch & mouse dragging to pan photo, real-time zoom slider, and presets
- */
-interface InteractiveFramingStudioProps {
-  sub: Submission;
-  frameImg: HTMLImageElement | null;
-  onUpdateCoord: (inquiryId: string, field: 'photoZoom' | 'photoOffsetX' | 'photoOffsetY', value: number) => void;
-  onSaveAlignment: () => void;
-  onTogglePrintStatus: () => void;
-  onDownloadFrame: () => void;
-  isSaving: boolean;
-  isSaved: boolean;
-  autoSaveState?: 'saving' | 'saved';
-  onPrev: () => void;
-  onNext: () => void;
-  currentIndex: number;
-  totalCount: number;
-}
-
-const InteractiveFramingStudio: React.FC<InteractiveFramingStudioProps> = ({
-  sub,
-  frameImg,
-  onUpdateCoord,
-  onSaveAlignment,
-  onTogglePrintStatus,
-  onDownloadFrame,
-  isSaving,
-  isSaved,
-  autoSaveState,
-  onPrev,
-  onNext,
-  currentIndex,
-  totalCount
-}) => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [coupleImg, setCoupleImg] = useState<HTMLImageElement | null>(null);
-  const [loadingImg, setLoadingImg] = useState(true);
-
-  // Dragging interaction state
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef<{ x: number; y: number; startOx: number; startOy: number }>({
-    x: 0,
-    y: 0,
-    startOx: 0,
-    startOy: 0
-  });
-
-  const zoomVal = sub.photoZoom ?? 1.0;
-  const offsetValX = sub.photoOffsetX ?? 0;
-  const offsetValY = sub.photoOffsetY ?? 0;
-  const isPrinted = sub.frameExportStatus === 'EXPORTED';
-  const isModified = sub.frameExportStatus === 'MODIFIED';
-
-  // Load high-speed 600x800 preview photo
-  useEffect(() => {
-    let isMounted = true;
-    if (!sub.couplePhoto) {
-      setCoupleImg(null);
-      setLoadingImg(false);
-      return;
-    }
-
-    setLoadingImg(true);
-    const optimizedUrl = getOptimizedPhotoUrl(sub.couplePhoto, 600, 800);
-    loadSafeCanvasImage(optimizedUrl, 12000).then((img) => {
-      if (!isMounted) return;
-      setCoupleImg(img);
-      setLoadingImg(false);
-    });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [sub.couplePhoto]);
-
-  // Render Canvas
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    canvas.width = 768;
-    canvas.height = 1024;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const startX = canvas.width * 0.08;
-    const startY = canvas.height * 0.08;
-    const drawWidth = canvas.width * 0.84;
-    const drawHeight = canvas.height * 0.84;
-
-    if (coupleImg) {
-      const imgAspect = coupleImg.width / coupleImg.height;
-      const targetAspect = drawWidth / drawHeight;
-      let tempW = drawWidth;
-      let tempH = drawHeight;
-      let offsetX = 0;
-      let offsetY = 0;
-
-      if (imgAspect > targetAspect) {
-        tempW = drawHeight * imgAspect;
-        offsetX = -(tempW - drawWidth) / 2;
-      } else {
-        tempH = drawWidth / imgAspect;
-        offsetY = -(tempH - drawHeight) / 2;
-      }
-
-      const w = tempW * zoomVal;
-      const h = tempH * zoomVal;
-      const ox = offsetX - (w - tempW) / 2 + (offsetValX * (canvas.width / 768));
-      const oy = offsetY - (h - tempH) / 2 + (offsetValY * (canvas.height / 1024));
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(startX, startY, drawWidth, drawHeight);
-      ctx.clip();
-      ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
-      ctx.restore();
-    } else {
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(startX, startY, drawWidth, drawHeight);
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = 'bold 24px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(loadingImg ? 'Loading photo...' : 'No Photo Available', canvas.width / 2, canvas.height / 2);
-    }
-
-    // Overlay frame
-    if (frameImg) {
-      ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
-    }
-
-    // Token text
-    ctx.save();
-    ctx.fillStyle = '#7a0c0c';
-    ctx.font = 'bold 22px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
-    ctx.restore();
-  }, [coupleImg, frameImg, zoomVal, offsetValX, offsetValY, sub.inquiryId, loadingImg]);
-
-  // Touch & Mouse Handlers for Drag-to-Pan
-  const handlePointerDown = (clientX: number, clientY: number) => {
-    setIsDragging(true);
-    dragStartRef.current = {
-      x: clientX,
-      y: clientY,
-      startOx: offsetValX,
-      startOy: offsetValY
-    };
-  };
-
-  const handlePointerMove = (clientX: number, clientY: number) => {
-    if (!isDragging) return;
-    const deltaX = clientX - dragStartRef.current.x;
-    const deltaY = clientY - dragStartRef.current.y;
-    // Scale delta relative to canvas size (~2x sensitivity)
-    const newOx = Math.round(dragStartRef.current.startOx + deltaX * 1.6);
-    const newOy = Math.round(dragStartRef.current.startOy + deltaY * 1.6);
-    onUpdateCoord(sub.inquiryId, 'photoOffsetX', Math.max(-300, Math.min(300, newOx)));
-    onUpdateCoord(sub.inquiryId, 'photoOffsetY', Math.max(-300, Math.min(300, newOy)));
-  };
-
-  const handlePointerUp = () => {
-    setIsDragging(false);
-  };
-
-  return (
-    <div className="flex-1 flex flex-col h-full overflow-y-auto p-3 sm:p-5 space-y-4">
-      
-      {/* Studio Header Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-black px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40">
-              {sub.inquiryId}
-            </span>
-            <h3 className="text-sm sm:text-base font-extrabold text-white truncate">
-              {sub.husbandName} &amp; {sub.wifeName} {sub.surname}
-            </h3>
-            {isPrinted ? (
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                Printed
-              </span>
-            ) : isModified ? (
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                Adjusted
-              </span>
-            ) : (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 border border-slate-700">
-                New
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-slate-400 font-medium mt-0.5">
-            Phone: <span className="text-white font-bold">{sub.phoneNumber || 'N/A'}</span> &bull; Program: {sub.programName || 'Standard'}
-          </p>
-        </div>
-
-        {/* Quick Save & Actions */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {autoSaveState === 'saving' && (
-            <span className="text-[10px] font-bold text-amber-400 flex items-center gap-1 bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20">
-              <div className="w-2 h-2 border border-amber-400 border-t-transparent rounded-full animate-spin" />
-              <span>Saving...</span>
-            </span>
-          )}
-
-          <button
-            type="button"
-            onClick={onSaveAlignment}
-            disabled={isSaving}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
-              isSaved
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                : 'bg-slate-800 hover:bg-slate-700 text-white border-slate-700'
-            }`}
-          >
-            {isSaving ? (
-              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : isSaved ? (
-              <>
-                <CheckIcon className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Saved</span>
-              </>
-            ) : (
-              <span>Save</span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={onTogglePrintStatus}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-              isPrinted
-                ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500'
-            }`}
-          >
-            {isPrinted ? 'Reset Status' : 'Mark Printed'}
-          </button>
-
-          <button
-            type="button"
-            onClick={onDownloadFrame}
-            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-          >
-            <DownloadIcon className="w-3.5 h-3.5" />
-            <span>Download PNG</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Main Interactive Studio Canvas */}
-      <div className="flex-1 min-h-[360px] sm:min-h-[460px] flex items-center justify-center relative bg-slate-900/50 rounded-2xl border border-slate-800/80 p-4">
-        
-        {/* Floating Instruction */}
-        <div className="absolute top-3 left-3 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-xl px-2.5 py-1 text-[11px] text-slate-400 font-medium z-10 hidden sm:block">
-          💡 Drag photo to position &bull; Use slider below to zoom
-        </div>
-
-        {/* Previous / Next Floating Arrows */}
-        <button
-          type="button"
-          onClick={onPrev}
-          className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-2xl bg-slate-900/90 border border-slate-700 hover:border-amber-500 text-white flex items-center justify-center cursor-pointer z-10 shadow-lg hover:scale-105 active:scale-95 transition-all"
-          title="Previous Couple (Left Arrow)"
-        >
-          ◀
-        </button>
-
-        <button
-          type="button"
-          onClick={onNext}
-          className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-2xl bg-slate-900/90 border border-slate-700 hover:border-amber-500 text-white flex items-center justify-center cursor-pointer z-10 shadow-lg hover:scale-105 active:scale-95 transition-all"
-          title="Next Couple (Right Arrow)"
-        >
-          ▶
-        </button>
-
-        {/* The Live Interactive Canvas */}
-        <div
-          onMouseDown={(e) => handlePointerDown(e.clientX, e.clientY)}
-          onMouseMove={(e) => handlePointerMove(e.clientX, e.clientY)}
-          onMouseUp={handlePointerUp}
-          onMouseLeave={handlePointerUp}
-          onTouchStart={(e) => {
-            if (e.touches.length > 0) {
-              handlePointerDown(e.touches[0].clientX, e.touches[0].clientY);
-            }
-          }}
-          onTouchMove={(e) => {
-            if (e.touches.length > 0) {
-              handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
-            }
-          }}
-          onTouchEnd={handlePointerUp}
-          className={`relative max-w-[320px] sm:max-w-[380px] w-full aspect-[3/4] rounded-2xl overflow-hidden shadow-2xl border-2 transition-all ${
-            isDragging
-              ? 'border-amber-500 cursor-grabbing ring-4 ring-amber-500/20'
-              : 'border-slate-700 hover:border-slate-500 cursor-grab'
-          }`}
-        >
-          <canvas ref={canvasRef} className="w-full h-full object-contain block select-none pointer-events-none" />
-          {loadingImg && (
-            <div className="absolute inset-0 bg-slate-950/60 flex items-center justify-center">
-              <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Control Sliders & Presets Panel */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-4 space-y-3 shrink-0">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          
-          {/* Zoom Slider */}
-          <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                Zoom ({zoomVal.toFixed(2)}x)
-              </span>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => onUpdateCoord(sub.inquiryId, 'photoZoom', Math.max(0.5, Number((zoomVal - 0.05).toFixed(2))))}
-                  className="w-5 h-5 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center cursor-pointer"
-                >
-                  −
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onUpdateCoord(sub.inquiryId, 'photoZoom', Math.min(2.5, Number((zoomVal + 0.05).toFixed(2))))}
-                  className="w-5 h-5 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center cursor-pointer"
-                >
-                  +
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onUpdateCoord(sub.inquiryId, 'photoZoom', 1.0)}
-                  className="px-1.5 h-5 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-400 font-bold text-[10px] flex items-center justify-center cursor-pointer"
-                  title="Reset Zoom"
-                >
-                  1x
-                </button>
-              </div>
-            </div>
-            <input
-              type="range"
-              min="0.5"
-              max="2.5"
-              step="0.02"
-              value={zoomVal}
-              onChange={(e) => onUpdateCoord(sub.inquiryId, 'photoZoom', Number(e.target.value))}
-              className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
-            />
-          </div>
-
-          {/* Horizontal Position Slider */}
-          <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                ◄ Left / Right ► ({offsetValX > 0 ? `+${offsetValX}` : offsetValX}px)
-              </span>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => onUpdateCoord(sub.inquiryId, 'photoOffsetX', offsetValX - 10)}
-                  className="w-5 h-5 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center cursor-pointer"
-                >
-                  ◄
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onUpdateCoord(sub.inquiryId, 'photoOffsetX', offsetValX + 10)}
-                  className="w-5 h-5 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center cursor-pointer"
-                >
-                  ►
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onUpdateCoord(sub.inquiryId, 'photoOffsetX', 0)}
-                  className="px-1.5 h-5 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-400 font-bold text-[10px] flex items-center justify-center cursor-pointer"
-                  title="Center Horizontally"
-                >
-                  0
-                </button>
-              </div>
-            </div>
-            <input
-              type="range"
-              min="-300"
-              max="300"
-              step="5"
-              value={offsetValX}
-              onChange={(e) => onUpdateCoord(sub.inquiryId, 'photoOffsetX', Number(e.target.value))}
-              className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
-            />
-          </div>
-
-          {/* Vertical Position Slider */}
-          <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                ▲ Up / Down ▼ ({offsetValY > 0 ? `+${offsetValY}` : offsetValY}px)
-              </span>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => onUpdateCoord(sub.inquiryId, 'photoOffsetY', offsetValY - 10)}
-                  className="w-5 h-5 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center cursor-pointer"
-                >
-                  ▲
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onUpdateCoord(sub.inquiryId, 'photoOffsetY', offsetValY + 10)}
-                  className="w-5 h-5 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center cursor-pointer"
-                >
-                  ▼
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onUpdateCoord(sub.inquiryId, 'photoZoom', 1.0);
-                    onUpdateCoord(sub.inquiryId, 'photoOffsetX', 0);
-                    onUpdateCoord(sub.inquiryId, 'photoOffsetY', 0);
-                  }}
-                  className="px-1.5 h-5 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-400 font-bold text-[10px] flex items-center justify-center cursor-pointer"
-                  title="Reset All Alignment"
-                >
-                  ↺
-                </button>
-              </div>
-            </div>
-            <input
-              type="range"
-              min="-300"
-              max="300"
-              step="5"
-              value={offsetValY}
-              onChange={(e) => onUpdateCoord(sub.inquiryId, 'photoOffsetY', Number(e.target.value))}
-              className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-rose-500"
-            />
-          </div>
-
-        </div>
-
-        {/* Quick Position Presets */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mr-1">
-              Presets:
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                onUpdateCoord(sub.inquiryId, 'photoZoom', 1.0);
-                onUpdateCoord(sub.inquiryId, 'photoOffsetX', 0);
-                onUpdateCoord(sub.inquiryId, 'photoOffsetY', 0);
-              }}
-              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer"
-            >
-              Center (0,0)
-            </button>
-            <button
-              type="button"
-              onClick={() => onUpdateCoord(sub.inquiryId, 'photoOffsetY', offsetValY - 25)}
-              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer"
-            >
-              Nudge Up (-25px)
-            </button>
-            <button
-              type="button"
-              onClick={() => onUpdateCoord(sub.inquiryId, 'photoOffsetY', offsetValY + 25)}
-              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer"
-            >
-              Nudge Down (+25px)
-            </button>
-            <button
-              type="button"
-              onClick={() => onUpdateCoord(sub.inquiryId, 'photoZoom', 1.25)}
-              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer"
-            >
-              Portrait Face Zoom (1.25x)
-            </button>
-          </div>
-
-          <div className="text-[11px] font-bold text-slate-400">
-            Card {currentIndex} of {totalCount}
-          </div>
-        </div>
-
-      </div>
-
-    </div>
-  );
 };

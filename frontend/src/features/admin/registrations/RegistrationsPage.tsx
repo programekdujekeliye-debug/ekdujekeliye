@@ -19,10 +19,8 @@ import {
   WhatsappIcon,
   CreditCardIcon,
   DownloadIcon,
-  EditIcon,
-  CameraIcon
+  EditIcon
 } from '../../../components/Icons';
-import { FrameReviewExportModal } from '../reports/FrameReviewExportModal';
 import toast from 'react-hot-toast';
 
 export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean }) => {
@@ -32,7 +30,6 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
-  const [showFrameStudioModal, setShowFrameStudioModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
@@ -326,17 +323,8 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                 )}
               </div>
 
-              {/* Unified Export & Frame Review Buttons */}
+              {/* Unified Export Center Button for Registrations */}
               <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowFrameStudioModal(true)}
-                  className="w-full sm:w-auto px-3.5 py-2.5 bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-700 hover:to-rose-700 text-white font-extrabold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all whitespace-nowrap active:scale-95"
-                  title="Open Photo Frame Review & Export Studio"
-                >
-                  <CameraIcon className="w-4 h-4 flex-shrink-0" />
-                  <span>Frame Studio</span>
-                </button>
                 <button
                   type="button"
                   onClick={() => setShowExportModal(true)}
@@ -1227,12 +1215,6 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
       <BatchExportModal
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
-        defaultProgramId={selectedProgramId}
-      />
-      {/* Photo Frame Review & Export Studio Modal */}
-      <FrameReviewExportModal
-        isOpen={showFrameStudioModal}
-        onClose={() => setShowFrameStudioModal(false)}
         defaultProgramId={selectedProgramId}
       />
       {/* Edit Registration Details Modal */}
