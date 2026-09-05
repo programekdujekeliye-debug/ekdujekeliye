@@ -2,68 +2,73 @@ import dns from 'dns';
 if (dns.setDefaultResultOrder) {
   dns.setDefaultResultOrder('ipv4first');
 }
+import fs from 'fs';
+import path from 'path';
 import mongoose from 'mongoose';
 import { env } from '../src/config/env.js';
 import { sendUtilityTemplate } from '../src/integrations/whatsapp/whatsapp.service.js';
 
 const prodUri = 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
 
-async function broadcastMarketing() {
+async function broadcastRichRoyal() {
   if (process.argv.includes('--live')) {
     env.APP_ENV = 'production';
     env.WHATSAPP_MODE = 'production';
   }
 
-  console.log('--- EDKL Marketing Broadcast: TBD & Past Events Pending Registrations ---');
+  console.log('================================================================');
+  console.log('RICH & ROYAL SALON — WHATSAPP MARKETING BROADCAST');
+  console.log('================================================================');
   console.log(`WhatsApp Mode: ${env.WHATSAPP_MODE.toUpperCase()}`);
+  console.log(`Template: edkl_september_special_invite_v1 (Gujarati)`);
+  console.log(`Live Execution Flag: ${process.argv.includes('--execute') ? 'YES' : 'NO'}`);
+  console.log('================================================================\n');
+
   await mongoose.connect(prodUri, { family: 4 });
   const db = mongoose.connection.db;
 
-  const upcomingIds = ['prog-2026-09-07', 'prog-2026-09-11', 'prog-2026-09-19'];
-  const upcomingDates = ['2026-09-07', '2026-09-11', '2026-09-19'];
+  const contactsPath = path.resolve(process.cwd(), 'data/rich_royal_clean_contacts.json');
+  if (!fs.existsSync(contactsPath)) {
+    console.error('File not found:', contactsPath);
+    process.exit(1);
+  }
 
-  // Query all pending registrations for TBD and past events
-  const targetSubmissions = await db.collection('submission').find({
-    programId: { $nin: upcomingIds },
-    programDate: { $nin: upcomingDates },
-    inquiryId: { $not: /^(EK06|EK07|EK08)/ },
-    status: { $in: ['pending', 'inquiry'] },
-    isDeleted: { $ne: true }
-  }).toArray();
+  const contacts = JSON.parse(fs.readFileSync(contactsPath, 'utf8'));
+  console.log(`Total Clean Contacts Loaded: ${contacts.length}`);
 
-  console.log(`Found ${targetSubmissions.length} target records.`);
+  // Fetch already sent phone numbers for this template to avoid duplicates
+  const alreadySent = await db.collection('whatsapp_messages').find({
+    templateName: 'edkl_september_special_invite_v1',
+    trigger: 'marketing_broadcast',
+    status: { $in: ['SENT', 'DELIVERED', 'READ'] }
+  }, { projection: { recipientPhone: 1 } }).toArray();
 
-  // Group by unique 10-digit mobile to ensure exactly 1 message per phone number
-  const phoneMap = new Map();
-  targetSubmissions.forEach(sub => {
-    const cleanPhone = String(sub.phoneNumber || '').replace(/\D/g, '').slice(-10);
-    if (cleanPhone && cleanPhone.length === 10 && !phoneMap.has(cleanPhone)) {
-      phoneMap.set(cleanPhone, sub);
-    }
-  });
+  const sentSet = new Set(alreadySent.map(m => (m.recipientPhone || '').slice(-10)));
+  console.log(`Already sent: ${sentSet.size} contacts.`);
 
-  const uniqueRecipients = Array.from(phoneMap.values());
-  console.log(`Total unique phone recipients to broadcast: ${uniqueRecipients.length}`);
+  const remaining = contacts.filter(c => !sentSet.has(c.phone));
+  console.log(`Remaining to send: ${remaining.length} contacts.\n`);
+
+  if (!process.argv.includes('--execute')) {
+    console.log('DRY RUN COMPLETE. To launch live broadcast, run with: node scripts/broadcast_marketing_cohort.js --execute --live');
+    await mongoose.disconnect();
+    return;
+  }
 
   let sent = 0;
   let failed = 0;
 
-  for (let i = 0; i < uniqueRecipients.length; i++) {
-    const record = uniqueRecipients[i];
-    const cleanPhone = String(record.phoneNumber || '').replace(/\D/g, '').slice(-10);
-    const coupleName = `${record.husbandName || ''} & ${record.wifeName || ''}`.trim() || 'Respected Couple';
-
-    console.log(`[${i + 1}/${uniqueRecipients.length}] Sending to ${cleanPhone} (${coupleName})...`);
+  for (let i = 0; i < remaining.length; i++) {
+    const c = remaining[i];
+    const phone = c.phone;
 
     try {
       const res = await sendUtilityTemplate({
-        recipientPhone: `91${cleanPhone}`,
-        templateKey: 'edkl_all_couples_invite_v1',
-        languageCode: 'en_US',
-        variables: {
-          customerName: coupleName
-        },
-        idempotencyKey: `MKT_BROADCAST_V1:${record.inquiryId || cleanPhone}`,
+        recipientPhone: `91${phone}`,
+        templateKey: 'edkl_september_special_invite_v1',
+        languageCode: 'gu',
+        variables: {},
+        idempotencyKey: `RR_BROADCAST_SEPT2026:${phone}`,
         trigger: 'marketing_broadcast',
         category: 'MARKETING'
       });
@@ -71,31 +76,31 @@ async function broadcastMarketing() {
       if (res.success) {
         sent++;
       } else {
-        console.warn(`Failed for ${cleanPhone}:`, res.error || res.message);
         failed++;
       }
     } catch (err) {
-      console.error(`Error sending to ${cleanPhone}:`, err.message);
       failed++;
+      console.error(`Error sending to ${phone}:`, err.message);
     }
 
-    // Rate limiting: 100ms between calls to avoid hitting Meta rate limits
+    if ((i + 1) % 50 === 0 || i === remaining.length - 1) {
+      const now = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' });
+      console.log(`[${now} IST] Progress: ${i + 1}/${remaining.length} (${Math.round(((i + 1) / remaining.length) * 100)}%) | Sent: ${sent} | Failed: ${failed}`);
+    }
+
+    // Rate limiting: 10 messages/sec (100ms)
     await new Promise(r => setTimeout(r, 100));
   }
 
-  console.log(`\n========================================`);
-  console.log(`=== Broadcast Complete ===`);
+  console.log('\n================================================================');
+  console.log('BROADCAST CAMPAIGN COMPLETED');
   console.log(`Successfully sent: ${sent} | Failed: ${failed}`);
-  console.log(`========================================`);
+  console.log('================================================================\n');
 
   await mongoose.disconnect();
 }
 
-if (process.argv.includes('--execute')) {
-  broadcastMarketing().catch(err => {
-    console.error('Fatal broadcast error:', err);
-    process.exit(1);
-  });
-} else {
-  console.log('SAFETY LOCK ACTIVE: Run with --execute --live to execute.');
-}
+broadcastRichRoyal().catch(err => {
+  console.error('Fatal broadcast error:', err);
+  process.exit(1);
+});

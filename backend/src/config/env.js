@@ -171,7 +171,7 @@ export const env = {
   META_GRAPH_API_VERSION,
   WHATSAPP_MODE: (process.env.WHATSAPP_MODE || (APP_ENV === 'production' ? 'production' : 'test')).toLowerCase(),
   WHATSAPP_SEND_ENABLED,
-  WHATSAPP_TEST_RECIPIENTS: (process.env.WHATSAPP_TEST_RECIPIENTS || '918320594829,918200302328,919825100000,919724552042')
+  WHATSAPP_TEST_RECIPIENTS: (process.env.WHATSAPP_TEST_RECIPIENTS || '918320594829,918200302328,919825100000,919724552042,918401473276')
     .split(',')
     .map(s => normalizePhoneNumber(s.trim()))
     .filter(Boolean),

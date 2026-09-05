@@ -46,8 +46,8 @@ export const WhatsAppBroadcastPage: React.FC = () => {
 
   // New Campaign Modal
   const [showLaunchModal, setShowLaunchModal] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState('edkl_all_couples_invite_v1');
-  const [selectedCohort, setSelectedCohort] = useState('TBD_AND_PAST_PENDING');
+  const [selectedTemplate, setSelectedTemplate] = useState('edkl_september_special_invite_v1');
+  const [selectedCohort, setSelectedCohort] = useState('RICH_ROYAL_SALON');
   const [testPhoneNumber, setTestPhoneNumber] = useState('918320594829');
   const [sendingTest, setSendingTest] = useState(false);
   const [launchingCampaign, setLaunchingCampaign] = useState(false);
@@ -624,14 +624,20 @@ export const WhatsAppBroadcastPage: React.FC = () => {
             <div className="space-y-4 text-xs">
               {/* Template Selection */}
               <div>
-                <label className="block text-stone-700 font-bold mb-1">Approved Marketing Template</label>
+                <label className="block text-stone-700 font-bold mb-1">WhatsApp Template</label>
                 <select
                   value={selectedTemplate}
                   onChange={e => setSelectedTemplate(e.target.value)}
                   className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-medium text-stone-800 focus:outline-none focus:border-rose-500"
                 >
+                  <option value="edkl_september_special_invite_v1">
+                    edkl_september_special_invite_v1 (દોડધામ ભરેલી જિંદગીમાં... - Manish Vaghasiya - MARKETING)
+                  </option>
                   <option value="edkl_all_couples_invite_v1">
-                    edkl_all_couples_invite_v1 (All Couples - Married, Engaged &amp; Committed)
+                    edkl_all_couples_invite_v1 (All Couples - Married, Engaged &amp; Committed - MARKETING)
+                  </option>
+                  <option value="edkl_september_gift_share_v3">
+                    edkl_september_gift_share_v3 (Gift &amp; Share Couple Seminar - MARKETING)
                   </option>
                 </select>
               </div>
@@ -644,6 +650,9 @@ export const WhatsAppBroadcastPage: React.FC = () => {
                   onChange={e => setSelectedCohort(e.target.value)}
                   className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-medium text-stone-800 focus:outline-none focus:border-rose-500"
                 >
+                  <option value="RICH_ROYAL_SALON">
+                    RICH &amp; ROYAL Salon Contacts (6,133 Surat Numbers - Deduplicated)
+                  </option>
                   <option value="TBD_AND_PAST_PENDING">
                     TBD &amp; Past Unpaid Registrations (Safe - Strictly Excludes Upcoming EK06, EK07, EK08)
                   </option>

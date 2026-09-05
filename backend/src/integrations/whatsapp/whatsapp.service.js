@@ -131,9 +131,10 @@ export async function sendWhatsAppMessage(rawParams = {}) {
   const maskedPhone = maskPhoneNumber(normalizedPhone);
   const phoneHash = hashPhoneNumber(normalizedPhone);
 
-  // 3. Test Mode Allowlist Guard (Only applies when calling real Meta API in non-prod)
+  // 3. Test Mode Allowlist Guard (Only applies when calling real Meta API in non-prod test mode)
   const isMock = providerMode === 'MOCK' || executionSource === 'AUTOMATED_TEST' || env.WHATSAPP_MODE === 'mock' || process.env.WHATSAPP_MODE === 'mock';
-  if (!isMock && (env.WHATSAPP_MODE === 'test' || env.APP_ENV !== 'production')) {
+  const isBroadcast = trigger === 'marketing_broadcast' || executionSource === 'BROADCAST';
+  if (!isMock && !isBroadcast && (env.WHATSAPP_MODE === 'test' || (env.APP_ENV !== 'production' && trigger === 'marketing_test'))) {
     const isAllowed = env.WHATSAPP_TEST_RECIPIENTS.includes(normalizedPhone);
     if (!isAllowed) {
       console.warn(`[WhatsApp Master Guard] Blocked test dispatch to non-allowlisted number: ${maskedPhone}`);

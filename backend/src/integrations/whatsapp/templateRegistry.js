@@ -571,6 +571,46 @@ export const CORE_TEMPLATES = {
         }
       }
     ]
+  },
+
+  // 13. September 7 & 11 Couple Seminar Schedule & Reference Info (Rich & Royal Salon Broadcast)
+  edkl_september_schedule_info_v1: {
+    key: 'edkl_september_schedule_info_v1',
+    metaName: 'edkl_september_schedule_info_v1',
+    category: 'UTILITY',
+    section: 'CORE',
+    language: 'gu',
+    purpose: 'Event schedule and reference info broadcast for upcoming 7 & 11 September seminar in Surat',
+    trigger: 'marketing_broadcast',
+    bodyVariables: [],
+    buttonVariables: [],
+    requiredVariables: [],
+    components: [
+      {
+        type: 'BODY',
+        text: `નમસ્તે, કેમ છો દોસ્તો?\n\n“એક દુજે કે લિયે” કાર્યક્રમની આગામી તારીખોની માહિતી નીચે મુજબ છે.\n\nતારીખ: 7 અને 11 સપ્ટેમ્બર, 2026\nસમય: સાંજે 8:30 વાગ્યે\nસ્થળ: સરદાર પટેલ સ્મૃતિ ભવન, મીની બજાર, સુરત\n\nરજીસ્ટ્રેશન ફી: ₹1,500 પ્રતિ કપલ\n\nProgram Details & Registration:\nekdujekeliye.in\n\nવધુ માહિતી માટે:\n8200302328 / 9213532835\n\nઆ માહિતી તમારા reference માટે શેર કરવામાં આવી છે.\n\nManish Vaghasiya\n& Ek Duje Ke Liye Team`
+      }
+    ]
+  },
+
+  // 14. September 7 & 11 Couple Seminar Emotional Message & Seat Booking by Manish Vaghasiya (Marketing)
+  edkl_september_special_invite_v1: {
+    key: 'edkl_september_special_invite_v1',
+    metaName: 'edkl_september_special_invite_v1',
+    category: 'MARKETING',
+    section: 'CORE',
+    language: 'gu',
+    purpose: 'Special couple seminar invitation and emotional reflection message by Manish Vaghasiya with seat booking details',
+    trigger: 'marketing_broadcast',
+    bodyVariables: [],
+    buttonVariables: [],
+    requiredVariables: [],
+    components: [
+      {
+        type: 'BODY',
+        text: `દોડધામ ભરેલી જિંદગીમાં ક્યારેક સાથે બેસીને એકબીજાની આંખોમાં જોવાનો સમય પણ નથી મળતો. લગ્નજીવનમાં પ્રેમ તો હોય જ છે, પણ સમય જતાં વાતો અને સંવાદ ક્યાંક ખોવાઈ જાય છે. આ કાર્યક્રમ કોઈ ઉપદેશ આપવા માટે નથી, પણ તમારા સંબંધને ફરીથી એ જ તાજગી અને ઊંડાણ આપવા માટે એક ખાસ સાંજ છે.-મનીષ વઘાસીયા \n\nસંબંધમાં ફરી એ જ પ્રેમ અને સમજણ જીવંત કરવાનો અવસર એટલે—“એક દુજે કે લિયે”\nજ્યાં તમે તમારા પાર્ટનર સાથે બેસીને એકબીજાને ફરીથી ઓળખશો, સમજશો અને તમારા સંબંધને વધુ મજબૂત બનાવશો.\n\nકાર્યક્રમની વિગત:\nતારીખ: 7 અને 11 સપ્ટેમ્બર, 2026\nસમય: સાંજે 8:30 વાગ્યે\nસ્થળ: સરદાર પટેલ સ્મૃતિ ભવન, મીની બજાર, સુરત\nપ્રવેશ: ₹1,500/કપલ (સીમિત બેઠકો)\nતમારા લગ્નજીવન માટે આપેલી આ બે-ત્રણ કલાકની ભેટ આખી જિંદગી યાદ રહેશે.\n\nસીટ બુકિંગ માટે:\nekdujekeliye.in\nસંપર્ક:\n8200302328 / 9213532835\nતમારી અને તમારા જીવનસાથીની રાહ જોશે,\nમનીષ વઘાસિયા અને ‘એક દુજે કે લિયે’ પરિવાર`
+      }
+    ]
   }
 };
 

@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import fs from 'fs';
+import path from 'path';
 import { WhatsappMessage } from '../../models/WhatsappMessage.js';
 import { Registration } from '../../models/Registration.js';
 import { Event } from '../../models/Event.js';
@@ -91,7 +93,7 @@ export const getBroadcastOverview = async (req, res) => {
         templateName: c._id || 'edkl_all_couples_invite_v1',
         title: templateDef?.purpose || 'General Couple Seminar Invitation & Gift Broadcast',
         category: 'MARKETING',
-        audience: 'Past Event Attendees (Paid Registrations)',
+        audience: c._id === 'edkl_september_special_invite_v1' ? 'Rich & Royal Salon (Clean Contacts)' : 'Past Event Attendees (Paid Registrations)',
         totalRecipients: c.totalRecipients,
         sentCount: c.sentCount,
         deliveredCount: c.deliveredCount,
@@ -246,12 +248,13 @@ export const launchBroadcastCampaign = async (req, res) => {
       const testResult = await sendUtilityTemplate({
         recipientPhone: `91${cleanPhone}`,
         templateKey,
-        languageCode: 'en_US',
+        languageCode: templateDef.language || 'en_US',
         variables: {
-          customerName: 'Jayneshbhai (Test)'
+          customerName: 'Jayneshbhai (Test)',
+          eventDate: '7 અને 11 સપ્ટેમ્બર, 2026'
         },
         trigger: 'marketing_test',
-        category: 'MARKETING'
+        category: templateDef.category || 'UTILITY'
       });
 
       return res.json({
@@ -263,35 +266,49 @@ export const launchBroadcastCampaign = async (req, res) => {
       });
     }
 
-    // Safety guard: Find target cohort strictly excluding upcoming active events
-    const upcomingIds = ['prog-2026-09-07', 'prog-2026-09-11', 'prog-2026-09-19'];
-    const upcomingDates = ['2026-09-07', '2026-09-11', '2026-09-19'];
+    let uniqueRecipients = [];
 
-    let targetFilter = {};
-    if (audienceCohort === 'TBD_AND_PAST_PENDING') {
-      targetFilter = {
+    if (audienceCohort === 'RICH_ROYAL_SALON') {
+      const cleanContactsPath = path.resolve(process.cwd(), 'data/rich_royal_clean_contacts.json');
+      if (fs.existsSync(cleanContactsPath)) {
+        const raw = JSON.parse(fs.readFileSync(cleanContactsPath, 'utf8'));
+        uniqueRecipients = raw.map(c => ({
+          phoneNumber: c.phone,
+          husbandName: c.name || 'Friend',
+          wifeName: '',
+          inquiryId: `RR-${c.phone}`
+        }));
+      } else {
+        return res.status(400).json({ error: 'Rich & Royal clean contacts database not found.' });
+      }
+    } else if (audienceCohort === 'TBD_AND_PAST_PENDING') {
+      // Safety guard: Find target cohort strictly excluding upcoming active events
+      const upcomingIds = ['prog-2026-09-07', 'prog-2026-09-11', 'prog-2026-09-19'];
+      const upcomingDates = ['2026-09-07', '2026-09-11', '2026-09-19'];
+
+      const targetFilter = {
         programId: { $nin: upcomingIds },
         programDate: { $nin: upcomingDates },
         inquiryId: { $not: /^(EK06|EK07|EK08)/ },
         status: { $in: ['pending', 'inquiry'] },
         isDeleted: { $ne: true }
       };
+
+      const targetSubmissions = await Registration.find(targetFilter).lean();
+
+      // Deduplicate by 10-digit phone
+      const phoneMap = new Map();
+      targetSubmissions.forEach(sub => {
+        const clean = String(sub.phoneNumber || '').replace(/\D/g, '').slice(-10);
+        if (clean && clean.length === 10 && !phoneMap.has(clean)) {
+          phoneMap.set(clean, sub);
+        }
+      });
+
+      uniqueRecipients = Array.from(phoneMap.values());
     } else {
       return res.status(400).json({ error: 'Invalid audience cohort specified.' });
     }
-
-    const targetSubmissions = await Registration.find(targetFilter).lean();
-
-    // Deduplicate by 10-digit phone
-    const phoneMap = new Map();
-    targetSubmissions.forEach(sub => {
-      const clean = String(sub.phoneNumber || '').replace(/\D/g, '').slice(-10);
-      if (clean && clean.length === 10 && !phoneMap.has(clean)) {
-        phoneMap.set(clean, sub);
-      }
-    });
-
-    const uniqueRecipients = Array.from(phoneMap.values());
 
     // Trigger async background processing without blocking request
     setImmediate(async () => {
@@ -307,11 +324,14 @@ export const launchBroadcastCampaign = async (req, res) => {
           await sendUtilityTemplate({
             recipientPhone: `91${cleanPhone}`,
             templateKey,
-            languageCode: 'en_US',
-            variables: { customerName: coupleName },
-            idempotencyKey: `MKT_BROADCAST_UI_${Date.now()}:${record.inquiryId || cleanPhone}`,
+            languageCode: templateDef.language || 'en_US',
+            variables: {
+              customerName: coupleName,
+              eventDate: '7 અને 11 સપ્ટેમ્બર, 2026'
+            },
+            idempotencyKey: `RR_BROADCAST_SEPT2026:${cleanPhone}`,
             trigger: 'marketing_broadcast',
-            category: 'MARKETING'
+            category: templateDef.category || 'UTILITY'
           });
         } catch (e) {
           console.error(`Broadcast error for ${cleanPhone}:`, e.message);
