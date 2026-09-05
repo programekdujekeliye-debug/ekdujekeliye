@@ -359,6 +359,7 @@ export const getEventCommunicationDashboard = async (req, res) => {
 
     let eventRegMatch = {};
     let eventMsgMatch = {};
+    let event = null;
 
     if (eventId && eventId !== 'all') {
       event = await Event.findOne(
@@ -366,7 +367,7 @@ export const getEventCommunicationDashboard = async (req, res) => {
         'id name slug date time venue city capacity status price isPaymentEnabled earlyRegistrationMode'
       ).lean();
 
-      matchedIds.push(eventId);
+      const matchedIds = [eventId];
       if (event) {
         if (event.id && !matchedIds.includes(event.id)) matchedIds.push(event.id);
         if (event.slug && !matchedIds.includes(event.slug)) matchedIds.push(event.slug);
