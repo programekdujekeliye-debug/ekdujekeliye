@@ -909,6 +909,38 @@ export const markFramesExported = async (req, res) => {
   }
 };
 
+export const bulkUpdateFrameAlignments = async (req, res) => {
+  const { alignments } = req.body;
+  if (!Array.isArray(alignments) || alignments.length === 0) {
+    return res.status(400).json({ error: 'No alignments provided.' });
+  }
+
+  try {
+    const ops = alignments.map((item) => ({
+      updateOne: {
+        filter: { inquiryId: item.inquiryId },
+        update: {
+          $set: {
+            photoZoom: item.photoZoom,
+            photoOffsetX: item.photoOffsetX,
+            photoOffsetY: item.photoOffsetY,
+            frameExportStatus: 'MODIFIED'
+          }
+        }
+      }
+    }));
+
+    const result = await Registration.bulkWrite(ops, { ordered: false });
+    res.json({
+      success: true,
+      modifiedCount: result.modifiedCount || alignments.length
+    });
+  } catch (err) {
+    console.error('[Registration Controller] Error bulk updating frame alignments:', err);
+    res.status(500).json({ error: 'Server error bulk updating frame alignments.' });
+  }
+};
+
 /**
  * Direct CDN Redirects for Media (Prevents Render Bandwidth Proxying)
  */

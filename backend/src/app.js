@@ -66,12 +66,16 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ limit: '20mb', extended: true }));
 
-// Uploads static directory
+// Uploads static directory with 7-day browser caching
 const uploadsDir = path.resolve(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', express.static(uploadsDir, {
+  maxAge: '7d',
+  immutable: true,
+  etag: true
+}));
 
 // --- System & Discovery Endpoints ---
 app.get('/api/health', (req, res) => {
