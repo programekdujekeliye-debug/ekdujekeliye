@@ -381,7 +381,7 @@ export const manualInviteeRegistration = async (req, res) => {
           console.warn('[ManualInvitee] Invitation card generation warning:', cardErr.message);
         }
 
-        return sendUtilityTemplate({
+        await sendUtilityTemplate({
           recipientPhone: phoneNumber,
           templateKey: 'edkl_personal_invitation_24h_v2',
           languageCode: 'en_US',
