@@ -13,7 +13,8 @@ export type AdminSection =
   | 'settings'
   | 'resources'
   | 'integrations'
-  | 'storage';
+  | 'storage'
+  | 'feedback';
 
 export interface DatabaseStats {
   dataSizeMB: number;

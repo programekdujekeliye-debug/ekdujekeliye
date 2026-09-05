@@ -17,6 +17,7 @@ import { SettingsPage } from '../admin/settings/SettingsPage';
 import { ResourcesPage } from '../admin/resources/ResourcesPage';
 import { IntegrationsPage } from '../admin/integrations/IntegrationsPage';
 import { StoragePage } from './storage/StoragePage';
+import { FeedbackDashboardPage } from './feedback/FeedbackDashboardPage';
 import { BatchExportModal } from '../admin/reports/BatchExportModal';
 import { settingsApi } from '../../services/admin/settingsApi';
 import { apiClient } from '../../services/apiClient';
@@ -132,6 +133,7 @@ const SuperAdminAppContent = () => {
       {activeSection === 'registrations' && <RegistrationsPage />}
       {activeSection === 'vip_passes' && <VipPassesPage />}
       {activeSection === 'finance' && <FinancePage />}
+      {activeSection === 'feedback' && <FeedbackDashboardPage />}
       {activeSection === 'storage' && <StoragePage />}
       {activeSection === 'whatsapp' && <WhatsAppPage />}
       {activeSection === 'whatsapp_inbox' && <WhatsAppInboxPage />}

@@ -39,6 +39,12 @@ export const SUPER_ADMIN_NAVIGATION: SuperAdminNavItem[] = [
     iconName: 'DollarSignIcon'
   },
   {
+    id: 'feedback',
+    label: 'Couples Feedback',
+    gujaratiLabel: 'પ્રતિભાવ ડેશબોર્ડ',
+    iconName: 'StarIcon'
+  },
+  {
     id: 'storage',
     label: 'Storage & Archive',
     iconName: 'ArchiveIcon'
