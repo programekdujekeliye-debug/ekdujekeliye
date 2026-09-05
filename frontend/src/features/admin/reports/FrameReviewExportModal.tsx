@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import JSZip from 'jszip';
 import { useAdmin } from '../context/AdminContext';
 import { registrationsApi } from '../../../services/admin/registrationsApi';
-import { Submission, Program } from '../../../types';
+import { Submission } from '../../../types';
 import { API_BASE_URL } from '../../../config';
 import {
   XIcon,
@@ -13,7 +13,6 @@ import {
   SparklesIcon,
   CheckCircleIcon,
   CameraIcon,
-  AlertTriangleIcon,
   CheckIcon
 } from '../../../components/Icons';
 import { LuxurySelect } from '../../../components/LuxurySelect';
@@ -25,19 +24,17 @@ interface FrameReviewExportModalProps {
   defaultProgramId?: string;
 }
 
-// Token matching algorithm matching legacy system: allows comma/space separated CPL, IP, or numeric IDs
+// Token matching algorithm matching legacy system
 export const matchCplToken = (inquiryId: string, searchToken: string, isBulk: boolean) => {
   const id = inquiryId.trim().toUpperCase();
   const token = searchToken.trim().toUpperCase();
 
   if (id === token) return true;
 
-  // Exact prefix match
   if (token.startsWith('CPL-') || token.startsWith('IP-') || /^EK\d+-\d+$/.test(token)) {
     return id === token;
   }
 
-  // Pure numeric suffix match (e.g. "8" or "0101")
   if (/^\d+$/.test(token)) {
     return id.endsWith(`-${token}`) || id.endsWith(token);
   }
@@ -47,7 +44,8 @@ export const matchCplToken = (inquiryId: string, searchToken: string, isBulk: bo
   return id.includes(token);
 };
 
-const resolvePhotoUrl = (photoPath: string): string => {
+export const resolvePhotoUrl = (photoPath: string): string => {
+  if (!photoPath) return '';
   if (
     photoPath.startsWith('data:') ||
     photoPath.startsWith('http://') ||
@@ -58,41 +56,107 @@ const resolvePhotoUrl = (photoPath: string): string => {
   return `${API_BASE_URL}${photoPath.startsWith('/') ? photoPath : `/${photoPath}`}`;
 };
 
-// Safe image loader with timeout
-const loadImage = (src: string, timeoutMs: number = 10000): Promise<HTMLImageElement | null> => {
-  return new Promise((resolve) => {
-    let safeSrc = src;
-    if (
-      typeof window !== 'undefined' &&
-      window.location.protocol === 'https:' &&
-      safeSrc.startsWith('http://')
-    ) {
-      safeSrc = safeSrc.replace('http://', 'https://');
+/**
+ * Cloudinary fast thumbnail / preview optimizer:
+ * Converts raw 5-15MB camera uploads into super-fast ~40KB WebP/JPEGs
+ */
+export const getOptimizedPhotoUrl = (url: string, width = 600, height = 800): string => {
+  if (!url) return '';
+  const full = resolvePhotoUrl(url);
+  if (full.includes('res.cloudinary.com') && full.includes('/image/upload/')) {
+    if (!full.includes('/image/upload/w_') && !full.includes('/image/upload/c_')) {
+      return full.replace(
+        '/image/upload/',
+        `/image/upload/w_${width},h_${height},c_limit,q_auto,f_auto/`
+      );
     }
+  }
+  return full;
+};
+
+// Global memory cache for loaded images to eliminate network re-fetching
+const imageMemoryCache = new Map<string, HTMLImageElement>();
+
+/**
+ * High-performance, CORS-safe image loader with Blob URL creation to guarantee
+ * that HTML5 Canvas is NEVER tainted during preview or export.
+ */
+export const loadSafeCanvasImage = async (
+  src: string,
+  timeoutMs: number = 15000
+): Promise<HTMLImageElement | null> => {
+  if (!src) return null;
+  if (imageMemoryCache.has(src)) {
+    return imageMemoryCache.get(src)!;
+  }
+
+  let safeSrc = src;
+  if (
+    typeof window !== 'undefined' &&
+    window.location.protocol === 'https:' &&
+    safeSrc.startsWith('http://')
+  ) {
+    safeSrc = safeSrc.replace('http://', 'https://');
+  }
+
+  // Method 1: Fetch as Blob to create same-origin blob: URL (100% immune to canvas tainting)
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(safeSrc, { mode: 'cors', signal: controller.signal });
+    clearTimeout(timer);
+
+    if (res.ok) {
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const img = new Image();
+      const loadedImg = await new Promise<HTMLImageElement | null>((resolve) => {
+        img.onload = () => resolve(img);
+        img.onerror = () => {
+          URL.revokeObjectURL(blobUrl);
+          resolve(null);
+        };
+        img.src = blobUrl;
+      });
+
+      if (loadedImg) {
+        imageMemoryCache.set(src, loadedImg);
+        return loadedImg;
+      }
+    }
+  } catch {
+    // Fall back to Image with crossOrigin
+  }
+
+  // Method 2: Standard crossOrigin with cache-buster
+  return new Promise<HTMLImageElement | null>((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
+    const cacheBusted = safeSrc.includes('?')
+      ? `${safeSrc}&cb=${Date.now()}`
+      : `${safeSrc}?cb=${Date.now()}`;
+
     const timer = setTimeout(() => {
       img.onload = null;
       img.onerror = null;
-      console.warn('Image load timed out in FrameReview:', safeSrc);
       resolve(null);
     }, timeoutMs);
 
     img.onload = () => {
       clearTimeout(timer);
+      imageMemoryCache.set(src, img);
       resolve(img);
     };
     img.onerror = () => {
       clearTimeout(timer);
-      console.warn('Failed to load image in FrameReview:', safeSrc);
       resolve(null);
     };
-    img.src = safeSrc;
+    img.src = cacheBusted;
   });
 };
 
 /**
- * LivePreviewCanvas: Real-time rendered canvas showing couple photo inside frame with live zoom & offset
+ * LivePreviewCanvas: Fast, real-time rendered canvas showing couple photo inside frame
  */
 const LivePreviewCanvas: React.FC<{
   sub: Submission;
@@ -101,20 +165,39 @@ const LivePreviewCanvas: React.FC<{
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [coupleImg, setCoupleImg] = useState<HTMLImageElement | null>(null);
   const [loadingImg, setLoadingImg] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadTrigger, setReloadTrigger] = useState(0);
 
   useEffect(() => {
+    let isMounted = true;
     if (!sub.couplePhoto) {
       setCoupleImg(null);
       setLoadingImg(false);
+      setLoadError(false);
       return;
     }
+
     setLoadingImg(true);
-    const fullUrl = resolvePhotoUrl(sub.couplePhoto);
-    loadImage(fullUrl).then((img) => {
-      setCoupleImg(img);
+    setLoadError(false);
+    // Use optimized 500x667 thumbnail for instant live canvas rendering
+    const optimizedUrl = getOptimizedPhotoUrl(sub.couplePhoto, 500, 667);
+
+    loadSafeCanvasImage(optimizedUrl, 12000).then((img) => {
+      if (!isMounted) return;
+      if (img) {
+        setCoupleImg(img);
+        setLoadError(false);
+      } else {
+        setCoupleImg(null);
+        setLoadError(true);
+      }
       setLoadingImg(false);
     });
-  }, [sub.couplePhoto]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [sub.couplePhoto, reloadTrigger]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -162,12 +245,21 @@ const LivePreviewCanvas: React.FC<{
       ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
       ctx.restore();
     } else {
-      ctx.fillStyle = '#f1f5f9';
+      ctx.fillStyle = '#f8fafc';
       ctx.fillRect(startX, startY, drawWidth, drawHeight);
       ctx.fillStyle = '#94a3b8';
-      ctx.font = 'bold 12px sans-serif';
+      ctx.font = 'bold 11px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(loadingImg ? 'Loading photo...' : 'No photo uploaded', canvas.width / 2, canvas.height / 2);
+      if (loadingImg) {
+        ctx.fillText('Loading...', canvas.width / 2, canvas.height / 2);
+      } else if (loadError) {
+        ctx.fillStyle = '#f43f5e';
+        ctx.fillText('Load failed', canvas.width / 2, canvas.height / 2 - 8);
+        ctx.font = '9px sans-serif';
+        ctx.fillText('Tap to retry', canvas.width / 2, canvas.height / 2 + 10);
+      } else {
+        ctx.fillText('No photo uploaded', canvas.width / 2, canvas.height / 2);
+      }
     }
 
     // Draw frame overlay if loaded
@@ -182,14 +274,29 @@ const LivePreviewCanvas: React.FC<{
     ctx.textAlign = 'center';
     ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
     ctx.restore();
-  }, [coupleImg, frameImg, sub.photoZoom, sub.photoOffsetX, sub.photoOffsetY, sub.inquiryId, loadingImg]);
+  }, [coupleImg, frameImg, sub.photoZoom, sub.photoOffsetX, sub.photoOffsetY, sub.inquiryId, loadingImg, loadError]);
 
   return (
-    <div className="w-[120px] h-[160px] relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 flex-shrink-0 shadow-inner">
-      <canvas
-        ref={canvasRef}
-        className="w-full h-full object-contain block"
-      />
+    <div
+      onClick={() => {
+        if (loadError) {
+          if (sub.couplePhoto) {
+            imageMemoryCache.delete(getOptimizedPhotoUrl(sub.couplePhoto, 500, 667));
+          }
+          setReloadTrigger((v) => v + 1);
+        }
+      }}
+      className={`w-[110px] h-[146px] sm:w-[120px] sm:h-[160px] relative rounded-2xl overflow-hidden border bg-slate-900 flex-shrink-0 shadow-inner ${
+        loadError ? 'border-rose-300 cursor-pointer' : 'border-slate-200'
+      }`}
+      title={loadError ? 'Click to retry loading photo' : 'Live Frame Preview'}
+    >
+      <canvas ref={canvasRef} className="w-full h-full object-contain block" />
+      {loadingImg && (
+        <div className="absolute inset-0 bg-slate-900/40 flex items-center justify-center">
+          <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
     </div>
   );
 };
@@ -208,12 +315,16 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
   const [selectedInquiryIds, setSelectedInquiryIds] = useState<string[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
 
+  // Expanded sliders state for mobile friendliness (inquiryIds with sliders visible)
+  const [expandedAlignIds, setExpandedAlignIds] = useState<Record<string, boolean>>({});
+
   // Global Frame Image
   const [globalFrameImg, setGlobalFrameImg] = useState<HTMLImageElement | null>(null);
 
   // Export & Progress state
   const [zipping, setZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState('');
+  const [zipPercent, setZipPercent] = useState<number | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedSuccessIds, setSavedSuccessIds] = useState<Record<string, boolean>>({});
   const [printStatusFilter, setPrintStatusFilter] = useState<'ALL' | 'UNPRINTED' | 'MODIFIED' | 'EXPORTED'>('ALL');
@@ -237,12 +348,12 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
   // Pre-load frame template PNG
   useEffect(() => {
     if (!isOpen) return;
-    loadImage('/frame_template.png').then((img) => {
+    loadSafeCanvasImage('/frame_template.png').then((img) => {
       setGlobalFrameImg(img);
     });
   }, [isOpen]);
 
-  // Fetch submissions with couple photos for the selected program without the 200 limit
+  // Fetch submissions with couple photos for the selected program
   const fetchSubmissionsForFrames = useCallback(async () => {
     if (!selectedProgramId) {
       setSubmissions([]);
@@ -257,17 +368,27 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         limit: 5000
       });
 
-      const list = (res.submissions || []).filter((s) => Boolean(s.couplePhoto));
+      // Filter to only submissions belonging to the selected program that have photos
+      const selectedProg = programs.find((p) => p.id === selectedProgramId);
+      const rawList = res.submissions || [];
+      const list = rawList.filter((s) => {
+        if (!s.couplePhoto) return false;
+        if (selectedProgramId === 'all') return true;
+        return (
+          s.programId === selectedProgramId ||
+          (selectedProg?.slug && s.programId === selectedProg.slug) ||
+          (selectedProg?.date && s.programDate === selectedProg.date)
+        );
+      });
+
       setSubmissions(list);
-      // Invalidate filter key so auto-sync immediately selects visible filtered items
-      prevFilterKeyRef.current = '';
     } catch (err) {
       console.error('Failed to fetch submissions for frames:', err);
       toast.error('Failed to load registrations with photos.');
     } finally {
       setLoadingSubmissions(false);
     }
-  }, [selectedProgramId]);
+  }, [selectedProgramId, programs]);
 
   useEffect(() => {
     if (isOpen) {
@@ -275,13 +396,15 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
   }, [isOpen, fetchSubmissionsForFrames]);
 
-  // 1. Current Cohort filtered by Payment Status
-  const currentCohort = submissions.filter((sub) => {
-    const isPaid = sub.status === 'approved' || sub.payment?.status === 'captured';
-    if (paymentFilter === 'PAID') return isPaid;
-    if (paymentFilter === 'PENDING') return !isPaid;
-    return true;
-  });
+  // 1. Current Cohort strictly filtered by Payment Status
+  const currentCohort = useMemo(() => {
+    return submissions.filter((sub) => {
+      const isPaid = sub.status === 'approved' || sub.payment?.status === 'captured';
+      if (paymentFilter === 'PAID') return isPaid;
+      if (paymentFilter === 'PENDING') return !isPaid;
+      return true;
+    });
+  }, [submissions, paymentFilter]);
 
   const totalAllCount = submissions.length;
   const paidCount = submissions.filter((s) => s.status === 'approved' || s.payment?.status === 'captured').length;
@@ -292,42 +415,50 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
   const modifiedCount = currentCohort.filter((s) => s.frameExportStatus === 'MODIFIED').length;
   const exportedCount = currentCohort.filter((s) => s.frameExportStatus === 'EXPORTED').length;
 
-  // 2. Filtered submissions based on payment status, print status, and search query
-  const searchedTokens = cplSearchQuery
-    .split(/[\s,]+/)
-    .map((s) => s.trim().toUpperCase())
-    .filter(Boolean);
+  // 2. Filtered submissions based on payment status, print status, and search tokens
+  const searchedTokens = useMemo(() => {
+    return cplSearchQuery
+      .split(/[\s,]+/)
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean);
+  }, [cplSearchQuery]);
+
   const isBulkSearch = searchedTokens.length > 1;
 
-  const filteredSubmissions = currentCohort.filter((sub) => {
-    // Print Status Filter
-    if (printStatusFilter === 'UNPRINTED') {
-      if (sub.frameExportStatus && sub.frameExportStatus !== 'NOT_EXPORTED') return false;
-    } else if (printStatusFilter === 'MODIFIED') {
-      if (sub.frameExportStatus !== 'MODIFIED') return false;
-    } else if (printStatusFilter === 'EXPORTED') {
-      if (sub.frameExportStatus !== 'EXPORTED') return false;
-    }
+  const filteredSubmissions = useMemo(() => {
+    return currentCohort.filter((sub) => {
+      if (printStatusFilter === 'UNPRINTED') {
+        if (sub.frameExportStatus && sub.frameExportStatus !== 'NOT_EXPORTED') return false;
+      } else if (printStatusFilter === 'MODIFIED') {
+        if (sub.frameExportStatus !== 'MODIFIED') return false;
+      } else if (printStatusFilter === 'EXPORTED') {
+        if (sub.frameExportStatus !== 'EXPORTED') return false;
+      }
 
-    if (!cplSearchQuery.trim()) return true;
-    return searchedTokens.some((token) => matchCplToken(sub.inquiryId, token, isBulkSearch));
-  });
+      if (!cplSearchQuery.trim()) return true;
+      return searchedTokens.some((token) => matchCplToken(sub.inquiryId, token, isBulkSearch));
+    });
+  }, [currentCohort, printStatusFilter, cplSearchQuery, searchedTokens, isBulkSearch]);
 
   // 3. Selection Scoping: ONLY items in filteredSubmissions that are selected
-  const selectedFilteredSubmissions = filteredSubmissions.filter((s) =>
-    selectedInquiryIds.includes(s.inquiryId)
-  );
+  const selectedFilteredSubmissions = useMemo(() => {
+    const idSet = new Set(selectedInquiryIds);
+    return filteredSubmissions.filter((s) => idSet.has(s.inquiryId));
+  }, [filteredSubmissions, selectedInquiryIds]);
+
   const selectedCount = selectedFilteredSubmissions.length;
 
-  // 4. Auto-sync selection whenever active filter criteria change
-  const prevFilterKeyRef = useRef<string>('');
+  // 4. Stable selection sync: Triggered ONLY when selectedProgramId or paymentFilter changes
+  // This explicitly prevents background auto-saves or count changes from re-selecting unselected items!
+  const prevCohortKeyRef = useRef<string>('');
   useEffect(() => {
-    const currentFilterKey = `${selectedProgramId}_${paymentFilter}_${printStatusFilter}_${cplSearchQuery}_${submissions.length}_${unprintedCount}_${exportedCount}_${modifiedCount}`;
-    if (prevFilterKeyRef.current !== currentFilterKey) {
-      prevFilterKeyRef.current = currentFilterKey;
+    const cohortKey = `${selectedProgramId}_${paymentFilter}`;
+    if (prevCohortKeyRef.current !== cohortKey) {
+      prevCohortKeyRef.current = cohortKey;
+      // Auto-select all items in the newly activated cohort
       setSelectedInquiryIds(filteredSubmissions.map((s) => s.inquiryId));
     }
-  }, [selectedProgramId, paymentFilter, printStatusFilter, cplSearchQuery, submissions.length, filteredSubmissions, unprintedCount, exportedCount, modifiedCount]);
+  }, [selectedProgramId, paymentFilter, filteredSubmissions]);
 
   // Debounced Auto-Save trigger for real-time framing updates
   const triggerAutoSave = (sub: Submission) => {
@@ -418,7 +549,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
   };
 
-  // Batch Mark Selected as Exported / Unprinted (operates on active filtered selection)
+  // Batch Mark Selected as Exported / Unprinted (operates strictly on active filtered selection)
   const handleMarkSelectedExported = async (status: 'EXPORTED' | 'NOT_EXPORTED') => {
     const targetIds = selectedFilteredSubmissions.map((s) => s.inquiryId);
     if (targetIds.length === 0) {
@@ -456,9 +587,10 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
 
     try {
-      const fullPhotoUrl = resolvePhotoUrl(sub.couplePhoto);
-      const coupleImg = await loadImage(fullPhotoUrl);
-      const frameImg = globalFrameImg || (await loadImage('/frame_template.png'));
+      // High-resolution photo load with CORS protection
+      const highResUrl = getOptimizedPhotoUrl(sub.couplePhoto, 1800, 2400);
+      const coupleImg = await loadSafeCanvasImage(highResUrl);
+      const frameImg = globalFrameImg || (await loadSafeCanvasImage('/frame_template.png'));
 
       if (!frameImg) {
         toast.error('Failed to load frame template.');
@@ -550,6 +682,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
 
   // Batch Framed Photos ZIP Generation (scoped strictly to visible filtered selection)
   const handleDownloadFramedZip = async () => {
+    // Strictly export only items that are visible in filteredSubmissions AND in selectedInquiryIds
     const listToExport = filteredSubmissions.filter((s) => selectedInquiryIds.includes(s.inquiryId));
     if (listToExport.length === 0) {
       toast.error('No selected registrations to download in current filter.');
@@ -559,10 +692,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     try {
       setZipping(true);
       setZipProgress('Starting...');
+      setZipPercent(0);
       const zip = new JSZip();
 
       setZipProgress('Loading frame template...');
-      const frameImg = globalFrameImg || (await loadImage('/frame_template.png'));
+      const frameImg = globalFrameImg || (await loadSafeCanvasImage('/frame_template.png'));
       if (!frameImg) throw new Error('Could not load frame template');
 
       const successfullyExportedIds: string[] = [];
@@ -570,18 +704,19 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       for (let i = 0; i < listToExport.length; i++) {
         const sub = listToExport[i];
         setZipProgress(`Processing ${i + 1} of ${listToExport.length} (${sub.inquiryId})...`);
+        setZipPercent(Math.round(((i + 1) / listToExport.length) * 80));
 
-        // Yield to browser UI thread every photo to prevent frozen tabs/errors
+        // Yield to browser UI thread every photo to prevent frozen UI
         await new Promise((r) => setTimeout(r, 20));
 
         try {
           let coupleImg: HTMLImageElement | null = null;
           if (sub.couplePhoto) {
-            const fullPhotoUrl = resolvePhotoUrl(sub.couplePhoto);
-            coupleImg = await loadImage(fullPhotoUrl, 12000);
+            const highResPhotoUrl = getOptimizedPhotoUrl(sub.couplePhoto, 1800, 2400);
+            coupleImg = await loadSafeCanvasImage(highResPhotoUrl, 15000);
           }
 
-          // Dedicated canvas per photo to completely prevent tainted canvas cascading errors
+          // Dedicated canvas per photo to completely prevent tainted canvas cascading
           const canvas = document.createElement('canvas');
           canvas.width = frameImg.naturalWidth || 768;
           canvas.height = frameImg.naturalHeight || 1024;
@@ -622,7 +757,6 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
             ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
             ctx.restore();
           } else {
-            // Safe fallback placeholder inside frame
             ctx.fillStyle = '#f8fafc';
             ctx.fillRect(startX, startY, drawWidth, drawHeight);
             ctx.fillStyle = '#64748b';
@@ -646,8 +780,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
           try {
             dataUrl = canvas.toDataURL('image/png');
           } catch (canvasErr) {
-            console.warn(`Canvas tainted for ${sub.inquiryId}, falling back to frame placeholder`, canvasErr);
-            // Re-render clean frame without tainted remote photo
+            console.warn(`Canvas tainted for ${sub.inquiryId}, falling back to placeholder`, canvasErr);
             const cleanCanvas = document.createElement('canvas');
             cleanCanvas.width = canvas.width;
             cleanCanvas.height = canvas.height;
@@ -683,10 +816,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       const curProg = programs.find((p) => p.id === selectedProgramId);
       const progName = curProg ? curProg.name : 'Event';
 
-      let manifestCsv = "Token ID,Husband Name,Wife Name,Surname,Mobile Number,Print Status,Zoom,Offset Y,Printed Checkbox,Desk Handover Checkbox\n";
+      let manifestCsv = "Token ID,Husband Name,Wife Name,Surname,Mobile Number,Print Status,Payment Status,Zoom,Offset Y,Printed Checkbox,Desk Handover Checkbox\n";
       listToExport.forEach((sub) => {
         const pStatus = sub.frameExportStatus === 'EXPORTED' ? 'Already Exported' : sub.frameExportStatus === 'MODIFIED' ? 'Adjusted' : 'New';
-        manifestCsv += `"${sub.inquiryId}","${sub.husbandName}","${sub.wifeName}","${sub.surname || ''}","${sub.phoneNumber || ''}","${pStatus}","${sub.photoZoom ?? 1.0}","${sub.photoOffsetY ?? 0}","[  ] Printed","[  ] Handed Over"\n`;
+        const payStatus = sub.status === 'approved' || sub.payment?.status === 'captured' ? 'PAID' : 'PENDING';
+        manifestCsv += `"${sub.inquiryId}","${sub.husbandName}","${sub.wifeName}","${sub.surname || ''}","${sub.phoneNumber || ''}","${pStatus}","${payStatus}","${sub.photoZoom ?? 1.0}","${sub.photoOffsetY ?? 0}","[  ] Printed","[  ] Handed Over"\n`;
       });
       zip.file(`Printing_Manifest_${progName.replace(/\s+/g, '_')}.csv`, manifestCsv);
 
@@ -694,6 +828,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       const content = await zip.generateAsync(
         { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 5 } },
         (metadata) => {
+          setZipPercent(80 + Math.round((metadata.percent / 100) * 20));
           setZipProgress(`Compressing ZIP: ${Math.round(metadata.percent)}%`);
         }
       );
@@ -701,12 +836,12 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       setZipProgress('Downloading...');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(content);
-      a.download = `${progName}_framed_photos.zip`.replace(/\s+/g, '_');
+      const payTag = paymentFilter === 'PAID' ? 'PAID' : paymentFilter === 'PENDING' ? 'PENDING' : 'ALL';
+      a.download = `${progName}_${payTag}_framed_photos.zip`.replace(/\s+/g, '_');
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
 
-      // Automatically mark exported in database and local state for successful items
       if (successfullyExportedIds.length > 0) {
         registrationsApi.markFramesExported(successfullyExportedIds, undefined, 'EXPORTED').catch(console.error);
         setSubmissions((prev) =>
@@ -718,12 +853,13 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         );
       }
 
-      toast.success(`Successfully downloaded ${successfullyExportedIds.length} framed photos and printing manifest!`);
+      toast.success(`Successfully downloaded ${successfullyExportedIds.length} framed photos!`);
     } catch (err: any) {
       toast.error('Error creating ZIP: ' + err.message);
     } finally {
       setZipping(false);
       setZipProgress('');
+      setZipPercent(null);
     }
   };
 
@@ -738,15 +874,15 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     try {
       setZipping(true);
       setZipProgress('Starting...');
+      setZipPercent(0);
       const zip = new JSZip();
 
       for (let i = 0; i < listToExport.length; i++) {
         const sub = listToExport[i];
         setZipProgress(`Fetching raw photo ${i + 1} of ${listToExport.length} (${sub.inquiryId})...`);
+        setZipPercent(Math.round(((i + 1) / listToExport.length) * 80));
 
-        // Yield to event loop
         await new Promise((r) => setTimeout(r, 20));
-
         if (!sub.couplePhoto) continue;
 
         try {
@@ -754,9 +890,8 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
           let blob: Blob | null = null;
           let ext = 'jpg';
 
-          // Attempt 1: Direct fetch
           try {
-            const res = await fetch(photoUrl);
+            const res = await fetch(photoUrl, { mode: 'cors' });
             if (res.ok) {
               blob = await res.blob();
               const contentType = res.headers.get('content-type');
@@ -765,12 +900,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
               else if (contentType?.includes('jpeg') || contentType?.includes('jpg')) ext = 'jpg';
             }
           } catch {
-            // Direct fetch may fail due to CORS preflight, fall through to image tag
+            // Fallback via Image loader
           }
 
-          // Attempt 2: HTML Image tag fallback
           if (!blob) {
-            const img = await loadImage(photoUrl, 10000);
+            const img = await loadSafeCanvasImage(photoUrl, 12000);
             if (img) {
               const rawCanvas = document.createElement('canvas');
               rawCanvas.width = img.naturalWidth || img.width;
@@ -778,14 +912,10 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
               const rawCtx = rawCanvas.getContext('2d');
               if (rawCtx) {
                 rawCtx.drawImage(img, 0, 0);
-                try {
-                  const dataUrl = rawCanvas.toDataURL('image/jpeg', 0.95);
-                  const base64 = dataUrl.split(',')[1];
-                  zip.file(`${sub.inquiryId}.jpg`, base64, { base64: true });
-                  continue;
-                } catch {
-                  // Fallback unable to convert
-                }
+                const dataUrl = rawCanvas.toDataURL('image/jpeg', 0.95);
+                const base64 = dataUrl.split(',')[1];
+                zip.file(`${sub.inquiryId}.jpg`, base64, { base64: true });
+                continue;
               }
             }
           }
@@ -802,6 +932,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       const content = await zip.generateAsync(
         { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 5 } },
         (metadata) => {
+          setZipPercent(80 + Math.round((metadata.percent / 100) * 20));
           setZipProgress(`Compressing raw photos: ${Math.round(metadata.percent)}%`);
         }
       );
@@ -810,7 +941,8 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       const progName = curProg ? curProg.name : 'Event';
       const a = document.createElement('a');
       a.href = URL.createObjectURL(content);
-      a.download = `${progName}_raw_photos.zip`.replace(/\s+/g, '_');
+      const payTag = paymentFilter === 'PAID' ? 'PAID' : paymentFilter === 'PENDING' ? 'PENDING' : 'ALL';
+      a.download = `${progName}_${payTag}_raw_photos.zip`.replace(/\s+/g, '_');
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -821,31 +953,32 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     } finally {
       setZipping(false);
       setZipProgress('');
+      setZipPercent(null);
     }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-none sm:rounded-3xl shadow-2xl border-0 sm:border border-slate-200 w-full max-w-5xl h-full sm:max-h-[92vh] flex flex-col overflow-hidden">
         
         {/* Modal Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-50/50 via-white to-rose-50/50 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-100/80 border border-amber-200 text-amber-700 flex items-center justify-center shadow-xs shrink-0">
-              <CameraIcon className="w-5 h-5" />
+        <div className="p-3.5 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-50/60 via-white to-rose-50/60 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-100/80 border border-amber-200 text-amber-700 flex items-center justify-center shadow-xs shrink-0">
+              <CameraIcon className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h2 className="text-sm sm:text-lg font-extrabold text-slate-900 tracking-tight truncate">
                   Photo Frame Review &amp; Export
                 </h2>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                <span className="text-[9px] sm:text-[10px] font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
                   Live Canvas
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
+              <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate hidden sm:block">
                 Inspect, align with zoom &amp; shift, and download high-resolution framed photos individually or in bulk ZIP.
               </p>
             </div>
@@ -853,7 +986,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+            className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
             aria-label="Close Modal"
           >
             <XIcon className="w-5 h-5" />
@@ -861,8 +994,9 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         </div>
 
         {/* Top Controls Bar */}
-        <div className="p-4 border-b border-slate-100 bg-slate-50/70 space-y-3 shrink-0">
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+        <div className="p-3 sm:p-4 border-b border-slate-100 bg-slate-50/80 space-y-2.5 shrink-0">
+          {/* Responsive Selector Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
             {/* Program Session Selector */}
             <div className="sm:col-span-4">
               <label className="block text-[10px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
@@ -879,7 +1013,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
               />
             </div>
 
-            {/* Payment Filter using LuxurySelect */}
+            {/* Payment Filter using LuxurySelect with live counts */}
             <div className="sm:col-span-3">
               <label className="block text-[10px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
                 Payment Type
@@ -896,18 +1030,18 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
               />
             </div>
 
-            {/* Multiple CPL Search Filter */}
+            {/* Token / Name Search */}
             <div className="sm:col-span-5">
               <label className="block text-[10px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
                 Search / Filter Tokens
               </label>
-              <div className="relative flex items-center bg-white border border-slate-300 rounded-xl px-3 py-1.5 focus-within:border-rose-500 focus-within:ring-2 focus-within:ring-rose-500/10 transition-all">
-                <SearchIcon className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
+              <div className="relative flex items-center bg-white border border-slate-300 rounded-xl px-2.5 sm:px-3 py-1.5 focus-within:border-rose-500 focus-within:ring-2 focus-within:ring-rose-500/10 transition-all">
+                <SearchIcon className="w-3.5 h-3.5 text-slate-400 mr-2 shrink-0" />
                 <input
                   type="text"
                   value={cplSearchQuery}
                   onChange={(e) => setCplSearchQuery(e.target.value)}
-                  placeholder="Paste tokens, couple name, or phone..."
+                  placeholder="Paste tokens, couple name, phone..."
                   className="w-full bg-transparent text-xs text-slate-900 placeholder-slate-400 outline-none font-medium"
                 />
                 {cplSearchQuery && (
@@ -922,33 +1056,36 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
             </div>
           </div>
 
-          {/* Quick Print Status Filter Pills */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/80">
-            <div className="flex flex-wrap items-center gap-1.5 text-xs">
-              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mr-1">
+          {/* Print Status Filter Pills - Horizontally scrollable on mobile */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1.5 border-t border-slate-200/70">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
+              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider shrink-0 mr-0.5">
                 Print Status:
               </span>
 
               <button
                 type="button"
-                onClick={() => setPrintStatusFilter('ALL')}
-                className={`px-3 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer ${
+                onClick={() => {
+                  setPrintStatusFilter('ALL');
+                  setSelectedInquiryIds(currentCohort.map((s) => s.inquiryId));
+                }}
+                className={`px-2.5 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer shrink-0 ${
                   printStatusFilter === 'ALL'
                     ? 'bg-slate-800 text-white shadow-xs'
                     : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-300'
                 }`}
               >
-                All Photos ({totalCount})
+                All ({totalCount})
               </button>
 
               <button
                 type="button"
                 onClick={() => {
                   setPrintStatusFilter('UNPRINTED');
-                  const unprinted = submissions.filter((s) => !s.frameExportStatus || s.frameExportStatus === 'NOT_EXPORTED');
+                  const unprinted = currentCohort.filter((s) => !s.frameExportStatus || s.frameExportStatus === 'NOT_EXPORTED');
                   setSelectedInquiryIds(unprinted.map((s) => s.inquiryId));
                 }}
-                className={`px-3 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer shrink-0 flex items-center gap-1.5 ${
                   printStatusFilter === 'UNPRINTED'
                     ? 'bg-rose-600 text-white shadow-xs'
                     : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200'
@@ -966,16 +1103,16 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                 type="button"
                 onClick={() => {
                   setPrintStatusFilter('MODIFIED');
-                  const modified = submissions.filter((s) => s.frameExportStatus === 'MODIFIED');
+                  const modified = currentCohort.filter((s) => s.frameExportStatus === 'MODIFIED');
                   setSelectedInquiryIds(modified.map((s) => s.inquiryId));
                 }}
-                className={`px-3 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer shrink-0 flex items-center gap-1.5 ${
                   printStatusFilter === 'MODIFIED'
                     ? 'bg-amber-600 text-white shadow-xs'
                     : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
                 }`}
               >
-                <span>Adjusted (Needs Reprint)</span>
+                <span>Adjusted</span>
                 <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
                   printStatusFilter === 'MODIFIED' ? 'bg-amber-700 text-white' : 'bg-amber-200 text-amber-800'
                 }`}>
@@ -987,10 +1124,10 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                 type="button"
                 onClick={() => {
                   setPrintStatusFilter('EXPORTED');
-                  const exp = submissions.filter((s) => s.frameExportStatus === 'EXPORTED');
+                  const exp = currentCohort.filter((s) => s.frameExportStatus === 'EXPORTED');
                   setSelectedInquiryIds(exp.map((s) => s.inquiryId));
                 }}
-                className={`px-3 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 rounded-xl font-bold transition-all text-xs cursor-pointer shrink-0 flex items-center gap-1.5 ${
                   printStatusFilter === 'EXPORTED'
                     ? 'bg-emerald-600 text-white shadow-xs'
                     : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
@@ -1005,40 +1142,38 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
                 onClick={() => handleMarkSelectedExported('EXPORTED')}
                 disabled={selectedCount === 0}
-                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-40 text-emerald-800 border border-emerald-200 rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1"
+                className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-40 text-emerald-800 border border-emerald-200 rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1"
                 title="Manually mark selected as printed"
               >
                 <CheckCircleIcon className="w-3 h-3" />
-                <span>Mark as Printed</span>
+                <span>Mark Printed</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleMarkSelectedExported('NOT_EXPORTED')}
                 disabled={selectedCount === 0}
-                className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 disabled:opacity-40 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1"
+                className="px-2 py-1 bg-slate-50 hover:bg-slate-100 disabled:opacity-40 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1"
                 title="Reset selected to unprinted status"
               >
-                <span>Reset to Unprinted</span>
+                <span>Reset Status</span>
               </button>
             </div>
           </div>
 
-          {/* Selection & Action Buttons Row */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          {/* Selection Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
             <div className="flex flex-wrap items-center gap-1.5 text-xs">
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedInquiryIds(filteredSubmissions.map((s) => s.inquiryId));
-                }}
-                className="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-2xs"
+                onClick={() => setSelectedInquiryIds(filteredSubmissions.map((s) => s.inquiryId))}
+                className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-2xs"
               >
-                Select All Filtered ({filteredSubmissions.length})
+                Select All ({filteredSubmissions.length})
               </button>
               <button
                 type="button"
@@ -1046,39 +1181,26 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                   const filteredIds = new Set(filteredSubmissions.map((s) => s.inquiryId));
                   setSelectedInquiryIds((prev) => prev.filter((id) => !filteredIds.has(id)));
                 }}
-                className="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-2xs"
+                className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-2xs"
               >
-                Deselect Filtered
+                Deselect
               </button>
-              {filteredSubmissions.length !== submissions.length && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPrintStatusFilter('ALL');
-                    setPaymentFilter('ALL');
-                    setCplSearchQuery('');
-                  }}
-                  className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 rounded-xl font-bold transition-all text-xs cursor-pointer"
-                >
-                  Reset Filters
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => setSelectedInquiryIds([])}
-                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-xl font-bold transition-all text-xs cursor-pointer"
+                className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-xl font-bold transition-all text-xs cursor-pointer"
               >
-                Clear Selection
+                Clear
               </button>
             </div>
 
-            <div className="text-xs font-bold text-slate-600 flex items-center gap-2">
+            <div className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
               <span>
                 Selected: <strong className="text-rose-700">{selectedCount}</strong> / {filteredSubmissions.length}
               </span>
               {filteredSubmissions.length !== submissions.length && (
-                <span className="text-[11px] text-slate-400">
-                  ({submissions.length} total in event)
+                <span className="text-[10px] text-slate-400">
+                  ({submissions.length} total)
                 </span>
               )}
             </div>
@@ -1086,14 +1208,14 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         </div>
 
         {/* Main List Area with Real-Time Frame Canvases */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-slate-100/50">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-3.5 bg-slate-100/60">
           {loadingSubmissions ? (
             <div className="py-20 text-center space-y-3">
               <div className="w-8 h-8 border-3 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto" />
               <p className="text-xs font-bold text-slate-600">Loading registrations with photos...</p>
             </div>
           ) : filteredSubmissions.length === 0 ? (
-            <div className="py-20 text-center space-y-3 bg-white rounded-2xl border border-slate-200 p-8">
+            <div className="py-16 sm:py-20 text-center space-y-3 bg-white rounded-2xl border border-slate-200 p-6 sm:p-8">
               <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
                 <CameraIcon className="w-6 h-6" />
               </div>
@@ -1101,11 +1223,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
                 {cplSearchQuery.trim()
                   ? 'No registrations match your search criteria. Try modifying your search or clearing the query.'
-                  : 'There are no approved registrations with couple photos for the selected session.'}
+                  : `There are no ${paymentFilter === 'PAID' ? 'paid' : paymentFilter === 'PENDING' ? 'pending' : ''} registrations with couple photos for the selected session.`}
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3.5">
+            <div className="grid grid-cols-1 gap-3">
               {filteredSubmissions.map((sub) => {
                 const isSelected = selectedInquiryIds.includes(sub.inquiryId);
                 const zoomVal = sub.photoZoom ?? 1.0;
@@ -1114,261 +1236,282 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                 const isSaving = savingId === sub.inquiryId;
                 const isSaved = savedSuccessIds[sub.inquiryId];
                 const autoSaveState = autoSavingMap[sub.inquiryId];
-
                 const isPaid = sub.status === 'approved' || sub.payment?.status === 'captured';
+                const isAlignOpen = Boolean(expandedAlignIds[sub.inquiryId]);
 
                 return (
                   <div
                     key={sub.inquiryId}
-                    className={`bg-white border rounded-2xl p-4 transition-all shadow-xs flex flex-col sm:flex-row items-start sm:items-center gap-4 ${
+                    className={`bg-white border rounded-2xl p-3 sm:p-4 transition-all shadow-xs flex flex-col gap-3 ${
                       isSelected
-                        ? 'border-amber-300 ring-1 ring-amber-500/10'
-                        : 'border-slate-200/90 opacity-70 hover:opacity-100'
+                        ? 'border-amber-400 ring-1 ring-amber-500/20 bg-gradient-to-r from-amber-50/20 to-white'
+                        : 'border-slate-200/90 opacity-75 hover:opacity-100'
                     }`}
                   >
-                    {/* Checkbox */}
-                    <div className="flex items-center pt-1 sm:pt-0 shrink-0">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => {
-                          setSelectedInquiryIds((prev) =>
-                            isSelected ? prev.filter((id) => id !== sub.inquiryId) : [...prev, sub.inquiryId]
-                          );
-                        }}
-                        className="w-4 h-4 rounded text-amber-600 accent-amber-600 cursor-pointer"
-                        aria-label={`Select ${sub.inquiryId}`}
-                      />
-                    </div>
-
-                    {/* Live Preview Canvas */}
-                    <LivePreviewCanvas sub={sub} frameImg={globalFrameImg} />
-
-                    {/* Couple Information & Tactile Live Sliders */}
-                    <div className="flex-1 min-w-0 w-full space-y-3">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h4 className="font-extrabold text-slate-900 text-sm leading-tight">
+                    {/* Top Row: Checkbox + Names + Badges */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {
+                            setSelectedInquiryIds((prev) =>
+                              isSelected
+                                ? prev.filter((id) => id !== sub.inquiryId)
+                                : [...prev, sub.inquiryId]
+                            );
+                          }}
+                          className="w-4 h-4 rounded text-amber-600 accent-amber-600 cursor-pointer mt-0.5 shrink-0"
+                          aria-label={`Select ${sub.inquiryId}`}
+                        />
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm leading-tight truncate">
                               {sub.husbandName} &amp; {sub.wifeName} {sub.surname}
                             </h4>
-                            <span className="text-[10px] font-extrabold px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md">
+                            <span className="text-[10px] font-extrabold px-1.5 py-0.2 bg-rose-50 text-rose-700 border border-rose-200 rounded-md shrink-0">
                               {sub.inquiryId}
                             </span>
 
                             {/* Payment Status Badge */}
                             {sub.isVip ? (
-                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-300">
+                              <span className="text-[10px] font-black px-1.5 py-0.2 rounded-md bg-purple-100 text-purple-800 border border-purple-300">
                                 ★ VIP
                               </span>
                             ) : isPaid ? (
-                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                              <span className="text-[10px] font-black px-1.5 py-0.2 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-0.5">
                                 <CheckIcon className="w-2.5 h-2.5" />
                                 <span>PAID</span>
                               </span>
                             ) : (
-                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-300">
+                              <span className="text-[10px] font-black px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-800 border border-amber-300">
                                 ⏳ PENDING
                               </span>
                             )}
 
                             {/* Print Status Badge */}
                             {sub.frameExportStatus === 'EXPORTED' ? (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-0.5">
                                 <CheckIcon className="w-2.5 h-2.5" />
                                 <span>Printed</span>
                               </span>
                             ) : sub.frameExportStatus === 'MODIFIED' ? (
-                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
+                              <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
                                 ⚠ Adjusted
                               </span>
                             ) : (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
                                 New
                               </span>
                             )}
                           </div>
-                          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                            Phone: {sub.phoneNumber} &bull; Program: {sub.programName}
+                          <p className="text-[11px] text-slate-500 font-medium mt-0.5 truncate">
+                            Phone: {sub.phoneNumber} &bull; {sub.programName}
                           </p>
-                        </div>
-
-                        {/* Direct Action Buttons per Couple */}
-                        <div className="flex items-center gap-1.5">
-                          {/* Auto Save Feedback */}
-                          {autoSaveState === 'saving' ? (
-                            <span className="text-[10px] font-bold text-amber-600 flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                              <div className="w-2 h-2 border border-amber-600 border-t-transparent rounded-full animate-spin" />
-                              <span>Saving...</span>
-                            </span>
-                          ) : autoSaveState === 'saved' ? (
-                            <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                              <CheckIcon className="w-2.5 h-2.5" />
-                              <span>Auto-saved</span>
-                            </span>
-                          ) : null}
-
-                          <button
-                            type="button"
-                            onClick={() => handleSaveSingleAlignment(sub)}
-                            disabled={isSaving}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 border cursor-pointer ${
-                              isSaved
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                            }`}
-                            title="Instant Save Zoom and Position"
-                          >
-                            {isSaving ? (
-                              <div className="w-3 h-3 border-2 border-slate-600 border-t-transparent rounded-full animate-spin" />
-                            ) : isSaved ? (
-                              <>
-                                <CheckIcon className="w-3 h-3 text-emerald-600" />
-                                <span>Saved</span>
-                              </>
-                            ) : (
-                              <span>Save Align</span>
-                            )}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDownloadSingleFrame(sub)}
-                            className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-                            title="Download single high-res framed PNG"
-                          >
-                            <DownloadIcon className="w-3 h-3" />
-                            <span>Download PNG</span>
-                          </button>
                         </div>
                       </div>
 
-                      {/* Tactile Sliders & Steppers (Zoom, Left/Right, Up/Down) */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 bg-slate-50/80 p-3 rounded-xl border border-slate-200/70">
-                        {/* Zoom Slider */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
-                              Zoom ({zoomVal.toFixed(2)}x)
-                            </span>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => updateCoord(sub.inquiryId, 'photoZoom', Math.max(0.5, Number((zoomVal - 0.05).toFixed(2))))}
-                                className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
-                              >
-                                −
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => updateCoord(sub.inquiryId, 'photoZoom', Math.min(2.5, Number((zoomVal + 0.05).toFixed(2))))}
-                                className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-                          <input
-                            type="range"
-                            min="0.5"
-                            max="2.5"
-                            step="0.05"
-                            value={zoomVal}
-                            onChange={(e) => updateCoord(sub.inquiryId, 'photoZoom', Number(e.target.value))}
-                            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-600"
-                          />
-                        </div>
+                      {/* Action buttons on Top Right */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {autoSaveState === 'saving' ? (
+                          <span className="text-[9px] font-bold text-amber-600 flex items-center gap-1 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            <div className="w-2 h-2 border border-amber-600 border-t-transparent rounded-full animate-spin" />
+                            <span>Saving...</span>
+                          </span>
+                        ) : autoSaveState === 'saved' ? (
+                          <span className="text-[9px] font-bold text-emerald-700 flex items-center gap-0.5 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            <CheckIcon className="w-2.5 h-2.5" />
+                            <span>Saved</span>
+                          </span>
+                        ) : null}
 
-                        {/* Horizontal Shift (Left / Right) Slider */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
-                              ◄ Left / Right ► ({offsetValX > 0 ? `+${offsetValX}` : offsetValX}px)
-                            </span>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => updateCoord(sub.inquiryId, 'photoOffsetX', offsetValX - 10)}
-                                className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
-                                title="Shift Left"
-                              >
-                                ◄
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => updateCoord(sub.inquiryId, 'photoOffsetX', offsetValX + 10)}
-                                className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
-                                title="Shift Right"
-                              >
-                                ►
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => updateCoord(sub.inquiryId, 'photoOffsetX', 0)}
-                                className="px-1.5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-500 font-bold text-[10px] flex items-center justify-center cursor-pointer"
-                                title="Center Horizontally"
-                              >
-                                0
-                              </button>
-                            </div>
-                          </div>
-                          <input
-                            type="range"
-                            min="-300"
-                            max="300"
-                            step="5"
-                            value={offsetValX}
-                            onChange={(e) => updateCoord(sub.inquiryId, 'photoOffsetX', Number(e.target.value))}
-                            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                          />
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveSingleAlignment(sub)}
+                          disabled={isSaving}
+                          className={`px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 border cursor-pointer ${
+                            isSaved
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                          }`}
+                          title="Instant Save Zoom and Position"
+                        >
+                          {isSaving ? (
+                            <div className="w-3 h-3 border-2 border-slate-600 border-t-transparent rounded-full animate-spin" />
+                          ) : isSaved ? (
+                            <>
+                              <CheckIcon className="w-3 h-3 text-emerald-600" />
+                              <span className="hidden sm:inline">Saved</span>
+                            </>
+                          ) : (
+                            <span>Save</span>
+                          )}
+                        </button>
 
-                        {/* Vertical Shift (Up / Down) Slider */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
-                              ▲ Up / Down ▼ ({offsetValY > 0 ? `+${offsetValY}` : offsetValY}px)
-                            </span>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => updateCoord(sub.inquiryId, 'photoOffsetY', offsetValY - 10)}
-                                className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
-                                title="Move Up"
-                              >
-                                ▲
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => updateCoord(sub.inquiryId, 'photoOffsetY', offsetValY + 10)}
-                                className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
-                                title="Move Down"
-                              >
-                                ▼
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  updateCoord(sub.inquiryId, 'photoZoom', 1.0);
-                                  updateCoord(sub.inquiryId, 'photoOffsetX', 0);
-                                  updateCoord(sub.inquiryId, 'photoOffsetY', 0);
-                                }}
-                                className="px-1.5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-500 font-bold text-[10px] flex items-center justify-center cursor-pointer"
-                                title="Reset Alignment"
-                              >
-                                ↺
-                              </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadSingleFrame(sub)}
+                          className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                          title="Download single high-res framed PNG"
+                        >
+                          <DownloadIcon className="w-3 h-3" />
+                          <span className="hidden sm:inline">PNG</span>
+                        </button>
+
+                        {/* Mobile Toggle Alignment Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExpandedAlignIds((prev) => ({
+                              ...prev,
+                              [sub.inquiryId]: !prev[sub.inquiryId]
+                            }));
+                          }}
+                          className={`px-2 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1 sm:hidden ${
+                            isAlignOpen
+                              ? 'bg-amber-600 text-white border-amber-700'
+                              : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+                          }`}
+                          title="Toggle Alignment Sliders"
+                        >
+                          <span>{isAlignOpen ? 'Hide' : 'Align ⚙️'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Middle: Canvas + Sliders */}
+                    <div className="flex flex-col sm:flex-row items-start gap-3 w-full">
+                      {/* Live Canvas */}
+                      <LivePreviewCanvas sub={sub} frameImg={globalFrameImg} />
+
+                      {/* Sliders Container: Always visible on desktop, toggleable on mobile */}
+                      <div className={`flex-1 w-full ${isAlignOpen ? 'block' : 'hidden sm:block'}`}>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50/90 p-2.5 sm:p-3 rounded-xl border border-slate-200/80">
+                          {/* Zoom Slider */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
+                                Zoom ({zoomVal.toFixed(2)}x)
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoZoom', Math.max(0.5, Number((zoomVal - 0.05).toFixed(2))))}
+                                  className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                >
+                                  −
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoZoom', Math.min(2.5, Number((zoomVal + 0.05).toFixed(2))))}
+                                  className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                >
+                                  +
+                                </button>
+                              </div>
                             </div>
+                            <input
+                              type="range"
+                              min="0.5"
+                              max="2.5"
+                              step="0.05"
+                              value={zoomVal}
+                              onChange={(e) => updateCoord(sub.inquiryId, 'photoZoom', Number(e.target.value))}
+                              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-600"
+                            />
                           </div>
-                          <input
-                            type="range"
-                            min="-300"
-                            max="300"
-                            step="5"
-                            value={offsetValY}
-                            onChange={(e) => updateCoord(sub.inquiryId, 'photoOffsetY', Number(e.target.value))}
-                            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
-                          />
+
+                          {/* Left / Right Slider */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
+                                ◄ Left / Right ► ({offsetValX > 0 ? `+${offsetValX}` : offsetValX}px)
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoOffsetX', offsetValX - 10)}
+                                  className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                  title="Shift Left"
+                                >
+                                  ◄
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoOffsetX', offsetValX + 10)}
+                                  className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                  title="Shift Right"
+                                >
+                                  ►
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoOffsetX', 0)}
+                                  className="px-1.5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-500 font-bold text-[10px] flex items-center justify-center cursor-pointer"
+                                  title="Center Horizontally"
+                                >
+                                  0
+                                </button>
+                              </div>
+                            </div>
+                            <input
+                              type="range"
+                              min="-300"
+                              max="300"
+                              step="5"
+                              value={offsetValX}
+                              onChange={(e) => updateCoord(sub.inquiryId, 'photoOffsetX', Number(e.target.value))}
+                              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                            />
+                          </div>
+
+                          {/* Up / Down Slider */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
+                                ▲ Up / Down ▼ ({offsetValY > 0 ? `+${offsetValY}` : offsetValY}px)
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoOffsetY', offsetValY - 10)}
+                                  className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                  title="Move Up"
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateCoord(sub.inquiryId, 'photoOffsetY', offsetValY + 10)}
+                                  className="w-5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                  title="Move Down"
+                                >
+                                  ▼
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    updateCoord(sub.inquiryId, 'photoZoom', 1.0);
+                                    updateCoord(sub.inquiryId, 'photoOffsetX', 0);
+                                    updateCoord(sub.inquiryId, 'photoOffsetY', 0);
+                                  }}
+                                  className="px-1.5 h-5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-500 font-bold text-[10px] flex items-center justify-center cursor-pointer"
+                                  title="Reset Alignment"
+                                >
+                                  ↺
+                                </button>
+                              </div>
+                            </div>
+                            <input
+                              type="range"
+                              min="-300"
+                              max="300"
+                              step="5"
+                              value={offsetValY}
+                              onChange={(e) => updateCoord(sub.inquiryId, 'photoOffsetY', Number(e.target.value))}
+                              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1380,16 +1523,19 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         </div>
 
         {/* Modal Footer with Batch Actions */}
-        <div className="p-4 sm:p-5 border-t border-slate-200 bg-white flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-          <div className="text-xs text-slate-600 font-medium">
-            Ready to export: <strong className="text-slate-900">{selectedCount}</strong> framed couple photos
+        <div className="p-3 sm:p-4 border-t border-slate-200 bg-white flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+          <div className="text-xs text-slate-600 font-medium text-center sm:text-left w-full sm:w-auto">
+            Ready to export: <strong className="text-slate-900 font-extrabold">{selectedCount}</strong> framed photos
+            {paymentFilter !== 'ALL' && (
+              <span className="text-slate-400 ml-1">({paymentFilter})</span>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
+              className="px-3.5 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer flex-1 sm:flex-initial"
             >
               Close
             </button>
@@ -1398,22 +1544,22 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
               type="button"
               onClick={handleDownloadRawZip}
               disabled={zipping || selectedCount === 0}
-              className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+              className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"
             >
               <DownloadIcon className="w-3.5 h-3.5" />
-              <span>Raw Photos ZIP ({selectedCount})</span>
+              <span>Raw ZIP ({selectedCount})</span>
             </button>
 
             <button
               type="button"
               onClick={handleDownloadFramedZip}
               disabled={zipping || selectedCount === 0}
-              className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-700 hover:to-rose-700 disabled:opacity-50 text-white font-extrabold rounded-xl text-xs transition-all shadow-md cursor-pointer flex items-center gap-2 active:scale-95"
+              className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-700 hover:to-rose-700 disabled:opacity-50 text-white font-extrabold rounded-xl text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 active:scale-95"
             >
               {zipping ? (
                 <>
                   <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>{zipProgress || 'Processing...'}</span>
+                  <span>{zipProgress || (zipPercent !== null ? `Zipping (${zipPercent}%)...` : 'Processing...')}</span>
                 </>
               ) : (
                 <>
