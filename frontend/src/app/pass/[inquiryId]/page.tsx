@@ -90,7 +90,8 @@ export default function DigitalPassPage() {
   const [downloading, setDownloading] = useState<boolean>(false);
   const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
   const [passImageDataUrl, setPassImageDataUrl] = useState<string | null>(null);
-  const [showIosModal, setShowIosModal] = useState<boolean>(false);
+  const [showSaveModal, setShowSaveModal] = useState<boolean>(false);
+  const isIos = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent || '');
 
   /**
    * Render high-resolution 720x1260 Digital Pass Canvas
@@ -351,16 +352,32 @@ export default function DigitalPassPage() {
   };
 
   /**
-   * Helper to trigger direct browser file download
+   * Helper to trigger direct browser file download using Blob URL or string
    */
-  const triggerDirectDownload = (url: string) => {
+  const triggerDirectDownload = (urlOrBlob: string | Blob, customName?: string) => {
     if (!pass) return;
+    const fileName = customName || `EDKL_Pass_${pass.inquiryId}.png`;
+    let url: string;
+    let isObjectUrl = false;
+
+    if (urlOrBlob instanceof Blob) {
+      url = URL.createObjectURL(urlOrBlob);
+      isObjectUrl = true;
+    } else {
+      url = urlOrBlob;
+    }
+
     const link = document.createElement('a');
-    link.download = `EDKL_Pass_${pass.inquiryId}.png`;
+    link.download = fileName;
     link.href = url;
+    link.target = '_blank';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+
+    if (isObjectUrl) {
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
   };
 
   /**
@@ -376,20 +393,21 @@ export default function DigitalPassPage() {
       const dataUrl = canvas.toDataURL('image/png');
       setPassImageDataUrl(dataUrl);
 
-      const isIos = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent || '');
-
       canvas.toBlob(async (blob) => {
         if (!blob) {
           triggerDirectDownload(dataUrl);
+          setDownloadSuccess(true);
           setDownloading(false);
+          setShowSaveModal(true);
           return;
         }
 
         const fileName = `EDKL_Pass_${pass.inquiryId}.png`;
         const file = new File([blob], fileName, { type: 'image/png' });
 
-        // 1. Native Web Share API (Highest quality for iOS / iPhone Photos & Camera Roll)
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        // 1. iOS Safari / iPhone Photos ONLY:
+        // Native Web Share API has built-in "Save Image" option directly into Camera Roll
+        if (isIos && typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
           try {
             await navigator.share({
               files: [file],
@@ -410,15 +428,17 @@ export default function DigitalPassPage() {
 
         // 2. iOS fallback: Show dedicated preview sheet to press & hold "Save to Photos"
         if (isIos) {
-          setShowIosModal(true);
+          setShowSaveModal(true);
           setDownloading(false);
           return;
         }
 
-        // 3. Android / Desktop fallback: Instant direct PNG download into Gallery/Downloads
-        triggerDirectDownload(dataUrl);
+        // 3. Android & Desktop: Direct PNG file download via Blob URL into Gallery / Downloads
+        // NEVER trigger navigator.share on Android because it opens external share chooser without saving to Gallery
+        triggerDirectDownload(blob, fileName);
         setDownloadSuccess(true);
         setDownloading(false);
+        setShowSaveModal(true);
       }, 'image/png');
     } catch (err: any) {
       console.error('Download pass error:', err);
@@ -624,28 +644,40 @@ export default function DigitalPassPage() {
 
       </div>
 
-      {/* iOS iPhone Save to Photos Modal */}
-      {showIosModal && passImageDataUrl && (
+      {/* Save to Photos & Gallery Modal (Universal for Android & iOS) */}
+      {showSaveModal && passImageDataUrl && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-5 flex flex-col items-center text-center shadow-2xl relative">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 flex flex-col items-center text-center shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
             <button
               type="button"
-              onClick={() => setShowIosModal(false)}
+              onClick={() => setShowSaveModal(false)}
               className="absolute top-4 right-4 w-8 h-8 rounded-full bg-stone-100 text-stone-600 flex items-center justify-center font-bold text-sm hover:bg-stone-200 cursor-pointer"
             >
               ✕
             </button>
 
-            <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mb-3">
-              <DownloadIcon className="w-5 h-5" />
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
+              <CheckCircleIcon className="w-6 h-6" />
             </div>
 
-            <h3 className="text-base font-bold text-stone-900">Save Pass to iPhone Photos</h3>
+            <h3 className="text-base font-bold text-stone-900">
+              {isIos ? 'Save Pass to iPhone Photos' : 'Pass Saved to Gallery & Downloads!'}
+            </h3>
             <p className="text-xs text-stone-600 mt-1 mb-4 leading-relaxed">
-              <strong>Press and hold</strong> the pass image below, then tap <span className="font-bold text-rose-700">"Save to Photos"</span> to keep it directly in your camera roll gallery.
+              {isIos ? (
+                <>
+                  <strong>Press and hold</strong> the pass image below, then tap{' '}
+                  <span className="font-bold text-rose-700">"Save to Photos"</span> to keep it directly in your camera roll gallery.
+                </>
+              ) : (
+                <>
+                  Your digital pass has been downloaded to your phone's{' '}
+                  <span className="font-bold text-emerald-700">Gallery & Downloads</span>. You can also press and hold the image below to view or save.
+                </>
+              )}
             </p>
 
-            <div className="w-full max-h-[52vh] overflow-y-auto rounded-2xl border border-stone-200 bg-stone-50 p-2 mb-4">
+            <div className="w-full max-h-[50vh] overflow-y-auto rounded-2xl border border-stone-200 bg-stone-50 p-2 mb-4">
               <img
                 src={passImageDataUrl}
                 alt="Digital Pass"
@@ -657,15 +689,31 @@ export default function DigitalPassPage() {
             <div className="w-full flex gap-2">
               <button
                 type="button"
-                onClick={() => triggerDirectDownload(passImageDataUrl)}
-                className="flex-1 py-2.5 px-3 bg-stone-900 text-white rounded-xl font-bold text-xs hover:bg-stone-800 cursor-pointer"
+                onClick={() => {
+                  if (passImageDataUrl) {
+                    const win = window.open();
+                    if (win) {
+                      win.document.write(`<title>EDKL Digital Pass - ${pass?.inquiryId}</title><style>body{margin:0;background:#111;display:flex;justify-content:center;align-items:center;min-height:100vh;}img{max-width:100%;max-height:100vh;object-fit:contain;}</style><img src="${passImageDataUrl}" alt="Digital Pass" />`);
+                    } else {
+                      window.location.href = passImageDataUrl;
+                    }
+                  }
+                }}
+                className="flex-1 py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-rose-600/20 cursor-pointer"
               >
-                Download File
+                View Full Pass
               </button>
               <button
                 type="button"
-                onClick={() => setShowIosModal(false)}
-                className="py-2.5 px-4 bg-stone-100 text-stone-700 rounded-xl font-bold text-xs hover:bg-stone-200 cursor-pointer"
+                onClick={() => triggerDirectDownload(passImageDataUrl)}
+                className="py-2.5 px-3 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl font-bold text-xs transition-all cursor-pointer"
+              >
+                Download Again
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSaveModal(false)}
+                className="py-2.5 px-3 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-xl font-bold text-xs cursor-pointer"
               >
                 Done
               </button>

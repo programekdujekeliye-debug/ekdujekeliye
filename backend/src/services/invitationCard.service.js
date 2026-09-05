@@ -270,6 +270,7 @@ export class InvitationCardService {
   async generateOfficialCardBuffer(registration, event) {
     const width = 576;
     const height = 1024;
+    const inquiryId = registration.inquiryId || 'EDKL';
 
     const hX = event?.heartX ?? 157;
     const hY = event?.heartY ?? 91;
@@ -361,7 +362,6 @@ export class InvitationCardService {
     }
 
     // 4. Gold CPL text overlay
-    const inquiryId = registration.inquiryId || 'EDKL';
     const textX = Math.round(hX + hW / 2);
     const textY = Math.max(32, hY - 18);
 
