@@ -480,6 +480,7 @@ export const getEventCommunicationDashboard = async (req, res) => {
       reminder: { eligible: confirmedRegistrations, queued: 0, sent: 0, delivered: 0, read: 0, failed: 0 },
       feedback_request: { eligible: attendedRegistrations, queued: 0, sent: 0, delivered: 0, read: 0, failed: 0 },
       gallery_ready: { eligible: attendedRegistrations, queued: 0, sent: 0, delivered: 0, read: 0, failed: 0 },
+      post_event: { eligible: attendedRegistrations > 0 ? attendedRegistrations : confirmedRegistrations, queued: 0, sent: 0, delivered: 0, read: 0, failed: 0 },
       event_update: { eligible: confirmedRegistrations, queued: 0, sent: 0, delivered: 0, read: 0, failed: 0 },
       event_cancelled: { eligible: totalRegistrations, queued: 0, sent: 0, delivered: 0, read: 0, failed: 0 },
       pass_reissued: { eligible: 0, queued: 0, sent: 0, delivered: 0, read: 0, failed: 0 },

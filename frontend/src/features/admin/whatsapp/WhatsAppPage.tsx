@@ -1032,7 +1032,7 @@ export const WhatsAppPage = () => {
                     { key: 'payment_confirmation', label: 'Payment Confirmed', eligible: summary?.confirmedRegistrations ?? 0, stats: dashboardData?.messageTypeStats?.['payment_confirmation'] || dashboardData?.messageTypeStats?.['pass_delivery'] },
                     { key: 'reminder', label: '48h Pass Reminder', eligible: summary?.confirmedRegistrations ?? 0, stats: dashboardData?.messageTypeStats?.['reminder'] },
                     { key: 'invitation', label: '24h Invitation (Image Header)', eligible: summary?.confirmedRegistrations ?? 0, stats: dashboardData?.messageTypeStats?.['invitation'] },
-                    { key: 'post_event', label: 'Post Event (Photos + Feedback)', eligible: summary?.attendedRegistrations ?? 0, stats: dashboardData?.messageTypeStats?.['post_event'] || dashboardData?.messageTypeStats?.['gallery_ready'] || dashboardData?.messageTypeStats?.['feedback_request'] }
+                    { key: 'post_event', label: 'Post Event (Photos + Feedback)', eligible: (summary?.attendedRegistrations && summary.attendedRegistrations > 0) ? summary.attendedRegistrations : (summary?.confirmedRegistrations ?? 0), stats: dashboardData?.messageTypeStats?.['post_event'] || dashboardData?.messageTypeStats?.['gallery_ready'] || dashboardData?.messageTypeStats?.['feedback_request'] }
                   ].map((row) => {
                     const m = row.stats || { queued: 0, sent: 0, delivered: 0, read: 0, failed: 0, deliveryRate: 0, readRate: 0 };
                     return (
