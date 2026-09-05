@@ -6,11 +6,15 @@ import {
   getAdminFeedbackList,
   toggleTestimonialPermission,
   deleteFeedbackRecord,
-  exportFeedbackData
+  exportFeedbackData,
+  getPublicTestimonials
 } from './feedback.controller.js';
 import { requireAuth, requireSuperAuth } from '../../middleware/auth.js';
 
 export const feedbackRouter = Router();
+
+// Public verified testimonials for website showcase
+feedbackRouter.get('/public/testimonials', getPublicTestimonials);
 
 // Admin & Super Admin feedback management (Must precede /:token)
 feedbackRouter.get('/admin/stats', requireAuth, getAdminFeedbackStats);

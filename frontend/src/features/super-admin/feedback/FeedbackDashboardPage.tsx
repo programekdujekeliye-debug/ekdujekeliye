@@ -41,7 +41,7 @@ const CONNECTION_LABELS: Record<string, { eng: string; guj: string }> = {
 };
 
 export const FeedbackDashboardPage = () => {
-  const { selectedProgramId, programs } = useAdmin();
+  const { selectedProgramId, setSelectedProgramId, programs } = useAdmin();
 
   const [stats, setStats] = useState<FeedbackStats | null>(null);
   const [loadingStats, setLoadingStats] = useState<boolean>(true);
@@ -64,7 +64,16 @@ export const FeedbackDashboardPage = () => {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const activeEventId = selectedProgramId;
+  // In-Page Event Slot Filter (Synchronized with global admin context)
+  const [selectedEventSlot, setSelectedEventSlot] = useState<string>(selectedProgramId || 'all');
+
+  useEffect(() => {
+    if (selectedProgramId) {
+      setSelectedEventSlot(selectedProgramId);
+    }
+  }, [selectedProgramId]);
+
+  const activeEventId = selectedEventSlot;
 
   const fetchStats = async () => {
     try {
@@ -200,6 +209,32 @@ export const FeedbackDashboardPage = () => {
 
         {/* Global Actions */}
         <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+          {/* Event Slot Selector Pill */}
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-1 pl-1.5 text-slate-600 font-bold text-xs">
+              <CalendarIcon className="w-3.5 h-3.5 text-rose-800" />
+              <span className="hidden sm:inline">Event:</span>
+            </div>
+            <select
+              value={selectedEventSlot}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedEventSlot(val);
+                setSelectedProgramId(val);
+                setPage(1);
+              }}
+              aria-label="Filter Feedback by Event Slot"
+              className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-extrabold text-slate-900 focus:outline-none focus:ring-1 focus:ring-rose-800 cursor-pointer shadow-2xs"
+            >
+              <option value="all">🌐 All Event Slots (તમામ સ્લોટ)</option>
+              {programs.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name || p.id} ({p.date || 'TBD'})
+                </option>
+              ))}
+            </select>
+          </div>
+
           <button
             type="button"
             onClick={() => {
@@ -224,6 +259,40 @@ export const FeedbackDashboardPage = () => {
           </a>
         </div>
       </div>
+
+      {/* Active Event Slot Filter Banner */}
+      {activeEventId && activeEventId !== 'all' ? (
+        <div className="bg-rose-50/70 border border-rose-200/90 rounded-2xl px-4 py-2.5 flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-rose-950 font-bold">
+            <span className="w-2 h-2 rounded-full bg-rose-700 animate-pulse flex-shrink-0" />
+            <span>
+              Showing feedback strictly for event:{' '}
+              <span className="font-extrabold underline decoration-rose-400">
+                {programs.find((p) => p.id === activeEventId)?.name || activeEventId}
+              </span>{' '}
+              ({programs.find((p) => p.id === activeEventId)?.date || ''})
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedEventSlot('all');
+              setSelectedProgramId('all');
+            }}
+            className="text-rose-800 hover:text-rose-950 font-extrabold text-[11px] underline cursor-pointer flex-shrink-0"
+          >
+            View All Events Combined
+          </button>
+        </div>
+      ) : (
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2 text-xs text-slate-600 flex items-center justify-between">
+          <div className="flex items-center gap-2 font-medium">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+            <span>Showing aggregated feedback &amp; reviews across <strong>All Event Slots</strong>.</span>
+          </div>
+          <span className="text-[11px] text-slate-400">Select any event above to filter strictly per event.</span>
+        </div>
+      )}
 
       {/* Top Executive Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 sm:gap-4">

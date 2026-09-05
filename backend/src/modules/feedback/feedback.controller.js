@@ -461,3 +461,34 @@ export async function exportFeedbackData(req, res) {
     return res.status(500).json({ error: 'Failed to export feedback data.' });
   }
 }
+
+/**
+ * Public: Get approved couple testimonials for website showcase
+ */
+export async function getPublicTestimonials(req, res) {
+  try {
+    const { eventId, limit = 12 } = req.query;
+    const filter = {
+      isSubmitted: true,
+      isTestimonialAllowed: true,
+      feedbackText: { $exists: true, $ne: '' }
+    };
+    if (eventId && eventId !== 'all') {
+      filter.eventId = eventId;
+    }
+
+    const reviews = await Feedback.find(filter)
+      .sort({ overallRating: -1, submittedAt: -1 })
+      .limit(Math.min(50, parseInt(limit) || 12))
+      .select('coupleName eventId overallRating venueRating feedbackText keyTakeaways connectionRating submittedAt')
+      .lean();
+
+    return res.json({
+      success: true,
+      count: reviews.length,
+      testimonials: reviews
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch public testimonials.' });
+  }
+}
