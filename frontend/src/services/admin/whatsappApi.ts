@@ -60,6 +60,9 @@ export interface RegistrationCommunicationRow {
   inquiryId: string;
   coupleName: string;
   maskedPhone: string;
+  programId?: string;
+  programName?: string;
+  programDate?: string;
   paymentStatus: 'PAID' | 'PENDING' | 'FAILED' | 'COMPLIMENTARY';
   paymentAmount: number;
   passId: string | null;

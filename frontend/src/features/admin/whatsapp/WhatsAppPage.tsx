@@ -35,16 +35,44 @@ import {
 } from '../../../components/Icons';
 import { WhatsAppInbox } from './WhatsAppInbox';
 import { LuxurySelect, SelectOption } from '../../../components/LuxurySelect';
+import { useAdmin } from '../context/AdminContext';
 import toast from 'react-hot-toast';
 
 export const WhatsAppPage = () => {
+  const {
+    selectedProgramId: globalProgramId,
+    setSelectedProgramId: setGlobalProgramId,
+    programs: globalPrograms
+  } = useAdmin();
+
   // Navigation Sub-tabs: 'dashboard' | 'inbox' | 'templates' | 'logs'
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inbox' | 'templates' | 'logs'>('dashboard');
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
 
-  // Events & Selected Event
-  const [events, setEvents] = useState<Program[]>([]);
-  const [selectedEventId, setSelectedEventId] = useState<string>('');
+  // Events & Selected Event (syncs with global admin event selector)
+  const [events, setEvents] = useState<Program[]>(globalPrograms || []);
+  const [selectedEventId, setSelectedEventId] = useState<string>(globalProgramId || 'all');
+
+  // Sync with global topbar event selector
+  useEffect(() => {
+    if (globalProgramId !== undefined && globalProgramId !== null) {
+      setSelectedEventId(globalProgramId || 'all');
+    }
+  }, [globalProgramId]);
+
+  // Sync with global programs list
+  useEffect(() => {
+    if (globalPrograms && globalPrograms.length > 0) {
+      setEvents(globalPrograms);
+    }
+  }, [globalPrograms]);
+
+  const handleSelectEvent = (val: string) => {
+    setSelectedEventId(val);
+    if (setGlobalProgramId) {
+      setGlobalProgramId(val);
+    }
+  };
 
   // Dashboard Overview & Registration List State
   const [dashboardData, setDashboardData] = useState<EventCommunicationDashboardResponse | null>(null);
@@ -153,7 +181,9 @@ export const WhatsAppPage = () => {
         ]);
         if (evts && evts.length > 0) {
           setEvents(evts);
-          setSelectedEventId(evts[0].id || (evts[0] as any)._id || '');
+          if (!globalProgramId) {
+            setSelectedEventId('all');
+          }
         }
         if (tpls?.metaTemplates) setMetaTemplates(tpls.metaTemplates);
         if (subs?.submissions) {
@@ -523,8 +553,8 @@ export const WhatsAppPage = () => {
 
   const selectedEvent = events.find(e => e.id === selectedEventId || (e as any)._id === selectedEventId || e.slug === selectedEventId);
   const selectedEventName = selectedEventId === 'all'
-    ? 'All Active Seminars (Global Overview)'
-    : (selectedEvent ? `${selectedEvent.name} — ${selectedEvent.city} (${selectedEvent.date || 'TBA'})` : 'Selected Seminar');
+    ? 'All Events (Global Ledger)'
+    : (selectedEvent ? `${selectedEvent.name} (${selectedEvent.date || 'TBD'})` : 'Selected Seminar Slot');
 
   // Payment Reminder Cell with Attempt Count & Failure Reasons
   const renderPaymentReminderCell = (row: RegistrationCommunicationRow) => {
@@ -764,14 +794,14 @@ export const WhatsAppPage = () => {
                 <div className="flex-1 max-w-xl min-w-0">
                   <LuxurySelect
                     value={selectedEventId}
-                    onChange={(val) => setSelectedEventId(val)}
+                    onChange={(val) => handleSelectEvent(val)}
                     options={[
-                      { value: 'all', label: 'All Seminar Slots (Global Overview)' },
+                      { value: 'all', label: 'All Events (Global Ledger)', badge: 'ALL' },
                       ...events.map((evt) => ({
                         value: evt.id || (evt as any)._id,
-                        label: `${evt.name} — ${evt.city}`,
-                        badge: evt.date || 'TBA',
-                        sublabel: evt.venue
+                        label: `${evt.name} (${evt.date || 'TBD'})`,
+                        badge: evt.date || (evt.status === 'upcoming' ? 'ACTIVE' : undefined),
+                        sublabel: `${evt.city || ''} ${evt.venue ? '• ' + evt.venue : ''}`.trim()
                       }))
                     ]}
                     placeholder="Select Seminar Slot..."
@@ -1166,7 +1196,14 @@ export const WhatsAppPage = () => {
                             </div>
                             <div>
                               <span className="font-extrabold text-slate-900 block leading-tight">{row.coupleName}</span>
-                              <span className="text-[10px] font-mono text-rose-700 font-bold">{row.inquiryId}</span>
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                <span className="text-[10px] font-mono text-rose-700 font-bold">{row.inquiryId}</span>
+                                {selectedEventId === 'all' && (row.programDate || row.programName) && (
+                                  <span className="text-[9px] px-1.5 py-0.2 bg-amber-50 text-amber-800 border border-amber-200/80 rounded font-semibold whitespace-nowrap">
+                                    {row.programDate || row.programName}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </td>

@@ -357,9 +357,9 @@ export const getEventCommunicationDashboard = async (req, res) => {
       return res.json(cached.data);
     }
 
-    let event = null;
-    let matchedIds = [];
-    let activeEvents = [];
+    let eventRegMatch = {};
+    let eventMsgMatch = {};
+
     if (eventId && eventId !== 'all') {
       event = await Event.findOne(
         { $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] },
@@ -371,28 +371,26 @@ export const getEventCommunicationDashboard = async (req, res) => {
         if (event.id && !matchedIds.includes(event.id)) matchedIds.push(event.id);
         if (event.slug && !matchedIds.includes(event.slug)) matchedIds.push(event.slug);
       }
+
+      eventRegMatch = {
+        $or: [
+          { programId: { $in: matchedIds } },
+          ...(event?.date ? [{ programDate: event.date }] : [])
+        ],
+        isDeleted: { $ne: true }
+      };
+
+      eventMsgMatch = {
+        $or: [
+          { eventId: { $in: matchedIds } },
+          ...(event?.date ? [{ eventDate: event.date }] : [])
+        ]
+      };
     } else {
-      activeEvents = await Event.find({
-        status: { $nin: ['archived', 'completed', 'cancelled', 'date_tba', 'registration_closed'] },
-        date: { $gte: '2026-09-07', $nin: ['TBA', 'TBD', ''] }
-      }).select('id slug date').lean();
-      matchedIds = activeEvents.flatMap(e => [e.id, e.slug]).filter(Boolean);
+      // Global Overview: All events across the platform
+      eventRegMatch = { isDeleted: { $ne: true } };
+      eventMsgMatch = {};
     }
-
-    const eventRegMatch = {
-      $or: [
-        { programId: { $in: matchedIds } },
-        ...(event?.date ? [{ programDate: event.date }] : (activeEvents.length > 0 ? [{ programDate: { $in: activeEvents.map(e => e.date).filter(Boolean) } }] : []))
-      ],
-      isDeleted: { $ne: true }
-    };
-
-    const eventMsgMatch = {
-      $or: [
-        { eventId: { $in: matchedIds } },
-        ...(event?.date ? [{ eventDate: event.date }] : (activeEvents.length > 0 ? [{ eventDate: { $in: activeEvents.map(e => e.date).filter(Boolean) } }] : []))
-      ]
-    };
 
     // Parallel aggregate queries in single roundtrip (< 30ms)
     const [regAggList, breakdown, actionNeededIds] = await Promise.all([
@@ -611,18 +609,8 @@ export const getEventRegistrationsCommunication = async (req, res) => {
         ...(event?.date ? [{ programDate: event.date }] : [])
       ];
     } else {
-      // Global Overview: strictly include 7 Sep, 11 Sep, 19 Sep Bhavnagar & upcoming active events (>= 2026-09-07)
-      const activeEvents = await Event.find({
-        status: { $nin: ['archived', 'completed', 'cancelled', 'date_tba', 'registration_closed'] },
-        date: { $gte: '2026-09-07', $nin: ['TBA', 'TBD', ''] }
-      }).select('id slug date').lean();
-      
-      const activeIds = activeEvents.flatMap(e => [e.id, e.slug]).filter(Boolean);
-      const activeDates = activeEvents.map(e => e.date).filter(Boolean);
-      eventMatchOr = [
-        { programId: { $in: activeIds } },
-        { programDate: { $in: activeDates } }
-      ];
+      // Global Overview: Show all non-deleted registrations across all events
+      eventMatchOr = [];
     }
 
     const andConditions = [
@@ -690,7 +678,7 @@ export const getEventRegistrationsCommunication = async (req, res) => {
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
-        .select('inquiryId customerToken husbandName wifeName surname phoneNumber whatsappOptIn whatsappMarketingOptIn whatsappOptOutAt status payment attendance isDeleted createdAt updatedAt')
+        .select('inquiryId customerToken husbandName wifeName surname phoneNumber programId programName programDate isVip whatsappOptIn whatsappMarketingOptIn whatsappOptOutAt status payment attendance isDeleted createdAt updatedAt')
         .lean()
     ]);
 
@@ -898,6 +886,9 @@ export const getEventRegistrationsCommunication = async (req, res) => {
         inquiryId: reg.inquiryId,
         coupleName: `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim(),
         maskedPhone: reg.phoneNumber ? reg.phoneNumber.replace(/(\d{4})\d{4}(\d{2})/, '$1****$2') : '',
+        programId: reg.programId,
+        programName: reg.programName || event?.name || 'Seminar Slot',
+        programDate: reg.programDate || event?.date || '',
         paymentStatus: isPaid ? 'PAID' : (isPaymentNotOpen ? 'NOT_OPEN_YET' : (reg.payment?.status === 'failed' ? 'FAILED' : 'PENDING')),
         paymentAmount: reg.payment?.amount || 1500,
         passId: pass?.passId || null,
