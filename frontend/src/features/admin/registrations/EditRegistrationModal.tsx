@@ -44,6 +44,7 @@ export const EditRegistrationModal: React.FC<EditRegistrationModalProps> = ({
   const isVip = Boolean(
     submission.isVip ||
     submission.inquiryId?.startsWith('IP-') ||
+    submission.inquiryId?.includes('-IP-') ||
     submission.payment?.provider === 'manual_invite'
   );
 

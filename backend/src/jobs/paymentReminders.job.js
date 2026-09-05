@@ -40,6 +40,7 @@ export const runPaymentReminders = async () => {
     status: 'pending',
     'payment.status': { $ne: 'captured' },
     isVip: { $ne: true },
+    inquiryId: { $not: /IP-/i },
     createdAt: { $lte: tenMinutesAgo },
     isDeleted: { $ne: true }
   }).limit(100);

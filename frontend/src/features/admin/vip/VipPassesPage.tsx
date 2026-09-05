@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAdmin } from '../context/AdminContext';
 import { apiClient } from '../../../services/apiClient';
 import { API_BASE_URL } from '../../../config';
@@ -29,17 +29,31 @@ import { LuxurySelect } from '../../../components/LuxurySelect';
 import toast from 'react-hot-toast';
 
 export const VipPassesPage = () => {
-  const { programs, password } = useAdmin();
+  const { programs, password, selectedProgramId: globalProgramId, setSelectedProgramId: setGlobalProgramId } = useAdmin();
 
   const [vipGuests, setVipGuests] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProgramId, setSelectedProgramId] = useState('all');
+  const [selectedProgramId, setSelectedProgramId] = useState<string>(globalProgramId || 'all');
   const [attendanceFilter, setAttendanceFilter] = useState('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [editingGuest, setEditingGuest] = useState<Submission | null>(null);
+
+  // Sync with global topbar event selector
+  useEffect(() => {
+    if (globalProgramId) {
+      setSelectedProgramId(globalProgramId);
+    }
+  }, [globalProgramId]);
+
+  const handleSelectProgram = (val: string) => {
+    setSelectedProgramId(val);
+    if (setGlobalProgramId) {
+      setGlobalProgramId(val);
+    }
+  };
 
   const formatSubmissionTime = (dateStr?: string) => {
     if (!dateStr) return 'N/A';
@@ -97,25 +111,35 @@ export const VipPassesPage = () => {
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [resendStatus, setResendStatus] = useState<{ id: string; message: string; success: boolean } | null>(null);
 
-  const fetchVipGuests = async () => {
+  const fetchVipGuests = useCallback(async () => {
     try {
       setLoading(true);
-      const res: any = await apiClient(
-        `/api/submissions?isVip=true&programId=${selectedProgramId}&limit=500`
-      );
-      const list = res?.submissions || res?.data || (Array.isArray(res) ? res : []);
+      const url = selectedProgramId && selectedProgramId !== 'all'
+        ? `/api/submissions?isVip=true&programId=${selectedProgramId}&limit=500`
+        : `/api/submissions?isVip=true&limit=500`;
+      const res: any = await apiClient(url);
+      const rawList = res?.submissions || res?.data || (Array.isArray(res) ? res : []);
+
+      const selectedProg = programs.find((p) => p.id === selectedProgramId);
+      const list = rawList.filter((g: Submission) => {
+        if (!selectedProgramId || selectedProgramId === 'all') return true;
+        return (
+          g.programId === selectedProgramId ||
+          (selectedProg?.slug && g.programId === selectedProg.slug) ||
+          (selectedProg?.date && g.programDate === selectedProg.date)
+        );
+      });
       setVipGuests(list);
     } catch (err) {
       console.error('Failed to fetch VIP guests:', err);
     } finally {
       setLoading(false);
     }
-  };
-
+  }, [selectedProgramId, programs]);
 
   useEffect(() => {
     fetchVipGuests();
-  }, [selectedProgramId]);
+  }, [fetchVipGuests]);
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -373,6 +397,7 @@ export const VipPassesPage = () => {
               setNewPassUrl('');
               setCouplePhoto(null);
               setCouplePhotoPreview(null);
+              setProgramId(selectedProgramId && selectedProgramId !== 'all' ? selectedProgramId : (programs[0]?.id || ''));
             }}
             className="flex-1 sm:flex-none px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
           >
@@ -430,7 +455,7 @@ export const VipPassesPage = () => {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by VIP name, phone, or Pass ID (e.g. IP-101)..."
+            placeholder="Search by VIP name, phone, or Pass ID (e.g. EK06-IP-01)..."
             className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 focus:bg-white focus:outline-none focus:border-amber-500 font-medium"
           />
           {searchQuery && (
@@ -448,7 +473,7 @@ export const VipPassesPage = () => {
             <LuxurySelect
               label="Filter Event Slot"
               value={selectedProgramId}
-              onChange={(val) => setSelectedProgramId(val)}
+              onChange={(val) => handleSelectProgram(val)}
               options={[
                 { value: 'all', label: 'All Event Slots' },
                 ...programs.map((p) => ({

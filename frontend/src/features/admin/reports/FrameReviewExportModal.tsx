@@ -31,7 +31,7 @@ export const matchCplToken = (inquiryId: string, searchToken: string, isBulk: bo
 
   if (id === token) return true;
 
-  if (token.startsWith('CPL-') || token.startsWith('IP-') || /^EK\d+-\d+$/.test(token)) {
+  if (token.startsWith('CPL-') || token.startsWith('IP-') || token.includes('-IP-') || /^EK\d+-(IP-)?\d+$/i.test(token)) {
     return id === token;
   }
 

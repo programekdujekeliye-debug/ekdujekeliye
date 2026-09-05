@@ -480,7 +480,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                       const isApproved = sub.status === 'approved';
                       const isRejected = sub.status === 'rejected';
                       const isPending = !isApproved && !isRejected;
-                      const isVip = Boolean(sub.isVip || sub.inquiryId?.startsWith('IP-') || sub.payment?.provider === 'manual_invite');
+                      const isVip = Boolean(sub.isVip || sub.inquiryId?.startsWith('IP-') || sub.inquiryId?.includes('-IP-') || sub.payment?.provider === 'manual_invite');
                       const isPaid = sub.payment?.status === 'captured' || sub.status === 'approved' || isVip;
                       const isPaymentFailed = sub.payment?.status === 'failed';
                       const cleanDigits = getCleanDigits(sub.phoneNumber);

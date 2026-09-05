@@ -289,8 +289,35 @@ export const manualInviteeRegistration = async (req, res) => {
       });
     }
 
-    const counterVal = await getNextSequence('manualInquiryNumber');
-    const inquiryId = `IP-${String(counterVal).padStart(2, '0')}`;
+    // Generate authoritative VIP Inquiry ID with event-scoped prefix (e.g. EK06-IP-01) for upcoming events
+    const isUpcoming = Boolean(
+      program.sequenceNumber && (
+        (program.date && program.date >= '2026-09-07') ||
+        ['prog-2026-09-07', 'prog-2026-09-11', 'prog-2026-09-19'].includes(program.id)
+      )
+    );
+
+    const seqPad = String(program.sequenceNumber || 1).padStart(2, '0');
+    const counterKey = isUpcoming ? `manualInquiryNumber_${program.id}` : 'manualInquiryNumber';
+
+    let inquiryId = '';
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const counterVal = await getNextSequence(counterKey);
+      const candidateId = isUpcoming
+        ? `EK${seqPad}-IP-${String(counterVal).padStart(2, '0')}`
+        : `IP-${String(counterVal).padStart(2, '0')}`;
+
+      const exists = await Registration.findOne({ inquiryId: candidateId }).select('_id').lean();
+      if (!exists) {
+        inquiryId = candidateId;
+        break;
+      }
+    }
+
+    if (!inquiryId) {
+      const rand = crypto.randomBytes(2).toString('hex').toUpperCase();
+      inquiryId = isUpcoming ? `EK${seqPad}-IP-${rand}` : `IP-${rand}`;
+    }
 
     let couplePhotoUrl = '/sample_couple.png';
     const couplePhotoFile = req.files && req.files['couplePhoto'] ? req.files['couplePhoto'][0] : null;
@@ -387,14 +414,15 @@ export const getSubmissionsList = async (req, res) => {
     andConditions.push({
       $or: [
         { isVip: true },
-        { inquiryId: { $regex: '^IP-', $options: 'i' } },
+        { inquiryId: { $regex: 'IP-', $options: 'i' } },
         { 'payment.provider': 'manual_invite' }
       ]
     });
   } else if (isVip === 'false') {
     andConditions.push({
       isVip: { $ne: true },
-      inquiryId: { $not: /^IP-/i }
+      inquiryId: { $not: /IP-/i },
+      'payment.provider': { $ne: 'manual_invite' }
     });
   }
 
