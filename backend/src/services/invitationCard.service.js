@@ -187,12 +187,32 @@ export class InvitationCardService {
 
   /**
    * Ensure invitation card metadata is updated on Registration
+   * and high-resolution official invitation card image is rendered
    */
-  async ensureInvitationCard(inquiryId) {
-    const reg = await Registration.findOne({ inquiryId: { $regex: new RegExp(`^${inquiryId}$`, 'i') } });
+  async ensureInvitationCard(registrationOrInquiryId, eventParam = null) {
+    let reg = registrationOrInquiryId;
+    if (typeof registrationOrInquiryId === 'string') {
+      reg = await Registration.findOne({ inquiryId: { $regex: new RegExp(`^${registrationOrInquiryId}$`, 'i') } });
+    }
     if (!reg) return null;
 
-    const event = await eventService.getEventBySlug(reg.programId);
+    let event = eventParam;
+    if (!event) {
+      event = await eventService.getEventBySlug(reg.programId);
+    }
+    if (!event?.cardTemplate && !event?.cardTemplateUrl) {
+      const fresh = await Event.findOne({
+        $or: [
+          { id: reg.programId },
+          { slug: reg.programId },
+          ...(reg.programDate && reg.programDate !== 'TBD' ? [{ date: reg.programDate }] : [])
+        ]
+      }).lean();
+      if (fresh && (fresh.cardTemplate || fresh.cardTemplateUrl)) {
+        event = { ...(event || {}), ...fresh };
+      }
+    }
+
     const hash = this.calculateInvitationHash(reg, event);
 
     if (!reg.invitationHash || reg.invitationHash !== hash) {
@@ -202,13 +222,27 @@ export class InvitationCardService {
       await reg.save();
     }
 
+    // Ensure the official high-resolution composite card is created and uploaded
+    let cardUrl = reg.invitationCardUrl;
+    if (!cardUrl || reg.invitationHash !== hash) {
+      try {
+        const imgRes = await this.ensureInvitationCardImage(reg, event);
+        if (imgRes && imgRes.cardUrl) {
+          cardUrl = imgRes.cardUrl;
+        }
+      } catch (err) {
+        console.warn('[InvitationCardService] ensureInvitationCard image upload warning:', err.message);
+      }
+    }
+
     const buffer = await this.generateCardBuffer(reg, event);
     return {
       buffer,
       registration: reg,
       event,
       version: reg.invitationVersion || 1,
-      hash: reg.invitationHash
+      hash: reg.invitationHash,
+      cardUrl: cardUrl || reg.invitationCardUrl || null
     };
   }
 
@@ -381,8 +415,17 @@ export class InvitationCardService {
     if (!reg) return null;
 
     let event = eventParam;
-    if (!event) {
-      event = await Event.findOne({ $or: [{ id: reg.programId }, { slug: reg.programId }] }).lean();
+    if (!event || (!event.cardTemplate && !event.cardTemplateUrl)) {
+      const searchConditions = [];
+      if (reg.programId) searchConditions.push({ id: reg.programId }, { slug: reg.programId });
+      if (reg.programDate && reg.programDate !== 'TBD') searchConditions.push({ date: reg.programDate });
+      if (event?.id) searchConditions.push({ id: event.id });
+      if (event?.slug) searchConditions.push({ slug: event.slug });
+
+      const freshEvent = await Event.findOne({ $or: searchConditions }).lean();
+      if (freshEvent) {
+        event = { ...(event || {}), ...freshEvent };
+      }
     }
 
     const hash = this.calculateInvitationHash(reg, event);

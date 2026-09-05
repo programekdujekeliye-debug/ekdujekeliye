@@ -104,7 +104,7 @@ export const sendTestMessage = async (req, res) => {
         const program = await Event.findOne({
           $or: [{ id: targetRegistration.programId }, { slug: targetRegistration.programId }]
         });
-        const cardRes = await invitationCardService.ensureInvitationCard(targetRegistration, program);
+        const cardRes = await invitationCardService.ensureInvitationCardImage(targetRegistration, program);
         if (cardRes && cardRes.cardUrl) {
           headerImageUrl = cardRes.cardUrl;
         }

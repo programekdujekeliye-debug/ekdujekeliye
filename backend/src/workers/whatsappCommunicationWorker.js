@@ -3,6 +3,7 @@ import { Registration } from '../models/Registration.js';
 import { WhatsappMessage } from '../models/WhatsappMessage.js';
 import { sendUtilityTemplate } from '../integrations/whatsapp/whatsapp.service.js';
 import { ensureFeedbackToken } from '../modules/feedback/feedback.controller.js';
+import { invitationCardService } from '../services/invitationCard.service.js';
 import { env } from '../config/env.js';
 
 /**
@@ -144,6 +145,19 @@ export async function runAutomaticWhatsAppWorker() {
         const idempotencyKey = `REMINDER_24H:${ev.id}:${reg.inquiryId}`;
         const customerName = `${reg.husbandName || ''} & ${reg.wifeName || ''}`.trim() || 'Guest';
 
+        let headerImageUrl = reg.invitationCardUrl;
+        if (!headerImageUrl) {
+          try {
+            const cardRes = await invitationCardService.ensureInvitationCardImage(reg, ev);
+            headerImageUrl = cardRes?.cardUrl;
+          } catch (err) {
+            console.warn(`[WhatsApp Worker] Failed to render card for ${reg.inquiryId}:`, err.message);
+          }
+        }
+        if (!headerImageUrl) {
+          headerImageUrl = reg.couplePhoto || 'https://www.ekdujekeliye.in/sample_couple.png';
+        }
+
         const res = await sendUtilityTemplate({
           recipientPhone: reg.phoneNumber,
           templateKey: 'edkl_personal_invitation_24h_v2',
@@ -155,7 +169,8 @@ export async function runAutomaticWhatsAppWorker() {
             eventTime,
             venue,
             registrationId: reg.inquiryId,
-            inquiryId: reg.inquiryId
+            inquiryId: reg.inquiryId,
+            headerImageUrl
           },
           idempotencyKey,
           registrationId: reg._id,

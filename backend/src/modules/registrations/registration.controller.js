@@ -373,7 +373,7 @@ export const manualInviteeRegistration = async (req, res) => {
         // Generate personalized invitation card for VIP (pass & invitation message, NO payment confirmation)
         let headerImageUrl = sub.couplePhoto || 'https://www.ekdujekeliye.in/sample_couple.png';
         try {
-          const cardRes = await invitationCardService.ensureInvitationCard(sub, program);
+          const cardRes = await invitationCardService.ensureInvitationCardImage(sub, program);
           if (cardRes && cardRes.cardUrl) {
             headerImageUrl = cardRes.cardUrl;
           }
