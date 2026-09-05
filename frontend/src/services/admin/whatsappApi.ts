@@ -68,7 +68,27 @@ export interface RegistrationCommunicationRow {
   attendance: 'PRESENT' | 'ABSENT';
   messages: {
     registration: { status: string; sentAt?: string; deliveredAt?: string; readAt?: string; failedAt?: string; reasonIfMissing?: string };
-    paymentReminder: { count: number; status: string; nextScheduledAt?: string; reasonIfMissing?: string };
+    paymentReminder: {
+      count: number;
+      sentCount?: number;
+      failedCount?: number;
+      status: string;
+      lastError?: string | null;
+      lastErrorCode?: string | null;
+      attempts?: Array<{
+        messageId?: string;
+        trigger: string;
+        status: string;
+        sentAt?: string;
+        deliveredAt?: string;
+        readAt?: string;
+        failedAt?: string;
+        error?: string | null;
+        errorCode?: string | null;
+      }>;
+      nextScheduledAt?: string;
+      reasonIfMissing?: string;
+    };
     paymentConfirmed: { status: string; sentAt?: string; deliveredAt?: string; readAt?: string; failedAt?: string; reasonIfMissing?: string };
     invitation48h: { status: string; scheduledFor?: string; sentAt?: string; deliveredAt?: string; readAt?: string; failedAt?: string; reasonIfMissing?: string };
     reminder24h: { status: string; scheduledFor?: string; sentAt?: string; deliveredAt?: string; readAt?: string; failedAt?: string; reasonIfMissing?: string };
@@ -88,6 +108,7 @@ export interface RegistrationCommunicationRow {
   lastCommunication: { messageType: string; status: string; at: string; templateName?: string } | null;
   nextCommunication: { messageType: string; scheduledFor: string; templateName?: string } | null;
   health: 'GOOD' | 'HEALTHY' | 'WAITING' | 'PENDING' | 'ACTION_NEEDED';
+  healthReason?: string;
 }
 
 export interface RegistrationCommunicationListResponse {
@@ -137,6 +158,9 @@ export interface PersonTimelineResponse {
     deliveredAt?: string;
     readAt?: string;
     failedAt?: string;
+    providerErrorCode?: string;
+    providerErrorMessage?: string;
+    lastErrorCode?: string;
     lastErrorMessage?: string;
     providerMessageId?: string;
     createdAt: string;

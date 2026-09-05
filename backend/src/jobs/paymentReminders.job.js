@@ -15,24 +15,28 @@ export const runPaymentReminders = async () => {
   const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000);
 
   // 1. Fetch active events where payment & communications are currently ENABLED
+  // Strictly target 7 September, 11 September, 19 September Bhavnagar & upcoming active events (>= 2026-09-07)
   const activeEvents = await Event.find({
     isPaymentEnabled: true,
     earlyRegistrationMode: { $ne: true },
     communicationsEnabled: { $ne: false },
-    status: { $nin: ['archived', 'completed', 'cancelled'] }
+    status: { $nin: ['archived', 'completed', 'cancelled', 'date_tba', 'registration_closed'] },
+    date: { $gte: '2026-09-07', $nin: ['TBA', 'TBD', ''] }
   }).lean();
 
   if (activeEvents.length === 0) {
-    logger.info('[Payment Reminders Job] No events currently have online payment & communications active. Reminders suppressed.');
+    logger.info('[Payment Reminders Job] No upcoming events on/after 2026-09-07 currently have online payment & communications active. Reminders suppressed.');
     return { processedCount: 0, queuedReminders: 0 };
   }
 
   const activeEventMap = new Map(activeEvents.map(e => [e.id, e]));
   const activeEventIds = activeEvents.map(e => e.id);
+  const activeEventSlugs = activeEvents.map(e => e.slug).filter(Boolean);
+  const allEligibleEventKeys = Array.from(new Set([...activeEventIds, ...activeEventSlugs]));
 
-  // 2. Fetch pending unpaid registrations created >= 10 minutes ago
+  // 2. Fetch pending unpaid registrations created >= 10 minutes ago for active events only
   const pendingSubmissions = await Registration.find({
-    programId: { $in: activeEventIds },
+    programId: { $in: allEligibleEventKeys },
     status: 'pending',
     'payment.status': { $ne: 'captured' },
     isVip: { $ne: true },
@@ -43,8 +47,14 @@ export const runPaymentReminders = async () => {
   let queuedCount = 0;
 
   for (const reg of pendingSubmissions) {
-    const event = activeEventMap.get(reg.programId);
+    const event = activeEventMap.get(reg.programId) || activeEvents.find(e => e.id === reg.programId || e.slug === reg.programId);
     if (!event || !reg.phoneNumber || String(reg.phoneNumber).trim().length < 10) continue;
+
+    // Strict exclusion of old legacy event prefixes
+    const inqPrefix = (reg.inquiryId || '').split('-')[0].toUpperCase();
+    if (['CPL', 'EK05', 'IP', 'EK03', 'EK01', 'EK02', 'EK04'].includes(inqPrefix)) {
+      continue;
+    }
 
     // Check Event Start Cutoff: Do not schedule reminders after event starts
     const eventStartAt = communicationSchedulerService.parseEventDateTime(event.date, event.time || '8:30 PM');

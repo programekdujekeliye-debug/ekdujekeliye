@@ -209,26 +209,33 @@ async function runLifecycleTests() {
     assert(workerFbNoShow.skippedIneligible >= 0 || workerFbNoShow.totalDue === 0, 'No-show attendee prevented from receiving feedback request');
 
     console.log('\n--- TEST 10: Attended Review Execution ---');
-    // Queue combined post-event message for present attendee
+    // Ensure combined post-event message exists for present attendee
     const fbKey = `POST_EVENT:${testEvent.id}:${testReg._id}:v1`;
-    await WhatsappMessage.create({
-      messageId: `WA-TEST-POST-${Date.now()}`,
-      eventId: testEvent.id,
-      registrationId: testReg._id,
-      inquiryId: testInquiryId,
-      recipientPhone: testPhone,
-      recipientMasked: '918320****29',
-      templateName: 'edkl_post_event_memories_feedback_v1',
-      templateLanguage: 'gu',
-      templateCategory: 'UTILITY',
-      messageType: 'post_event',
-      trigger: 'post_event_memories_feedback',
-      executionSource: 'AUTOMATED_TEST',
-      providerMode: 'MOCK',
-      idempotencyKey: fbKey,
-      status: 'QUEUED',
-      scheduledFor: simTimeFb
-    });
+    let postMsg = await WhatsappMessage.findOne({ idempotencyKey: fbKey });
+    if (!postMsg) {
+      await WhatsappMessage.create({
+        messageId: `WA-TEST-POST-${Date.now()}`,
+        eventId: testEvent.id,
+        registrationId: testReg._id,
+        inquiryId: testInquiryId,
+        recipientPhone: testPhone,
+        recipientMasked: '918320****29',
+        templateName: 'edkl_post_event_memories_feedback_v1',
+        templateLanguage: 'gu',
+        templateCategory: 'UTILITY',
+        messageType: 'post_event',
+        trigger: 'post_event_memories_feedback',
+        executionSource: 'AUTOMATED_TEST',
+        providerMode: 'MOCK',
+        idempotencyKey: fbKey,
+        status: 'QUEUED',
+        scheduledFor: simTimeFb
+      });
+    } else {
+      postMsg.status = 'QUEUED';
+      postMsg.scheduledFor = simTimeFb;
+      await postMsg.save();
+    }
     testReg.attendance = 'PRESENT';
     await testReg.save();
 

@@ -50,6 +50,19 @@ export function maskPhoneNumber(phone) {
 }
 
 /**
+ * Format Meta WhatsApp Cloud API error codes into human-readable strings
+ */
+export function formatMetaErrorMessage(code, defaultMsg = '') {
+  const c = String(code || '').trim();
+  if (c === '131026') return 'Phone number not reachable on WhatsApp (not registered or offline)';
+  if (c === '131047') return '24-hour customer service window is closed';
+  if (c === '131051') return 'Unsupported message type or format';
+  if (c === '130429') return 'Meta rate limit reached. Throttled temporarily';
+  if (c === '131000') return 'Meta service generic delivery failure';
+  return defaultMsg || (c ? `Meta Error ${c}` : 'Delivery failed');
+}
+
+/**
  * Normalizes a recipient phone number (canonical export)
  */
 export const normalizeWhatsAppRecipient = normalizePhoneNumber;
@@ -891,8 +904,13 @@ export const handleWebhookEvent = async (req, res) => {
                 if (statusObj.errors && statusObj.errors.length > 0) {
                   const errCode = statusObj.errors[0].code;
                   const errTitle = statusObj.errors[0].title || statusObj.errors[0].message || '';
+                  const humanError = formatMetaErrorMessage(errCode, errTitle);
                   updateFields.providerErrorCode = String(errCode || '');
                   updateFields.providerErrorMessage = errTitle;
+                  updateFields.lastErrorCode = String(errCode || '');
+                  updateFields.lastErrorMessage = humanError;
+                } else {
+                  updateFields.lastErrorMessage = 'Delivery failed by Meta WhatsApp.';
                 }
               }
 

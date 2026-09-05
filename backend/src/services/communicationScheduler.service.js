@@ -92,10 +92,26 @@ export class CommunicationSchedulerService {
     }
 
     if (!event && registration) {
-      event = await Event.findOne({ id: registration.eventId || registration.programId });
+      event = await Event.findOne({
+        $or: [
+          { id: registration.eventId || registration.programId },
+          { slug: registration.eventId || registration.programId }
+        ]
+      });
     }
 
     if (!registration || !event) return { success: false, reason: 'MISSING_DATA' };
+
+    // Strict exclusion of old legacy events (< 2026-09-07 or completed/archived)
+    if (event.status === 'completed' || event.status === 'archived' || event.status === 'cancelled' || (event.date && event.date < '2026-09-07')) {
+      return { success: false, reason: 'OLD_EVENT_EXCLUDED' };
+    }
+
+    // Strict exclusion of old legacy inquiry prefixes
+    const inqPrefix = (registration.inquiryId || '').split('-')[0].toUpperCase();
+    if (['CPL', 'EK05', 'IP', 'EK03', 'EK01', 'EK02', 'EK04'].includes(inqPrefix)) {
+      return { success: false, reason: 'OLD_PREFIX_EXCLUDED' };
+    }
 
     const schedules = this.calculateScheduleTimes(event);
     if (!schedules) {
@@ -246,7 +262,7 @@ export class CommunicationSchedulerService {
                 recipientPhone: normalizePhoneNumber(phone),
                 recipientMasked: maskPhoneNumber(phone),
                 templateName: 'edkl_personal_invitation_24h_v2',
-                templateLanguage: 'gu',
+                templateLanguage: 'en_US',
                 templateCategory: 'UTILITY',
                 messageType: 'invitation',
                 trigger,
@@ -437,9 +453,19 @@ export class CommunicationSchedulerService {
         $or: [{ id: job.eventId }, { slug: job.eventId }]
       });
 
-      if (!event || event.status === 'archived' || event.status === 'cancelled') {
+      if (!event || event.status === 'archived' || event.status === 'cancelled' || event.status === 'completed' || (event.date && event.date < '2026-09-07')) {
         job.status = WHATSAPP_MESSAGE_STATUSES.CANCELLED;
-        job.lastErrorMessage = `Event ${job.eventId} is inactive or cancelled.`;
+        job.lastErrorMessage = `Event ${job.eventId} is inactive, past, or cancelled.`;
+        await job.save();
+        summary.skippedIneligible++;
+        continue;
+      }
+
+      // Revalidate: Legacy inquiry prefix exclusion
+      const inqPrefix = (job.inquiryId || '').split('-')[0].toUpperCase();
+      if (['CPL', 'EK05', 'IP', 'EK03', 'EK01', 'EK02', 'EK04'].includes(inqPrefix)) {
+        job.status = WHATSAPP_MESSAGE_STATUSES.CANCELLED;
+        job.lastErrorMessage = `Legacy inquiry prefix ${inqPrefix} excluded from automation.`;
         await job.save();
         summary.skippedIneligible++;
         continue;

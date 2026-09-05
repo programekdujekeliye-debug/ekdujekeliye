@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import crypto from 'crypto';
 import { env } from '../../config/env.js';
+import { logger } from '../../utils/logger.js';
 import { verifyWebhook, handleWebhookEvent, sendUtilityTemplate, sendFreeTextMessage, hashPhoneNumber, normalizePhoneNumber, maskPhoneNumber } from '../../integrations/whatsapp/whatsapp.service.js';
 import { WhatsappTemplate } from '../../models/WhatsappTemplate.js';
 import { CORE_TEMPLATES } from '../../integrations/whatsapp/templateRegistry.js';
@@ -310,7 +311,7 @@ export const getRegistrationTimeline = async (req, res) => {
         providerErrorCode: m.providerErrorCode,
         providerErrorMessage: m.providerErrorMessage,
         lastErrorCode: m.lastErrorCode,
-        lastErrorMessage: m.lastErrorMessage,
+        lastErrorMessage: m.lastErrorMessage || (m.providerErrorCode === '131026' ? 'Phone number not reachable on WhatsApp (not registered or offline)' : (m.providerErrorMessage || null)),
         providerMessageId: m.providerMessageId,
         executionSource: m.executionSource,
         providerMode: m.providerMode,
@@ -358,6 +359,7 @@ export const getEventCommunicationDashboard = async (req, res) => {
 
     let event = null;
     let matchedIds = [];
+    let activeEvents = [];
     if (eventId && eventId !== 'all') {
       event = await Event.findOne(
         { $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] },
@@ -369,25 +371,27 @@ export const getEventCommunicationDashboard = async (req, res) => {
         if (event.id && !matchedIds.includes(event.id)) matchedIds.push(event.id);
         if (event.slug && !matchedIds.includes(event.slug)) matchedIds.push(event.slug);
       }
+    } else {
+      activeEvents = await Event.find({
+        status: { $nin: ['archived', 'completed', 'cancelled', 'date_tba', 'registration_closed'] },
+        date: { $gte: '2026-09-07', $nin: ['TBA', 'TBD', ''] }
+      }).select('id slug date').lean();
+      matchedIds = activeEvents.flatMap(e => [e.id, e.slug]).filter(Boolean);
     }
 
     const eventRegMatch = {
-      ...(matchedIds.length > 0 ? {
-        $or: [
-          { programId: { $in: matchedIds } },
-          ...(event?.date ? [{ programDate: event.date }] : [])
-        ]
-      } : {}),
+      $or: [
+        { programId: { $in: matchedIds } },
+        ...(event?.date ? [{ programDate: event.date }] : (activeEvents.length > 0 ? [{ programDate: { $in: activeEvents.map(e => e.date).filter(Boolean) } }] : []))
+      ],
       isDeleted: { $ne: true }
     };
 
     const eventMsgMatch = {
-      ...(matchedIds.length > 0 ? {
-        $or: [
-          { eventId: { $in: matchedIds } },
-          ...(event?.date ? [{ eventDate: event.date }] : [])
-        ]
-      } : {})
+      $or: [
+        { eventId: { $in: matchedIds } },
+        ...(event?.date ? [{ eventDate: event.date }] : (activeEvents.length > 0 ? [{ eventDate: { $in: activeEvents.map(e => e.date).filter(Boolean) } }] : []))
+      ]
     };
 
     // Parallel aggregate queries in single roundtrip (< 30ms)
@@ -428,19 +432,19 @@ export const getEventCommunicationDashboard = async (req, res) => {
           }
         }
       ]),
-      Registration.find({
-        ...eventRegMatch,
-        status: { $ne: 'approved' }
-      })
-        .select('inquiryId')
+      Registration.find(eventRegMatch)
+        .select('inquiryId status payment whatsappOptOutAt')
         .lean()
-        .then(async (unpaidRegs) => {
-          if (!unpaidRegs || unpaidRegs.length === 0) return [];
-          const unpaidIds = unpaidRegs.map(r => r.inquiryId);
-          return WhatsappMessage.distinct('inquiryId', {
-            inquiryId: { $in: unpaidIds },
+        .then(async (regs) => {
+          if (!regs || regs.length === 0) return [];
+          const regIds = regs.map(r => r.inquiryId);
+          const failedInquiries = await WhatsappMessage.distinct('inquiryId', {
+            inquiryId: { $in: regIds },
             status: 'FAILED'
           });
+          const paymentFailedInquiries = regs.filter(r => r.status !== 'approved' && r.payment?.status === 'failed').map(r => r.inquiryId);
+          const optOutInquiries = regs.filter(r => r.whatsappOptOutAt).map(r => r.inquiryId);
+          return Array.from(new Set([...failedInquiries, ...paymentFailedInquiries, ...optOutInquiries]));
         })
     ]);
 
@@ -606,6 +610,19 @@ export const getEventRegistrationsCommunication = async (req, res) => {
         { programId: { $in: matchedIds } },
         ...(event?.date ? [{ programDate: event.date }] : [])
       ];
+    } else {
+      // Global Overview: strictly include 7 Sep, 11 Sep, 19 Sep Bhavnagar & upcoming active events (>= 2026-09-07)
+      const activeEvents = await Event.find({
+        status: { $nin: ['archived', 'completed', 'cancelled', 'date_tba', 'registration_closed'] },
+        date: { $gte: '2026-09-07', $nin: ['TBA', 'TBD', ''] }
+      }).select('id slug date').lean();
+      
+      const activeIds = activeEvents.flatMap(e => [e.id, e.slug]).filter(Boolean);
+      const activeDates = activeEvents.map(e => e.date).filter(Boolean);
+      eventMatchOr = [
+        { programId: { $in: activeIds } },
+        { programDate: { $in: activeDates } }
+      ];
     }
 
     const andConditions = [
@@ -677,25 +694,7 @@ export const getEventRegistrationsCommunication = async (req, res) => {
         .lean()
     ]);
 
-    // Fallback: If user searched specifically for a name/phone/ID and 0 results found for this event,
-    // search across ALL events so the user finds the couple!
-    if (search && totalRegistrations === 0 && eventMatchOr.length > 0) {
-      const globalAnd = andConditions.filter(c => !c.$or || c.$or !== eventMatchOr);
-      const globalMatch = { $and: globalAnd };
-      const [gTotal, gRegs] = await Promise.all([
-        Registration.countDocuments(globalMatch),
-        Registration.find(globalMatch)
-          .sort({ createdAt: -1 })
-          .skip((page - 1) * limit)
-          .limit(limit)
-          .select('inquiryId customerToken husbandName wifeName surname phoneNumber whatsappOptIn whatsappMarketingOptIn whatsappOptOutAt status payment attendance isDeleted createdAt updatedAt')
-          .lean()
-      ]);
-      if (gTotal > 0) {
-        totalRegistrations = gTotal;
-        registrations = gRegs;
-      }
-    }
+    // Strict event scoping: do not silently bleed into other events on search
 
     const totalPages = Math.ceil(totalRegistrations / limit) || 1;
 
@@ -713,7 +712,7 @@ export const getEventRegistrationsCommunication = async (req, res) => {
           { inquiryId: { $in: inquiryIds } }
         ]
       })
-        .select('messageId registrationId inquiryId messageType status trigger templateName sentAt deliveredAt readAt failedAt lastErrorMessage scheduledFor createdAt')
+        .select('messageId registrationId inquiryId messageType status trigger templateName sentAt deliveredAt readAt failedAt lastErrorMessage lastErrorCode providerErrorMessage providerErrorCode scheduledFor createdAt')
         .sort({ createdAt: 1 })
         .lean()
     ]);
@@ -747,9 +746,15 @@ export const getEventRegistrationsCommunication = async (req, res) => {
         m.messageType === 'payment_pending' ||
         m.templateName?.includes('payment_pending') ||
         m.templateName?.includes('polite_payment') ||
+        m.trigger === 'payment_reminder_10m' ||
+        m.trigger === 'payment_reminder_24h' ||
         m.trigger === 'payment_pending' ||
         m.trigger === 'registration_created'
       );
+      const reminder10m = mPayReminders.find(m => m.trigger === 'payment_reminder_10m');
+      const reminder24h = mPayReminders.find(m => m.trigger === 'payment_reminder_24h');
+      const remindersSentCount = mPayReminders.filter(m => ['SENT', 'DELIVERED', 'READ'].includes(m.status)).length;
+      const remindersFailedCount = mPayReminders.filter(m => m.status === 'FAILED').length;
       const mPayConf = regMsgs.find(m =>
         (m.messageType === 'payment_confirmation' ||
          m.templateName?.includes('payment_confirmed') ||
@@ -807,12 +812,33 @@ export const getEventRegistrationsCommunication = async (req, res) => {
         templateName: nextPending.templateName
       } : null;
 
-      // Deterministic Health Status: GOOD, WAITING, ACTION_NEEDED
-      let health = 'GOOD';
-      if (totals.failed > 0 || (!isPaid && reg.payment?.status === 'failed')) {
+      // Deterministic Health Status: HEALTHY, WAITING, ACTION_NEEDED
+      let health = 'HEALTHY';
+      let healthReason = '';
+      if (totals.failed > 0) {
         health = 'ACTION_NEEDED';
+        const failedMsg = regMsgs.find(m => m.status === 'FAILED');
+        const errDesc = failedMsg?.lastErrorMessage || failedMsg?.providerErrorMessage;
+        const errCode = failedMsg?.providerErrorCode || failedMsg?.lastErrorCode;
+        if (errCode === '131026' || (errDesc && errDesc.toLowerCase().includes('undeliverable'))) {
+          healthReason = 'Phone number not reachable on WhatsApp (not registered or offline)';
+        } else if (errDesc) {
+          healthReason = errDesc;
+        } else {
+          healthReason = 'WhatsApp message dispatch failed';
+        }
+      } else if (!isPaid && reg.payment?.status === 'failed') {
+        health = 'ACTION_NEEDED';
+        healthReason = 'Payment transaction failed at gateway';
+      } else if (reg.whatsappOptOutAt) {
+        health = 'ACTION_NEEDED';
+        healthReason = 'Recipient opted out of WhatsApp messages';
       } else if (totals.pending > 0 || (!isPaid && reg.status === 'pending')) {
         health = 'WAITING';
+        healthReason = isPaid ? 'Scheduled messages queued in worker' : 'Awaiting payment from couple';
+      } else {
+        health = 'HEALTHY';
+        healthReason = isPaid ? 'All lifecycle messages delivered' : 'Registration active';
       }
 
       // Reason if missing helper with standard lifecycle why-not-sent enums
@@ -881,9 +907,25 @@ export const getEventRegistrationsCommunication = async (req, res) => {
         messages: {
           paymentReminder: {
             count: mPayReminders.length,
+            sentCount: remindersSentCount,
+            failedCount: remindersFailedCount,
             status: mPayReminders.length > 0
               ? mPayReminders[mPayReminders.length - 1].status
               : (isPaid ? 'NOT_REQUIRED' : (isPaymentNotOpen ? 'NOT_OPEN_YET' : 'SCHEDULED')),
+            lastError: mPayReminders.find(m => m.status === 'FAILED')?.lastErrorMessage ||
+                       (mPayReminders.find(m => m.status === 'FAILED')?.providerErrorCode === '131026' ? 'Phone number not reachable on WhatsApp' : mPayReminders.find(m => m.status === 'FAILED')?.providerErrorMessage) || null,
+            lastErrorCode: mPayReminders.find(m => m.status === 'FAILED')?.providerErrorCode || mPayReminders.find(m => m.status === 'FAILED')?.lastErrorCode || null,
+            attempts: mPayReminders.map(m => ({
+              messageId: m.messageId,
+              trigger: m.trigger,
+              status: m.status,
+              sentAt: m.sentAt,
+              deliveredAt: m.deliveredAt,
+              readAt: m.readAt,
+              failedAt: m.failedAt,
+              error: m.lastErrorMessage || (m.providerErrorCode === '131026' ? 'Phone number not reachable on WhatsApp' : m.providerErrorMessage) || null,
+              errorCode: m.providerErrorCode || m.lastErrorCode || null
+            })),
             nextScheduledAt: reg.paymentReminder?.nextReminderAt || null,
             reasonIfMissing: mPayReminders.length === 0 ? getReason('payment_reminder') : null
           },
@@ -931,7 +973,7 @@ export const getEventRegistrationsCommunication = async (req, res) => {
           },
 
           // Backwards compatible aliases
-          registration: mReg ? { status: mReg.status, sentAt: mReg.sentAt, deliveredAt: mReg.deliveredAt, readAt: mReg.readAt, failedAt: mReg.failedAt, reasonIfMissing: null } : { status: 'NOT_REQUIRED', reasonIfMissing: 'NOT_REQUIRED' },
+          registration: mReg ? { status: mReg.status, sentAt: mReg.sentAt, deliveredAt: mReg.deliveredAt, readAt: mReg.readAt, failedAt: mReg.failedAt, reasonIfMissing: null } : { status: !optIn ? 'SKIPPED' : 'NOT_REQUIRED', reasonIfMissing: !optIn ? 'WHATSAPP_OPT_OUT' : 'NOT_REQUIRED' },
           invitation48h: mInv ? { status: mInv.status, scheduledFor: mInv.scheduledFor, sentAt: mInv.sentAt, deliveredAt: mInv.deliveredAt, readAt: mInv.readAt, failedAt: mInv.failedAt, reasonIfMissing: null } : { status: isPaid && remainingMinutes >= 120 ? 'SCHEDULED' : 'SKIPPED', reasonIfMissing: getReason('invitation_24h') },
           reminder24h: mRem ? { status: mRem.status, scheduledFor: mRem.scheduledFor, sentAt: mRem.sentAt, deliveredAt: mRem.deliveredAt, readAt: mRem.readAt, failedAt: mRem.failedAt, reasonIfMissing: null } : { status: isPaid && remainingMinutes > 48 * 60 ? 'SCHEDULED' : 'SKIPPED', reasonIfMissing: getReason('pass_reminder_48h') },
           feedback: mPostCombined ? { status: mPostCombined.status } : { status: isPaid ? (now < calculateEventMidnightIST(event?.date) ? 'SCHEDULED' : (isPresent ? 'WAITING' : 'NOT_ELIGIBLE')) : 'NOT_ELIGIBLE', reasonIfMissing: getReason('post_event') },
@@ -940,14 +982,15 @@ export const getEventRegistrationsCommunication = async (req, res) => {
         totals,
         lastCommunication,
         nextCommunication,
-        health
+        health,
+        healthReason
       };
     });
 
     // Client-side filtering if complex message status filters applied
     let filteredRows = rows;
     if (healthFilter !== 'ALL') {
-      filteredRows = filteredRows.filter(r => r.health === healthFilter);
+      filteredRows = filteredRows.filter(r => r.health === healthFilter || (healthFilter === 'HEALTHY' && r.health === 'GOOD'));
     }
     if (messageStatusFilter === 'READ') {
       filteredRows = filteredRows.filter(r => r.totals.read > 0);
