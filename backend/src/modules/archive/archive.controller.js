@@ -658,8 +658,11 @@ export const startEventArchive = async (req, res) => {
     const existingSet = new Set(existingRecords.map(r => r.sourcePublicId));
 
     submissions.forEach(sub => {
-      const photoUrl = sub.couplePhoto;
+      let photoUrl = sub.couplePhoto;
       if (!photoUrl) return;
+      if (photoUrl.includes('.heic')) {
+        photoUrl = photoUrl.replace(/\.heic$/i, '.jpg');
+      }
       const publicIdMatch = photoUrl.match(/\/([^/]+)\.(jpg|jpeg|png|webp)/i);
       const publicId = publicIdMatch ? publicIdMatch[1] : `sub_${sub.inquiryId}_photo`;
 
@@ -1012,7 +1015,7 @@ export const getArchiveJobs = async (req, res) => {
     if (status && status !== 'all') filter.status = status;
     if (eventId && eventId !== 'all') filter.eventId = eventId;
 
-    const [jobs, total, statusCounts] = await Promise.all([
+    const [jobs, total, statusCounts, cleanedCount] = await Promise.all([
       MediaArchive.find(filter)
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
@@ -1021,7 +1024,8 @@ export const getArchiveJobs = async (req, res) => {
       MediaArchive.countDocuments(filter),
       MediaArchive.aggregate([
         { $group: { _id: '$status', count: { $sum: 1 } } }
-      ])
+      ]),
+      MediaArchive.countDocuments({ cloudinaryOriginalStatus: 'DELETED' })
     ]);
 
     const summary = {
@@ -1029,7 +1033,8 @@ export const getArchiveJobs = async (req, res) => {
       COPYING: 0,
       VERIFIED: 0,
       ARCHIVED: 0,
-      FAILED: 0
+      FAILED: 0,
+      CLEANED_CLOUDINARY: cleanedCount
     };
     statusCounts.forEach(s => {
       if (summary[s._id] !== undefined) summary[s._id] = s.count;
@@ -1280,6 +1285,17 @@ export const cleanupOriginalAsset = async (req, res) => {
       return res.status(404).json({ error: `Archive record not found for registration ${registrationId}.` });
     }
 
+    // IMMUTABLE SAFETY GATE: Upcoming events are strictly protected
+    const PROTECTED_EVENTS = new Set(['prog-2026-09-07', 'prog-2026-09-11', 'prog-2026-09-19']);
+    const PROTECTED_PREFIXES = ['EK06-', 'EK07-', 'EK08-'];
+    if (PROTECTED_EVENTS.has(archive.eventId) || PROTECTED_PREFIXES.some(p => registrationId.startsWith(p))) {
+      return res.status(403).json({
+        success: false,
+        code: 'PROTECTED_UPCOMING_EVENT',
+        error: `Cannot delete asset for upcoming event ${archive.eventId}. Upcoming events are strictly protected.`
+      });
+    }
+
     // 2. HARD SERVER-SIDE SAFETY GATE: Event Archive 100% Verified Check
     const [submissionsCount, archives] = await Promise.all([
       Registration.countDocuments({
@@ -1349,8 +1365,12 @@ export const cleanupOriginalAsset = async (req, res) => {
     }
 
     // 5. Delete only the original Cloudinary resource using stored sourcePublicId
-    if (archive.sourcePublicId && archive.sourceProvider === 'cloudinary') {
-      await cloudinary.uploader.destroy(archive.sourcePublicId);
+    let fullPublicId = archive.sourcePublicId;
+    if (archive.sourceUrl && archive.sourceUrl.includes('/couplePhotos/') && !fullPublicId.startsWith('couplePhotos/')) {
+      fullPublicId = `couplePhotos/${fullPublicId}`;
+    }
+    if (fullPublicId && archive.sourceProvider === 'cloudinary') {
+      await cloudinary.uploader.destroy(fullPublicId);
     }
 
     archive.cloudinaryOriginalStatus = 'DELETED';

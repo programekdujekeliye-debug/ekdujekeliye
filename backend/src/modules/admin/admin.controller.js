@@ -6,6 +6,7 @@ import { Job } from '../../models/Job.js';
 import { Payment } from '../../models/Payment.js';
 import { Registration } from '../../models/Registration.js';
 import { Event } from '../../models/Event.js';
+import { MediaArchive } from '../../models/MediaArchive.js';
 import { env } from '../../config/env.js';
 import { runDatabaseBackup } from '../../jobs/backup.job.js';
 
@@ -134,6 +135,9 @@ export const getSystemResources = async (req, res) => {
       warnings.push({ code: 'JOB_FAILURE_WARNING', level: 'WARNING', message: `${failedJobs} background job(s) failed.` });
     }
 
+    // 6. Cleaned Cloudinary Assets from Archive
+    const cleanedAssetsCount = await MediaArchive.countDocuments({ cloudinaryOriginalStatus: 'DELETED' });
+
     res.json({
       success: true,
       timestamp: new Date(),
@@ -145,7 +149,10 @@ export const getSystemResources = async (req, res) => {
         status: memoryStatus
       },
       database: dbStatsCache,
-      cloudinary: cloudinaryStatsCache,
+      cloudinary: {
+        ...(cloudinaryStatsCache || {}),
+        cleanedAssetsCount
+      },
       googleDriveArchive: {
         status: 'READY (Google-Side Pipeline)',
         pendingArchiveJobs: pendingJobs,

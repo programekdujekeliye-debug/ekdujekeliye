@@ -101,11 +101,14 @@ export const StoragePage = () => {
   useEffect(() => {
     fetchTelemetry();
     fetchCandidates();
+    fetchJobs(1);
+    fetchBackups();
 
-    // Auto-refresh candidate progress every 20 seconds while on this page
+    // Auto-refresh candidate progress and telemetry every 20 seconds while on this page
     const interval = setInterval(() => {
       fetchCandidates();
       fetchTelemetry();
+      fetchJobs(1);
     }, 20000);
 
     return () => clearInterval(interval);
@@ -270,7 +273,11 @@ export const StoragePage = () => {
             {resources?.cloudinary?.creditsUsed !== undefined ? `${resources.cloudinary.creditsUsed} / 25` : 'Active'}
           </span>
           <span className="text-[10px] sm:text-[11px] text-slate-500 font-medium block truncate">
-            Credits &bull; {resources?.cloudinary?.storageMB ? `${resources.cloudinary.storageMB} MB stored` : 'Active'}
+            {resources?.cloudinary?.cleanedAssetsCount ? (
+              <span className="text-emerald-700 font-semibold">✓ {resources.cloudinary.cleanedAssetsCount} old photos purged from Cloudinary</span>
+            ) : (
+              `Credits • ${resources?.cloudinary?.storageMB ? `${resources.cloudinary.storageMB} MB stored` : 'Active'}`
+            )}
           </span>
         </div>
 
@@ -297,18 +304,31 @@ export const StoragePage = () => {
 
         {/* Archive Queue Health */}
         <div className="p-4 sm:p-5 lg:p-6 bg-white border border-slate-200 rounded-2xl space-y-1 shadow-xs">
-          <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block">Archive Worker Queue</span>
-          <div className="flex items-center gap-3 mt-1">
+          <div className="flex justify-between items-center">
+            <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block">Archive Worker Queue</span>
+            {(jobsSummary.CLEANED_CLOUDINARY > 0 || resources?.cloudinary?.cleanedAssetsCount > 0) && (
+              <span className="px-2 py-0.5 text-[9px] font-extrabold rounded-md uppercase bg-purple-50 text-purple-700 border border-purple-200">
+                {jobsSummary.CLEANED_CLOUDINARY || resources?.cloudinary?.cleanedAssetsCount} Purged
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2.5 mt-1">
             <div>
               <span className="text-xl sm:text-2xl font-extrabold text-emerald-600">{jobsSummary.VERIFIED || 0}</span>
               <span className="text-[9px] sm:text-[10px] text-slate-400 block font-bold">VERIFIED</span>
             </div>
-            <div className="border-l border-slate-200 pl-3">
+            <div className="border-l border-slate-200 pl-2.5">
               <span className="text-xl sm:text-2xl font-extrabold text-amber-600">{jobsSummary.QUEUED || 0}</span>
               <span className="text-[9px] sm:text-[10px] text-slate-400 block font-bold">QUEUED</span>
             </div>
+            <div className="border-l border-slate-200 pl-2.5">
+              <span className="text-xl sm:text-2xl font-extrabold text-purple-600">
+                {jobsSummary.CLEANED_CLOUDINARY || resources?.cloudinary?.cleanedAssetsCount || 0}
+              </span>
+              <span className="text-[9px] sm:text-[10px] text-slate-400 block font-bold">CLEANED</span>
+            </div>
             {jobsSummary.FAILED > 0 && (
-              <div className="border-l border-slate-200 pl-3">
+              <div className="border-l border-slate-200 pl-2.5">
                 <span className="text-xl sm:text-2xl font-extrabold text-red-600">{jobsSummary.FAILED}</span>
                 <span className="text-[9px] sm:text-[10px] text-slate-400 block font-bold">FAILED</span>
               </div>
