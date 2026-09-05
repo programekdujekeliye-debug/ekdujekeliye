@@ -175,73 +175,132 @@ async function asyncPool<T, R>(
 }
 
 /**
- * Ultra-Fast, Zero-Fetch CSS LivePreviewCard:
- * Uses pure HTML/CSS rendering with GPU hardware transforms.
- * ZERO JavaScript fetch() calls, ZERO canvas contexts, 120 FPS real-time slider updates,
- * and 0 server/database load!
+ * LivePreviewCanvas: Real-time rendered canvas showing couple photo inside frame with live zoom & offset.
+ * Draws the number directly onto the canvas at canvas.height * 0.95 in #7a0c0c bold 13px sans-serif,
+ * matching the original system and high-res exported PNGs.
  */
-const LivePreviewCard: React.FC<{
+const LivePreviewCanvas: React.FC<{
   sub: Submission;
-}> = ({ sub }) => {
-  const [loadError, setLoadError] = useState(false);
-  const zoomVal = sub.photoZoom ?? 1.0;
-  const offsetValX = sub.photoOffsetX ?? 0;
-  const offsetValY = sub.photoOffsetY ?? 0;
+  frameImg: HTMLImageElement | null;
+}> = ({ sub, frameImg }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [coupleImg, setCoupleImg] = useState<HTMLImageElement | null>(null);
+  const [loadingImg, setLoadingImg] = useState(true);
+  const [localFrameImg, setLocalFrameImg] = useState<HTMLImageElement | null>(frameImg);
 
-  // Use sub.photoThumbnailUrl or optimized thumbnail URL directly in <img> (no fetch()!)
-  const photoUrl = sub.photoThumbnailUrl || getOptimizedPhotoUrl(sub.couplePhoto, 360, 480);
+  useEffect(() => {
+    if (frameImg) {
+      setLocalFrameImg(frameImg);
+      return;
+    }
+    loadSafeCanvasImage('/frame_template.png').then((img) => {
+      if (img) setLocalFrameImg(img);
+    });
+  }, [frameImg]);
+
+  const activeFrame = frameImg || localFrameImg;
+
+  useEffect(() => {
+    if (!sub.couplePhoto) {
+      setCoupleImg(null);
+      setLoadingImg(false);
+      return;
+    }
+    setLoadingImg(true);
+    const fullUrl = getOptimizedPhotoUrl(sub.couplePhoto, 360, 480);
+    if (imageMemoryCache.has(fullUrl)) {
+      setCoupleImg(imageMemoryCache.get(fullUrl)!);
+      setLoadingImg(false);
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      imageMemoryCache.set(fullUrl, img);
+      setCoupleImg(img);
+      setLoadingImg(false);
+    };
+    img.onerror = () => {
+      setCoupleImg(null);
+      setLoadingImg(false);
+    };
+    img.src = fullUrl;
+  }, [sub.couplePhoto]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = 384;
+    canvas.height = 512;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Frame bounding box (8% padding on left/right/top, 84% width/height)
+    const startX = canvas.width * 0.08;
+    const startY = canvas.height * 0.08;
+    const drawWidth = canvas.width * 0.84;
+    const drawHeight = canvas.height * 0.84;
+
+    if (coupleImg) {
+      const imgAspect = coupleImg.width / coupleImg.height;
+      const targetAspect = drawWidth / drawHeight;
+      let tempW = drawWidth;
+      let tempH = drawHeight;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (imgAspect > targetAspect) {
+        tempW = drawHeight * imgAspect;
+        offsetX = -(tempW - drawWidth) / 2;
+      } else {
+        tempH = drawWidth / imgAspect;
+        offsetY = -(tempH - drawHeight) / 2;
+      }
+
+      const zoom = sub.photoZoom ?? 1.0;
+      const w = tempW * zoom;
+      const h = tempH * zoom;
+      const ox = offsetX - (w - tempW) / 2 + ((sub.photoOffsetX ?? 0) * (canvas.width / 768));
+      const oy = offsetY - (h - tempH) / 2 + ((sub.photoOffsetY ?? 0) * (canvas.height / 1024));
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(startX, startY, drawWidth, drawHeight);
+      ctx.clip();
+      ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#f1f5f9';
+      ctx.fillRect(startX, startY, drawWidth, drawHeight);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(loadingImg ? 'Loading photo...' : 'No photo uploaded', canvas.width / 2, canvas.height / 2);
+    }
+
+    // Draw frame overlay if loaded
+    if (activeFrame) {
+      ctx.drawImage(activeFrame, 0, 0, canvas.width, canvas.height);
+    }
+
+    // Draw inquiryId / Token ID cleanly at bottom below calligraphy logo - EXACT OLD FORMAT
+    ctx.save();
+    ctx.fillStyle = '#7a0c0c';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
+    ctx.restore();
+  }, [coupleImg, activeFrame, sub.photoZoom, sub.photoOffsetX, sub.photoOffsetY, sub.inquiryId, loadingImg]);
 
   return (
     <div className="w-[110px] h-[146px] sm:w-[124px] sm:h-[165px] relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-950 shrink-0 shadow-inner select-none">
-      {/* Photo cutout area (8% inner frame bounding box) */}
-      <div className="absolute inset-[8%] overflow-hidden bg-slate-900 flex items-center justify-center">
-        {photoUrl && !loadError ? (
-          <img
-            src={photoUrl}
-            alt={sub.inquiryId}
-            loading="lazy"
-            decoding="async"
-            onError={() => setLoadError(true)}
-            style={{
-              transform: `translate(${offsetValX * (124 / 768)}px, ${offsetValY * (165 / 1024)}px) scale(${zoomVal})`,
-              transformOrigin: 'center center'
-            }}
-            className="w-full h-full object-cover transition-transform duration-75 pointer-events-none select-none"
-          />
-        ) : (
-          <div className="text-center p-1">
-            <span className="text-[10px] font-bold text-slate-400 block">
-              {loadError ? 'Load Error' : 'No Photo'}
-            </span>
-            {loadError && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setLoadError(false);
-                }}
-                className="text-[8px] text-amber-400 underline mt-1"
-              >
-                Retry
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Frame Template Overlay on top */}
-      <img
-        src="/frame_template.png"
-        alt=""
-        className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none z-10"
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full object-contain block select-none pointer-events-none"
       />
-
-      {/* Token ID printed at bottom center */}
-      <div className="absolute inset-x-0 bottom-1 text-center z-20 pointer-events-none">
-        <span className="text-[11px] sm:text-xs font-black text-[#7a0c0c] tracking-tight drop-shadow-xs">
-          {sub.inquiryId}
-        </span>
-      </div>
     </div>
   );
 };
@@ -1379,8 +1438,8 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
 
                       {/* Middle: Canvas + Redesigned Luxury Alignment Controls */}
                       <div className="flex flex-col sm:flex-row items-start gap-3 w-full">
-                        {/* High-Speed Zero-Fetch CSS LivePreviewCard */}
-                        <LivePreviewCard sub={sub} />
+                        {/* Live Canvas Preview matching exact original system */}
+                        <LivePreviewCanvas sub={sub} frameImg={globalFrameImg} />
 
                         {/* Redesigned Sliders & Presets Container */}
                         <div className={`flex-1 w-full space-y-2.5 ${isAlignOpen ? 'block' : 'hidden sm:block'}`}>
