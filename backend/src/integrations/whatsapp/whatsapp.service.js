@@ -330,22 +330,27 @@ export async function sendWhatsAppMessage(rawParams = {}) {
     });
 
     if (!conversation) {
-      conversation = await WhatsappConversation.create({
-        phone: normalizedPhone,
-        phoneMasked: maskedPhone,
-        phoneHash,
-        registrationId: targetRegistration?._id || registrationId || null,
-        inquiryId: targetRegistration?.inquiryId || inquiryId || null,
-        eventId: targetRegistration?.programId || eventId || null,
-        customerName,
-        status: 'OPEN',
-        unreadCount: 0,
-        lastMessageAt: new Date(),
-        lastMessagePreview: renderedContent || `[Template: ${templateDef.metaName}]`,
-        lastMessageDirection: 'OUTBOUND',
-        lastMessageStatus: 'SENDING',
-        lastOutboundAt: new Date()
-      });
+      // Only auto-create support conversations for registrations or direct 1-to-1 customer messages.
+      // Mass marketing broadcasts are logged in whatsapp_messages ledger and only enter
+      // the support inbox if the customer replies (handled by inbound webhook).
+      if (trigger !== 'marketing_broadcast' || targetRegistration || inquiryId) {
+        conversation = await WhatsappConversation.create({
+          phone: normalizedPhone,
+          phoneMasked: maskedPhone,
+          phoneHash,
+          registrationId: targetRegistration?._id || registrationId || null,
+          inquiryId: targetRegistration?.inquiryId || inquiryId || null,
+          eventId: targetRegistration?.programId || eventId || null,
+          customerName,
+          status: 'OPEN',
+          unreadCount: 0,
+          lastMessageAt: new Date(),
+          lastMessagePreview: renderedContent || `[Template: ${templateDef.metaName}]`,
+          lastMessageDirection: 'OUTBOUND',
+          lastMessageStatus: 'SENDING',
+          lastOutboundAt: new Date()
+        });
+      }
     } else {
       conversation.lastMessageAt = new Date();
       conversation.lastMessagePreview = renderedContent || `[Template: ${templateDef.metaName}]`;
@@ -1049,10 +1054,12 @@ export const handleWebhookEvent = async (req, res) => {
                 conversation.lastMessageStatus = 'RECEIVED';
                 conversation.lastInboundAt = timestamp;
                 conversation.customerServiceWindowExpiresAt = windowExpiry;
-                if (activeReg && !conversation.registrationId) {
+                if (activeReg) {
                   conversation.registrationId = activeReg._id;
                   conversation.inquiryId = activeReg.inquiryId;
                   conversation.eventId = activeReg.programId;
+                  conversation.customerName = customerName;
+                } else if (!conversation.customerName || conversation.customerName === 'WhatsApp Guest') {
                   conversation.customerName = customerName;
                 }
                 await conversation.save();

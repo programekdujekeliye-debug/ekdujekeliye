@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SendIcon, SparklesIcon, LockIcon } from '@/components/Icons';
+import { SendIcon, LockIcon, FileTextIcon } from '@/components/Icons';
 import { QuickRepliesBar } from './QuickRepliesBar';
 
 interface ChatComposerProps {
@@ -55,22 +55,23 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   // 1. If 24-Hour Session is Expired:
   if (!isWindowActive) {
     return (
-      <div className="p-3.5 bg-amber-50/95 border-t border-amber-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 flex-shrink-0">
+      <div className="p-3.5 bg-amber-50/95 border-t border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3 flex-shrink-0">
         <div className="text-center sm:text-left">
-          <p className="text-xs font-black text-amber-950">
+          <p className="text-xs font-black text-amber-950 flex items-center gap-1.5 justify-center sm:justify-start">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
             24-Hour WhatsApp Session Expired
           </p>
-          <p className="text-[11px] text-amber-800 mt-0.5">
-            Meta policy requires sending an approved template to message this customer.
+          <p className="text-[11px] text-amber-800 mt-0.5 font-medium">
+            Meta policy requires sending an approved template to message this contact.
           </p>
         </div>
 
         <button
           type="button"
           onClick={onOpenTemplateModal}
-          className="w-full sm:w-auto px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+          className="w-full sm:w-auto px-4 py-2 bg-[#881337] hover:bg-[#70102d] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
         >
-          <SparklesIcon className="w-3.5 h-3.5 text-amber-200" />
+          <FileTextIcon className="w-3.5 h-3.5 text-rose-200" />
           <span>Choose Approved Template</span>
         </button>
       </div>
@@ -79,7 +80,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
   // 2. Active Session: Live Chat Composer
   return (
-    <div className="bg-[#F0EBE3] border-t border-slate-200/90 flex-shrink-0">
+    <div className="bg-[#F5F2EB] border-t border-stone-200 flex-shrink-0">
       {/* Quick Replies Bar */}
       {mode === 'reply' && <QuickRepliesBar onSelectReply={handleSelectQuickReply} />}
 
@@ -87,14 +88,14 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       <form onSubmit={handleSubmit} className="p-2.5 sm:p-3 space-y-2">
         <div className="flex items-center justify-between text-[11px]">
           {/* Mode Switcher: Reply vs Note */}
-          <div className="flex items-center gap-1 bg-slate-200/70 p-0.5 rounded-xl text-[10px] font-bold">
+          <div className="flex items-center gap-1 bg-stone-200/70 p-0.5 rounded-xl text-[10px] font-bold">
             <button
               type="button"
               onClick={() => setMode('reply')}
               className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                 mode === 'reply'
                   ? 'bg-[#881337] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  : 'text-stone-600 hover:text-stone-900'
               }`}
             >
               💬 WhatsApp Chat
@@ -105,7 +106,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
                 mode === 'note'
                   ? 'bg-amber-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  : 'text-stone-600 hover:text-stone-900'
               }`}
             >
               <LockIcon className="w-2.5 h-2.5" />
@@ -113,7 +114,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             </button>
           </div>
 
-          <span className="text-[10px] text-slate-400 hidden sm:inline font-medium">
+          <span className="text-[10px] text-stone-400 hidden sm:inline font-medium">
             Enter to send &bull; Shift+Enter for new line
           </span>
         </div>
@@ -133,13 +134,13 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               }}
               placeholder={
                 mode === 'reply'
-                  ? 'Type your message on WhatsApp...'
-                  : 'Write an internal staff note (visible only to admins)...'
+                  ? 'Type your WhatsApp reply here...'
+                  : 'Write an internal staff note (visible only to admin team)...'
               }
               className={`w-full px-3.5 py-2.5 rounded-2xl text-xs font-medium focus:outline-none resize-none transition-all ${
                 mode === 'reply'
-                  ? 'bg-white border border-slate-200 text-slate-900 focus:ring-1 focus:ring-[#881337] focus:border-[#881337] shadow-xs placeholder:text-slate-400'
-                  : 'bg-amber-50 border border-amber-300 text-amber-950 focus:ring-1 focus:ring-amber-500 shadow-xs'
+                  ? 'bg-white border border-stone-200 text-stone-900 focus:ring-1 focus:ring-[#881337] focus:border-[#881337] shadow-xs placeholder:text-stone-400'
+                  : 'bg-amber-50 border border-amber-300 text-amber-950 focus:ring-1 focus:ring-amber-500 shadow-xs placeholder:text-amber-700/60'
               }`}
             />
           </div>
@@ -149,7 +150,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             disabled={sendingReply || addingNote || !text.trim()}
             className={`px-4 py-2.5 font-bold text-xs rounded-2xl shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer flex-shrink-0 ${
               mode === 'reply'
-                ? 'bg-[#881337] hover:bg-[#9F1239] text-white'
+                ? 'bg-[#881337] hover:bg-[#70102d] text-white'
                 : 'bg-amber-600 hover:bg-amber-700 text-white'
             }`}
           >
@@ -159,7 +160,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                 ? 'Sending...'
                 : mode === 'reply'
                 ? 'Send'
-                : 'Save'}
+                : 'Save Note'}
             </span>
           </button>
         </div>

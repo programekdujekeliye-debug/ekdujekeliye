@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 
 export interface ConversationsFilterState {
   search: string;
-  filter: 'all' | 'unread' | 'open' | 'window_open' | 'window_expired' | 'closed';
+  filter: 'all' | 'unread' | 'inbound' | 'open' | 'window_open' | 'window_expired' | 'closed';
   selectedEventId: string;
 }
 

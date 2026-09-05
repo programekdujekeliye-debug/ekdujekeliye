@@ -1,71 +1,61 @@
 import mongoose from 'mongoose';
-import { env } from '../src/config/env.js';
-import { WhatsappMessage } from '../src/models/WhatsappMessage.js';
-import { Registration } from '../src/models/Registration.js';
-import { Event } from '../src/models/Event.js';
+
+const prodUri = 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
 
 async function run() {
-  await mongoose.connect(process.env.MONGO_URI);
-  console.log('Connected to MongoDB');
+  await mongoose.connect(prodUri);
+  const db = mongoose.connection.db;
 
-  const failedCount = await WhatsappMessage.countDocuments({ status: 'FAILED' });
-  const blockedCount = await WhatsappMessage.countDocuments({ status: 'BLOCKED_TEST_MODE' });
-  console.log('FAILED count:', failedCount, 'BLOCKED_TEST_MODE count:', blockedCount);
+  const totalConvs = await db.collection('whatsapp_conversations').countDocuments();
+  console.log('Total WhatsappConversation records:', totalConvs);
 
-  const failedMsgs = await WhatsappMessage.find({ status: { $in: ['FAILED', 'BLOCKED_TEST_MODE'] } })
-    .sort({ createdAt: -1 })
-    .limit(5)
-    .lean();
+  // Inbound messages
+  const inboundMsgs = await db.collection('whatsapp_messages').find({ direction: 'INBOUND' }).toArray();
+  console.log('\nTotal INBOUND messages in whatsapp_messages:', inboundMsgs.length);
+  
+  const senderSet = new Set();
+  inboundMsgs.forEach(m => {
+    senderSet.add(m.senderPhone || m.recipientPhone);
+  });
+  console.log('Unique sender phone numbers who sent INBOUND messages:', senderSet.size);
+  console.log('Sender numbers:', Array.from(senderSet));
 
-  console.log('\nRecent Failed/Blocked Messages:');
-  failedMsgs.forEach(m => {
+  // Inbound messages details
+  console.log('\nRecent 10 Inbound Messages:');
+  inboundMsgs.slice(-10).forEach(m => {
     console.log({
-      inquiryId: m.inquiryId,
-      phone: m.recipientPhone,
-      template: m.templateName,
-      status: m.status,
-      trigger: m.trigger,
-      providerMode: m.providerMode,
-      lastErrorMessage: m.lastErrorMessage,
-      lastErrorCode: m.lastErrorCode,
-      createdAt: m.createdAt
+      id: m._id,
+      from: m.senderPhone,
+      to: m.recipientPhone,
+      text: m.content,
+      createdAt: m.createdAt,
+      conversationId: m.conversationId
     });
   });
 
-  const reg379 = await Registration.findOne({ inquiryId: /379/i }).lean();
-  console.log('\nRegistration 379:');
-  if (reg379) {
+  // Check how many conversations have lastInboundAt
+  const convsWithInbound = await db.collection('whatsapp_conversations').find({
+    lastInboundAt: { $ne: null }
+  }).toArray();
+  console.log('\nConversations with lastInboundAt != null:', convsWithInbound.length);
+  convsWithInbound.forEach(c => {
     console.log({
-      id: reg379._id,
-      inquiryId: reg379.inquiryId,
-      name: `${reg379.husbandName} & ${reg379.wifeName}`,
-      phone: reg379.phoneNumber,
-      programId: reg379.programId,
-      status: reg379.status,
-      payment: reg379.payment,
-      createdAt: reg379.createdAt
+      id: c._id,
+      phone: c.phone,
+      customerName: c.customerName,
+      unreadCount: c.unreadCount,
+      lastMessagePreview: c.lastMessagePreview,
+      lastInboundAt: c.lastInboundAt
     });
+  });
 
-    const msgs379 = await WhatsappMessage.find({
-      $or: [{ registrationId: reg379._id }, { inquiryId: reg379.inquiryId }]
-    }).lean();
-    console.log('Messages for 379:', msgs379.length);
-    msgs379.forEach(m => {
-      console.log({
-        template: m.templateName,
-        status: m.status,
-        trigger: m.trigger,
-        error: m.lastErrorMessage,
-        errorCode: m.lastErrorCode,
-        providerMode: m.providerMode
-      });
-    });
-  } else {
-    console.log('No reg found matching 379');
-  }
-
-  const events = await Event.find({}).select('id slug name date status price isPaymentEnabled earlyRegistrationMode').lean();
-  console.log('\nEvents:', events);
+  // Check how many conversations are purely from marketing_broadcast with NO inbound reply
+  const broadcastOnlyConvs = await db.collection('whatsapp_conversations').countDocuments({
+    lastInboundAt: null,
+    registrationId: null,
+    inquiryId: null
+  });
+  console.log('\nBroadcast-only conversations with NO inbound reply and NO registration:', broadcastOnlyConvs);
 
   await mongoose.disconnect();
 }

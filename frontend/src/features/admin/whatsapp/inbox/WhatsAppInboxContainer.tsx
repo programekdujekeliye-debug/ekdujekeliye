@@ -191,7 +191,7 @@ export const WhatsAppInboxContainer: React.FC<WhatsAppInboxContainerProps> = ({
                     </div>
                     <p className="text-xs font-bold text-slate-600">No message history yet with this contact.</p>
                     <p className="text-[11px] text-slate-400 max-w-xs text-center">
-                      Send a message below or simulate an incoming reply to start the conversation.
+                      Send a message below or use an approved template to contact this attendee.
                     </p>
                   </div>
                 ) : (

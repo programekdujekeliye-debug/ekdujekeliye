@@ -1695,47 +1695,66 @@ export const getConversations = async (req, res) => {
     const filter = req.query.filter || 'all';
     const eventId = req.query.eventId || '';
 
-    const query = {};
+    const query = {
+      $and: [
+        {
+          $or: [
+            { lastInboundAt: { $ne: null } },
+            { unreadCount: { $gt: 0 } },
+            { 'notes.0': { $exists: true } },
+            { registrationId: { $ne: null } }
+          ]
+        }
+      ]
+    };
 
     if (eventId && eventId !== 'all') {
-      query.eventId = eventId;
+      if (eventId === 'leads' || eventId === 'unassigned') {
+        query.$and.push({ $or: [{ eventId: null }, { eventId: { $exists: false } }] });
+      } else {
+        query.$and.push({ eventId });
+      }
     }
 
     const now = new Date();
 
     if (filter === 'unread') {
-      query.unreadCount = { $gt: 0 };
+      query.$and.push({ unreadCount: { $gt: 0 } });
+    } else if (filter === 'inbound') {
+      query.$and.push({ lastInboundAt: { $ne: null } });
     } else if (filter === 'open') {
-      query.status = 'OPEN';
+      query.$and.push({ status: 'OPEN' });
     } else if (filter === 'closed') {
-      query.status = 'CLOSED';
+      query.$and.push({ status: 'CLOSED' });
     } else if (filter === 'unassigned') {
-      query.assignedAdminId = null;
+      query.$and.push({ assignedAdminId: null });
     } else if (filter === 'assigned_to_me') {
       const adminId = req.user?.id || req.user?.username || 'admin';
-      query.assignedAdminId = adminId;
+      query.$and.push({ assignedAdminId: adminId });
     } else if (filter === 'window_open') {
-      query.customerServiceWindowExpiresAt = { $gt: now };
+      query.$and.push({ customerServiceWindowExpiresAt: { $gt: now } });
     } else if (filter === 'window_expired') {
-      query.customerServiceWindowExpiresAt = { $lte: now };
+      query.$and.push({ customerServiceWindowExpiresAt: { $lte: now } });
     } else if (filter === 'window_expiring_soon') {
       const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-      query.customerServiceWindowExpiresAt = { $gt: now, $lte: twoHoursLater };
+      query.$and.push({ customerServiceWindowExpiresAt: { $gt: now, $lte: twoHoursLater } });
     }
 
     if (search) {
-      query.$or = [
-        { customerName: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { inquiryId: { $regex: search, $options: 'i' } }
-      ];
+      query.$and.push({
+        $or: [
+          { customerName: { $regex: search, $options: 'i' } },
+          { phone: { $regex: search, $options: 'i' } },
+          { inquiryId: { $regex: search, $options: 'i' } }
+        ]
+      });
     }
 
     const skip = (page - 1) * limit;
 
     const [conversations, total] = await Promise.all([
       WhatsappConversation.find(query)
-        .sort({ unreadCount: -1, lastMessageAt: -1 })
+        .sort({ unreadCount: -1, lastInboundAt: -1, lastMessageAt: -1 })
         .skip(skip)
         .limit(limit)
         .populate({
@@ -1816,15 +1835,25 @@ export const getConversationStats = async (req, res) => {
     const now = new Date();
     const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
 
+    const baseFilter = {
+      $or: [
+        { lastInboundAt: { $ne: null } },
+        { unreadCount: { $gt: 0 } },
+        { 'notes.0': { $exists: true } },
+        { registrationId: { $ne: null } }
+      ]
+    };
+
     const [openCount, unreadCount, unassignedCount, windowExpiringSoonCount, totalConversations] = await Promise.all([
-      WhatsappConversation.countDocuments({ status: 'OPEN' }),
-      WhatsappConversation.countDocuments({ unreadCount: { $gt: 0 } }),
-      WhatsappConversation.countDocuments({ status: 'OPEN', assignedAdminId: null }),
+      WhatsappConversation.countDocuments({ ...baseFilter, status: 'OPEN' }),
+      WhatsappConversation.countDocuments({ ...baseFilter, unreadCount: { $gt: 0 } }),
+      WhatsappConversation.countDocuments({ ...baseFilter, status: 'OPEN', assignedAdminId: null }),
       WhatsappConversation.countDocuments({
+        ...baseFilter,
         status: 'OPEN',
         customerServiceWindowExpiresAt: { $gt: now, $lte: twoHoursLater }
       }),
-      WhatsappConversation.countDocuments()
+      WhatsappConversation.countDocuments(baseFilter)
     ]);
 
     res.json({
@@ -1885,6 +1914,26 @@ export const getConversationDetails = async (req, res) => {
         { _id: { $in: unlinkedIds } },
         { $set: { conversationId: conversation._id } }
       ).catch(() => {});
+    }
+
+    // Automatically clear unread counter and mark inbound messages as read when viewed by staff
+    if (conversation.unreadCount > 0) {
+      await WhatsappConversation.updateOne(
+        { _id: conversation._id },
+        { $set: { unreadCount: 0 } }
+      ).catch(() => {});
+      await WhatsappMessage.updateMany(
+        {
+          $or: [
+            { conversationId: conversation._id },
+            { senderPhone: { $in: phoneVariants } }
+          ],
+          direction: 'INBOUND',
+          readByAdminAt: null
+        },
+        { $set: { readByAdminAt: new Date() } }
+      ).catch(() => {});
+      conversation.unreadCount = 0;
     }
 
     // Look up Digital Pass if registered
@@ -2403,6 +2452,13 @@ export const syncHistoricalConversations = async (req, res) => {
 
       const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
       const unreadCount = msgs.filter(m => m.direction === 'INBOUND' && !m.readByAdminAt).length;
+
+      // Only create a conversation if customer replied or if registered for an upcoming event
+      const hasInbound = msgs.some(m => m.direction === 'INBOUND');
+      const isTargetReg = reg && (reg.status === 'approved' || reg.status === 'pending');
+      if (!conversation && !hasInbound && !isTargetReg) {
+        continue;
+      }
 
       if (!conversation) {
         conversation = await WhatsappConversation.create({
