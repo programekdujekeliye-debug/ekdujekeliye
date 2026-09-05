@@ -148,219 +148,7 @@ export const loadSafeCanvasImage = async (
   return null;
 };
 
-/**
- * Enhanced Auto-Framing & Centering Engine:
- * Analyzes photo aspect ratio, facial bounding boxes (via FaceDetector when available),
- * and human subject/skin tone clusters to automatically calculate the optimal
- * photoZoom (zooming out if too big/close-up, zooming in if far away),
- * photoOffsetX (mathematical horizontal centering), and photoOffsetY (golden portrait headroom).
- */
-export const calculateSmartAutoFraming = async (
-  img: HTMLImageElement
-): Promise<{ photoZoom: number; photoOffsetX: number; photoOffsetY: number }> => {
-  const naturalW = img.naturalWidth || img.width;
-  const naturalH = img.naturalHeight || img.height;
 
-  if (!naturalW || !naturalH) {
-    return { photoZoom: 1.0, photoOffsetX: 0, photoOffsetY: -15 };
-  }
-
-  const imgAspect = naturalW / naturalH;
-  // In the 768x1024 template, the photo cutout is 645.12 x 860.16 (aspect ratio 0.75)
-  const targetAspect = 0.75;
-  const baseW = imgAspect > targetAspect ? 860 * imgAspect : 645;
-  const baseH = imgAspect > targetAspect ? 860 : 645 / imgAspect;
-
-  let detectedCenter: { x: number; y: number } | null = null;
-  let detectedFaceSpanX = 0;
-  let detectedFaceSpanY = 0;
-  let detectedAvgFaceH = 0;
-
-  // 1. Try Native Browser FaceDetector if supported (Chrome, Edge, Chromium Android)
-  if (typeof window !== 'undefined' && 'FaceDetector' in window) {
-    try {
-      const detector = new (window as any).FaceDetector({ fastMode: false, maxDetectedFaces: 4 });
-      const faces = await detector.detect(img);
-      if (faces && faces.length > 0) {
-        let minX = Infinity;
-        let maxX = -Infinity;
-        let minY = Infinity;
-        let maxY = -Infinity;
-        let totalFaceH = 0;
-
-        faces.forEach((face: any) => {
-          const box = face.boundingBox;
-          minX = Math.min(minX, box.x);
-          maxX = Math.max(maxX, box.x + box.width);
-          minY = Math.min(minY, box.y);
-          maxY = Math.max(maxY, box.y + box.height);
-          totalFaceH += box.height;
-        });
-
-        detectedCenter = {
-          x: ((minX + maxX) / 2) / naturalW,
-          y: ((minY + maxY) / 2) / naturalH
-        };
-        detectedFaceSpanX = (maxX - minX) / naturalW;
-        detectedFaceSpanY = (maxY - minY) / naturalH;
-        detectedAvgFaceH = (totalFaceH / faces.length) / naturalH;
-      }
-    } catch {
-      // Fall through to Canvas skin & saliency detector
-    }
-  }
-
-  // 2. High-speed Canvas Skin-Tone & Saliency Sizing Fallback
-  if (!detectedCenter) {
-    try {
-      const sampleCanvas = document.createElement('canvas');
-      const sampleW = 160;
-      const sampleH = Math.round((sampleW / naturalW) * naturalH);
-      sampleCanvas.width = sampleW;
-      sampleCanvas.height = sampleH;
-      const sCtx = sampleCanvas.getContext('2d');
-      if (sCtx) {
-        sCtx.drawImage(img, 0, 0, sampleW, sampleH);
-        const imgData = sCtx.getImageData(0, 0, sampleW, sampleH);
-        const data = imgData.data;
-
-        let skinX = 0;
-        let skinY = 0;
-        let skinCount = 0;
-        let minX = sampleW;
-        let maxX = 0;
-        let minY = sampleH;
-        let maxY = 0;
-
-        // Focus on upper 72% of photo where couple heads & shoulders are located
-        const maxScanY = Math.round(sampleH * 0.72);
-        for (let y = Math.round(sampleH * 0.05); y < maxScanY; y += 2) {
-          for (let x = Math.round(sampleW * 0.05); x < Math.round(sampleW * 0.95); x += 2) {
-            const idx = (y * sampleW + x) * 4;
-            const r = data[idx];
-            const g = data[idx + 1];
-            const b = data[idx + 2];
-
-            // Robust skin tone detection across Indian skin tones
-            const isSkin =
-              r > 75 &&
-              g > 35 &&
-              b > 20 &&
-              r > g &&
-              r > b &&
-              r - g > 8 &&
-              Math.abs(r - g) < 140;
-
-            if (isSkin) {
-              skinX += x;
-              skinY += y;
-              skinCount++;
-              minX = Math.min(minX, x);
-              maxX = Math.max(maxX, x);
-              minY = Math.min(minY, y);
-              maxY = Math.max(maxY, y);
-            }
-          }
-        }
-
-        if (skinCount > 30) {
-          detectedCenter = {
-            x: (skinX / skinCount) / sampleW,
-            y: (skinY / skinCount) / sampleH
-          };
-          detectedFaceSpanX = (maxX - minX) / sampleW;
-          detectedFaceSpanY = (maxY - minY) / sampleH;
-          detectedAvgFaceH = detectedFaceSpanY / 1.5;
-        }
-      }
-    } catch (err) {
-      console.warn('Canvas saliency detection error', err);
-    }
-  }
-
-  // 3. Mathematical Centering, Headroom & Dynamic Zoom Calculation
-  let photoZoom = 1.0;
-  let photoOffsetX = 0;
-  let photoOffsetY = -15;
-
-  if (detectedCenter) {
-    const { x: faceX, y: faceY } = detectedCenter;
-
-    // A. HORIZONTAL AUTO-CENTERING
-    // Shift image so that face center (faceX) moves to frame center (0.50)
-    photoOffsetX = Math.round((0.50 - faceX) * baseW);
-    const maxShiftX = Math.max(80, Math.round((baseW - 645) / 2 + 100));
-    photoOffsetX = Math.max(-maxShiftX, Math.min(maxShiftX, photoOffsetX));
-
-    // B. ZOOM CALCULATION (Handles "too big -> zoom out" and "far away -> zoom in")
-    const faceSize = detectedAvgFaceH || (detectedFaceSpanY / 1.5);
-    const spanWidth = detectedFaceSpanX;
-
-    if (faceSize > 0.30 || spanWidth > 0.60) {
-      // Very close selfie / big portrait - ZOOM OUT so couple isn't cropped!
-      if (faceSize > 0.40 || spanWidth > 0.72) {
-        photoZoom = 0.78;
-      } else if (faceSize > 0.35 || spanWidth > 0.65) {
-        photoZoom = 0.84;
-      } else {
-        photoZoom = 0.90;
-      }
-    } else if (faceSize > 0.22 || spanWidth > 0.48) {
-      // Moderately close portrait - gentle zoom out to ensure natural margins
-      photoZoom = 0.95;
-    } else if (faceSize < 0.11 && faceSize > 0) {
-      // Distant full-body shot - zoom in so couple's faces are prominent!
-      if (faceSize < 0.08) {
-        photoZoom = 1.35;
-      } else {
-        photoZoom = 1.22;
-      }
-    } else if (faceSize < 0.16 && faceSize > 0) {
-      // Three-quarter shot - slight zoom in
-      photoZoom = 1.10;
-    } else {
-      // Standard half-body portrait
-      photoZoom = 1.02;
-    }
-
-    // Aspect ratio adjustment: If wide landscape, prevent over-zooming
-    if (imgAspect > 1.35 && photoZoom > 1.05 && spanWidth > 0.35) {
-      photoZoom = Math.min(photoZoom, 1.05);
-    }
-
-    // C. VERTICAL AUTO-POSITIONING (Headroom & Logo Clearance)
-    // Target face center: 36% down from the top of the 860px cutout
-    photoOffsetY = Math.round((0.36 - faceY) * baseH);
-
-    // If zoomed out, slightly adjust vertical center to keep natural headroom
-    if (photoZoom < 0.90) {
-      photoOffsetY -= 15;
-    } else if (photoZoom > 1.15) {
-      photoOffsetY -= 25;
-    }
-
-    // Bound vertical offset
-    photoOffsetY = Math.max(-140, Math.min(100, photoOffsetY));
-  } else {
-    // Aspect ratio-based fallback when no face/skin detected
-    if (imgAspect > 1.25) {
-      photoZoom = 1.05;
-      photoOffsetY = -20;
-    } else if (imgAspect < 0.70) {
-      photoZoom = 0.95;
-      photoOffsetY = -10;
-    } else {
-      photoZoom = 1.0;
-      photoOffsetY = -15;
-    }
-  }
-
-  return {
-    photoZoom: Number(photoZoom.toFixed(2)),
-    photoOffsetX: Math.round(photoOffsetX / 5) * 5, // Clean 5px increments
-    photoOffsetY: Math.round(photoOffsetY / 5) * 5
-  };
-};
 
 /**
  * Concurrency helper for batch tasks
@@ -499,10 +287,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
   // Global Frame Image for canvas export
   const [globalFrameImg, setGlobalFrameImg] = useState<HTMLImageElement | null>(null);
 
-  // AI Framing State
-  const [aiAnalyzingIds, setAiAnalyzingIds] = useState<Record<string, boolean>>({});
-  const [isAiBatchRunning, setIsAiBatchRunning] = useState(false);
-  const [aiBatchProgress, setAiBatchProgress] = useState('');
+
 
   // Export & Progress state
   const [zipping, setZipping] = useState(false);
@@ -742,96 +527,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
     }
   };
 
-  // Single Couple Smart Auto-Frame & Centering
-  const handleAiAutoFrameSingle = async (sub: Submission) => {
-    if (!sub.couplePhoto) {
-      toast.error('No photo available to analyze.');
-      return;
-    }
-    try {
-      setAiAnalyzingIds((prev) => ({ ...prev, [sub.inquiryId]: true }));
-      const optimizedUrl = getOptimizedPhotoUrl(sub.couplePhoto, 360, 480);
-      const img = await loadSafeCanvasImage(optimizedUrl, 10000);
-      if (!img) throw new Error('Could not load image');
 
-      const result = await calculateSmartAutoFraming(img);
-      updateCoord(sub.inquiryId, 'photoZoom', result.photoZoom);
-      updateCoord(sub.inquiryId, 'photoOffsetX', result.photoOffsetX);
-      updateCoord(sub.inquiryId, 'photoOffsetY', result.photoOffsetY);
-      toast.success(`Auto-aligned ${sub.inquiryId} (${result.photoZoom}x, ${result.photoOffsetY > 0 ? `+${result.photoOffsetY}` : result.photoOffsetY}px)`);
-    } catch (err: any) {
-      toast.error('Auto-alignment failed: ' + (err.message || 'Unknown error'));
-    } finally {
-      setAiAnalyzingIds((prev) => ({ ...prev, [sub.inquiryId]: false }));
-    }
-  };
-
-  // Batch Auto-Frame All in current filter (processed with gentle concurrency to never overload server)
-  const handleAiAutoFrameAll = async () => {
-    const targetList = filteredSubmissions.filter((s) => s.couplePhoto);
-    if (targetList.length === 0) {
-      toast.error('No photos to frame in current filter.');
-      return;
-    }
-    try {
-      setIsAiBatchRunning(true);
-      setAiBatchProgress(`0/${targetList.length}...`);
-      let completed = 0;
-      const pendingAlignments: Array<{
-        inquiryId: string;
-        photoZoom: number;
-        photoOffsetX: number;
-        photoOffsetY: number;
-      }> = [];
-
-      await asyncPool(2, targetList, async (sub) => {
-        try {
-          const optimizedUrl = getOptimizedPhotoUrl(sub.couplePhoto, 360, 480);
-          const img = await loadSafeCanvasImage(optimizedUrl, 10000);
-          if (img) {
-            const result = await calculateSmartAutoFraming(img);
-            setSubmissions((prev) =>
-              prev.map((item) =>
-                item.inquiryId === sub.inquiryId
-                  ? {
-                      ...item,
-                      photoZoom: result.photoZoom,
-                      photoOffsetX: result.photoOffsetX,
-                      photoOffsetY: result.photoOffsetY,
-                      frameExportStatus: item.frameExportStatus === 'EXPORTED' ? 'MODIFIED' : item.frameExportStatus
-                    }
-                  : item
-              )
-            );
-            pendingAlignments.push({
-              inquiryId: sub.inquiryId,
-              photoZoom: result.photoZoom,
-              photoOffsetX: result.photoOffsetX,
-              photoOffsetY: result.photoOffsetY
-            });
-          }
-        } catch (err) {
-          console.warn('Auto-alignment error for', sub.inquiryId, err);
-        } finally {
-          completed++;
-          setAiBatchProgress(`${completed}/${targetList.length}...`);
-        }
-      });
-
-      // Save all alignments in a single bulk operation (reducing 100 HTTP requests to 1)
-      if (pendingAlignments.length > 0) {
-        setAiBatchProgress('Saving alignments...');
-        await registrationsApi.bulkUpdateFrameAlignments(pendingAlignments);
-      }
-
-      toast.success(`Auto-aligned all ${completed} photos successfully!`);
-    } catch (err: any) {
-      toast.error('Auto-alignment batch error: ' + err.message);
-    } finally {
-      setIsAiBatchRunning(false);
-      setAiBatchProgress('');
-    }
-  };
 
   // Batch Mark Selected as Exported / Unprinted
   const handleMarkSelectedExported = async (status: 'EXPORTED' | 'NOT_EXPORTED') => {
@@ -1457,33 +1153,6 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
               >
                 Clear
               </button>
-
-              {/* Auto-Center All Button */}
-              <button
-                type="button"
-                onClick={handleAiAutoFrameAll}
-                disabled={isAiBatchRunning || filteredSubmissions.length === 0}
-                className="px-3 py-1 bg-slate-900 hover:bg-black disabled:opacity-50 text-white rounded-xl font-bold transition-all text-xs cursor-pointer shadow-xs flex items-center gap-1.5 active:scale-95"
-                title="Automatically center, adjust headroom, and align all visible couple photos"
-              >
-                {isAiBatchRunning ? (
-                  <>
-                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Auto-Centering {aiBatchProgress}</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-3.5 h-3.5 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="22" y1="12" x2="18" y2="12" />
-                      <line x1="6" y1="12" x2="2" y2="12" />
-                      <line x1="12" y1="6" x2="12" y2="2" />
-                      <line x1="12" y1="22" x2="12" y2="18" />
-                    </svg>
-                    <span>Auto-Center All ({filteredSubmissions.length})</span>
-                  </>
-                )}
-              </button>
             </div>
 
             <div className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
@@ -1564,7 +1233,6 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                   const autoSaveState = autoSavingMap[sub.inquiryId];
                   const isPaid = sub.status === 'approved' || sub.payment?.status === 'captured';
                   const isAlignOpen = Boolean(expandedAlignIds[sub.inquiryId]);
-                  const isAiAnalyzing = Boolean(aiAnalyzingIds[sub.inquiryId]);
 
                   return (
                     <div
@@ -1654,27 +1322,6 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                             </span>
                           ) : null}
 
-                          {/* Auto-Center Single Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleAiAutoFrameSingle(sub)}
-                            disabled={isAiAnalyzing}
-                            className="px-2 sm:px-2.5 py-1 bg-slate-900 hover:bg-black disabled:opacity-50 text-white rounded-lg text-xs font-extrabold shadow-2xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
-                            title="Auto-Center: Automatically zoom, center, and position this couple"
-                          >
-                            {isAiAnalyzing ? (
-                              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                              <svg className="w-3 h-3 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                <circle cx="12" cy="12" r="10" />
-                                <line x1="22" y1="12" x2="18" y2="12" />
-                                <line x1="6" y1="12" x2="2" y2="12" />
-                                <line x1="12" y1="6" x2="12" y2="2" />
-                                <line x1="12" y1="22" x2="12" y2="18" />
-                              </svg>
-                            )}
-                            <span>Auto Center</span>
-                          </button>
 
                           <button
                             type="button"
@@ -1898,23 +1545,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                                 Presets:
                               </span>
 
-                              {/* Auto Center Preset */}
-                              <button
-                                type="button"
-                                onClick={() => handleAiAutoFrameSingle(sub)}
-                                disabled={isAiAnalyzing}
-                                className="px-2 py-0.5 bg-slate-900 hover:bg-black text-white rounded-md text-[10px] font-extrabold cursor-pointer transition-all flex items-center gap-1"
-                                title="Automatically center, adjust headroom and auto zoom"
-                              >
-                                <svg className="w-2.5 h-2.5 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <circle cx="12" cy="12" r="10" />
-                                  <line x1="22" y1="12" x2="18" y2="12" />
-                                  <line x1="6" y1="12" x2="2" y2="12" />
-                                  <line x1="12" y1="6" x2="12" y2="2" />
-                                  <line x1="12" y1="22" x2="12" y2="18" />
-                                </svg>
-                                <span>Auto Fit</span>
-                              </button>
+
 
                               <button
                                 type="button"
