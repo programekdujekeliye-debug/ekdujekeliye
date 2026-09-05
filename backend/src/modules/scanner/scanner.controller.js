@@ -7,6 +7,43 @@ import { qrPassService } from '../passes/qrPass.service.js';
 import { eventService } from '../events/event.service.js';
 
 /**
+ * Helper: Aggregate real-time gate attendance stats for an event
+ */
+export async function getEventLiveAttendanceStats(eventId) {
+  const [totalConfirmed, presentCount, duplicateScans, conflictScans, activeDevices] = await Promise.all([
+    Registration.countDocuments({
+      programId: eventId,
+      isDeleted: { $ne: true },
+      $or: [{ status: 'approved' }, { 'payment.status': 'captured' }]
+    }),
+    Registration.countDocuments({
+      programId: eventId,
+      isDeleted: { $ne: true },
+      attendance: 'present'
+    }),
+    ScanRecord.countDocuments({ eventId, result: 'DUPLICATE' }),
+    ScanRecord.countDocuments({ eventId, result: 'CONFLICT' }),
+    ScanRecord.distinct('deviceId', {
+      eventId,
+      receivedAtServer: { $gte: new Date(Date.now() - 30 * 60 * 1000) }
+    })
+  ]);
+
+  const remaining = Math.max(0, totalConfirmed - presentCount);
+
+  return {
+    eventId,
+    totalConfirmed,
+    presentCount,
+    remaining,
+    duplicateScans,
+    conflictScans,
+    activeDeviceCount: Math.max(1, activeDevices.length),
+    refreshedAt: new Date().toISOString()
+  };
+}
+
+/**
  * 1. Online Scanner Atomic Verification & Attendance Marking
  */
 export async function handleOnlineScan(req, res) {
@@ -94,8 +131,9 @@ export async function handleOnlineScan(req, res) {
     if (updatedPass) {
       // First valid scan! Update Registration single-source-of-truth
       let coupleName = 'Verified Attendee';
+      let reg = null;
       if (updatedPass.registrationId) {
-        const reg = await Registration.findByIdAndUpdate(
+        reg = await Registration.findByIdAndUpdate(
           updatedPass.registrationId,
           {
             $set: {
@@ -126,15 +164,21 @@ export async function handleOnlineScan(req, res) {
         receivedAtServer: new Date()
       });
 
+      const liveStats = await getEventLiveAttendanceStats(eventId);
+
       return res.json({
         result: 'VALID',
         passId: updatedPass.passId,
         inquiryId: updatedPass.inquiryId,
         coupleName,
+        couplePhoto: reg?.couplePhoto || null,
+        isVip: Boolean(reg?.isVip),
+        phoneNumber: reg?.phoneNumber || '',
         firstScannedAt: updatedPass.firstScannedAt,
         scannedByDevice: deviceId,
         scannedByOperator: operatorUserId,
-        message: 'Entry Approved.'
+        message: 'Entry Approved.',
+        liveStats
       });
     }
 
@@ -184,46 +228,68 @@ export async function handleOnlineScan(req, res) {
       });
     }
 
-    // Already scanned (Duplicate)
-    await Pass.updateOne(
-      { _id: currentPass._id },
-      {
-        $set: { lastScannedAt: new Date() },
-        $inc: { scanCount: 1 }
-      }
-    );
-
-    await ScanRecord.create({
-      scanId,
-      eventId,
+    // Debounce check: If this device already triggered a DUPLICATE for this pass in the last 4 seconds,
+    // do NOT create an extra ScanRecord (prevents +2 counter jump from back-to-back camera frames)
+    const recentDuplicate = await ScanRecord.findOne({
       passId: currentPass.passId,
-      registrationId: currentPass.registrationId,
-      inquiryId: currentPass.inquiryId,
       deviceId,
-      operatorUserId,
-      mode: 'ONLINE',
       result: 'DUPLICATE',
-      deviceSequence,
-      scannedAtDevice: scannedAt,
-      receivedAtServer: new Date()
+      receivedAtServer: { $gte: new Date(Date.now() - 4000) }
     });
 
+    if (!recentDuplicate) {
+      await Pass.updateOne(
+        { _id: currentPass._id },
+        {
+          $set: { lastScannedAt: new Date() },
+          $inc: { scanCount: 1 }
+        }
+      );
+
+      await ScanRecord.create({
+        scanId,
+        eventId,
+        passId: currentPass.passId,
+        registrationId: currentPass.registrationId,
+        inquiryId: currentPass.inquiryId,
+        deviceId,
+        operatorUserId,
+        mode: 'ONLINE',
+        result: 'DUPLICATE',
+        deviceSequence,
+        scannedAtDevice: scannedAt,
+        receivedAtServer: new Date()
+      });
+    }
+
     let coupleName = 'Registered Couple';
+    let couplePhoto = null;
+    let isVip = false;
+    let phoneNumber = '';
     const reg = await Registration.findById(currentPass.registrationId);
     if (reg) {
       coupleName = `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim();
+      couplePhoto = reg.couplePhoto;
+      isVip = Boolean(reg.isVip);
+      phoneNumber = reg.phoneNumber || '';
     }
+
+    const liveStats = await getEventLiveAttendanceStats(eventId);
 
     return res.json({
       result: 'ALREADY_SCANNED',
       passId: currentPass.passId,
       inquiryId: currentPass.inquiryId,
       coupleName,
+      couplePhoto,
+      isVip,
+      phoneNumber,
       firstScannedAt: currentPass.firstScannedAt,
       scannedByDevice: currentPass.firstScannedBy?.deviceId || 'Gate Scanner',
       scannedByOperator: currentPass.firstScannedBy?.operatorUserId || 'Gate Staff',
-      scanCount: currentPass.scanCount + 1,
-      message: 'Already scanned. Duplicate entry attempt.'
+      scanCount: (currentPass.scanCount || 1) + (recentDuplicate ? 0 : 1),
+      message: 'Already scanned. Duplicate entry attempt.',
+      liveStats
     });
   } catch (err) {
     console.error('[Scanner Controller] Online scan error:', err);
@@ -468,12 +534,34 @@ export async function handleManualAttendance(req, res) {
     }
 
     if (pass.firstScannedAt) {
+      let coupleName = 'Registered Couple';
+      let couplePhoto = null;
+      let isVip = false;
+      let phoneNumber = '';
+      if (pass.registrationId) {
+        const reg = await Registration.findById(pass.registrationId);
+        if (reg) {
+          coupleName = `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim();
+          couplePhoto = reg.couplePhoto;
+          isVip = Boolean(reg.isVip);
+          phoneNumber = reg.phoneNumber || '';
+        }
+      }
+      const liveStats = await getEventLiveAttendanceStats(eventId);
+
       return res.json({
         result: 'ALREADY_SCANNED',
         passId: pass.passId,
         inquiryId: pass.inquiryId,
+        coupleName,
+        couplePhoto,
+        isVip,
+        phoneNumber,
         firstScannedAt: pass.firstScannedAt,
-        message: 'Pass was already marked present.'
+        scannedByDevice: pass.firstScannedBy?.deviceId || 'Gate Scanner',
+        scannedByOperator: pass.firstScannedBy?.operatorUserId || 'Gate Staff',
+        message: 'Pass was already marked present.',
+        liveStats
       });
     }
 
@@ -487,21 +575,39 @@ export async function handleManualAttendance(req, res) {
     pass.scanCount = 1;
     await pass.save();
 
+    let coupleName = 'Registered Couple';
+    let couplePhoto = null;
+    let isVip = false;
+    let phoneNumber = '';
     if (pass.registrationId) {
-      await Registration.findByIdAndUpdate(pass.registrationId, {
+      const reg = await Registration.findByIdAndUpdate(pass.registrationId, {
         $set: {
           attendance: 'present',
           attendanceAt: new Date(),
           attendanceMethod: 'MANUAL_ENTRY'
         }
       });
+      if (reg) {
+        coupleName = `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim();
+        couplePhoto = reg.couplePhoto;
+        isVip = Boolean(reg.isVip);
+        phoneNumber = reg.phoneNumber || '';
+      }
     }
+
+    const liveStats = await getEventLiveAttendanceStats(eventId);
 
     return res.json({
       result: 'VALID',
       passId: pass.passId,
       inquiryId: pass.inquiryId,
-      message: 'Manual entry marked present.'
+      coupleName,
+      couplePhoto,
+      isVip,
+      phoneNumber,
+      firstScannedAt: pass.firstScannedAt,
+      message: 'Manual entry marked present.',
+      liveStats
     });
   } catch (err) {
     return res.status(500).json({ error: 'Error during manual attendance marking.' });
@@ -518,34 +624,8 @@ export async function getScannerStats(req, res) {
       return res.status(400).json({ error: 'eventId query parameter is required.' });
     }
 
-    const [totalConfirmed, presentCount, duplicateScans, conflictScans, activeDevices] = await Promise.all([
-      Registration.countDocuments({
-        programId: eventId,
-        isDeleted: { $ne: true },
-        $or: [{ status: 'approved' }, { 'payment.status': 'captured' }]
-      }),
-      Registration.countDocuments({
-        programId: eventId,
-        isDeleted: { $ne: true },
-        attendance: 'present'
-      }),
-      ScanRecord.countDocuments({ eventId, result: 'DUPLICATE' }),
-      ScanRecord.countDocuments({ eventId, result: 'CONFLICT' }),
-      ScanRecord.distinct('deviceId', { eventId })
-    ]);
-
-    const remaining = Math.max(0, totalConfirmed - presentCount);
-
-    return res.json({
-      eventId,
-      totalConfirmed,
-      presentCount,
-      remaining,
-      duplicateScans,
-      conflictScans,
-      activeDeviceCount: activeDevices.length,
-      refreshedAt: new Date().toISOString()
-    });
+    const stats = await getEventLiveAttendanceStats(eventId);
+    return res.json(stats);
   } catch (err) {
     return res.status(500).json({ error: 'Failed to fetch scanner stats.' });
   }

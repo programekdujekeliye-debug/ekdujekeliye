@@ -29,7 +29,9 @@ import {
   ImageIcon,
   FlashlightIcon,
   CheckIcon,
-  UsersIcon
+  UsersIcon,
+  RadioIcon,
+  PhoneIcon
 } from '../../../components/Icons';
 import toast from 'react-hot-toast';
 
@@ -40,11 +42,24 @@ interface ScanDisplayResult {
   passId?: string;
   inquiryId?: string;
   coupleName?: string;
+  couplePhoto?: string | null;
+  isVip?: boolean;
+  phoneNumber?: string;
   slotName?: string;
   scannedByDevice?: string;
   scannedByOperator?: string;
   firstScannedAt?: string;
   timestamp: string;
+  scanCount?: number;
+}
+
+interface ServerGateStats {
+  totalConfirmed: number;
+  presentCount: number;
+  remaining: number;
+  duplicateScans: number;
+  activeDeviceCount?: number;
+  refreshedAt?: string;
 }
 
 export const ScannerPage: React.FC = () => {
@@ -60,14 +75,14 @@ export const ScannerPage: React.FC = () => {
   const [torchOn, setTorchOn] = useState<boolean>(false);
   const [isScanningCooldown, setIsScanningCooldown] = useState<boolean>(false);
   const [latestResult, setLatestResult] = useState<ScanDisplayResult | null>(null);
-  const [autoDismissSeconds, setAutoDismissSeconds] = useState<number>(0);
+  const [autoDismissProgress, setAutoDismissProgress] = useState<number>(100);
 
   // Offline Prep & Sync Stats
   const [preparedEvent, setPreparedEvent] = useState<PreparedEventData | null>(null);
   const [isPrepping, setIsPrepping] = useState<boolean>(false);
   const [prepSuccessMessage, setPrepSuccessMessage] = useState<string | null>(null);
   const [offlineCryptoReady, setOfflineCryptoReady] = useState<boolean>(false);
-  const [offlineCryptoMessage, setOfflineCryptoMessage] = useState<string>('Offline Cryptographic Verification: UNSUPPORTED');
+  const [, setOfflineCryptoMessage] = useState<string>('Offline Cryptographic Verification: UNSUPPORTED');
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [syncedCount, setSyncedCount] = useState<number>(0);
   const [conflictCount, setConflictCount] = useState<number>(0);
@@ -77,29 +92,27 @@ export const ScannerPage: React.FC = () => {
   const [manualCode, setManualCode] = useState<string>('');
   const [manualLoading, setManualLoading] = useState<boolean>(false);
 
-  // Live Stats from Server
-  const [serverStats, setServerStats] = useState<{
-    totalConfirmed: number;
-    presentCount: number;
-    remaining: number;
-    duplicateScans: number;
-  } | null>(null);
+  // Live Multi-Device Gate Stats from Server
+  const [serverStats, setServerStats] = useState<ServerGateStats | null>(null);
 
-  // Refs
+  // Refs for race-condition prevention & camera loop
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const animationFrameId = useRef<number | null>(null);
   const sequenceRef = useRef<number>(1);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const scanIntervalRef = useRef<any>(null);
+  const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const barcodeDetectorRef = useRef<any>(null);
-  const dismissTimerRef = useRef<any>(null);
+  const dismissTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // CRITICAL SYNCHRONOUS LOCKS TO ELIMINATE +2 DUPLICATE SCANS
+  const isProcessingRef = useRef<boolean>(false);
+  const lastScannedTokenRef = useRef<{ token: string; timestamp: number } | null>(null);
 
   const activeEventId = selectedProgramId !== 'all' ? selectedProgramId : programs[0]?.id || '';
   const currentProgram = programs.find((p) => p.id === activeEventId) || programs[0];
 
-  // 1. Initialize Device ID & Network Listeners + Auto Start Camera
+  // 1. Initialize Device ID & Network Listeners
   useEffect(() => {
     getOrCreateDeviceId().then(setDeviceId);
 
@@ -120,13 +133,13 @@ export const ScannerPage: React.FC = () => {
       }
     }
 
-    // AUTO-START CAMERA on load
-    const timer = setTimeout(() => {
+    // Auto-start camera on mount with safety margin
+    const startTimer = setTimeout(() => {
       startCamera();
-    }, 200);
+    }, 250);
 
     return () => {
-      clearTimeout(timer);
+      clearTimeout(startTimer);
       window.removeEventListener('online', updateOnlineStatus);
       window.removeEventListener('offline', updateOnlineStatus);
       stopCamera();
@@ -157,7 +170,7 @@ export const ScannerPage: React.FC = () => {
     refreshLocalStats();
   }, [refreshLocalStats]);
 
-  // 3. Fetch Live Online Server Stats
+  // 3. Fast Heartbeat (3s) for Multi-Device Gate Sync (6 to 9 Phones Live)
   const fetchServerStats = useCallback(async () => {
     if (!isOnline || !activeEventId) return;
     try {
@@ -166,7 +179,7 @@ export const ScannerPage: React.FC = () => {
         headers: { Authorization: `Bearer ${savedPass}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data: ServerGateStats = await res.json();
         setServerStats(data);
       }
     } catch (_) {}
@@ -174,49 +187,98 @@ export const ScannerPage: React.FC = () => {
 
   useEffect(() => {
     fetchServerStats();
-    const interval = setInterval(fetchServerStats, 15000);
+
+    // Fast 3-second heartbeat polling when window is visible
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchServerStats();
+      }
+    }, 3000);
+
     return () => clearInterval(interval);
   }, [fetchServerStats]);
 
-  // 4. Auto-dismiss timer for scan feedback (4s queue mode)
+  // 4. Auto-dismiss timer for scan feedback (Smooth 3.5s countdown bar)
   useEffect(() => {
     if (latestResult) {
-      setAutoDismissSeconds(4);
+      setAutoDismissProgress(100);
       if (dismissTimerRef.current) clearInterval(dismissTimerRef.current);
 
+      const startTime = Date.now();
+      const totalDuration = 3500; // 3.5 seconds
+
       dismissTimerRef.current = setInterval(() => {
-        setAutoDismissSeconds((prev) => {
-          if (prev <= 1) {
-            clearInterval(dismissTimerRef.current);
-            setLatestResult(null);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+        const elapsed = Date.now() - startTime;
+        const remainingFraction = Math.max(0, 1 - elapsed / totalDuration);
+        setAutoDismissProgress(Math.round(remainingFraction * 100));
+
+        if (elapsed >= totalDuration) {
+          if (dismissTimerRef.current) clearInterval(dismissTimerRef.current);
+          setLatestResult(null);
+        }
+      }, 50);
     } else {
       if (dismissTimerRef.current) clearInterval(dismissTimerRef.current);
     }
+
     return () => {
       if (dismissTimerRef.current) clearInterval(dismissTimerRef.current);
     };
   }, [latestResult]);
 
-  // 5. Start Camera Stream with Progressive Fallbacks
+  // 5. High-Reliability Camera Engine with Safe Hardware Delay & Fallbacks
+  const stopCamera = useCallback(() => {
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (_) {}
+      });
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+    setTorchOn(false);
+  }, []);
+
   const startCamera = async () => {
     setCameraError(null);
     stopCamera();
 
+    // Hardware release delay: Wait 180ms so mobile drivers fully release camera hardware
+    await new Promise((resolve) => setTimeout(resolve, 180));
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError('Camera API is not available in this browser. Please access via HTTPS or use Photo / Manual ID verification.');
+      setCameraError('Camera API is not available. Please access via HTTPS or use Photo QR / Manual ID verification.');
       return;
     }
 
     let stream: MediaStream | null = null;
     const constraintList: MediaStreamConstraints[] = [
-      { video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-      { video: { facingMode: facingMode }, audio: false },
-      { video: true, audio: false }
+      {
+        video: {
+          facingMode: { ideal: facingMode },
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 }
+        },
+        audio: false
+      },
+      {
+        video: {
+          facingMode: facingMode
+        },
+        audio: false
+      },
+      {
+        video: true,
+        audio: false
+      }
     ];
 
     for (const constraints of constraintList) {
@@ -224,12 +286,12 @@ export const ScannerPage: React.FC = () => {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
         if (stream) break;
       } catch (e: any) {
-        console.warn('[Scanner] Constraint attempt failed:', e.name);
+        console.warn('[Scanner] Trying fallback constraint...', e.name);
       }
     }
 
     if (!stream) {
-      setCameraError('Camera access denied or busy. Please check browser permissions.');
+      setCameraError('Camera access denied or device is busy. Please close other camera apps and tap "Resume Scanner".');
       setCameraActive(false);
       return;
     }
@@ -259,11 +321,13 @@ export const ScannerPage: React.FC = () => {
           setCameraActive(true);
         }
 
-        // Check torch capabilities
+        // Inspect torch capabilities
         const track = stream.getVideoTracks()[0];
         const capabilities = track.getCapabilities ? (track.getCapabilities() as any) : {};
         if (capabilities.torch) {
           setTorchSupported(true);
+        } else {
+          setTorchSupported(false);
         }
       } else {
         setCameraActive(true);
@@ -273,19 +337,6 @@ export const ScannerPage: React.FC = () => {
       setCameraError(err.message || 'Failed to start video stream.');
       setCameraActive(false);
     }
-  };
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    if (animationFrameId.current) {
-      cancelAnimationFrame(animationFrameId.current);
-      animationFrameId.current = null;
-    }
-    setCameraActive(false);
-    setTorchOn(false);
   };
 
   const toggleTorch = async () => {
@@ -302,21 +353,32 @@ export const ScannerPage: React.FC = () => {
     }
   };
 
-  // 6. Fast Auto-Capture Loop (100ms interval)
+  // Switch facing camera lens smoothly
+  const handleToggleFacingMode = async () => {
+    const nextMode = facingMode === 'environment' ? 'user' : 'environment';
+    setFacingMode(nextMode);
+    stopCamera();
+    setTimeout(() => {
+      startCamera();
+    }, 200);
+  };
+
+  // 6. Ultra-Fast Auto-Capture Loop with Synchronous Duplicate Lock
   const scanCurrentFrame = useCallback(async () => {
-    if (!videoRef.current || !cameraActive || isScanningCooldown) return;
+    // SYNCHRONOUS LOCK: If another frame is already processing or cooldown is active, return IMMEDIATELY
+    if (!videoRef.current || !cameraActive || isProcessingRef.current) return;
 
     const video = videoRef.current;
     if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return;
 
-    // 1. Hardware BarcodeDetector Check
+    // 1. Hardware BarcodeDetector Check (Fastest hardware path)
     if (barcodeDetectorRef.current) {
       try {
         const barcodes = await barcodeDetectorRef.current.detect(video);
         if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
           const rawVal = barcodes[0].rawValue.trim();
           if (rawVal) {
-            handleQrDetected(rawVal);
+            triggerScan(rawVal);
             return;
           }
         }
@@ -341,13 +403,34 @@ export const ScannerPage: React.FC = () => {
     });
 
     if (code && code.data && code.data.trim()) {
-      handleQrDetected(code.data.trim());
+      triggerScan(code.data.trim());
     }
-  }, [cameraActive, isScanningCooldown]);
+  }, [cameraActive]);
+
+  // Synchronously evaluate debounce before scheduling async execution
+  const triggerScan = (rawToken: string) => {
+    const now = Date.now();
+
+    // 3.5s Debounce guard: drop if same token scanned back-to-back
+    if (
+      lastScannedTokenRef.current &&
+      lastScannedTokenRef.current.token === rawToken &&
+      now - lastScannedTokenRef.current.timestamp < 3500
+    ) {
+      return;
+    }
+
+    // Synchronously lock IMMEDIATELY so no other frame can trigger
+    isProcessingRef.current = true;
+    lastScannedTokenRef.current = { token: rawToken, timestamp: now };
+    setIsScanningCooldown(true);
+
+    handleQrDetected(rawToken);
+  };
 
   useEffect(() => {
     if (cameraActive) {
-      scanIntervalRef.current = setInterval(scanCurrentFrame, 100);
+      scanIntervalRef.current = setInterval(scanCurrentFrame, 120);
     } else {
       if (scanIntervalRef.current) {
         clearInterval(scanIntervalRef.current);
@@ -364,9 +447,6 @@ export const ScannerPage: React.FC = () => {
 
   // 7. QR Detected Dispatcher
   const handleQrDetected = async (rawQrToken: string) => {
-    if (isScanningCooldown) return;
-    setIsScanningCooldown(true);
-
     try {
       if (isOnline) {
         await processOnlineScan(rawQrToken);
@@ -385,9 +465,11 @@ export const ScannerPage: React.FC = () => {
         timestamp: new Date().toLocaleTimeString()
       });
     } finally {
+      // Cooldown timer: release lock after 1.5s so next pass can be scanned smoothly
       setTimeout(() => {
+        isProcessingRef.current = false;
         setIsScanningCooldown(false);
-      }, 1000);
+      }, 1500);
     }
   };
 
@@ -412,7 +494,7 @@ export const ScannerPage: React.FC = () => {
           const code = jsQR(imgData.data, imgData.width, imgData.height);
 
           if (code && code.data) {
-            handleQrDetected(code.data.trim());
+            triggerScan(code.data.trim());
           } else {
             toast.error('No readable QR code found in the selected image.');
           }
@@ -447,6 +529,11 @@ export const ScannerPage: React.FC = () => {
 
     const data = await res.json();
 
+    // Instantly update liveStats across UI from this scan response (0ms latency)
+    if (data.liveStats) {
+      setServerStats(data.liveStats);
+    }
+
     if (data.result === 'VALID') {
       playScanFeedback('VALID');
       setLatestResult({
@@ -456,6 +543,9 @@ export const ScannerPage: React.FC = () => {
         passId: data.passId,
         inquiryId: data.inquiryId,
         coupleName: data.coupleName,
+        couplePhoto: data.couplePhoto,
+        isVip: data.isVip,
+        phoneNumber: data.phoneNumber,
         slotName: currentProgram?.name,
         scannedByDevice: data.scannedByDevice || deviceId,
         scannedByOperator: data.scannedByOperator || 'Gate Staff',
@@ -467,13 +557,19 @@ export const ScannerPage: React.FC = () => {
       setLatestResult({
         type: 'ALREADY_SCANNED',
         title: 'ALREADY SCANNED (DUPLICATE)',
-        message: `This pass was already checked in at ${data.firstScannedAt ? new Date(data.firstScannedAt).toLocaleTimeString() : 'an earlier time'}.`,
+        message: `This pass was already checked in at ${
+          data.firstScannedAt ? new Date(data.firstScannedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'an earlier time'
+        }.`,
         passId: data.passId,
         inquiryId: data.inquiryId,
         coupleName: data.coupleName,
+        couplePhoto: data.couplePhoto,
+        isVip: data.isVip,
+        phoneNumber: data.phoneNumber,
         scannedByDevice: data.scannedByDevice || 'Gate Scanner',
         scannedByOperator: data.scannedByOperator || 'Gate Staff',
         firstScannedAt: data.firstScannedAt,
+        scanCount: data.scanCount || 2,
         timestamp: new Date().toLocaleTimeString()
       });
     } else if (data.result === 'WRONG_EVENT') {
@@ -613,7 +709,7 @@ export const ScannerPage: React.FC = () => {
 
       if (!cryptoReady) {
         setPreparedEvent(null);
-        throw new Error('Offline secure QR verification is not supported on this browser/device. Connect to the internet or use a supported device.');
+        throw new Error('Offline secure QR verification is not supported on this browser/device.');
       }
 
       await savePreparedEvent(data);
@@ -695,6 +791,10 @@ export const ScannerPage: React.FC = () => {
 
       const data = await res.json();
 
+      if (data.liveStats) {
+        setServerStats(data.liveStats);
+      }
+
       if (data.result === 'VALID') {
         playScanFeedback('VALID');
         setLatestResult({
@@ -704,6 +804,9 @@ export const ScannerPage: React.FC = () => {
           passId: data.passId,
           inquiryId: data.inquiryId,
           coupleName: data.coupleName,
+          couplePhoto: data.couplePhoto,
+          isVip: data.isVip,
+          phoneNumber: data.phoneNumber,
           slotName: currentProgram?.name,
           scannedByDevice: data.scannedByDevice || deviceId,
           scannedByOperator: data.scannedByOperator || 'Admin',
@@ -715,13 +818,17 @@ export const ScannerPage: React.FC = () => {
         playScanFeedback('ALREADY_SCANNED');
         setLatestResult({
           type: 'ALREADY_SCANNED',
-          title: 'ALREADY SCANNED',
+          title: 'ALREADY SCANNED (DUPLICATE)',
           message: data.message || 'Pass was previously checked in.',
           passId: data.passId,
           inquiryId: data.inquiryId,
           coupleName: data.coupleName,
+          couplePhoto: data.couplePhoto,
+          isVip: data.isVip,
+          phoneNumber: data.phoneNumber,
           scannedByDevice: data.scannedByDevice || 'Gate Scanner',
           scannedByOperator: data.scannedByOperator || 'Gate Staff',
+          firstScannedAt: data.firstScannedAt,
           timestamp: new Date().toLocaleTimeString()
         });
       } else {
@@ -742,10 +849,16 @@ export const ScannerPage: React.FC = () => {
     }
   };
 
+  // Turnout percentage calculations
+  const totalConfirmed = serverStats?.totalConfirmed || 0;
+  const presentCount = serverStats?.presentCount || 0;
+  const turnoutPercent = totalConfirmed > 0 ? ((presentCount / totalConfirmed) * 100).toFixed(1) : '0';
+  const activeGateDevices = serverStats?.activeDeviceCount || 1;
+
   return (
-    <div className="space-y-4 max-w-xl mx-auto w-full pb-12 font-sans">
+    <div className="space-y-4 max-w-xl mx-auto w-full pb-16 font-sans">
       
-      {/* 1. Header & Live Gate Network Bar */}
+      {/* 1. Header & Multi-Device Live Gate Mesh Network Bar */}
       <div className="bg-white border border-stone-200/90 rounded-3xl p-4 sm:p-5 shadow-xs space-y-3.5">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
@@ -754,9 +867,17 @@ export const ScannerPage: React.FC = () => {
                 isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
               }`}
             />
-            <span className="font-extrabold text-[11px] tracking-wider uppercase text-stone-800">
-              {isOnline ? 'Live Gate Online' : 'Offline Mode (Local PWA)'}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-black text-[11px] tracking-wider uppercase text-stone-800">
+                {isOnline ? 'Live Gate Online' : 'Offline Mode (Local PWA)'}
+              </span>
+              {isOnline && (
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <RadioIcon className="w-3 h-3 text-emerald-700 animate-pulse" />
+                  <span>{activeGateDevices} {activeGateDevices === 1 ? 'Device' : 'Devices'} Connected</span>
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -781,24 +902,65 @@ export const ScannerPage: React.FC = () => {
           />
         </div>
 
-        {/* Live Attendance Stats Ribbon */}
-        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-stone-100 text-center">
+        {/* Live Attendance Turnout Progress Bar */}
+        {totalConfirmed > 0 && (
+          <div className="pt-2 border-t border-stone-100 space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-extrabold text-stone-700">
+                Live Attendance Turnout: <span className="text-emerald-700">{turnoutPercent}%</span>
+              </span>
+              <span className="text-stone-500 font-mono text-[11px]">
+                {presentCount} / {totalConfirmed} Couples Checked In
+              </span>
+            </div>
+            <div className="w-full h-2.5 bg-stone-100 rounded-full overflow-hidden border border-stone-200/80">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, Math.max(0, Number(turnoutPercent)))}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Live Attendance Stats Ribbon (4 Metric Cards) */}
+        <div className="grid grid-cols-4 gap-2 pt-1 text-center">
           <div className="bg-emerald-50/80 rounded-xl p-2 border border-emerald-200/70">
             <span className="text-[9px] font-extrabold text-emerald-800 uppercase tracking-wider block">Present</span>
             <span className="text-sm sm:text-base font-black text-emerald-700 font-mono">
               {serverStats?.presentCount ?? '--'}
             </span>
+            <span className="text-[8px] text-emerald-600 block font-semibold leading-tight mt-0.5">
+              {serverStats?.presentCount ? `${serverStats.presentCount * 2} inside` : 'Couples'}
+            </span>
           </div>
+
           <div className="bg-stone-50 rounded-xl p-2 border border-stone-200">
             <span className="text-[9px] font-extrabold text-stone-600 uppercase tracking-wider block">Remaining</span>
             <span className="text-sm sm:text-base font-black text-stone-700 font-mono">
               {serverStats?.remaining ?? '--'}
             </span>
+            <span className="text-[8px] text-stone-500 block font-semibold leading-tight mt-0.5">
+              Couples
+            </span>
           </div>
+
           <div className="bg-amber-50/80 rounded-xl p-2 border border-amber-200/70">
             <span className="text-[9px] font-extrabold text-amber-800 uppercase tracking-wider block">Duplicates</span>
             <span className="text-sm sm:text-base font-black text-amber-700 font-mono">
               {serverStats?.duplicateScans ?? '--'}
+            </span>
+            <span className="text-[8px] text-amber-600 block font-semibold leading-tight mt-0.5">
+              Stopped
+            </span>
+          </div>
+
+          <div className="bg-rose-50/70 rounded-xl p-2 border border-rose-200/60">
+            <span className="text-[9px] font-extrabold text-rose-800 uppercase tracking-wider block">Active Gates</span>
+            <span className="text-sm sm:text-base font-black text-rose-700 font-mono">
+              {activeGateDevices}
+            </span>
+            <span className="text-[8px] text-rose-600 block font-semibold leading-tight mt-0.5">
+              Phones
             </span>
           </div>
         </div>
@@ -823,8 +985,8 @@ export const ScannerPage: React.FC = () => {
           <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               type="button"
-              onClick={() => setFacingMode(facingMode === 'environment' ? 'user' : 'environment')}
-              className="px-2.5 py-1.5 bg-stone-100 hover:bg-stone-200 active:bg-stone-300 text-stone-800 rounded-xl transition-all cursor-pointer text-xs font-bold flex items-center gap-1.5 border border-stone-200"
+              onClick={handleToggleFacingMode}
+              className="px-2.5 py-1.5 bg-stone-100 hover:bg-stone-200 active:bg-stone-300 text-stone-800 rounded-xl transition-all cursor-pointer text-xs font-bold flex items-center gap-1.5 border border-stone-200 shadow-xs"
               title="Switch Camera Lens"
             >
               <CameraIcon className="w-3.5 h-3.5 text-rose-600" />
@@ -835,9 +997,9 @@ export const ScannerPage: React.FC = () => {
               <button
                 type="button"
                 onClick={toggleTorch}
-                className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer text-xs font-bold flex items-center gap-1.5 border ${
+                className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer text-xs font-bold flex items-center gap-1.5 border shadow-xs ${
                   torchOn
-                    ? 'bg-amber-400 border-amber-500 text-stone-950 font-black shadow-xs'
+                    ? 'bg-amber-400 border-amber-500 text-stone-950 font-black'
                     : 'bg-stone-100 border-stone-200 text-stone-800 hover:bg-stone-200'
                 }`}
                 title="Toggle Torch"
@@ -850,7 +1012,7 @@ export const ScannerPage: React.FC = () => {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="px-2.5 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl transition-all cursor-pointer text-xs font-bold flex items-center gap-1.5 border border-stone-200"
+              className="px-2.5 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl transition-all cursor-pointer text-xs font-bold flex items-center gap-1.5 border border-stone-200 shadow-xs"
               title="Upload QR Image"
             >
               <ImageIcon className="w-3.5 h-3.5 text-amber-600" />
@@ -869,7 +1031,7 @@ export const ScannerPage: React.FC = () => {
           </span>
         </div>
 
-        {/* Center Viewport Frame (Light Theme) */}
+        {/* Center Viewport Frame */}
         <div className="relative w-full aspect-square max-w-[300px] sm:max-w-[320px] my-auto flex items-center justify-center bg-stone-100 rounded-2xl overflow-hidden border-2 border-stone-200 shadow-inner">
           <video
             ref={videoRef}
@@ -894,7 +1056,7 @@ export const ScannerPage: React.FC = () => {
               {/* Center Guidance Badge */}
               <div className="text-center z-10">
                 <span className="bg-white/95 text-rose-800 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider border border-rose-200 shadow-md">
-                  Auto-Capturing QR
+                  Align QR Code in Frame
                 </span>
               </div>
 
@@ -910,12 +1072,12 @@ export const ScannerPage: React.FC = () => {
               <div className="w-14 h-14 rounded-2xl bg-white border border-stone-200 flex items-center justify-center text-rose-600 shadow-sm">
                 <CameraIcon className="w-7 h-7" />
               </div>
-              <p className="text-xs font-bold text-stone-700 max-w-[200px]">
-                Camera is paused. Tap below to resume auto-capture scanning.
+              <p className="text-xs font-bold text-stone-700 max-w-[220px]">
+                Camera is paused or initializing. Tap below to resume auto-capture scanning.
               </p>
               {cameraError && (
-                <div className="bg-rose-50 border border-rose-200 text-rose-800 text-xs p-2.5 rounded-xl leading-relaxed">
-                  {cameraError}
+                <div className="bg-rose-50 border border-rose-200 text-rose-800 text-xs p-2.5 rounded-xl leading-relaxed text-left max-w-[260px]">
+                  <strong>Notice:</strong> {cameraError}
                 </div>
               )}
             </div>
@@ -945,38 +1107,45 @@ export const ScannerPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. Real-Time Attendee Verification Card (Scanned By & Operator Details) */}
+      {/* 3. Real-Time Attendee Verification Card with Couple Photo & Auto-Dismiss */}
       {latestResult && (
         <div
-          className={`rounded-3xl p-5 border shadow-xl transition-all animate-in fade-in-50 duration-200 relative overflow-hidden bg-white ${
+          onClick={() => setLatestResult(null)}
+          className={`rounded-3xl p-5 border shadow-2xl transition-all animate-in fade-in-50 duration-200 relative overflow-hidden bg-white cursor-pointer ${
             latestResult.type === 'VALID' || latestResult.type === 'VALID_OFFLINE'
-              ? 'border-emerald-400 text-emerald-950 ring-2 ring-emerald-500/20'
+              ? 'border-emerald-400 text-emerald-950 ring-4 ring-emerald-500/10'
               : latestResult.type === 'ALREADY_SCANNED'
-              ? 'border-amber-400 text-amber-950 ring-2 ring-amber-500/20'
-              : 'border-rose-400 text-rose-950 ring-2 ring-rose-500/20'
+              ? 'border-amber-400 text-amber-950 ring-4 ring-amber-500/15'
+              : 'border-rose-400 text-rose-950 ring-4 ring-rose-500/15'
           }`}
+          title="Tap anywhere to dismiss and scan next attendee"
         >
-          {/* Top Status Header */}
+          {/* Top Status Banner */}
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               {latestResult.type === 'VALID' || latestResult.type === 'VALID_OFFLINE' ? (
-                <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow-md">
-                  <CheckCircleIcon className="w-6 h-6" />
+                <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow-md">
+                  <CheckCircleIcon className="w-7 h-7" />
+                </div>
+              ) : latestResult.type === 'ALREADY_SCANNED' ? (
+                <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center flex-shrink-0 shadow-md">
+                  <AlertTriangleIcon className="w-7 h-7" />
                 </div>
               ) : (
-                <div className="w-11 h-11 rounded-2xl bg-rose-600 text-white flex items-center justify-center flex-shrink-0 shadow-md">
-                  <AlertTriangleIcon className="w-6 h-6" />
+                <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center flex-shrink-0 shadow-md">
+                  <AlertTriangleIcon className="w-7 h-7" />
                 </div>
               )}
+
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-base sm:text-lg font-black tracking-tight">{latestResult.title}</h3>
                   <span
-                    className={`text-[9px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider ${
+                    className={`text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${
                       latestResult.type === 'VALID' || latestResult.type === 'VALID_OFFLINE'
                         ? 'bg-emerald-100 text-emerald-800'
                         : latestResult.type === 'ALREADY_SCANNED'
-                        ? 'bg-amber-100 text-amber-800'
+                        ? 'bg-amber-100 text-amber-900 border border-amber-300'
                         : 'bg-rose-100 text-rose-800'
                     }`}
                   >
@@ -986,9 +1155,13 @@ export const ScannerPage: React.FC = () => {
                 <p className="text-xs text-stone-600 mt-0.5 font-medium">{latestResult.message}</p>
               </div>
             </div>
+
             <button
               type="button"
-              onClick={() => setLatestResult(null)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setLatestResult(null);
+              }}
               className="text-stone-400 hover:text-stone-700 p-1.5 rounded-full hover:bg-stone-100 transition-colors"
               aria-label="Dismiss Card"
             >
@@ -996,63 +1169,112 @@ export const ScannerPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Attendee Details Grid */}
+          {/* Attendee Details & Couple Photo Thumbnail */}
           {(latestResult.coupleName || latestResult.inquiryId || latestResult.passId) && (
-            <div className="mt-3.5 pt-3.5 border-t border-stone-100 space-y-2.5">
-              {latestResult.coupleName && (
-                <div>
-                  <span className="text-[10px] uppercase font-extrabold text-stone-500 block tracking-wider">
-                    Couple Names
-                  </span>
-                  <span className="font-extrabold text-stone-900 text-base sm:text-lg block">
-                    {latestResult.coupleName}
-                  </span>
-                </div>
-              )}
+            <div className="mt-4 pt-3.5 border-t border-stone-100">
+              <div className="flex items-start gap-3.5">
+                {/* Couple Photo or Avatar */}
+                {latestResult.couplePhoto ? (
+                  <div className="relative flex-shrink-0">
+                    <img
+                      src={latestResult.couplePhoto}
+                      alt={latestResult.coupleName || 'Couple Photo'}
+                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-stone-200 shadow-sm"
+                    />
+                    {latestResult.isVip && (
+                      <span className="absolute -top-1 -right-1 bg-amber-500 text-stone-950 font-black text-[8px] px-1.5 py-0.5 rounded-full shadow-xs border border-amber-300">
+                        VIP
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-stone-100 border border-stone-200 flex flex-col items-center justify-center text-stone-400 flex-shrink-0">
+                    <UsersIcon className="w-6 h-6 text-stone-500" />
+                    <span className="text-[8px] font-bold text-stone-500 uppercase mt-0.5">No Photo</span>
+                  </div>
+                )}
 
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {latestResult.inquiryId && (
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-stone-500 block">Registration No</span>
-                    <span className="font-mono font-extrabold text-rose-700 text-sm">{latestResult.inquiryId}</span>
-                  </div>
-                )}
-                {latestResult.slotName && (
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-stone-500 block">Session Slot</span>
-                    <span className="font-semibold text-stone-800 text-xs truncate block">{latestResult.slotName}</span>
-                  </div>
-                )}
-                
-                {/* Scanned By Operator & Device Details */}
-                <div className="col-span-2 bg-stone-50 border border-stone-200 rounded-xl p-2.5 text-[11px] text-stone-700 space-y-1">
-                  <div className="flex items-center justify-between flex-wrap gap-1">
-                    <span className="font-bold text-stone-900">
-                      Scanned By: {latestResult.scannedByOperator || 'Gate Staff'} ({latestResult.scannedByDevice || deviceId})
-                    </span>
-                    <span className="text-stone-500 font-mono">
-                      {latestResult.timestamp}
-                    </span>
-                  </div>
-                  {latestResult.firstScannedAt && (
-                    <div className="text-amber-800 font-medium pt-1 border-t border-stone-200">
-                      <strong>Prior Check-in:</strong> {new Date(latestResult.firstScannedAt).toLocaleString()}
+                {/* Names & VIP Ribbon */}
+                <div className="flex-1 min-w-0 space-y-1">
+                  {latestResult.isVip && (
+                    <div className="inline-flex items-center gap-1 bg-amber-50 border border-amber-300 text-amber-900 px-2 py-0.5 rounded-md text-[10px] font-black tracking-wider uppercase">
+                      <span>⭐ VIP PASS &bull; PRIORITY SEATING</span>
                     </div>
                   )}
+
+                  {latestResult.coupleName && (
+                    <div className="truncate">
+                      <span className="text-[10px] uppercase font-extrabold text-stone-500 block tracking-wider">
+                        Couple Names
+                      </span>
+                      <span className="font-black text-stone-900 text-base sm:text-lg block leading-tight truncate">
+                        {latestResult.coupleName}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 text-xs flex-wrap pt-0.5">
+                    {latestResult.inquiryId && (
+                      <span className="font-mono font-black text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200/60 text-[11px]">
+                        {latestResult.inquiryId}
+                      </span>
+                    )}
+                    {latestResult.phoneNumber && (
+                      <span className="text-[11px] text-stone-600 font-bold flex items-center gap-1">
+                        <PhoneIcon className="w-3 h-3 text-stone-400" />
+                        <span>{latestResult.phoneNumber}</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
+              </div>
+
+              {/* Gate Device & Operator Audit Strip */}
+              <div className="mt-3 bg-stone-50 border border-stone-200 rounded-xl p-2.5 text-[11px] text-stone-700 space-y-1">
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <span className="font-bold text-stone-900">
+                    Gate Staff: {latestResult.scannedByOperator || 'Gate Staff'} ({latestResult.scannedByDevice || deviceId})
+                  </span>
+                  <span className="text-stone-500 font-mono text-[10px]">
+                    {latestResult.timestamp}
+                  </span>
+                </div>
+
+                {latestResult.firstScannedAt && (
+                  <div className="text-amber-900 font-bold pt-1 border-t border-amber-200/70 text-[11px] flex items-center justify-between">
+                    <span>
+                      ⚠️ First Check-in: {new Date(latestResult.firstScannedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                    <span className="text-[10px] text-amber-700">
+                      Scan #{latestResult.scanCount || 2}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* Action & Auto-Dismiss Progress Button */}
-          <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between gap-3">
+          {/* Action & Smooth Countdown Bar */}
+          <div className="mt-4 pt-3 border-t border-stone-100 space-y-2">
             <button
               type="button"
-              onClick={() => setLatestResult(null)}
-              className="w-full py-2.5 bg-stone-900 hover:bg-stone-800 text-white font-bold rounded-xl text-xs transition-all shadow-sm cursor-pointer text-center"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLatestResult(null);
+              }}
+              className="w-full py-2.5 bg-stone-900 hover:bg-stone-800 text-white font-extrabold rounded-xl text-xs transition-all shadow-sm cursor-pointer text-center flex items-center justify-center gap-1.5"
             >
-              Admit Next Couple {autoDismissSeconds > 0 ? `(${autoDismissSeconds}s)` : ''}
+              <span>Admit Next Couple</span>
+              <span className="text-stone-400 text-[10px] font-medium">(Tap anywhere to scan next)</span>
             </button>
+
+            {/* Countdown line indicator */}
+            <div className="w-full h-1 bg-stone-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-rose-500 transition-all duration-75 ease-linear"
+                style={{ width: `${autoDismissProgress}%` }}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -1067,7 +1289,7 @@ export const ScannerPage: React.FC = () => {
             type="text"
             value={manualCode}
             onChange={(e) => setManualCode(e.target.value)}
-            placeholder="e.g. EK01-01 or EDKL-XXXXXXXX"
+            placeholder="e.g. EK06-IP-05 or EK06-425"
             className="flex-1 bg-stone-50 border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 focus:outline-none uppercase font-mono"
           />
           <button
