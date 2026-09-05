@@ -856,6 +856,7 @@ export const getEventRegistrationsCommunication = async (req, res) => {
           return 'PAYMENT_PENDING';
         }
         if (type === 'payment_confirmed') {
+          if (reg.isVip || reg.payment?.provider === 'manual_invite' || reg.payment?.amount === 0) return 'NOT_REQUIRED';
           if (!isPaid) return 'PAYMENT_NOT_COMPLETE';
           if (!pass || pass.status !== 'ACTIVE') return 'PASS_NOT_ACTIVE';
         }
@@ -935,7 +936,12 @@ export const getEventRegistrationsCommunication = async (req, res) => {
             readAt: mPayConf.readAt,
             failedAt: mPayConf.failedAt,
             reasonIfMissing: null
-          } : { status: isPaid ? 'PENDING' : 'NOT_SENT', reasonIfMissing: getReason('payment_confirmed') },
+          } : {
+            status: (reg.isVip || reg.payment?.provider === 'manual_invite' || reg.payment?.amount === 0)
+              ? 'NOT_REQUIRED'
+              : (isPaid ? 'PENDING' : 'NOT_SENT'),
+            reasonIfMissing: getReason('payment_confirmed')
+          },
 
           passReminder48h: mRem ? {
             status: mRem.status,
