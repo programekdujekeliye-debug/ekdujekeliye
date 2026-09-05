@@ -336,12 +336,25 @@ export class InvitationCardService {
     }
 
     // 3. Resize couple photo to cover the heart area
-    let resizedPhotoBuf;
+    let resizedPhotoBuf = null;
     if (photoBuf) {
-      resizedPhotoBuf = await sharp(photoBuf)
-        .resize(hW, hH, { fit: 'cover', position: 'center' })
-        .toBuffer();
-    } else {
+      try {
+        resizedPhotoBuf = await sharp(photoBuf)
+          .resize(hW, hH, { fit: 'cover', position: 'center' })
+          .toBuffer();
+      } catch (err) {
+        console.warn(`[InvitationCardService] Error resizing couple photo for ${inquiryId}, falling back to sample photo:`, err.message);
+        try {
+          const localPhoto = path.resolve(process.cwd(), '..', 'frontend', 'public', 'sample_couple.png');
+          if (fs.existsSync(localPhoto)) {
+            resizedPhotoBuf = await sharp(localPhoto)
+              .resize(hW, hH, { fit: 'cover', position: 'center' })
+              .toBuffer();
+          }
+        } catch (_) {}
+      }
+    }
+    if (!resizedPhotoBuf) {
       resizedPhotoBuf = await sharp({
         create: { width: hW, height: hH, channels: 4, background: { r: 255, g: 241, b: 242, alpha: 1 } }
       }).png().toBuffer();

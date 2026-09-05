@@ -5,6 +5,7 @@ import { WhatsappMessage } from '../../models/WhatsappMessage.js';
 import { WhatsappConversation } from '../../models/WhatsappConversation.js';
 import { Registration } from '../../models/Registration.js';
 import { whatsappTemplateService } from './whatsappTemplate.service.js';
+import { invitationCardService } from '../../services/invitationCard.service.js';
 
 // In-Memory cache of Meta template statuses (refreshed every 5 minutes)
 let metaTemplateStatusCache = new Map();
@@ -88,24 +89,26 @@ export function getWhatsAppConfigStatus() {
  * Master WhatsApp Message Dispatcher
  * Strictly validates all Master Send Guards
  */
-export async function sendWhatsAppMessage({
-  recipientPhone,
-  templateKey,
-  languageCode,
-  variables = {},
-  idempotencyKey,
-  registrationId = null,
-  paymentId = null,
-  passId = null,
-  eventId = null,
-  inquiryId = null,
-  customerId = null,
-  trigger = 'manual',
-  messageType = null,
-  category = 'UTILITY',
-  executionSource = 'NORMAL',
-  providerMode = 'META'
-}) {
+export async function sendWhatsAppMessage(rawParams = {}) {
+  const {
+    recipientPhone,
+    idempotencyKey,
+    registrationId = null,
+    paymentId = null,
+    passId = null,
+    eventId = null,
+    inquiryId = null,
+    customerId = null,
+    trigger = 'manual',
+    messageType = null,
+    executionSource = 'NORMAL',
+    providerMode = 'META'
+  } = rawParams;
+
+  const templateKey = rawParams.templateKey || rawParams.templateName;
+  const languageCode = rawParams.languageCode || rawParams.templateLanguage || 'en_US';
+  const variables = { ...(rawParams.templateParameters || {}), ...(rawParams.variables || {}) };
+  const category = rawParams.category || rawParams.templateCategory || 'UTILITY';
   // 1. Send Enabled Guard
   if (!env.WHATSAPP_SEND_ENABLED) {
     return {
@@ -214,6 +217,26 @@ export async function sendWhatsAppMessage({
       }
     } catch (e) {
       console.warn('[WhatsApp Master Guard] Warning checking opt-in status:', e.message);
+    }
+  }
+
+  // Bulletproof Guard: Guarantee that personalized invitation always uses the rendered official invitation card
+  if (templateKey === 'edkl_personal_invitation_24h_v2' || messageType === 'invitation') {
+    const currentHeader = variables.headerImageUrl || variables.imageUrl || variables.invitationImageUrl || '';
+    if (!currentHeader || currentHeader.includes('couplePhotos') || currentHeader.includes('sample_couple.png')) {
+      try {
+        const targetLookup = inquiryId || registrationId || variables.inquiryId || variables.registrationId;
+        if (targetLookup) {
+          const cardRes = await invitationCardService.ensureInvitationCardImage(targetLookup, eventId);
+          if (cardRes && cardRes.cardUrl) {
+            variables.headerImageUrl = cardRes.cardUrl;
+            variables.imageUrl = cardRes.cardUrl;
+            variables.invitationImageUrl = cardRes.cardUrl;
+          }
+        }
+      } catch (cardErr) {
+        console.warn('[WhatsApp Service] Dynamic invitation card rendering warning:', cardErr.message);
+      }
     }
   }
 
