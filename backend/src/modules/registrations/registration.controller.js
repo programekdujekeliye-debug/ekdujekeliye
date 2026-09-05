@@ -10,6 +10,7 @@ import { storageService } from '../../services/storage.service.js';
 import { qrPassService } from '../passes/qrPass.service.js';
 import { invitationCardService } from '../../services/invitationCard.service.js';
 import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
+import { transferNotificationService } from '../../services/transferNotification.service.js';
 
 export const submitRegistration = async (req, res) => {
   const { husbandName, wifeName, surname, phoneNumber, programId, whatsappOptIn } = req.body;
@@ -235,6 +236,15 @@ export const bulkMoveSubmissions = async (req, res) => {
         { inquiryId: sub.inquiryId },
         { $set: { inquiryId: newInquiryId, eventId: targetProgram.id } }
       ).catch(() => {});
+
+      // Asynchronously handle cryptographic pass re-sign, invitation card re-render, WhatsApp notification & lifecycle reschedule
+      transferNotificationService.processTransfer({
+        registrationOrId: sub._id,
+        targetProgramOrId: targetProgram,
+        oldInquiryId: sub.inquiryId,
+        newInquiryId,
+        source: 'bulk_transfer'
+      }).catch(err => console.warn('[bulkMoveSubmissions] Transfer notification error:', err.message));
 
       movedItems.push({ oldInquiryId: sub.inquiryId, newInquiryId });
     }
@@ -734,6 +744,9 @@ export const updateSubmission = async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Submission not found.' });
 
 
+    let isEventTransferred = false;
+    let targetEventObj = null;
+
     // If transferring event, automatically cascade event name, date, timing, and assign new incremental inquiryId
     if (updateData.programId && updateData.programId !== existing.programId) {
       const eventObj = await eventService.getEventBySlug(updateData.programId) || await Event.findOne({
@@ -741,6 +754,8 @@ export const updateSubmission = async (req, res) => {
       }).lean();
 
       if (eventObj) {
+        isEventTransferred = true;
+        targetEventObj = eventObj;
         const seqPad = String(eventObj.sequenceNumber || 1).padStart(2, '0');
         const counterKey = eventObj.sequenceNumber ? `inquiryNumber_${eventObj.id}` : 'inquiryNumber';
         const nextSeq = await getNextSequence(counterKey);
@@ -826,7 +841,16 @@ export const updateSubmission = async (req, res) => {
       { returnDocument: 'after' }
     );
 
-
+    // Asynchronously handle cryptographic pass re-sign, invitation card re-render, WhatsApp notification & lifecycle reschedule on single transfer
+    if (isEventTransferred && updated && targetEventObj) {
+      transferNotificationService.processTransfer({
+        registrationOrId: updated,
+        targetProgramOrId: targetEventObj,
+        oldInquiryId: existing.inquiryId,
+        newInquiryId: updated.inquiryId,
+        source: 'single_transfer'
+      }).catch(err => console.warn('[updateRegistration] Transfer notification error:', err.message));
+    }
 
     res.json({ success: true, submission: updated });
   } catch (err) {

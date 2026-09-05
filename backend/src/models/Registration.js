@@ -26,7 +26,7 @@ const RegistrationSchema = new mongoose.Schema({
   },
   isVip: { type: Boolean, default: false },
   payment: {
-    provider: { type: String, enum: ['razorpay', 'legacy_upi', 'cash', 'free', 'manual_invite'], default: 'razorpay' },
+    provider: { type: String, enum: ['razorpay', 'legacy_upi', 'cash', 'free', 'manual_invite', 'manual'], default: 'razorpay' },
     status: { type: String, enum: ['created', 'pending', 'captured', 'failed', 'refunded'], default: 'pending' },
     amount: { type: Number, default: 1500 },
     currency: { type: String, default: 'INR' },

@@ -343,7 +343,7 @@ export const EditRegistrationModal: React.FC<EditRegistrationModalProps> = ({
                 Event / Program Slot (Transfer Event)
               </label>
               <span className="text-[10px] text-amber-800 font-semibold">
-                Changing slot will transfer registration
+                Auto-updates digital pass &amp; sends WhatsApp invitation
               </span>
             </div>
             <select

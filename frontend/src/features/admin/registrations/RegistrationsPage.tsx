@@ -250,7 +250,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
 
     try {
       await registrationsApi.bulkMove(selectedIds, targetProgramId);
-      toast.success(`Successfully moved ${selectedIds.length} registrations.`);
+      toast.success(`Successfully moved ${selectedIds.length} registrations. Passes & WhatsApp invitations queued!`);
       setSelectedIds([]);
       setTargetProgramId('');
       fetchList(currentPage);
