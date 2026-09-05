@@ -736,6 +736,81 @@ export class CommunicationSchedulerService {
 
     return { success: true, cancelledPendingJobs: cancelResult.modifiedCount };
   }
+
+  /**
+   * Automatically reconcile and self-heal lifecycle queues for an active event:
+   * 1. Finds all confirmed/approved registrations for the event.
+   * 2. Checks if 48h pass reminder, 24h invitation, and post-event feedback are queued or sent.
+   * 3. Automatically schedules any missing milestone messages.
+   * 4. Cleans up any orphaned queued messages (where registration was moved to another event or deleted).
+   */
+  async reconcileEventLifecycleQueues(eventId) {
+    if (!eventId || eventId === 'all') return { success: false, reason: 'INVALID_EVENT' };
+
+    try {
+      const event = await Event.findOne({
+        $or: [{ id: eventId }, { slug: eventId }, { date: eventId }]
+      }).lean();
+
+      if (!event || event.status === 'archived' || event.status === 'cancelled' || event.status === 'completed' || (event.date && event.date < '2026-09-07')) {
+        return { success: false, reason: 'INACTIVE_EVENT' };
+      }
+
+      const matchedIds = [event.id, event.slug, eventId].filter(Boolean);
+      const confirmedRegs = await Registration.find({
+        $or: [
+          { programId: { $in: matchedIds } },
+          ...(event.date ? [{ programDate: event.date }] : [])
+        ],
+        status: 'approved',
+        isDeleted: { $ne: true }
+      }).lean();
+
+      if (!confirmedRegs.length) return { success: true, healedCount: 0 };
+
+      const confirmedInquiryIds = new Set(confirmedRegs.map(r => r.inquiryId));
+
+      // Orphan cleanup: Cancel queued messages under this event whose registrations are no longer approved in this event
+      await WhatsappMessage.updateMany(
+        {
+          eventId: { $in: matchedIds },
+          status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
+          inquiryId: { $nin: Array.from(confirmedInquiryIds) }
+        },
+        {
+          $set: {
+            status: WHATSAPP_MESSAGE_STATUSES.CANCELLED,
+            lastErrorMessage: 'Registration transferred or no longer approved for this event.'
+          }
+        }
+      );
+
+      // Check each confirmed registration has active milestones
+      let healedCount = 0;
+      for (const reg of confirmedRegs) {
+        if (!hasOperationalWhatsappConsent(reg)) continue;
+
+        const activeMsgs = await WhatsappMessage.find({
+          inquiryId: reg.inquiryId,
+          status: { $in: ['QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'READ'] }
+        }).select('trigger messageType').lean();
+
+        const has48h = activeMsgs.some(m => m.trigger === 'scheduled_48h_pass_reminder' || m.messageType === 'reminder');
+        const has24h = activeMsgs.some(m => m.trigger === 'scheduled_24h_invitation' || m.trigger === 'vip_invitation_pass' || m.messageType === 'invitation');
+        const hasPost = activeMsgs.some(m => m.trigger === 'post_event_memories_feedback' || m.messageType === 'post_event');
+
+        if (!has48h || !has24h || !hasPost) {
+          await this.scheduleRegistrationLifecycle(reg, event);
+          healedCount++;
+        }
+      }
+
+      return { success: true, healedCount, totalConfirmed: confirmedRegs.length };
+    } catch (err) {
+      console.warn(`[CommunicationScheduler] Reconcile error for ${eventId}:`, err.message);
+      return { success: false, error: err.message };
+    }
+  }
 }
 
 export const communicationSchedulerService = new CommunicationSchedulerService();

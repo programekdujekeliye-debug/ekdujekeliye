@@ -11,6 +11,7 @@ import { qrPassService } from '../passes/qrPass.service.js';
 import { invitationCardService } from '../../services/invitationCard.service.js';
 import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
 import { transferNotificationService } from '../../services/transferNotification.service.js';
+import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
 
 export const submitRegistration = async (req, res) => {
   const { husbandName, wifeName, surname, phoneNumber, programId, whatsappOptIn } = req.body;
@@ -400,6 +401,9 @@ export const manualInviteeRegistration = async (req, res) => {
           inquiryId,
           trigger: 'vip_invitation_pass'
         });
+
+        // Automatically schedule future milestones (48h pass reminder & post-event feedback)
+        await communicationSchedulerService.scheduleRegistrationLifecycle(sub, program);
       })
       .catch(passErr => console.warn('[ManualInvitee] Background Pass or WhatsApp notice:', passErr.message));
 
@@ -850,6 +854,21 @@ export const updateSubmission = async (req, res) => {
         newInquiryId: updated.inquiryId,
         source: 'single_transfer'
       }).catch(err => console.warn('[updateRegistration] Transfer notification error:', err.message));
+    } else {
+      // If status transitioned to approved or payment captured, automatically ensure digital pass & lifecycle milestones
+      const becameApproved = (existing.status !== 'approved' && updated.status === 'approved') ||
+                             (existing.payment?.status !== 'captured' && updated.payment?.status === 'captured');
+      if (becameApproved && updated) {
+        Promise.resolve().then(async () => {
+          try {
+            const eventObj = await eventService.getEventBySlug(updated.programId);
+            await qrPassService.ensurePass(updated, eventObj);
+            await communicationSchedulerService.scheduleRegistrationLifecycle(updated, eventObj);
+          } catch (e) {
+            console.warn('[updateRegistration] Auto-ensure pass & lifecycle error:', e.message);
+          }
+        });
+      }
     }
 
     res.json({ success: true, submission: updated });

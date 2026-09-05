@@ -387,6 +387,11 @@ export const getEventCommunicationDashboard = async (req, res) => {
           ...(event?.date ? [{ eventDate: event.date }] : [])
         ]
       };
+
+      // Non-blocking self-healing reconciliation to guarantee queues and approved registrations never drift (skip synthetic test events)
+      if (!eventId.startsWith('prog-test-') && !eventId.includes('test')) {
+        communicationSchedulerService.reconcileEventLifecycleQueues(eventId).catch(() => {});
+      }
     } else {
       // Global Overview: All events across the platform
       eventRegMatch = { isDeleted: { $ne: true } };

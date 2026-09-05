@@ -22,7 +22,7 @@ async function runIdempotencyTest() {
     // First Call
     const res1 = await sendUtilityTemplate({
       recipientPhone: '918320594829', // Allowlisted test number
-      templateKey: 'edkl_event_reminder_v1',
+      templateKey: 'edkl_event_pass_reminder_v2',
       languageCode: 'en_US',
       variables: {
         customerName: 'Test Couple',
@@ -45,7 +45,7 @@ async function runIdempotencyTest() {
     // Second Call (Replayed trigger / duplicate event)
     const res2 = await sendUtilityTemplate({
       recipientPhone: '918320594829',
-      templateKey: 'edkl_event_reminder_v1',
+      templateKey: 'edkl_event_pass_reminder_v2',
       languageCode: 'en_US',
       variables: {
         customerName: 'Test Couple',

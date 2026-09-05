@@ -125,7 +125,7 @@ async function runWorkerTests() {
       inquiryId: testInquiryId,
       recipientPhone: '918320594829',
       recipientMasked: '918320****29',
-      templateName: 'edkl_event_reminder_v1',
+      templateName: 'edkl_event_pass_reminder_v2',
       templateLanguage: 'en_US',
       templateCategory: 'UTILITY',
       messageType: 'reminder',
