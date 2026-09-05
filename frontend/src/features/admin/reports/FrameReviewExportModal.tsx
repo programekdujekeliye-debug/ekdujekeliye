@@ -79,12 +79,11 @@ const imageMemoryCache = new Map<string, HTMLImageElement>();
 
 /**
  * High-performance, CORS-safe image loader for Canvas Export and AI analysis
- * Uses native browser hardware-accelerated image decoding first (ZERO JS fetch),
- * falling back to blob fetch only when strictly required.
+ * Uses blob fetch with mode: 'cors' so images are same-origin blobs that never taint canvas.
  */
 export const loadSafeCanvasImage = async (
   src: string,
-  timeoutMs: number = 12000
+  timeoutMs: number = 15000
 ): Promise<HTMLImageElement | null> => {
   if (!src) return null;
   if (imageMemoryCache.has(src)) {
@@ -100,23 +99,7 @@ export const loadSafeCanvasImage = async (
     safeSrc = safeSrc.replace('http://', 'https://');
   }
 
-  // Method 1: Fast native browser Image loading & hardware decoding (ZERO JS fetch, browser cache friendly)
-  try {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = safeSrc;
-
-    await Promise.race([
-      img.decode(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs))
-    ]);
-    imageMemoryCache.set(src, img);
-    return img;
-  } catch {
-    // Native decoding failed (e.g. strict CORS), fall back to fetch blob
-  }
-
-  // Method 2: Fallback to fetch as Blob
+  // Method 1: Fetch as same-origin Blob (guarantees canvas NEVER taints and toBlob never fails)
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -142,10 +125,97 @@ export const loadSafeCanvasImage = async (
       }
     }
   } catch {
+    // If fetch failed (e.g. cross-origin restriction), fall back to direct Image
+  }
+
+  // Method 2: Direct Image with anonymous crossOrigin
+  try {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const loaded = await new Promise<HTMLImageElement | null>((resolve) => {
+      const timer = setTimeout(() => resolve(null), timeoutMs);
+      img.onload = () => {
+        clearTimeout(timer);
+        resolve(img);
+      };
+      img.onerror = () => {
+        clearTimeout(timer);
+        resolve(null);
+      };
+      img.src = safeSrc;
+    });
+
+    if (loaded) {
+      imageMemoryCache.set(src, loaded);
+      return loaded;
+    }
+  } catch {
     // Fall back to null
   }
 
   return null;
+};
+
+/**
+ * Safely converts a canvas to a PNG Blob, with fallback to toDataURL binary conversion
+ * to guarantee no failure even in strict browser environments.
+ */
+export const getCanvasBlob = async (canvas: HTMLCanvasElement): Promise<Blob | null> => {
+  try {
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), 'image/png');
+    });
+    if (blob) return blob;
+  } catch (e) {
+    console.warn('canvas.toBlob failed, falling back to toDataURL binary conversion', e);
+  }
+  try {
+    const dataUrl = canvas.toDataURL('image/png');
+    const binStr = atob(dataUrl.split(',')[1]);
+    const len = binStr.length;
+    const arr = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      arr[i] = binStr.charCodeAt(i);
+    }
+    return new Blob([arr], { type: 'image/png' });
+  } catch (e2) {
+    console.error('Canvas export failed completely:', e2);
+    return null;
+  }
+};
+
+/**
+ * Triggers a robust browser file download for Blobs.
+ * Appends the <a> tag, triggers click, and defers URL revocation by 60s
+ * to prevent modern browsers (Chrome, Edge, Safari) from aborting the download before the stream is read.
+ */
+export const triggerBlobDownload = (blob: Blob, filename: string) => {
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = blobUrl;
+  a.download = filename;
+  a.setAttribute('download', filename);
+  document.body.appendChild(a);
+
+  // Trigger download click
+  try {
+    a.click();
+  } catch {
+    const evt = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
+    a.dispatchEvent(evt);
+  }
+
+  // Keep the blob URL and DOM element alive for 60 seconds so the browser download manager
+  // can complete streaming without getting an aborted NET::ERR_FILE_NOT_FOUND
+  setTimeout(() => {
+    try {
+      if (document.body.contains(a)) {
+        document.body.removeChild(a);
+      }
+      URL.revokeObjectURL(blobUrl);
+    } catch {}
+  }, 60000);
 };
 
 
@@ -700,7 +770,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         '_'
       );
 
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+      const blob = await getCanvasBlob(canvas);
       toast.dismiss(toastId);
 
       if (!blob) {
@@ -708,14 +778,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         return;
       }
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      triggerBlobDownload(blob, filename);
 
       // Mark single frame exported
       registrationsApi.markFramesExported([sub.inquiryId]).catch(console.error);
@@ -821,8 +884,8 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
           ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
           ctx.restore();
 
-          // Direct Blob streaming - zero base64 memory overhead!
-          const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+          // Direct Blob streaming with fallback
+          const blob = await getCanvasBlob(canvas);
           if (blob) {
             const cleanHusband = (sub.husbandName || '').trim().replace(/\s+/g, '_');
             const cleanWife = (sub.wifeName || '').trim().replace(/\s+/g, '_');
@@ -865,35 +928,39 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       zip.file(`Printing_Manifest_${progName.replace(/\s+/g, '_')}.csv`, manifestCsv);
 
       setZipProgress('Compressing ZIP archive...');
-      // Fast compression level 2 (4x faster, minimal memory)
+      // Fast compression level 2 (4x faster, minimal memory) with explicit zip mimeType
       const content = await zip.generateAsync(
-        { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 2 } },
+        {
+          type: 'blob',
+          mimeType: 'application/zip',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 2 }
+        },
         (metadata) => {
           setZipPercent(80 + Math.round((metadata.percent / 100) * 20));
           setZipProgress(`Compressing ZIP: ${Math.round(metadata.percent)}%`);
         }
       );
 
-      const payTag = paymentFilter === 'PAID' ? 'PAID' : paymentFilter === 'PENDING' ? 'PENDING' : 'ALL';
-      const a = document.createElement('a');
-      const blobUrl = URL.createObjectURL(content);
-      a.href = blobUrl;
-      a.download = `${progName}_${payTag}_framed_photos.zip`.replace(/\s+/g, '_');
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-
-      if (successfullyExportedIds.length > 0) {
-        registrationsApi.markFramesExported(successfullyExportedIds, undefined, 'EXPORTED').catch(console.error);
-        setSubmissions((prev) =>
-          prev.map((s) =>
-            successfullyExportedIds.includes(s.inquiryId)
-              ? { ...s, frameExportStatus: 'EXPORTED', frameExportedAt: new Date().toISOString() }
-              : s
-          )
-        );
+      if (successfullyExportedIds.length === 0) {
+        toast.error('No framed photos could be generated. Please check image links or network.');
+        return;
       }
+
+      setZipProgress('Starting download...');
+      const payTag = paymentFilter === 'PAID' ? 'PAID' : paymentFilter === 'PENDING' ? 'PENDING' : 'ALL';
+      const zipFilename = `${progName}_${payTag}_framed_photos.zip`.replace(/\s+/g, '_');
+
+      triggerBlobDownload(content, zipFilename);
+
+      registrationsApi.markFramesExported(successfullyExportedIds, undefined, 'EXPORTED').catch(console.error);
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          successfullyExportedIds.includes(s.inquiryId)
+            ? { ...s, frameExportStatus: 'EXPORTED', frameExportedAt: new Date().toISOString() }
+            : s
+        )
+      );
 
       toast.success(`Successfully downloaded ${successfullyExportedIds.length} framed photos!`);
     } catch (err: any) {
@@ -946,26 +1013,27 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         }
       });
 
-      setZipProgress('Compressing ZIP archive...');
+      setZipProgress('Compressing raw photos archive...');
       const content = await zip.generateAsync(
-        { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 2 } },
+        {
+          type: 'blob',
+          mimeType: 'application/zip',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 2 }
+        },
         (metadata) => {
           setZipPercent(80 + Math.round((metadata.percent / 100) * 20));
           setZipProgress(`Compressing raw photos: ${Math.round(metadata.percent)}%`);
         }
       );
 
+      setZipProgress('Starting download...');
       const curProg = programs.find((p) => p.id === selectedProgramId);
       const progName = curProg ? curProg.name : 'Event';
-      const a = document.createElement('a');
-      const blobUrl = URL.createObjectURL(content);
-      a.href = blobUrl;
       const payTag = paymentFilter === 'PAID' ? 'PAID' : paymentFilter === 'PENDING' ? 'PENDING' : 'ALL';
-      a.download = `${progName}_${payTag}_raw_photos.zip`.replace(/\s+/g, '_');
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
+      const zipFilename = `${progName}_${payTag}_raw_photos.zip`.replace(/\s+/g, '_');
+
+      triggerBlobDownload(content, zipFilename);
 
       toast.success(`Downloaded ${listToExport.length} raw photos.`);
     } catch (err: any) {
