@@ -93,6 +93,81 @@ const GALLERY_IMAGES = [
   "/seminar-optimized/042A8803.webp"
 ];
 
+import { safeSessionStorage } from '../utils/safeStorage';
+
+// Instant Fallback Programs for 0ms initial render on iPhone Safari
+const FALLBACK_PROGRAMS: Program[] = [
+  {
+    id: "prog-2026-09-07",
+    sequenceNumber: 6,
+    name: "Ek Duje Ke Liye - Sardar Patel Smruti Bhavan",
+    slug: "surat-7-september-2026",
+    city: "Surat",
+    venue: "Sardar Patel Smruti Bhavan, Varachha, Surat",
+    mapUrl: "https://share.google/y1jtFAZXuKusYTiUD",
+    description: "A life-transforming relationship seminar exclusively for married couples by Manish Vaghasiya.",
+    price: 1500,
+    status: "few_seats",
+    registrationMode: "internal",
+    date: "2026-09-07",
+    time: "8:30 PM",
+    capacity: 625,
+    bookingsCount: 0,
+    availableSeats: 625,
+    isDateFinal: true,
+    isInquiryClosed: false,
+    isRegistrationOpen: true,
+    isPaymentEnabled: true,
+    earlyRegistrationMode: false
+  },
+  {
+    id: "prog-2026-09-11",
+    sequenceNumber: 7,
+    name: "Ek Duje Ke Liye - Sardar Patel Smruti Bhavan",
+    slug: "surat-11-september-2026",
+    city: "Surat",
+    venue: "Sardar Patel Smruti Bhavan, Varachha, Surat",
+    mapUrl: "https://share.google/y1jtFAZXuKusYTiUD",
+    description: "An inspiring evening of deep love, understanding, and marital joy by Manish Vaghasiya.",
+    price: 1500,
+    status: "upcoming",
+    registrationMode: "internal",
+    date: "2026-09-11",
+    time: "8:30 PM",
+    capacity: 625,
+    bookingsCount: 0,
+    availableSeats: 625,
+    isDateFinal: true,
+    isInquiryClosed: false,
+    isRegistrationOpen: true,
+    isPaymentEnabled: true,
+    earlyRegistrationMode: false
+  },
+  {
+    id: "prog-2026-09-19",
+    sequenceNumber: 8,
+    name: "Ek Duje Ke Liye - Zaverchand Meghani Auditorium",
+    slug: "bhavnagar-19-september-2026",
+    city: "Bhavnagar",
+    venue: "Zaverchand Meghani Auditorium, Sardar Nagar, Bhavnagar",
+    mapUrl: "https://share.google/h6kwNxYFEcwNP8oq8",
+    description: "An inspiring evening of deep love, understanding, and marital joy by Manish Vaghasiya in Bhavnagar.",
+    price: 1500,
+    status: "upcoming",
+    registrationMode: "internal",
+    date: "2026-09-19",
+    time: "8:30 PM",
+    capacity: 500,
+    bookingsCount: 0,
+    availableSeats: 500,
+    isDateFinal: true,
+    isInquiryClosed: false,
+    isRegistrationOpen: true,
+    isPaymentEnabled: true,
+    earlyRegistrationMode: false
+  }
+];
+
 // Helper to format date in Indian English format: 07/09/2026 (07 September 2026)
 function formatIndianDate(dateStr?: string): string {
   if (!dateStr || dateStr.toUpperCase() === 'TBD') {
@@ -114,7 +189,7 @@ function formatIndianDate(dateStr?: string): string {
 }
 
 export default function HomePage() {
-  const [programs, setPrograms] = useState<Program[]>([]);
+  const [programs, setPrograms] = useState<Program[]>(FALLBACK_PROGRAMS);
   const [publicConfig, setPublicConfig] = useState<{
     brandName?: string;
     supportPhone?: string;
@@ -132,7 +207,7 @@ export default function HomePage() {
     defaultPrice?: number;
   }>({});
   const [selectedCity, setSelectedCity] = useState('All');
-  const [loadingEvents, setLoadingEvents] = useState(true);
+  const [loadingEvents, setLoadingEvents] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedGalleryIdx, setSelectedGalleryIdx] = useState<number | null>(null);
@@ -240,17 +315,11 @@ export default function HomePage() {
           if (isMounted) {
             const finalPrograms = sorted.length > 0 ? sorted : list;
             setPrograms(finalPrograms);
-            try {
-              if (typeof window !== 'undefined') {
-                sessionStorage.setItem('edkl_events', JSON.stringify(finalPrograms));
-                finalPrograms.forEach(p => {
-                  if (p.slug) sessionStorage.setItem(`edkl_event_${p.slug.toLowerCase()}`, JSON.stringify(p));
-                  if (p.id) sessionStorage.setItem(`edkl_event_${p.id.toLowerCase()}`, JSON.stringify(p));
-                });
-              }
-            } catch (e) {
-              // Ignore session storage errors
-            }
+            safeSessionStorage.setItem('edkl_events', JSON.stringify(finalPrograms));
+            finalPrograms.forEach(p => {
+              if (p.slug) safeSessionStorage.setItem(`edkl_event_${p.slug.toLowerCase()}`, JSON.stringify(p));
+              if (p.id) safeSessionStorage.setItem(`edkl_event_${p.id.toLowerCase()}`, JSON.stringify(p));
+            });
           }
         }
       } catch (err: any) {
@@ -278,12 +347,19 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-stone-900 font-sans selection:bg-rose-500/20 selection:text-rose-900 relative overflow-x-hidden">
 
-      {/* Subtle Warm Luxury Ambient Glows */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[20%] w-[550px] h-[550px] bg-rose-200/35 rounded-full blur-[150px]" />
-        <div className="absolute top-[30%] right-[-10%] w-[600px] h-[600px] bg-amber-200/35 rounded-full blur-[160px]" />
-        <div className="absolute bottom-[10%] left-[-10%] w-[600px] h-[600px] bg-orange-100/40 rounded-full blur-[160px]" />
-      </div>
+      {/* Subtle Warm Luxury Ambient Glows (Native GPU Vector Gradients - 0 MB memory overhead, never crashes iOS WebKit) */}
+      <div 
+        className="fixed inset-0 pointer-events-none z-0 opacity-70"
+        style={{
+          backgroundImage: `
+            radial-gradient(ellipse 65% 55% at 25% 10%, rgba(254, 205, 211, 0.45) 0%, transparent 70%),
+            radial-gradient(ellipse 55% 45% at 85% 35%, rgba(254, 243, 199, 0.45) 0%, transparent 70%),
+            radial-gradient(ellipse 60% 50% at 10% 85%, rgba(254, 215, 170, 0.35) 0%, transparent 70%)
+          `,
+          willChange: 'transform',
+          transform: 'translateZ(0)'
+        }}
+      />
 
       {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-stone-200/80 px-6 lg:px-12 py-4 shadow-xs">

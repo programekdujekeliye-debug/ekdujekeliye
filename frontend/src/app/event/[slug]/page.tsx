@@ -142,42 +142,193 @@ const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 
   });
 };
 
+import { safeSessionStorage } from '@/utils/safeStorage';
+
+// Instant Fallback Event Catalog for immediate Safari mobile rendering
+const FALLBACK_EVENT_CATALOG: Record<string, ProgramDetail> = {
+  'surat-7-september-2026': {
+    id: "prog-2026-09-07",
+    sequenceNumber: 6,
+    name: "Ek Duje Ke Liye - Sardar Patel Smruti Bhavan",
+    slug: "surat-7-september-2026",
+    city: "Surat",
+    venue: "Sardar Patel Smruti Bhavan, Varachha, Surat",
+    mapUrl: "https://share.google/y1jtFAZXuKusYTiUD",
+    description: "A life-transforming relationship seminar exclusively for married couples by Manish Vaghasiya.",
+    price: 1500,
+    status: "few_seats",
+    registrationMode: "internal",
+    date: "2026-09-07",
+    time: "8:30 PM",
+    capacity: 625,
+    bookingsCount: 0,
+    availableSeats: 625,
+    isDateFinal: true,
+    isInquiryClosed: false,
+    isRegistrationOpen: true,
+    isPaymentEnabled: true,
+    earlyRegistrationMode: false
+  },
+  'prog-2026-09-07': {
+    id: "prog-2026-09-07",
+    sequenceNumber: 6,
+    name: "Ek Duje Ke Liye - Sardar Patel Smruti Bhavan",
+    slug: "surat-7-september-2026",
+    city: "Surat",
+    venue: "Sardar Patel Smruti Bhavan, Varachha, Surat",
+    mapUrl: "https://share.google/y1jtFAZXuKusYTiUD",
+    description: "A life-transforming relationship seminar exclusively for married couples by Manish Vaghasiya.",
+    price: 1500,
+    status: "few_seats",
+    registrationMode: "internal",
+    date: "2026-09-07",
+    time: "8:30 PM",
+    capacity: 625,
+    bookingsCount: 0,
+    availableSeats: 625,
+    isDateFinal: true,
+    isInquiryClosed: false,
+    isRegistrationOpen: true,
+    isPaymentEnabled: true,
+    earlyRegistrationMode: false
+  },
+  'surat-11-september-2026': {
+    id: "prog-2026-09-11",
+    sequenceNumber: 7,
+    name: "Ek Duje Ke Liye - Sardar Patel Smruti Bhavan",
+    slug: "surat-11-september-2026",
+    city: "Surat",
+    venue: "Sardar Patel Smruti Bhavan, Varachha, Surat",
+    mapUrl: "https://share.google/y1jtFAZXuKusYTiUD",
+    description: "An inspiring evening of deep love, understanding, and marital joy by Manish Vaghasiya.",
+    price: 1500,
+    status: "upcoming",
+    registrationMode: "internal",
+    date: "2026-09-11",
+    time: "8:30 PM",
+    capacity: 625,
+    bookingsCount: 0,
+    availableSeats: 625,
+    isDateFinal: true,
+    isInquiryClosed: false,
+    isRegistrationOpen: true,
+    isPaymentEnabled: true,
+    earlyRegistrationMode: false
+  },
+  'prog-2026-09-11': {
+    id: "prog-2026-09-11",
+    sequenceNumber: 7,
+    name: "Ek Duje Ke Liye - Sardar Patel Smruti Bhavan",
+    slug: "surat-11-september-2026",
+    city: "Surat",
+    venue: "Sardar Patel Smruti Bhavan, Varachha, Surat",
+    mapUrl: "https://share.google/y1jtFAZXuKusYTiUD",
+    description: "An inspiring evening of deep love, understanding, and marital joy by Manish Vaghasiya.",
+    price: 1500,
+    status: "upcoming",
+    registrationMode: "internal",
+    date: "2026-09-11",
+    time: "8:30 PM",
+    capacity: 625,
+    bookingsCount: 0,
+    availableSeats: 625,
+    isDateFinal: true,
+    isInquiryClosed: false,
+    isRegistrationOpen: true,
+    isPaymentEnabled: true,
+    earlyRegistrationMode: false
+  },
+  'bhavnagar-19-september-2026': {
+    id: "prog-2026-09-19",
+    sequenceNumber: 8,
+    name: "Ek Duje Ke Liye - Zaverchand Meghani Auditorium",
+    slug: "bhavnagar-19-september-2026",
+    city: "Bhavnagar",
+    venue: "Zaverchand Meghani Auditorium, Sardar Nagar, Bhavnagar",
+    mapUrl: "https://share.google/h6kwNxYFEcwNP8oq8",
+    description: "An inspiring evening of deep love, understanding, and marital joy by Manish Vaghasiya in Bhavnagar.",
+    price: 1500,
+    status: "upcoming",
+    registrationMode: "internal",
+    date: "2026-09-19",
+    time: "8:30 PM",
+    capacity: 500,
+    bookingsCount: 0,
+    availableSeats: 500,
+    isDateFinal: true,
+    isInquiryClosed: false,
+    isRegistrationOpen: true,
+    isPaymentEnabled: true,
+    earlyRegistrationMode: false
+  },
+  'prog-2026-09-19': {
+    id: "prog-2026-09-19",
+    sequenceNumber: 8,
+    name: "Ek Duje Ke Liye - Zaverchand Meghani Auditorium",
+    slug: "bhavnagar-19-september-2026",
+    city: "Bhavnagar",
+    venue: "Zaverchand Meghani Auditorium, Sardar Nagar, Bhavnagar",
+    mapUrl: "https://share.google/h6kwNxYFEcwNP8oq8",
+    description: "An inspiring evening of deep love, understanding, and marital joy by Manish Vaghasiya in Bhavnagar.",
+    price: 1500,
+    status: "upcoming",
+    registrationMode: "internal",
+    date: "2026-09-19",
+    time: "8:30 PM",
+    capacity: 500,
+    bookingsCount: 0,
+    availableSeats: 500,
+    isDateFinal: true,
+    isInquiryClosed: false,
+    isRegistrationOpen: true,
+    isPaymentEnabled: true,
+    earlyRegistrationMode: false
+  }
+};
+
 export default function EventDetailPage() {
   const params = useParams();
   const router = useRouter();
   const slug = params?.slug as string;
 
-  // Instant SWR Cache Initialization
+  // Instant SWR Cache & Fallback Initialization (Zero Delay on iOS Safari)
   const [event, setEvent] = useState<ProgramDetail | null>(() => {
-    if (typeof window !== 'undefined' && slug) {
-      try {
-        const cached = sessionStorage.getItem(`edkl_event_${slug.toLowerCase()}`);
-        if (cached) return JSON.parse(cached);
-        const allCached = sessionStorage.getItem('edkl_events');
-        if (allCached) {
+    if (slug) {
+      const cached = safeSessionStorage.getItem(`edkl_event_${slug.toLowerCase()}`);
+      if (cached) {
+        try { return JSON.parse(cached); } catch (_) {}
+      }
+      const allCached = safeSessionStorage.getItem('edkl_events');
+      if (allCached) {
+        try {
           const list: ProgramDetail[] = JSON.parse(allCached);
           const found = list.find((p) => (p.slug && p.slug.toLowerCase() === slug.toLowerCase()) || p.id === slug);
           if (found) return found;
-        }
-      } catch (e) {
-        // Ignore cache parse error
+        } catch (_) {}
+      }
+      // Instant catalog fallback
+      if (FALLBACK_EVENT_CATALOG[slug.toLowerCase()]) {
+        return FALLBACK_EVENT_CATALOG[slug.toLowerCase()];
       }
     }
     return null;
   });
 
   const [loading, setLoading] = useState(() => {
-    if (typeof window !== 'undefined' && slug) {
-      try {
-        const cached = sessionStorage.getItem(`edkl_event_${slug.toLowerCase()}`);
-        if (cached) return false;
-        const allCached = sessionStorage.getItem('edkl_events');
-        if (allCached) {
+    if (slug) {
+      const cached = safeSessionStorage.getItem(`edkl_event_${slug.toLowerCase()}`);
+      if (cached) return false;
+      const allCached = safeSessionStorage.getItem('edkl_events');
+      if (allCached) {
+        try {
           const list: ProgramDetail[] = JSON.parse(allCached);
           const found = list.find((p) => (p.slug && p.slug.toLowerCase() === slug.toLowerCase()) || p.id === slug);
           if (found) return false;
-        }
-      } catch (e) { }
+        } catch (_) {}
+      }
+      if (FALLBACK_EVENT_CATALOG[slug.toLowerCase()]) {
+        return false;
+      }
     }
     return true;
   });
@@ -225,11 +376,7 @@ export default function EventDetailPage() {
           const match = programs.find((p) => (p.slug && p.slug.toLowerCase() === slug.toLowerCase()) || p.id === slug);
           if (match) {
             setEvent(match);
-            try {
-              if (typeof window !== 'undefined') {
-                sessionStorage.setItem(`edkl_event_${slug.toLowerCase()}`, JSON.stringify(match));
-              }
-            } catch (e) { }
+            safeSessionStorage.setItem(`edkl_event_${slug.toLowerCase()}`, JSON.stringify(match));
             return;
           }
         }
@@ -240,11 +387,7 @@ export default function EventDetailPage() {
       }
       const data = await res.json();
       setEvent(data);
-      try {
-        if (typeof window !== 'undefined') {
-          sessionStorage.setItem(`edkl_event_${slug.toLowerCase()}`, JSON.stringify(data));
-        }
-      } catch (e) { }
+      safeSessionStorage.setItem(`edkl_event_${slug.toLowerCase()}`, JSON.stringify(data));
     } catch (err: any) {
       if (!event) {
         setError(err.message || 'Failed to load event details.');

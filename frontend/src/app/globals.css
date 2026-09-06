@@ -37,23 +37,35 @@ body {
   -moz-osx-font-smoothing: grayscale;
   color-scheme: light !important;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
   position: relative;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   min-height: 100vh;
-  min-height: 100dvh;
 }
 
 /* Dynamic Viewport & iOS Height Fixes */
 .min-h-screen {
   min-height: 100vh;
-  min-height: 100dvh;
+}
+
+@supports (min-height: 100dvh) {
+  body {
+    min-height: 100dvh;
+  }
+  .min-h-screen {
+    min-height: 100dvh;
+  }
 }
 
 .h-screen {
   height: 100vh;
-  height: 100dvh;
+}
+
+@supports (height: 100dvh) {
+  .h-screen {
+    height: 100dvh;
+  }
 }
 
 /* Prevent auto-zoom on iOS Safari when focusing form fields */

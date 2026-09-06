@@ -46,6 +46,21 @@ const startServer = async () => {
     // 5. Start HTTP server
     const server = app.listen(env.PORT, '0.0.0.0', () => {
       console.log(`[Ek Duje Ke Liye] V2 Platform Server running on port ${env.PORT} (${env.NODE_ENV})`);
+
+      // 6. Production Keep-Alive Ping (Runs every 9 mins to keep Render free tier hot)
+      if (env.NODE_ENV === 'production' || process.env.RENDER) {
+        setInterval(async () => {
+          try {
+            const healthUrl = process.env.RENDER_EXTERNAL_URL
+              ? `${process.env.RENDER_EXTERNAL_URL}/api/health`
+              : 'https://ekdujekeliye-s9fx.onrender.com/api/health';
+            await fetch(healthUrl);
+            console.log('[Render Keepalive] Successfully pinged health endpoint to maintain warm container.');
+          } catch (pingErr) {
+            console.warn('[Render Keepalive] Ping warning:', pingErr.message);
+          }
+        }, 9 * 60 * 1000);
+      }
     });
 
     server.on('error', (err) => {

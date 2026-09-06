@@ -32,12 +32,14 @@ export function clearApiClientCache() {
   inFlightRequests.clear();
 }
 
+import { safeSessionStorage, safeLocalStorage } from '../utils/safeStorage';
+
 export async function apiClient<T = any>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { authPassword, headers, skipCache = false, ...customConfig } = options;
   const method = (customConfig.method || 'GET').toUpperCase();
 
   const activeAuth = authPassword || 
-    (typeof window !== 'undefined' ? (sessionStorage.getItem('adminPassword') || localStorage.getItem('adminPassword') || '') : '');
+    (typeof window !== 'undefined' ? (safeSessionStorage.getItem('adminPassword') || safeLocalStorage.getItem('adminPassword') || '') : '');
 
   const reqHeaders: Record<string, string> = {
     ...(headers as Record<string, string> || {})
