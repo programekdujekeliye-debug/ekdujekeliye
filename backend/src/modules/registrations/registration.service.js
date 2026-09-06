@@ -1,10 +1,12 @@
 import crypto from 'crypto';
+import sharp from 'sharp';
 import { Registration } from '../../models/Registration.js';
 import { Event } from '../../models/Event.js';
 import { eventService } from '../events/event.service.js';
 import { Counter, getNextSequence } from '../../models/Counter.js';
 import { storageService } from '../../services/storage.service.js';
 import { mediaService } from '../media/media.service.js';
+import { r2Provider } from '../../integrations/r2/r2.provider.js';
 import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
 import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
 
@@ -193,15 +195,57 @@ export class RegistrationService {
 
     let inquiryId = await generateUniqueInquiryId();
 
-    // 4. Upload photo to Cloudinary/Storage
+    // 4. Upload photo to private R2 and generate WebP variants
     let couplePhotoUrl = '/sample_couple.png';
+    let r2MediaData = null;
+
     if (couplePhotoFile && couplePhotoFile.buffer) {
-      const base64Data = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
-      couplePhotoUrl = await storageService.upload({
-        data: base64Data,
-        folder: 'couplePhotos',
-        filename: `${inquiryId}_couple`
-      });
+      try {
+        const opaqueMediaId = crypto.randomBytes(16).toString('hex');
+        const eventKey = program.sequenceNumber ? `EK${String(program.sequenceNumber).padStart(2, '0')}` : (inquiryId.split('-')[0] || 'EK06');
+        const baseKey = `prod/events/${eventKey}/registrations/${inquiryId}/couple/${opaqueMediaId}`;
+        const thumbKey = `${baseKey}/thumb.webp`;
+        const normalKey = `${baseKey}/normal.webp`;
+        const largeKey = `${baseKey}/large.webp`;
+
+        // Generate WebP variants via Sharp
+        const [thumbBuf, normBuf, largeBuf] = await Promise.all([
+          sharp(couplePhotoFile.buffer).rotate().resize(240, null, { withoutEnlargement: true }).webp({ quality: 80, effort: 4 }).toBuffer(),
+          sharp(couplePhotoFile.buffer).rotate().resize(720, null, { withoutEnlargement: true }).webp({ quality: 82, effort: 4 }).toBuffer(),
+          sharp(couplePhotoFile.buffer).rotate().resize(1200, null, { withoutEnlargement: true }).webp({ quality: 85, effort: 4 }).toBuffer()
+        ]);
+
+        // Upload directly to private R2 bucket
+        await Promise.all([
+          r2Provider.putObject({ bucket: r2Provider.privateBucket, key: thumbKey, body: thumbBuf, contentType: 'image/webp', cacheControl: 'private, max-age=3600, no-transform' }),
+          r2Provider.putObject({ bucket: r2Provider.privateBucket, key: normalKey, body: normBuf, contentType: 'image/webp', cacheControl: 'private, max-age=3600, no-transform' }),
+          r2Provider.putObject({ bucket: r2Provider.privateBucket, key: largeKey, body: largeBuf, contentType: 'image/webp', cacheControl: 'private, max-age=3600, no-transform' })
+        ]);
+
+        r2MediaData = {
+          status: 'R2_PRIMARY',
+          bucket: r2Provider.privateBucket,
+          isPrivate: true,
+          key: normalKey,
+          thumbKey,
+          normalKey,
+          largeKey,
+          verifiedAt: new Date()
+        };
+        couplePhotoUrl = `/api/media/${inquiryId}/couple-photo?preset=normal`;
+      } catch (uploadErr) {
+        console.error(`[RegistrationService] Direct private R2 upload failed for ${inquiryId}, falling back to storageService:`, uploadErr.message);
+        try {
+          const base64Data = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
+          couplePhotoUrl = await storageService.upload({
+            data: base64Data,
+            folder: 'couplePhotos',
+            filename: `${inquiryId}_couple`
+          });
+        } catch (storageErr) {
+          console.error(`[RegistrationService] Fallback storage upload failed for ${inquiryId}:`, storageErr.message);
+        }
+      }
     }
 
     // 5. Generate secure customer lookup token
@@ -224,6 +268,8 @@ export class RegistrationService {
       programDate: program.date,
       programTime: program.time || '8:30 PM',
       couplePhoto: couplePhotoUrl,
+      mediaProvider: r2MediaData ? 'R2' : 'CLOUDINARY',
+      ...(r2MediaData ? { r2Media: r2MediaData } : {}),
       status: 'pending',
       payment: {
         provider: 'razorpay',

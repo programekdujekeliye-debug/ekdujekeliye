@@ -5,11 +5,13 @@ import { env } from '../config/env.js';
  */
 export const requireAuth = (req, res, next) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.status(401).json({ error: 'Unauthorized. No authorization header provided.' });
-  }
+  const token = (authHeader ? authHeader.replace(/^Bearer\s+/i, '').trim() : '') ||
+    (req.query?.token ? String(req.query.token).trim() : '') ||
+    (req.query?.auth_token ? String(req.query.auth_token).trim() : '');
 
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized. No authorization credentials provided.' });
+  }
 
   // Validate Admin or Super Admin credentials
   if (token === env.ADMIN_PASSWORD || token === env.SUPER_ADMIN_PASSWORD) {
@@ -24,13 +26,16 @@ export const requireAuth = (req, res, next) => {
 };
 
 /**
- * Attaches req.user if authorization header is valid, but allows unauthenticated to pass through
+ * Attaches req.user if authorization header or query token is valid, but allows unauthenticated to pass through
  */
 export const optionalAuth = (req, res, next) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader) return next();
+  const token = (authHeader ? authHeader.replace(/^Bearer\s+/i, '').trim() : '') ||
+    (req.query?.token ? String(req.query.token).trim() : '') ||
+    (req.query?.auth_token ? String(req.query.auth_token).trim() : '');
 
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token) return next();
+
   if (token === env.ADMIN_PASSWORD || token === env.SUPER_ADMIN_PASSWORD) {
     req.user = {
       role: token === env.SUPER_ADMIN_PASSWORD ? 'SUPER_ADMIN' : 'EVENT_ADMIN',
@@ -42,11 +47,13 @@ export const optionalAuth = (req, res, next) => {
 
 export const requireSuperAuth = (req, res, next) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.status(401).json({ error: 'Unauthorized. No authorization header provided.' });
-  }
+  const token = (authHeader ? authHeader.replace(/^Bearer\s+/i, '').trim() : '') ||
+    (req.query?.token ? String(req.query.token).trim() : '') ||
+    (req.query?.auth_token ? String(req.query.auth_token).trim() : '');
 
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized. No authorization credentials provided.' });
+  }
 
   if (token === env.SUPER_ADMIN_PASSWORD) {
     req.user = {

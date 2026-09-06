@@ -630,7 +630,7 @@ export const VipPassesPage = () => {
                           {g.couplePhoto ? (
                             <button
                               type="button"
-                              onClick={() => setSelectedImage(getOptimizedPhotoUrl(g.photoThumbnailUrl || g.couplePhoto, 'normal'))}
+                              onClick={() => setSelectedImage(getOptimizedPhotoUrl(g.couplePhoto || g.photoThumbnailUrl, 'normal'))}
                               className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer shadow-xs hover:scale-105 transition-transform"
                               title="Click to zoom couple photo"
                             >
@@ -790,7 +790,7 @@ export const VipPassesPage = () => {
                         {g.couplePhoto ? (
                           <button
                             type="button"
-                            onClick={() => setSelectedImage(getOptimizedPhotoUrl(g.photoThumbnailUrl || g.couplePhoto, 'normal'))}
+                            onClick={() => setSelectedImage(getOptimizedPhotoUrl(g.couplePhoto || g.photoThumbnailUrl, 'normal'))}
                             className="w-14 h-14 rounded-xl overflow-hidden border border-amber-200 bg-white cursor-pointer shadow-xs active:scale-95 transition-transform"
                             title="Tap to enlarge photo"
                           >

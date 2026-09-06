@@ -65,12 +65,19 @@ export class InvitationCardService {
       }
     });
 
-    // Resolve couple photo base64 or remote URL
+    // Resolve couple photo base64: R2 buffer direct, remote URL, or local sample
     let couplePhotoDataUri = '';
+    const r2Media = registration.r2Media;
     const photoSrc = registration.couplePhoto || '/sample_couple.png';
 
     try {
-      if (photoSrc.startsWith('http')) {
+      if (r2Media && (r2Media.normalKey || r2Media.key)) {
+        const targetBucket = r2Media.bucket || r2Provider.privateBucket;
+        const targetKey = r2Media.normalKey || r2Media.key;
+        const buf = await r2Provider.getObjectBuffer({ bucket: targetBucket, key: targetKey });
+        const contentType = targetKey.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+        couplePhotoDataUri = `data:${contentType};base64,${buf.toString('base64')}`;
+      } else if (photoSrc.startsWith('http')) {
         const photoRes = await fetch(photoSrc);
         if (photoRes.ok) {
           const arrBuf = await photoRes.arrayBuffer();

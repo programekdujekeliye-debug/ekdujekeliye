@@ -664,7 +664,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                 {sub.couplePhoto && (
                                   <button
                                     type="button"
-                                    onClick={() => setSelectedImage(getOptimizedPhotoUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'normal'))}
+                                    onClick={() => setSelectedImage(getOptimizedPhotoUrl(sub.couplePhoto || sub.photoThumbnailUrl, 'normal'))}
                                     className="w-8 h-8 rounded-md overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform"
                                     title="View Thumbnail"
                                   >

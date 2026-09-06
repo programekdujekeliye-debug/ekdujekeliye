@@ -385,30 +385,70 @@ export const getPrivateCouplePhoto = async (req, res) => {
     const r2Media = registration.r2Media;
 
     // A. Private R2 Resolution
-    if (r2Media && (r2Media.isPrivate || r2Media.bucket === r2Provider.privateBucket)) {
-      let targetKey = r2Media.key;
-      if (preset === 'thumb' && r2Media.thumbKey) targetKey = r2Media.thumbKey;
-      else if (preset === 'normal' && r2Media.normalKey) targetKey = r2Media.normalKey;
-      else if (preset === 'large' && r2Media.largeKey) targetKey = r2Media.largeKey;
+    if (r2Media && (r2Media.isPrivate || r2Media.bucket === r2Provider.privateBucket || r2Media.key || r2Media.normalKey)) {
+      const isThumb = preset === 'thumb' || preset === 'thumbnail';
+      const isLarge = preset === 'large' || preset === 'download';
+      let targetKey = r2Media.normalKey || r2Media.key;
+
+      if (isThumb && r2Media.thumbKey) targetKey = r2Media.thumbKey;
+      else if (isLarge && r2Media.largeKey) targetKey = r2Media.largeKey;
+      else if (!isThumb && !isLarge && r2Media.normalKey) targetKey = r2Media.normalKey;
 
       if (targetKey) {
-        const presigned = await r2Provider.generatePresignedDownloadUrl({
-          bucket: r2Media.bucket || r2Provider.privateBucket,
-          key: targetKey,
-          expiresIn: 300 // 5 minutes max
-        });
-        return res.redirect(302, presigned.downloadUrl);
+        try {
+          const buffer = await r2Provider.getObjectBuffer({
+            bucket: r2Media.bucket || r2Provider.privateBucket,
+            key: targetKey
+          });
+
+          const contentType = targetKey.endsWith('.webp')
+            ? 'image/webp'
+            : targetKey.endsWith('.png')
+              ? 'image/png'
+              : 'image/jpeg';
+
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          return res.send(buffer);
+        } catch (bufErr) {
+          console.warn(`[MediaController] Buffer stream failed for ${targetKey}, falling back to presigned download URL:`, bufErr.message);
+          const presigned = await r2Provider.generatePresignedDownloadUrl({
+            bucket: r2Media.bucket || r2Provider.privateBucket,
+            key: targetKey,
+            expiresIn: 300 // 5 minutes max
+          });
+          return res.redirect(302, presigned.downloadUrl);
+        }
       }
     }
 
     // B. Legacy Cloudinary Read Fallback
     const rawPhoto = registration.couplePhoto || '';
     if (rawPhoto && rawPhoto.includes('cloudinary.com')) {
-      const optimized = getOptimizedPhotoUrl(rawPhoto, preset === 'large' ? 'large' : preset === 'thumb' ? 'thumbnail' : 'normal');
+      const optimized = getOptimizedPhotoUrl(rawPhoto, preset === 'large' ? 'large' : (preset === 'thumb' || preset === 'thumbnail') ? 'thumbnail' : 'normal');
       return res.redirect(302, optimized);
     }
 
-    // C. Default Fallback
+    // C. Public R2 Direct Fallback
+    if (rawPhoto && rawPhoto.includes('media.ekdujekeliye.in')) {
+      const extractedKey = rawPhoto.replace(/^https?:\/\/[^/]+\//, '');
+      try {
+        const buffer = await r2Provider.getObjectBuffer({
+          bucket: r2Provider.publicBucket,
+          key: extractedKey
+        });
+        const contentType = extractedKey.endsWith('.png') ? 'image/png' : 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        return res.send(buffer);
+      } catch (e) {
+        console.warn(`[MediaController] Fallback public R2 buffer fetch failed for ${extractedKey}:`, e.message);
+      }
+    }
+
+    // D. Default Fallback
     return res.redirect(302, '/sample_couple.png');
   } catch (err) {
     console.error('[MediaController] Error serving private couple photo:', err);

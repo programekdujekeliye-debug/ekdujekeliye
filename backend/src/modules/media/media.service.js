@@ -91,13 +91,21 @@ export class MediaService {
     const expNum = Number(expiresAt);
     if (isNaN(expNum) || Math.floor(Date.now() / 1000) > expNum) return false;
     const secret = env.GOOGLE_MEDIA_VIEW_SECRET || 'edkl_default_media_secret_fallback';
-    const message = `${registrationId}:${archiveId}:${purpose}:${preset}:${expNum}`;
-    const expectedSig = crypto.createHmac('sha256', secret).update(message).digest('hex');
-    try {
-      return crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expectedSig, 'hex'));
-    } catch (e) {
-      return false;
+
+    const candidatePresets = [preset, 'any'];
+    if (preset === 'thumb') candidatePresets.push('thumbnail');
+    if (preset === 'thumbnail') candidatePresets.push('thumb');
+
+    for (const candPreset of candidatePresets) {
+      const message = `${registrationId}:${archiveId}:${purpose}:${candPreset}:${expNum}`;
+      const expectedSig = crypto.createHmac('sha256', secret).update(message).digest('hex');
+      try {
+        if (crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expectedSig, 'hex'))) {
+          return true;
+        }
+      } catch (e) {}
     }
+    return false;
   }
 
   /**
@@ -121,7 +129,7 @@ export class MediaService {
     const isOriginalDeleted = archive && archive.cloudinaryOriginalStatus === 'DELETED';
 
     const r2Media = registration.r2Media || archive?.r2Media;
-    const hasR2 = Boolean(r2Media?.normalUrl || (rawPhoto && rawPhoto.includes('media.ekdujekeliye.in')));
+    const hasR2 = Boolean(r2Media?.normalUrl || r2Media?.key || r2Media?.normalKey || (rawPhoto && rawPhoto.includes('media.ekdujekeliye.in')));
     const isR2Primary = hasR2 && (registration.mediaProvider === 'R2' || r2Media?.status === 'R2_PRIMARY' || rawPhoto.includes('media.ekdujekeliye.in'));
     const isCloudinaryAvailable = Boolean(rawPhoto && rawPhoto.includes('cloudinary.com') && !isOriginalDeleted);
 
@@ -135,12 +143,19 @@ export class MediaService {
         let normUrl = r2Media?.normalUrl || rawPhoto;
         let lrgUrl = r2Media?.largeUrl || normUrl;
 
-        // If couple photo is private, route access through authenticated secure backend endpoints
+        // If couple photo is private, route access through authenticated secure backend endpoints with signed token
         if (r2Media?.isPrivate) {
           const regId = registration.inquiryId || registration._id;
-          thumbUrl = `/api/media/${regId}/couple-photo?preset=thumb`;
-          normUrl = `/api/media/${regId}/couple-photo?preset=normal`;
-          lrgUrl = `/api/media/${regId}/couple-photo?preset=large`;
+          const token = this.generateSignedMediaToken({
+            registrationId: regId,
+            purpose: 'couple_photo',
+            preset: 'any',
+            expiresIn: 604800 // 7 days
+          });
+          const qs = `exp=${token.expiresAt}&sig=${token.sig}`;
+          thumbUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=thumb&${qs}`;
+          normUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=normal&${qs}`;
+          lrgUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=large&${qs}`;
         }
 
         return {
@@ -184,9 +199,24 @@ export class MediaService {
 
       // 3. ELSE IF R2 exists: R2
       if (hasR2) {
-        const thumbUrl = r2Media?.thumbUrl || rawPhoto;
-        const normUrl = r2Media?.normalUrl || rawPhoto;
-        const lrgUrl = r2Media?.largeUrl || normUrl;
+        let thumbUrl = r2Media?.thumbUrl || rawPhoto;
+        let normUrl = r2Media?.normalUrl || rawPhoto;
+        let lrgUrl = r2Media?.largeUrl || normUrl;
+
+        if (r2Media?.isPrivate) {
+          const regId = registration.inquiryId || registration._id;
+          const token = this.generateSignedMediaToken({
+            registrationId: regId,
+            purpose: 'couple_photo',
+            preset: 'any',
+            expiresIn: 604800 // 7 days
+          });
+          const qs = `exp=${token.expiresAt}&sig=${token.sig}`;
+          thumbUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=thumb&${qs}`;
+          normUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=normal&${qs}`;
+          lrgUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=large&${qs}`;
+        }
+
         return {
           provider: 'R2',
           photoThumbnailUrl: thumbUrl,
