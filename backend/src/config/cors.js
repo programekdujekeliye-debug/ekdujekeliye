@@ -22,7 +22,15 @@ export const corsMiddleware = cors({
     'X-Requested-With',
     'Accept',
     'Origin',
-    'Cache-Control'
+    'Cache-Control',
+    'x-admin-password',
+    'x-super-admin-password',
+    'x-cron-secret',
+    'If-None-Match',
+    'If-Match',
+    'Range'
   ],
-  credentials: true
+  exposedHeaders: ['ETag', 'Content-Length', 'Cache-Control'],
+  credentials: true,
+  maxAge: 86400 // Cache CORS preflight approval for 24 hours
 });

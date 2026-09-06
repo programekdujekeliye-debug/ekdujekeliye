@@ -427,6 +427,11 @@ export const getAdminDashboardSummary = async (req, res) => {
 
     const cached = dashboardCacheMap.get(cacheKey);
     if (cached && now < cached.expiry) {
+      res.set('Cache-Control', 'private, max-age=15, stale-while-revalidate=60');
+      res.set('ETag', cached.etag);
+      if (req.headers['if-none-match'] === cached.etag) {
+        return res.status(304).end();
+      }
       return res.json(cached.data);
     }
 
@@ -547,10 +552,19 @@ export const getAdminDashboardSummary = async (req, res) => {
       activeEvents
     };
 
+    const etag = `W/"dash-${eventId}-${result.stats?.total || 0}-${result.stats?.approved || 0}"`;
     dashboardCacheMap.set(cacheKey, {
       data: result,
+      etag,
       expiry: now + (15 * 1000) // 15s cache
     });
+
+    res.set('Cache-Control', 'private, max-age=15, stale-while-revalidate=60');
+    res.set('ETag', etag);
+
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
 
     res.json(result);
   } catch (err) {

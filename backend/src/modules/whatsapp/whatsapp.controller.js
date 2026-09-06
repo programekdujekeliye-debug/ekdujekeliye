@@ -10,9 +10,18 @@ import { WhatsappMessage, WHATSAPP_MESSAGE_STATUSES } from '../../models/Whatsap
 import { WhatsappConversation } from '../../models/WhatsappConversation.js';
 import { Pass } from '../../models/Pass.js';
 import { Event } from '../../models/Event.js';
+import { eventService } from '../events/event.service.js';
 import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
 import { invitationCardService } from '../../services/invitationCard.service.js';
 import { ensureFeedbackToken } from '../feedback/feedback.controller.js';
+
+// High-speed In-Memory Cache for Event Registrations Communication
+const eventRegsCommCache = new Map();
+const EVENT_REGS_COMM_TTL_MS = 15 * 1000; // 15s TTL
+
+export function invalidateEventRegsCommCache() {
+  eventRegsCommCache.clear();
+}
 
 export const handleVerification = verifyWebhook;
 export const handleEvents = handleWebhookEvent;
@@ -597,10 +606,22 @@ export const getEventRegistrationsCommunication = async (req, res) => {
     const messageTypeFilter = req.query.messageType ? String(req.query.messageType).toLowerCase() : 'ALL';
     const healthFilter = req.query.health ? String(req.query.health).toUpperCase() : 'ALL';
 
+    const now = Date.now();
+    const cacheKey = JSON.stringify({ eventId, page, limit, search, paymentFilter, attendanceFilter, messageStatusFilter, messageTypeFilter, healthFilter });
+    const cached = eventRegsCommCache.get(cacheKey);
+    if (cached && now < cached.expiry) {
+      res.set('Cache-Control', 'private, max-age=15, stale-while-revalidate=60');
+      res.set('ETag', cached.etag);
+      if (req.headers['if-none-match'] === cached.etag) {
+        return res.status(304).end();
+      }
+      return res.json(cached.data);
+    }
+
     let eventMatchOr = [];
     let event = null;
     if (eventId && eventId !== 'all') {
-      event = await Event.findOne(
+      event = await eventService.getEventBySlug(eventId) || await Event.findOne(
         { $or: [{ id: eventId }, { slug: eventId }, { date: eventId }] },
         'id name slug date time venue city capacity status price isPaymentEnabled earlyRegistrationMode'
       ).lean();
@@ -1006,7 +1027,7 @@ export const getEventRegistrationsCommunication = async (req, res) => {
       filteredRows = filteredRows.filter(r => r.totals.failed > 0);
     }
 
-    res.json({
+    const responsePayload = {
       success: true,
       pagination: {
         total: totalRegistrations,
@@ -1015,7 +1036,31 @@ export const getEventRegistrationsCommunication = async (req, res) => {
         totalPages
       },
       rows: filteredRows
+    };
+
+    const firstRegId = filteredRows[0]?.inquiryId || '';
+    const lastRegId = filteredRows[filteredRows.length - 1]?.inquiryId || '';
+    const etag = `W/"wreg-${totalRegistrations}-${page}-${limit}-${firstRegId}-${lastRegId}"`;
+
+    eventRegsCommCache.set(cacheKey, {
+      data: responsePayload,
+      etag,
+      expiry: now + EVENT_REGS_COMM_TTL_MS
     });
+
+    if (eventRegsCommCache.size > 80) {
+      const oldest = eventRegsCommCache.keys().next().value;
+      eventRegsCommCache.delete(oldest);
+    }
+
+    res.set('Cache-Control', 'private, max-age=15, stale-while-revalidate=60');
+    res.set('ETag', etag);
+
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+
+    res.json(responsePayload);
   } catch (err) {
     console.error('[Registrations Communication Endpoint Error]:', err);
     res.status(500).json({ error: 'Error fetching registration communication table.', details: err.message });
@@ -1926,13 +1971,30 @@ export const getConversations = async (req, res) => {
   }
 };
 
+// Aggregated Statistics Cache for WhatsApp Inbox
+let conversationStatsCache = { data: null, etag: '', expiry: 0 };
+
+export function invalidateConversationStatsCache() {
+  conversationStatsCache = { data: null, etag: '', expiry: 0 };
+}
+
 /**
  * Get aggregated statistics for the WhatsApp Inbox overview
  */
 export const getConversationStats = async (req, res) => {
   try {
-    const now = new Date();
-    const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+    const now = Date.now();
+    if (conversationStatsCache.data && now < conversationStatsCache.expiry) {
+      res.set('Cache-Control', 'private, max-age=10, stale-while-revalidate=30');
+      res.set('ETag', conversationStatsCache.etag);
+      if (req.headers['if-none-match'] === conversationStatsCache.etag) {
+        return res.status(304).end();
+      }
+      return res.json(conversationStatsCache.data);
+    }
+
+    const nowDate = new Date();
+    const twoHoursLater = new Date(nowDate.getTime() + 2 * 60 * 60 * 1000);
 
     const baseFilter = {
       $or: [
@@ -1950,12 +2012,12 @@ export const getConversationStats = async (req, res) => {
       WhatsappConversation.countDocuments({
         ...baseFilter,
         status: 'OPEN',
-        customerServiceWindowExpiresAt: { $gt: now, $lte: twoHoursLater }
+        customerServiceWindowExpiresAt: { $gt: nowDate, $lte: twoHoursLater }
       }),
       WhatsappConversation.countDocuments(baseFilter)
     ]);
 
-    res.json({
+    const result = {
       success: true,
       stats: {
         totalConversations,
@@ -1964,7 +2026,23 @@ export const getConversationStats = async (req, res) => {
         unassignedCount,
         windowExpiringSoonCount
       }
-    });
+    };
+
+    const etag = `W/"wstats-${totalConversations}-${openCount}-${unreadCount}-${unassignedCount}-${windowExpiringSoonCount}"`;
+    conversationStatsCache = {
+      data: result,
+      etag,
+      expiry: now + 10 * 1000
+    };
+
+    res.set('Cache-Control', 'private, max-age=10, stale-while-revalidate=30');
+    res.set('ETag', etag);
+
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: 'Error fetching conversation statistics.', details: err.message });
   }

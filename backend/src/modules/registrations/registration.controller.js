@@ -18,6 +18,14 @@ import { getOptimizedPhotoUrl } from '../../utils/mediaPresets.js';
 import { mediaService } from '../media/media.service.js';
 import { warmRegistrationMediaCache, invalidateRegistrationMediaCache } from '../media/media.controller.js';
 
+// High-speed In-Memory Query Cache for Admin Registrations List
+const submissionsQueryCache = new Map();
+const SUBMISSIONS_CACHE_TTL_MS = 15 * 1000; // 15s TTL
+
+export function clearSubmissionsCache() {
+  submissionsQueryCache.clear();
+}
+
 export const submitRegistration = async (req, res) => {
   const { husbandName, wifeName, surname, phoneNumber, programId, whatsappOptIn } = req.body;
   if (!husbandName || !wifeName || !surname || !phoneNumber || !programId) {
@@ -36,6 +44,8 @@ export const submitRegistration = async (req, res) => {
       couplePhotoFile,
       whatsappOptIn: whatsappOptIn === true || whatsappOptIn === 'true' || whatsappOptIn === 'on'
     });
+
+    clearSubmissionsCache();
 
     res.status(200).json({
       success: true,
@@ -90,6 +100,7 @@ export const approveRegistration = async (req, res) => {
     sub.frameExportStatus = 'NOT_EXPORTED';
     sub.frameExportedAt = null;
     await sub.save();
+    clearSubmissionsCache();
 
     res.json({ success: true, message: 'Registration approved.', submission: sub });
   } catch (err) {
@@ -107,6 +118,7 @@ export const rejectRegistration = async (req, res) => {
     sub.status = 'rejected';
     sub.rejectionReason = reason || 'Declined by administrator';
     await sub.save();
+    clearSubmissionsCache();
 
     res.json({ success: true, message: 'Registration rejected.', submission: sub });
   } catch (err) {
@@ -128,6 +140,7 @@ export const markAttendance = async (req, res) => {
     }
     sub.attendanceMarkedAt = new Date();
     await sub.save();
+    clearSubmissionsCache();
 
     res.json({ success: true, attendance: sub.attendance, markedAt: sub.attendanceMarkedAt });
   } catch (err) {
@@ -146,6 +159,7 @@ export const bulkUpdateAttendance = async (req, res) => {
       { inquiryId: { $in: inquiryIds } },
       { $set: { attendance: attendance || 'present', attendanceMarkedAt: new Date() } }
     );
+    clearSubmissionsCache();
     res.json({ success: true, count: inquiryIds.length });
   } catch (err) {
     res.status(500).json({ error: 'Server error updating bulk attendance.' });
@@ -175,6 +189,7 @@ export const attendanceByAbsentees = async (req, res) => {
       { $set: { attendance: 'present', attendanceMarkedAt: new Date() } }
     );
 
+    clearSubmissionsCache();
     res.json({ success: true, message: 'Attendance processed successfully.' });
   } catch (err) {
     res.status(500).json({ error: 'Server error processing absentees attendance.' });
@@ -258,6 +273,7 @@ export const bulkMoveSubmissions = async (req, res) => {
       movedItems.push({ oldInquiryId: sub.inquiryId, newInquiryId });
     }
 
+    clearSubmissionsCache();
     res.json({
       success: true,
       message: `Transferred ${movedItems.length} submissions to ${targetProgram.name}.`,
@@ -459,6 +475,7 @@ export const manualInviteeRegistration = async (req, res) => {
       })
       .catch(passErr => console.warn('[ManualInvitee] Background Pass or WhatsApp notice:', passErr.message));
 
+    clearSubmissionsCache();
     res.json({ success: true, data: sub });
   } catch (err) {
     console.error('[ManualInvitee] Error creating manual invitee:', err);
@@ -468,9 +485,22 @@ export const manualInviteeRegistration = async (req, res) => {
 
 
 export const getSubmissionsList = async (req, res) => {
-  const { programId, status, attendance, paymentStatus, isVip, search, sortBy = 'createdAt', sortOrder = 'desc', page = 1, limit = 50 } = req.query;
+  const { programId, status, attendance, paymentStatus, isVip, search, sortBy = 'createdAt', sortOrder = 'desc', page = 1, limit = 50, frameExportStatus } = req.query;
   const safeLimit = Math.min(Math.max(1, Number(limit) || 50), 10000);
   const safePage = Math.max(1, Number(page) || 1);
+
+  // Fast In-Memory Cache Check (< 1ms)
+  const cacheKey = JSON.stringify({ programId, status, attendance, paymentStatus, isVip, search, sortBy, sortOrder, frameExportStatus, page: safePage, limit: safeLimit });
+  const now = Date.now();
+  const cached = submissionsQueryCache.get(cacheKey);
+  if (cached && now < cached.expiry) {
+    res.set('Cache-Control', 'private, max-age=15, stale-while-revalidate=60');
+    res.set('ETag', cached.etag);
+    if (req.headers['if-none-match'] === cached.etag) {
+      return res.status(304).end();
+    }
+    return res.json(cached.data);
+  }
 
   const andConditions = [
     { isDeleted: { $ne: true } }
@@ -568,7 +598,6 @@ export const getSubmissionsList = async (req, res) => {
     });
   }
 
-  const { frameExportStatus } = req.query;
   if (frameExportStatus && frameExportStatus !== 'all') {
     if (frameExportStatus === 'NOT_EXPORTED') {
       andConditions.push({
@@ -651,7 +680,7 @@ export const getSubmissionsList = async (req, res) => {
     // Warm high-speed in-memory media cache for fast thumbnail delivery
     warmRegistrationMediaCache(submissions);
 
-    res.json({
+    const responsePayload = {
       success: true,
       data: enrichedSubmissions,
       submissions: enrichedSubmissions,
@@ -660,7 +689,31 @@ export const getSubmissionsList = async (req, res) => {
       currentPage: safePage,
       page: safePage,
       totalPages: Math.ceil(total / safeLimit) || 1
+    };
+
+    const firstSubId = submissions[0]?.inquiryId || '';
+    const lastSubId = submissions[submissions.length - 1]?.inquiryId || '';
+    const etag = `W/"subs-${total}-${safePage}-${safeLimit}-${firstSubId}-${lastSubId}"`;
+
+    submissionsQueryCache.set(cacheKey, {
+      data: responsePayload,
+      etag,
+      expiry: now + SUBMISSIONS_CACHE_TTL_MS
     });
+
+    if (submissionsQueryCache.size > 100) {
+      const oldest = submissionsQueryCache.keys().next().value;
+      submissionsQueryCache.delete(oldest);
+    }
+
+    res.set('Cache-Control', 'private, max-age=15, stale-while-revalidate=60');
+    res.set('ETag', etag);
+
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+
+    res.json(responsePayload);
 
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching submissions.' });
@@ -754,6 +807,7 @@ export const restoreSubmission = async (req, res) => {
   const { inquiryId } = req.params;
   try {
     await Registration.updateOne({ inquiryId }, { $set: { isDeleted: false } });
+    clearSubmissionsCache();
     res.json({ success: true, message: 'Submission restored.' });
   } catch (err) {
     res.status(500).json({ error: 'Server error restoring submission.' });
@@ -764,6 +818,7 @@ export const permanentDeleteSubmission = async (req, res) => {
   const { inquiryId } = req.params;
   try {
     await Registration.deleteOne({ inquiryId });
+    clearSubmissionsCache();
     res.json({ success: true, message: 'Submission permanently deleted.' });
   } catch (err) {
     res.status(500).json({ error: 'Server error permanently deleting submission.' });
@@ -774,6 +829,7 @@ export const softDeleteSubmission = async (req, res) => {
   const { inquiryId } = req.params;
   try {
     await Registration.updateOne({ inquiryId }, { $set: { isDeleted: true } });
+    clearSubmissionsCache();
     res.json({ success: true, message: 'Submission moved to trash.' });
   } catch (err) {
     res.status(500).json({ error: 'Server error deleting submission.' });
@@ -894,6 +950,7 @@ export const updateSubmission = async (req, res) => {
 
     invalidateRegistrationMediaCache(existing.inquiryId);
     if (updated?.inquiryId) invalidateRegistrationMediaCache(updated.inquiryId);
+    clearSubmissionsCache();
 
     // Asynchronously handle cryptographic pass re-sign, invitation card re-render, WhatsApp notification & lifecycle reschedule on single transfer
     if (isEventTransferred && updated && targetEventObj) {
@@ -940,6 +997,7 @@ export const bulkDeleteSubmissions = async (req, res) => {
       { inquiryId: { $in: inquiryIds } },
       { $set: { isDeleted: true } }
     );
+    clearSubmissionsCache();
     res.json({ success: true, count: inquiryIds.length });
   } catch (err) {
     res.status(500).json({ error: 'Server error deleting submissions.' });
@@ -969,6 +1027,7 @@ export const markFramesExported = async (req, res) => {
     }
 
     const result = await Registration.updateMany(query, { $set: updatePayload });
+    clearSubmissionsCache();
 
     res.json({
       success: true,
@@ -1003,6 +1062,7 @@ export const bulkUpdateFrameAlignments = async (req, res) => {
     }));
 
     const result = await Registration.bulkWrite(ops, { ordered: false });
+    clearSubmissionsCache();
     res.json({
       success: true,
       modifiedCount: result.modifiedCount || alignments.length

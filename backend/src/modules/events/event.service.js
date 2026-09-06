@@ -161,23 +161,18 @@ export class EventService {
       return cached.data;
     }
 
-    // 2. Database lookup: Try direct indexed slug first, then ID, then Date, then ObjectId
-    let event = await Event.findOne({ slug: normalizedSlug }).lean();
-    if (!event) {
-      event = await Event.findOne({ id: slug }).lean();
-    }
-    if (!event) {
-      event = await Event.findOne({ date: slug }).lean();
-    }
-    if (!event && typeof slug === 'string' && slug.match(/^[0-9a-fA-F]{24}$/)) {
-      event = await Event.findOne({ _id: slug }).lean();
-    }
-    if (!event) {
-      event = await Event.findOne({
-        $or: [{ slug: normalizedSlug }, { id: slug }, { date: slug }]
-      }).lean();
+    // 2. Database lookup: Try single indexed query with all candidates
+    const orConditions = [
+      { slug: normalizedSlug },
+      { id: slug },
+      { id: normalizedSlug },
+      { date: slug }
+    ];
+    if (typeof slug === 'string' && /^[0-9a-fA-F]{24}$/.test(slug)) {
+      orConditions.push({ _id: slug });
     }
 
+    const event = await Event.findOne({ $or: orConditions }).lean();
     if (!event) return null;
 
     const mapped = {
@@ -186,8 +181,9 @@ export class EventService {
       isClosed: event.status === 'registration_closed' || event.isInquiryClosed === true
     };
 
-    // Cache result with 15-second TTL
-    const cacheEntry = { data: mapped, expiry: Date.now() + (15 * 1000) };
+    // Cache result with 300-second (5 mins) TTL for instant 0ms subsequent access
+    const cacheEntry = { data: mapped, expiry: Date.now() + (300 * 1000) };
+    slugCache.set(normalizedSlug, cacheEntry);
     if (event.slug) slugCache.set(event.slug.toLowerCase(), cacheEntry);
     if (event.id) slugCache.set(event.id.toLowerCase(), cacheEntry);
     if (event.date) slugCache.set(event.date.toLowerCase(), cacheEntry);

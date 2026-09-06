@@ -25,7 +25,7 @@ import { getOptimizedPhotoUrl, resolveDisplayImageUrl } from '../../../utils/med
 import toast from 'react-hot-toast';
 
 export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean }) => {
-  const { selectedProgramId, programs } = useAdmin();
+  const { selectedProgramId, programs, loadingPrograms } = useAdmin();
 
   const [viewMode, setViewMode] = useState<'all' | 'duplicates' | 'trash'>('all');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -128,10 +128,11 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
   };
 
   useEffect(() => {
+    if (loadingPrograms && !selectedProgramId) return;
     if (viewMode === 'all') {
       fetchList(1);
     }
-  }, [selectedProgramId, statusFilter, paymentFilter, attendanceFilter, entryTypeFilter, viewMode, pageSize]);
+  }, [selectedProgramId, statusFilter, paymentFilter, attendanceFilter, entryTypeFilter, viewMode, pageSize, loadingPrograms]);
 
   // Debounced search
   useEffect(() => {
@@ -673,6 +674,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                       alt="Photo"
                                       className="w-full h-full object-cover"
                                       loading="lazy"
+                                      decoding="async"
                                     />
                                   </button>
                                 )}
@@ -934,6 +936,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                 alt="Couple"
                                 className="w-full h-full object-cover"
                                 loading="lazy"
+                                decoding="async"
                               />
                             </button>
                           ) : (

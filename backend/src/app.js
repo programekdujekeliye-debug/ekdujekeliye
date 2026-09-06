@@ -53,6 +53,7 @@ export const app = express();
 
 app.set('trust proxy', true);
 app.use(corsMiddleware);
+app.options('*', corsMiddleware);
 app.use(requestLogger);
 
 // Capture raw body for Razorpay Webhook signature verification

@@ -113,7 +113,7 @@ export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
     return '';
   });
   const [programs, setPrograms] = useState<Program[]>([]);
-  const [loadingPrograms, setLoadingPrograms] = useState<boolean>(false);
+  const [loadingPrograms, setLoadingPrograms] = useState<boolean>(true);
   const isFetchingRef = React.useRef(false);
 
   const setSelectedProgramId = (id: string) => {

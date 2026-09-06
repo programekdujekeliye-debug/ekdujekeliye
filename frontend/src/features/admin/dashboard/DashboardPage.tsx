@@ -13,7 +13,7 @@ import {
 } from '../../../components/Icons';
 
 export const DashboardPage = () => {
-  const { selectedProgramId, programs } = useAdmin();
+  const { selectedProgramId, programs, loadingPrograms } = useAdmin();
   const [totalInquiries, setTotalInquiries] = useState<number>(0);
   const [approvedCount, setApprovedCount] = useState<number>(0);
   const [pendingCount, setPendingCount] = useState<number>(0);
@@ -74,8 +74,9 @@ export const DashboardPage = () => {
   };
 
   useEffect(() => {
+    if (loadingPrograms && !selectedProgramId) return;
     fetchStats();
-  }, [selectedProgramId, programs]);
+  }, [selectedProgramId, programs, loadingPrograms]);
 
   const fillPercentage = Math.min(100, Math.round((approvedCount / capacity) * 100));
 

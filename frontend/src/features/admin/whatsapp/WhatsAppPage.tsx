@@ -200,10 +200,9 @@ export const WhatsAppPage = () => {
   useEffect(() => {
     const init = async () => {
       try {
-        const [evts, tpls, subs] = await Promise.all([
+        const [evts, tpls] = await Promise.all([
           eventsApi.getEvents(),
-          whatsappApi.getMetaTemplates(),
-          registrationsApi.getSubmissions({ limit: 100 })
+          whatsappApi.getMetaTemplates()
         ]);
         if (evts && evts.length > 0) {
           setEvents(evts);
@@ -212,12 +211,6 @@ export const WhatsAppPage = () => {
           }
         }
         if (tpls?.metaTemplates) setMetaTemplates(tpls.metaTemplates);
-        if (subs?.submissions) {
-          setSubmissions(subs.submissions);
-          if (subs.submissions.length > 0) {
-            setSelectedSubmissionId(subs.submissions[0]._id || subs.submissions[0].inquiryId || '');
-          }
-        }
       } catch (err) {
         console.error('Failed to load initial data:', err);
       }
@@ -500,6 +493,19 @@ export const WhatsAppPage = () => {
 
   useEffect(() => {
     if (activeTab === 'logs') fetchLogs();
+    if (activeTab === 'templates' && submissions.length === 0) {
+      registrationsApi.getSubmissions({ limit: 50 }).then((subs) => {
+        if (subs?.submissions) {
+          setSubmissions(subs.submissions);
+          if (subs.submissions.length > 0 && !selectedSubmissionId) {
+            setSelectedSubmissionId(subs.submissions[0]._id || subs.submissions[0].inquiryId || '');
+            const first = subs.submissions[0];
+            if (first.phoneNumber) setCustomPhone(first.phoneNumber);
+            if (first.husbandName && first.wifeName) setCustomName(`${first.husbandName} & ${first.wifeName}`);
+          }
+        }
+      }).catch(err => console.warn('Failed to lazy load test submissions:', err));
+    }
   }, [activeTab]);
 
   // Send Test Message

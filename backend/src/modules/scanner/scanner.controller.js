@@ -6,10 +6,28 @@ import { ScanRecord } from '../../models/ScanRecord.js';
 import { qrPassService } from '../passes/qrPass.service.js';
 import { eventService } from '../events/event.service.js';
 
+// In-Memory Real-Time Attendance Stats Cache (5s TTL)
+const liveAttendanceStatsCache = new Map();
+const STATS_CACHE_TTL_MS = 5 * 1000;
+
+export function invalidateLiveAttendanceStatsCache(eventId) {
+  if (eventId) {
+    liveAttendanceStatsCache.delete(eventId);
+  } else {
+    liveAttendanceStatsCache.clear();
+  }
+}
+
 /**
- * Helper: Aggregate real-time gate attendance stats for an event
+ * Helper: Aggregate real-time gate attendance stats for an event (< 5ms cached)
  */
 export async function getEventLiveAttendanceStats(eventId) {
+  const now = Date.now();
+  const cached = liveAttendanceStatsCache.get(eventId);
+  if (cached && now < cached.expiry) {
+    return cached.data;
+  }
+
   const [totalConfirmed, presentCount, duplicateScans, conflictScans, activeDevices] = await Promise.all([
     Registration.countDocuments({
       programId: eventId,
@@ -31,7 +49,7 @@ export async function getEventLiveAttendanceStats(eventId) {
 
   const remaining = Math.max(0, totalConfirmed - presentCount);
 
-  return {
+  const stats = {
     eventId,
     totalConfirmed,
     presentCount,
@@ -41,6 +59,13 @@ export async function getEventLiveAttendanceStats(eventId) {
     activeDeviceCount: Math.max(1, activeDevices.length),
     refreshedAt: new Date().toISOString()
   };
+
+  liveAttendanceStatsCache.set(eventId, {
+    data: stats,
+    expiry: now + STATS_CACHE_TTL_MS
+  });
+
+  return stats;
 }
 
 /**
@@ -164,6 +189,7 @@ export async function handleOnlineScan(req, res) {
         receivedAtServer: new Date()
       });
 
+      invalidateLiveAttendanceStatsCache(eventId);
       const liveStats = await getEventLiveAttendanceStats(eventId);
 
       return res.json({
@@ -595,6 +621,7 @@ export async function handleManualAttendance(req, res) {
       }
     }
 
+    invalidateLiveAttendanceStatsCache(eventId);
     const liveStats = await getEventLiveAttendanceStats(eventId);
 
     return res.json({
@@ -625,6 +652,15 @@ export async function getScannerStats(req, res) {
     }
 
     const stats = await getEventLiveAttendanceStats(eventId);
+    const etag = `W/"scan-${eventId}-${stats.totalConfirmed}-${stats.presentCount}-${stats.duplicateScans}"`;
+
+    res.set('Cache-Control', 'private, max-age=5, stale-while-revalidate=15');
+    res.set('ETag', etag);
+
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+
     return res.json(stats);
   } catch (err) {
     return res.status(500).json({ error: 'Failed to fetch scanner stats.' });
