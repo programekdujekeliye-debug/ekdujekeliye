@@ -81,6 +81,8 @@ export const approveRegistration = async (req, res) => {
     }
     sub.payment.status = 'captured';
     sub.payment.paidAt = new Date();
+    sub.frameExportStatus = 'NOT_EXPORTED';
+    sub.frameExportedAt = null;
     await sub.save();
 
     res.json({ success: true, message: 'Registration approved.', submission: sub });
@@ -912,10 +914,13 @@ export const markFramesExported = async (req, res) => {
       updatePayload.frameExportBatch = Number(batchNumber);
     }
 
-    const result = await Registration.updateMany(
-      { inquiryId: { $in: inquiryIds } },
-      { $set: updatePayload }
-    );
+    const query = { inquiryId: { $in: inquiryIds } };
+    if (targetStatus === 'EXPORTED') {
+      // Security Guard: Physical print status can ONLY be marked EXPORTED for paid attendees
+      query.$or = [{ status: 'approved' }, { 'payment.status': 'captured' }];
+    }
+
+    const result = await Registration.updateMany(query, { $set: updatePayload });
 
     res.json({
       success: true,

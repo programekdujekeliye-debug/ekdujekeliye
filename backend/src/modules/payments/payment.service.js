@@ -147,6 +147,9 @@ export class PaymentService {
     submission.payment.razorpayOrderId = orderId;
     submission.payment.razorpaySignature = signature;
     submission.payment.paidAt = new Date();
+    // Guarantee that newly paid attendee always starts in unprinted queue so their physical frame is printed
+    submission.frameExportStatus = 'NOT_EXPORTED';
+    submission.frameExportedAt = null;
     await submission.save();
 
     // Record verified transaction in ledger
@@ -273,6 +276,9 @@ export class PaymentService {
       submission.payment.status = 'captured';
       submission.payment.razorpayPaymentId = paymentId;
       submission.payment.paidAt = new Date();
+      // Guarantee that newly paid attendee always starts in unprinted queue so their physical frame is printed
+      submission.frameExportStatus = 'NOT_EXPORTED';
+      submission.frameExportedAt = null;
       await submission.save();
 
       try {
