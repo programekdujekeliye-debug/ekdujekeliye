@@ -170,6 +170,32 @@ export const WhatsAppPage = () => {
     }
   };
 
+  // Retry All Failed Dispatches Trigger State
+  const [retryingFailed, setRetryingFailed] = useState(false);
+
+  const handleRetryAllFailed = async () => {
+    const failedCount = summary?.actionNeededCount || summary?.totalMessagesFailed || 0;
+    if (!confirm(`Are you sure you want to re-queue and dispatch the ${failedCount > 0 ? failedCount : ''} failed WhatsApp messages for this seminar slot?`)) return;
+
+    try {
+      setRetryingFailed(true);
+      const res = await whatsappApi.retryFailedMessages(selectedEventId);
+      if (res.success) {
+        toast.success(res.message || `Re-queued ${res.requeuedCount} failed messages.`);
+        await Promise.all([
+          fetchDashboardData(selectedEventId),
+          fetchRegistrations(selectedEventId, pagination.page)
+        ]);
+      } else {
+        toast.error(res.message || 'Failed to re-queue messages.');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Error retrying failed messages.');
+    } finally {
+      setRetryingFailed(false);
+    }
+  };
+
   // 1. Initial Load: Events & Meta Templates
   useEffect(() => {
     const init = async () => {
@@ -837,7 +863,7 @@ export const WhatsAppPage = () => {
 
             {/* Tier 2: Dedicated Operational Actions Strip */}
             <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 relative z-10">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={handleRunWorker}
                   disabled={runningWorker}
@@ -847,6 +873,18 @@ export const WhatsAppPage = () => {
                   <RefreshCwIcon className={`w-3.5 h-3.5 ${runningWorker ? 'animate-spin' : ''}`} />
                   <span>{runningWorker ? 'Dispatching Queue...' : 'Dispatch Due Queue (Run Worker)'}</span>
                 </button>
+
+                {Boolean((summary?.actionNeededCount ?? 0) > 0 || (summary?.totalMessagesFailed ?? 0) > 0) && (
+                  <button
+                    onClick={handleRetryAllFailed}
+                    disabled={retryingFailed}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white rounded-xl text-xs font-extrabold shadow-xs flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 animate-pulse"
+                    title="Re-queue and dispatch all failed WhatsApp messages for this seminar slot"
+                  >
+                    <RefreshCwIcon className={`w-3.5 h-3.5 ${retryingFailed ? 'animate-spin' : ''}`} />
+                    <span>{retryingFailed ? 'Retrying Failed...' : `Retry Failed Dispatches (${summary?.actionNeededCount || summary?.totalMessagesFailed})`}</span>
+                  </button>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -982,8 +1020,24 @@ export const WhatsAppPage = () => {
                 <span>Action Needed</span>
                 {healthFilter === 'ACTION_NEEDED' && <span className="text-[9px] bg-rose-600 text-white px-1.5 py-0.2 rounded font-bold">FILTER ON</span>}
               </span>
-              <div className="text-xl sm:text-2xl font-black text-rose-700">
-                {summary?.actionNeededCount ?? 0}
+              <div className="flex items-center justify-between">
+                <div className="text-xl sm:text-2xl font-black text-rose-700">
+                  {summary?.actionNeededCount ?? 0}
+                </div>
+                {(summary?.actionNeededCount ?? 0) > 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRetryAllFailed();
+                    }}
+                    disabled={retryingFailed}
+                    className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold rounded-lg shadow-xs flex items-center gap-1 transition-all disabled:opacity-50 cursor-pointer"
+                    title="Re-queue and dispatch all failed messages immediately"
+                  >
+                    <RefreshCwIcon className={`w-2.5 h-2.5 ${retryingFailed ? 'animate-spin' : ''}`} />
+                    <span>{retryingFailed ? 'Retrying...' : 'Retry All'}</span>
+                  </button>
+                )}
               </div>
               <div className="text-[10px] text-rose-600 font-medium">
                 Failed dispatches

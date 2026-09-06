@@ -17,6 +17,7 @@ import {
   triggerPostEventSend,
   runSchedulerWorker,
   resendMessage,
+  retryEventFailedMessages,
   getTemplates,
   createTemplate,
   activateTemplate,
@@ -77,6 +78,8 @@ whatsappRouter.get('/events/:eventId/post-event-status', requireAuth, getPostEve
 whatsappRouter.post('/events/:eventId/post-event-send', requireAuth, triggerPostEventSend);
 whatsappRouter.post('/events/:eventId/gallery-ready', requireAuth, triggerGalleryReady);
 whatsappRouter.post('/resend', requireAuth, resendMessage);
+whatsappRouter.post('/events/:eventId/retry-failed', requireAuth, retryEventFailedMessages);
+whatsappRouter.post('/retry-failed', requireAuth, retryEventFailedMessages);
 whatsappRouter.post('/run-worker', requireCronAuth, runSchedulerWorker);
 whatsappRouter.post('/run-worker-admin', requireAuth, runSchedulerWorker);
 

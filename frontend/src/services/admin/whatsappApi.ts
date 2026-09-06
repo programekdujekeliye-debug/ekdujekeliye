@@ -251,6 +251,13 @@ export const whatsappApi = {
     });
   },
 
+  async retryFailedMessages(eventId: string): Promise<{ success: boolean; message: string; requeuedCount: number }> {
+    return apiClient(`/api/whatsapp/events/${eventId}/retry-failed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  },
+
   async runWorker(options?: { simulatedNow?: string; eventId?: string }): Promise<{ success: boolean; summary?: any; error?: string }> {
     return apiClient('/api/whatsapp/run-worker-admin', {
       method: 'POST',

@@ -601,6 +601,9 @@ export class CommunicationSchedulerService {
         } else {
           summary.failed++;
         }
+
+        // Throttle 250ms between messages to respect Meta Cloud API rate limits
+        await new Promise(r => setTimeout(r, 250));
       } catch (err) {
         summary.failed++;
         job.status = WHATSAPP_MESSAGE_STATUSES.FAILED;

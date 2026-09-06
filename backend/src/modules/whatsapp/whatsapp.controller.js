@@ -1679,6 +1679,105 @@ export const resendMessage = async (req, res) => {
 };
 
 /**
+ * Retry all failed WhatsApp dispatches for an event (or globally)
+ */
+export const retryEventFailedMessages = async (req, res) => {
+  try {
+    const eventId = req.params.eventId || req.body.eventId;
+    const query = {
+      status: { $in: ['FAILED', 'BLOCKED_TEST_MODE'] },
+      templateName: { $ne: 'edkl_september_special_invite_v1' },
+      trigger: { $ne: 'marketing_broadcast' }
+    };
+
+    if (eventId && eventId !== 'all') {
+      const event = await Event.findOne({ $or: [{ id: eventId }, { slug: eventId }] }).lean();
+      const eventIds = [eventId, event?.id, event?.slug, event?.date].filter(Boolean);
+      query.eventId = { $in: eventIds };
+    }
+
+    // Exclude users who explicitly opted out of WhatsApp
+    const optedOutPhones = await Registration.distinct('phoneNumber', { whatsappOptOutAt: { $ne: null } });
+    if (optedOutPhones.length > 0) {
+      query.recipientPhone = { $nin: optedOutPhones };
+    }
+
+    const failedMessages = await WhatsappMessage.find(query).limit(100);
+    if (failedMessages.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No failed messages found matching the criteria.',
+        requeuedCount: 0
+      });
+    }
+
+    const now = new Date();
+    let requeuedCount = 0;
+
+    for (let i = 0; i < failedMessages.length; i++) {
+      const msg = failedMessages[i];
+
+      // If this is a pending payment reminder but the attendee has already paid, cancel it to avoid spamming
+      if (msg.messageType === 'payment_pending') {
+        const reg = await Registration.findOne({
+          $or: [
+            ...(msg.registrationId ? [{ _id: msg.registrationId }] : []),
+            ...(msg.inquiryId ? [{ inquiryId: msg.inquiryId }] : [])
+          ]
+        }).lean();
+        if (reg && (reg.status === 'approved' || reg.payment?.status === 'captured')) {
+          msg.status = WHATSAPP_MESSAGE_STATUSES.CANCELLED;
+          await WhatsappMessage.updateOne(
+            { _id: msg._id },
+            {
+              $set: {
+                status: WHATSAPP_MESSAGE_STATUSES.CANCELLED,
+                lastErrorMessage: 'Registration already paid. Stale payment reminder cancelled.'
+              }
+            }
+          );
+          continue;
+        }
+      }
+
+      // Schedule with 250ms spacing between jobs to prevent burst rate limits
+      const scheduledTime = new Date(now.getTime() + requeuedCount * 250);
+
+      await WhatsappMessage.updateOne(
+        { _id: msg._id },
+        {
+          $set: {
+            status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
+            scheduledFor: scheduledTime,
+            lockedAt: null,
+            attemptCount: 0,
+            providerErrorCode: null,
+            providerErrorMessage: null,
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            idempotencyKey: `RETRY:${msg.templateName || msg.messageType}:${msg.inquiryId || msg.recipientPhone}:${Date.now()}_${requeuedCount}`
+          }
+        }
+      );
+      requeuedCount++;
+    }
+
+    // Trigger communication worker in background to start immediate staggered dispatch
+    communicationSchedulerService.processScheduledJobs({ eventId, batchSize: 50 }).catch(err => {
+      console.warn('[RetryFailedWorker] Background run warning:', err.message);
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully re-queued ${requeuedCount} failed WhatsApp message(s). Worker has begun dispatch.`,
+      requeuedCount
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retry failed WhatsApp messages.', details: err.message });
+  }
+};
+
+/**
  * ============================================================================
  * TWO-WAY WHATSAPP HUMAN SUPPORT INBOX CONTROLLERS
  * ============================================================================
