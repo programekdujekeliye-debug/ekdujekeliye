@@ -34,13 +34,11 @@ async function run() {
   console.log('Due for prog-2026-09-07 (scheduledFor <= now):', dueForEvent);
   console.log('Scheduled for FUTURE for prog-2026-09-07:', notDueForEvent);
 
-  const futureSamples = await WhatsappMessage.find({
-    status: 'QUEUED',
-    templateName: 'edkl_personal_invitation_24h_v2',
-    eventId: 'prog-2026-09-07',
-    scheduledFor: { $gt: now }
-  }).select('scheduledFor inquiryId').limit(5);
-  console.log('Future sample scheduledFor times:', futureSamples);
+  const errors = await WhatsappMessage.aggregate([
+    { $match: { status: 'FAILED', templateName: 'edkl_personal_invitation_24h_v2' } },
+    { $group: { _id: { code: '$lastErrorCode', msg: '$lastErrorMessage' }, count: { $sum: 1 } } }
+  ]);
+  console.log('Errors on 24h invitations:', errors);
   process.exit(0);
 }
 

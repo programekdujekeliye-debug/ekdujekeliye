@@ -1655,6 +1655,19 @@ export const runSchedulerWorker = async (req, res) => {
   try {
     const { simulatedNow, eventId } = req.body || {};
     const summary = await communicationSchedulerService.processScheduledJobs({ simulatedNow, eventId });
+    if (summary?.reason === 'CONCURRENCY_LOCK_ACTIVE') {
+      return res.json({
+        success: true,
+        alreadyRunning: true,
+        summary: {
+          ...summary,
+          totalDue: 0,
+          sent: 0,
+          processed: 0,
+          message: 'Queue worker is already actively processing messages in the background.'
+        }
+      });
+    }
     res.json({ success: true, summary });
   } catch (err) {
     res.status(500).json({ error: 'Error running scheduler worker.', details: err.message });

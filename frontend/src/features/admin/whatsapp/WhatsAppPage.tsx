@@ -152,10 +152,18 @@ export const WhatsAppPage = () => {
       });
       if (res?.success) {
         const summary = res.summary || {};
-        const eventLabel = isScoped ? 'selected seminar slot' : 'all seminar slots';
-        toast.success(
-          `Queue worker dispatched for ${eventLabel}. Due: ${summary.totalDue ?? 0}, Sent: ${summary.sent ?? 0}, Processed: ${summary.processed ?? 0}`
-        );
+        const isAlreadyRunning = (res as any)?.alreadyRunning || summary.reason === 'CONCURRENCY_LOCK_ACTIVE';
+        if (isAlreadyRunning) {
+          toast('Queue worker is already actively processing in the background! Deliveries are in progress.', {
+            icon: '⚡',
+            duration: 4000
+          });
+        } else {
+          const eventLabel = isScoped ? 'selected seminar slot' : 'all seminar slots';
+          toast.success(
+            `Queue worker dispatched for ${eventLabel}. Due: ${summary.totalDue ?? 0}, Sent: ${summary.sent ?? 0}, Processed: ${summary.processed ?? 0}`
+          );
+        }
         await Promise.all([
           fetchDashboardData(selectedEventId),
           fetchRegistrations(selectedEventId, pagination.page)
