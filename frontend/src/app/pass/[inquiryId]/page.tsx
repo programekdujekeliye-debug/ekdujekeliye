@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import QRCode from 'qrcode';
 import { API_BASE_URL } from '../../../config';
 import {
@@ -34,6 +34,7 @@ interface PassData {
 }
 
 export default function DigitalPassPage() {
+  const router = useRouter();
   const params = useParams();
   const rawInquiryId = (params?.inquiryId as string) || '';
   const inquiryId = decodeURIComponent(rawInquiryId).toUpperCase();
@@ -91,7 +92,10 @@ export default function DigitalPassPage() {
   const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
   const [passImageDataUrl, setPassImageDataUrl] = useState<string | null>(null);
   const [showSaveModal, setShowSaveModal] = useState<boolean>(false);
-  const isIos = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent || '');
+  const isIos = typeof navigator !== 'undefined' && (
+    /iPad|iPhone|iPod/.test(navigator.userAgent || '') ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
 
   /**
    * Render high-resolution 720x1260 Digital Pass Canvas
@@ -448,7 +452,7 @@ export default function DigitalPassPage() {
 
   const handleDownloadInvitation = () => {
     if (!inquiryId) return;
-    window.location.href = `/invitation/${encodeURIComponent(inquiryId)}`;
+    router.push(`/invitation/${encodeURIComponent(inquiryId)}`);
   };
 
 

@@ -72,6 +72,14 @@ export default function PersonalizedInvitationPage() {
   const [userOffsetY, setUserOffsetY] = useState<number>(0);
   const [savingAdjustments, setSavingAdjustments] = useState(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState('');
+  const [downloadingCard, setDownloadingCard] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [modalCardImageUrl, setModalCardImageUrl] = useState('');
+
+  const isIos = typeof navigator !== 'undefined' && (
+    /iPad|iPhone|iPod/.test(navigator.userAgent || '') ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
@@ -386,51 +394,125 @@ export default function PersonalizedInvitationPage() {
     }
   };
 
-  const triggerDirectDownload = (url: string, fileName: string) => {
-    try {
-      const link = document.createElement('a');
-      link.download = fileName;
-      link.href = url;
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (err) {
-      window.open(url, '_blank');
+  const triggerDirectDownload = (urlOrBlob: string | Blob, customName?: string) => {
+    if (!submission) return;
+    const coupleTitle = `${submission?.surname || 'Couple'}_${submission?.husbandName || 'Pass'}`.replace(/\s+/g, '_');
+    const fileName = customName || `${coupleTitle}_Invitation_Card.png`;
+    let url: string;
+    let isObjectUrl = false;
+
+    if (urlOrBlob instanceof Blob) {
+      url = URL.createObjectURL(urlOrBlob);
+      isObjectUrl = true;
+    } else {
+      url = urlOrBlob;
+    }
+
+    const link = document.createElement('a');
+    link.download = fileName;
+    link.href = url;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    if (isObjectUrl) {
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
   };
 
   const handleDownloadCard = async () => {
     if (!submission) return;
+    setDownloadingCard(true);
+
     const coupleTitle = `${submission?.surname || 'Couple'}_${submission?.husbandName || 'Pass'}`.replace(/\s+/g, '_');
-    const fileName = `${coupleTitle}_Invitation_Card.png`;
+    const coupleDisplayName = `${submission.husbandName || ''} & ${submission.wifeName || ''} ${submission.surname || ''}`.trim() || 'Valued Couple';
 
-    // 1. If user adjusted framing and canvas is ready, download customized canvas
-    if (hasAdjusted && (canvasDataUrl || canvasRef.current)) {
-      const imageSrc = canvasDataUrl || canvasRef.current!.toDataURL('image/png');
-      triggerDirectDownload(imageSrc, fileName);
-      return;
-    }
+    try {
+      let finalBlob: Blob | null = null;
+      let finalDataUrl: string = '';
+      let isJpeg = false;
 
-    // 2. If pre-rendered official card is on R2 CDN, download directly as crisp JPEG
-    if (submission.invitationCardUrl) {
-      try {
-        const response = await fetch(submission.invitationCardUrl);
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        triggerDirectDownload(blobUrl, `${coupleTitle}_Invitation_Card.jpg`);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-        return;
-      } catch (_) {
-        window.open(submission.invitationCardUrl, '_blank');
+      // 1. If user adjusted framing on canvas, capture custom canvas blob
+      if (hasAdjusted && canvasRef.current) {
+        finalDataUrl = canvasDataUrl || canvasRef.current.toDataURL('image/png');
+        finalBlob = await new Promise<Blob | null>((resolve) => {
+          if (canvasRef.current) {
+            canvasRef.current.toBlob((b) => resolve(b), 'image/png');
+          } else {
+            resolve(null);
+          }
+        });
+      }
+
+      // 2. If pre-rendered official card is on R2 CDN, fetch blob for local saving
+      if (!finalBlob && submission.invitationCardUrl) {
+        try {
+          const res = await fetch(submission.invitationCardUrl);
+          if (res.ok) {
+            finalBlob = await res.blob();
+            finalDataUrl = submission.invitationCardUrl;
+            isJpeg = true;
+          }
+        } catch (_) {}
+      }
+
+      // 3. Fallback to canvas
+      if (!finalBlob && canvasDataUrl) {
+        finalDataUrl = canvasDataUrl;
+      }
+
+      const ext = isJpeg ? 'jpg' : 'png';
+      const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
+      const fileName = `${coupleTitle}_Invitation_Card.${ext}`;
+
+      // Save image preview URL for modal
+      const previewUrl = finalDataUrl || (finalBlob ? URL.createObjectURL(finalBlob) : submission.invitationCardUrl || '');
+      setModalCardImageUrl(previewUrl);
+
+      // 4. iOS Safari / iPhone Photos ONLY:
+      // Native Web Share API has built-in "Save Image" option directly into Camera Roll
+      if (isIos && finalBlob && typeof navigator !== 'undefined' && navigator.canShare) {
+        const file = new File([finalBlob], fileName, { type: mimeType });
+        if (navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: 'Ek Duje Ke Liye Invitation Card',
+              text: `Official Souvenir Invitation for ${coupleDisplayName} (${submission.inquiryId})`
+            });
+            setDownloadingCard(false);
+            return;
+          } catch (shareErr: any) {
+            if (shareErr.name === 'AbortError') {
+              // User dismissed sheet
+              setDownloadingCard(false);
+              return;
+            }
+          }
+        }
+      }
+
+      // 5. iOS fallback: Dedicated modal to press & hold "Save to Photos"
+      if (isIos) {
+        setShowSaveModal(true);
+        setDownloadingCard(false);
         return;
       }
-    }
 
-    // 3. Fallback to canvas
-    const imageSrc = canvasDataUrl || (canvasRef.current ? canvasRef.current.toDataURL('image/png') : '');
-    if (imageSrc) {
-      triggerDirectDownload(imageSrc, fileName);
+      // 6. Android & Desktop: Direct PNG/JPEG download into Gallery / Downloads
+      if (finalBlob) {
+        triggerDirectDownload(finalBlob, fileName);
+      } else if (finalDataUrl) {
+        triggerDirectDownload(finalDataUrl, fileName);
+      } else if (submission.invitationCardUrl) {
+        triggerDirectDownload(submission.invitationCardUrl, fileName);
+      }
+      setShowSaveModal(true);
+    } catch (err) {
+      console.error('Download card error:', err);
+    } finally {
+      setDownloadingCard(false);
     }
   };
 
@@ -655,10 +737,11 @@ export default function PersonalizedInvitationPage() {
           <button
             type="button"
             onClick={handleDownloadCard}
-            className="w-full py-3.5 px-4 bg-gradient-to-r from-rose-600 via-rose-700 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-extrabold rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-600/25 transition-all cursor-pointer"
+            disabled={downloadingCard}
+            className="w-full py-3.5 px-4 bg-gradient-to-r from-rose-600 via-rose-700 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-extrabold rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-600/25 transition-all cursor-pointer disabled:opacity-60"
           >
             <DownloadIcon className="w-4 h-4" />
-            <span>Download Invitation Card (PNG)</span>
+            <span>{downloadingCard ? 'Preparing Card...' : 'Save / Download Invitation Card'}</span>
           </button>
 
           <button
@@ -680,6 +763,84 @@ export default function PersonalizedInvitationPage() {
         </div>
 
       </div>
+
+      {/* Save to Photos & Gallery Modal (Universal for Android & iOS) */}
+      {showSaveModal && modalCardImageUrl && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 flex flex-col items-center text-center shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            <button
+              type="button"
+              onClick={() => setShowSaveModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-stone-100 text-stone-600 flex items-center justify-center font-bold text-sm hover:bg-stone-200 cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
+              <CheckCircleIcon className="w-6 h-6" />
+            </div>
+
+            <h3 className="text-base font-bold text-stone-900">
+              {isIos ? 'Save Card to iPhone Photos' : 'Card Saved to Gallery & Downloads!'}
+            </h3>
+            <p className="text-xs text-stone-600 mt-1 mb-4 leading-relaxed">
+              {isIos ? (
+                <>
+                  <strong>Press and hold</strong> the invitation card below, then tap{' '}
+                  <span className="font-bold text-rose-700">"Save to Photos"</span> to keep it directly in your camera roll gallery.
+                </>
+              ) : (
+                <>
+                  Your personalized invitation card has been downloaded to your phone's{' '}
+                  <span className="font-bold text-emerald-700">Gallery & Downloads</span>. You can also press and hold the image below to view or share.
+                </>
+              )}
+            </p>
+
+            <div className="w-full max-h-[50vh] overflow-y-auto rounded-2xl border border-stone-200 bg-stone-50 p-2 mb-4">
+              <img
+                src={modalCardImageUrl}
+                alt="Invitation Card"
+                className="w-full rounded-xl shadow-xs pointer-events-auto select-auto"
+                style={{ WebkitTouchCallout: 'default' } as React.CSSProperties}
+              />
+            </div>
+
+            <div className="w-full flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (modalCardImageUrl) {
+                    const win = window.open();
+                    if (win) {
+                      win.document.write(`<title>EDKL Invitation Card - ${submission?.inquiryId}</title><style>body{margin:0;background:#111;display:flex;justify-content:center;align-items:center;min-height:100vh;}img{max-width:100%;max-height:100vh;object-fit:contain;}</style><img src="${modalCardImageUrl}" alt="Invitation Card" />`);
+                    } else {
+                      window.location.href = modalCardImageUrl;
+                    }
+                  }
+                }}
+                className="flex-1 py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-rose-600/20 cursor-pointer"
+              >
+                View Full Image
+              </button>
+              <button
+                type="button"
+                onClick={() => triggerDirectDownload(modalCardImageUrl)}
+                className="py-2.5 px-3 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl font-bold text-xs transition-all cursor-pointer"
+              >
+                Download Again
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSaveModal(false)}
+                className="py-2.5 px-3 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-xl font-bold text-xs cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Brand Footer */}
       <div className="mt-4 text-center text-xs text-stone-500 font-medium print:hidden">
