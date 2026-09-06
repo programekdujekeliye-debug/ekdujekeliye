@@ -87,6 +87,9 @@ export interface ArchiveCandidate {
   copyingAssets?: number;
   failedAssets?: number;
   progressPercent?: number;
+  r2ActiveAssets?: number;
+  r2ProgressPercent?: number;
+  activeStorageTier?: string;
   estimatedSizeMB: number;
 }
 
@@ -95,6 +98,7 @@ export interface MediaStorageSummary {
   cloudinaryAssetCount: number;
   driveArchivedEvents: number;
   verifiedArchiveCount: number;
+  totalR2ActiveAssets?: number;
   pendingArchiveCount: number;
   failedArchiveCount: number;
   cleanupEligibleCount: number;

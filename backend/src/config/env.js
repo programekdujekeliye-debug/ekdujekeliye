@@ -193,8 +193,33 @@ export const env = {
   ALLOW_MOCK_ARCHIVE_VERIFICATION: false,
   ENABLE_BACKEND_BACKUP_CRON: false,
 
+  // Cloudflare R2 (S3-Compatible)
+  CLOUDFLARE_ACCOUNT_ID: readOptionalEnv('CLOUDFLARE_ACCOUNT_ID') || readOptionalEnv('R2_ACCOUNT_ID'),
+  CLOUDFLARE_API_TOKEN: readOptionalEnv('CLOUDFLARE_API_TOKEN') || readOptionalEnv('R2_API_TOKEN'),
+  R2_API_TOKEN: readOptionalEnv('R2_API_TOKEN') || readOptionalEnv('CLOUDFLARE_API_TOKEN'),
+  R2_ACCOUNT_ID: readOptionalEnv('R2_ACCOUNT_ID') || readOptionalEnv('CLOUDFLARE_ACCOUNT_ID'),
+  R2_ACCESS_KEY_ID: readOptionalEnv('R2_ACCESS_KEY_ID'),
+  R2_SECRET_ACCESS_KEY: readOptionalEnv('R2_SECRET_ACCESS_KEY'),
+  R2_ENDPOINT: readOptionalEnv('R2_ENDPOINT') || (readOptionalEnv('R2_ACCOUNT_ID') || readOptionalEnv('CLOUDFLARE_ACCOUNT_ID') ? `https://${readOptionalEnv('R2_ACCOUNT_ID') || readOptionalEnv('CLOUDFLARE_ACCOUNT_ID')}.r2.cloudflarestorage.com` : ''),
+  R2_PUBLIC_BUCKET: readOptionalEnv('R2_PUBLIC_BUCKET') || 'edkl-public-media',
+  R2_PRIVATE_BUCKET: readOptionalEnv('R2_PRIVATE_BUCKET') || 'edkl-private-media',
+  R2_PUBLIC_BASE_URL: readOptionalEnv('R2_PUBLIC_BASE_URL') || 'https://media.ekdujekeliye.in',
+  R2_ENABLED: Boolean(readOptionalEnv('R2_ACCESS_KEY_ID') && readOptionalEnv('R2_SECRET_ACCESS_KEY')),
+
+  // Authoritative Media Tier Settings
+  MEDIA_WRITE_PROVIDER: (process.env.MEDIA_WRITE_PROVIDER || 'r2').toLowerCase(),
+  LEGACY_CLOUDINARY_READ_FALLBACK: process.env.LEGACY_CLOUDINARY_READ_FALLBACK !== 'false',
+  HISTORICAL_MEDIA_PROVIDER: (process.env.HISTORICAL_MEDIA_PROVIDER || 'drive').toLowerCase(),
+
   ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()) : ['*']
 };
+
+// Fail-Fast: If MEDIA_WRITE_PROVIDER is R2, ensure all required R2 credentials are present
+if (env.MEDIA_WRITE_PROVIDER === 'r2') {
+  if (!env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY || !env.R2_ENDPOINT) {
+    throw new Error('[CONFIGURATION ERROR] MEDIA_WRITE_PROVIDER is set to "r2" but R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, or R2_ENDPOINT is missing. Backend startup failed.');
+  }
+}
 
 console.log('====================================================');
 console.log(`[Startup] APP_ENV: ${env.APP_ENV}`);
@@ -205,4 +230,7 @@ console.log(`[Startup] WHATSAPP TOKEN: ${env.WHATSAPP_ACCESS_TOKEN ? 'CONFIGURED
 console.log(`[Startup] WHATSAPP PHONE ID: ${env.WHATSAPP_PHONE_NUMBER_ID ? 'CONFIGURED' : 'MISSING'}`);
 console.log(`[Startup] CLOUDINARY ENV: ${env.CLOUDINARY_ENV.toUpperCase()} (Prefix: "${env.CLOUDINARY_FOLDER_PREFIX}")`);
 console.log(`[Startup] DRIVE ENV: ${env.DRIVE_ENV.toUpperCase()} (Root: "${env.DRIVE_ROOT_FOLDER_NAME}")`);
+console.log(`[Startup] MEDIA WRITE PROVIDER: ${env.MEDIA_WRITE_PROVIDER.toUpperCase()} (Cloudinary new writes: BLOCKED)`);
+console.log(`[Startup] CLOUDINARY READ FALLBACK: ${env.LEGACY_CLOUDINARY_READ_FALLBACK ? 'ENABLED' : 'DISABLED'}`);
+console.log(`[Startup] CLOUDFLARE R2: ${env.R2_ENABLED ? 'CONFIGURED' : 'MISSING'} (Public: "${env.R2_PUBLIC_BUCKET}", Private: "${env.R2_PRIVATE_BUCKET}")`);
 console.log('====================================================');

@@ -10,11 +10,14 @@ const MediaArchiveSchema = new mongoose.Schema({
   },
   sourceProvider: {
     type: String,
-    enum: ['cloudinary', 'local', 'external'],
+    enum: ['cloudinary', 'r2', 'local', 'external'],
     default: 'cloudinary'
   },
   sourcePublicId: { type: String, required: true, unique: true },
   sourceUrl: { type: String, required: true },
+  r2Bucket: { type: String, default: null },
+  r2Key: { type: String, default: null },
+  r2Checksum: { type: String, default: null },
 
   destinationProvider: {
     type: String,

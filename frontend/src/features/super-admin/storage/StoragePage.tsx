@@ -380,7 +380,7 @@ export const StoragePage = () => {
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 pt-1 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 pt-1 text-center">
             <div className="bg-purple-950/40 rounded-xl p-2.5 border border-purple-700/30">
               <span className="text-[10px] text-purple-300 font-bold block uppercase">Cloudinary Active</span>
               <span className="text-xl font-extrabold text-white">{mediaSummary.cloudinaryActiveEvents} Events</span>
@@ -388,6 +388,10 @@ export const StoragePage = () => {
             <div className="bg-purple-950/40 rounded-xl p-2.5 border border-purple-700/30">
               <span className="text-[10px] text-purple-300 font-bold block uppercase">Total Cloudinary</span>
               <span className="text-xl font-extrabold text-amber-300">{mediaSummary.cloudinaryAssetCount} Assets</span>
+            </div>
+            <div className="bg-purple-950/40 rounded-xl p-2.5 border border-purple-700/30">
+              <span className="text-[10px] text-amber-300 font-bold block uppercase">Cloudflare R2 Active</span>
+              <span className="text-xl font-extrabold text-amber-400">{mediaSummary.totalR2ActiveAssets || 0} Assets</span>
             </div>
             <div className="bg-purple-950/40 rounded-xl p-2.5 border border-purple-700/30">
               <span className="text-[10px] text-purple-300 font-bold block uppercase">Drive Archived</span>
@@ -460,7 +464,12 @@ export const StoragePage = () => {
                         </span>
                         {cand.isProtected && (
                           <span className="text-[10px] px-2 py-0.5 bg-blue-100 text-blue-800 font-extrabold rounded-md uppercase tracking-wider border border-blue-200">
-                            🛡️ ACTIVE CDN PROTECTED
+                            🛡️ ACTIVE EVENT
+                          </span>
+                        )}
+                        {cand.r2ActiveAssets !== undefined && cand.r2ActiveAssets > 0 && (
+                          <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-900 font-extrabold rounded-md uppercase tracking-wider border border-amber-300">
+                            ⚡ R2 ACTIVE ({cand.r2ActiveAssets}/{cand.eligibleCouplePhotos})
                           </span>
                         )}
                         {/* Historical Viewer Indicator */}
@@ -468,10 +477,12 @@ export const StoragePage = () => {
                           className={`text-[10px] px-2 py-0.5 font-extrabold rounded-md uppercase whitespace-nowrap ${
                             cand.historicalViewer === 'DRIVE'
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : cand.r2ActiveAssets && cand.r2ActiveAssets > 0
+                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
                               : 'bg-purple-100 text-purple-800 border border-purple-300'
                           }`}
                         >
-                          Viewer: {cand.historicalViewer || 'CLOUDINARY'}
+                          Viewer: {cand.r2ActiveAssets && cand.r2ActiveAssets > 0 ? 'R2 STANDARD' : (cand.historicalViewer || 'CLOUDINARY')}
                         </span>
                         {/* Cleanup Status Badge */}
                         <span
@@ -495,6 +506,11 @@ export const StoragePage = () => {
                       </div>
 
                       <div className="text-xs text-slate-500 flex items-center gap-4 flex-wrap">
+                        {cand.r2ActiveAssets !== undefined && cand.r2ActiveAssets > 0 && (
+                          <span className="inline-flex items-center gap-1 font-bold text-amber-700">
+                            ⚡ R2 Active: <strong>{cand.r2ActiveAssets} assets</strong>
+                          </span>
+                        )}
                         <span className="inline-flex items-center gap-1">
                           <CameraIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                           Cloudinary: <strong>{cand.cloudinaryAssetsCount ?? cand.eligibleCouplePhotos} assets (~{cand.estimatedSizeMB} MB)</strong>
@@ -516,7 +532,26 @@ export const StoragePage = () => {
                         )}
                       </div>
 
-                      {cand.eligibleCouplePhotos > 0 && (
+                      {/* R2 Migration Progress for Protected/Active Events */}
+                      {cand.isProtected && cand.eligibleCouplePhotos > 0 && (
+                        <div className="w-full max-w-md pt-1">
+                          <div className="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
+                            <span className="text-amber-800">⚡ R2 Active Migration Progress</span>
+                            <span className="text-amber-900 font-extrabold">
+                              {cand.r2ActiveAssets || 0} / {cand.eligibleCouplePhotos} ({cand.r2ProgressPercent || 0}%)
+                            </span>
+                          </div>
+                          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-amber-200">
+                            <div
+                              className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-300"
+                              style={{ width: `${cand.r2ProgressPercent || 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Google Drive Archive Progress for Historical Events */}
+                      {!cand.isProtected && cand.eligibleCouplePhotos > 0 && (
                         <div className="w-full max-w-md pt-1">
                           <div className="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
                             <span>Archive Progress</span>

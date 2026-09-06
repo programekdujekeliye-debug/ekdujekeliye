@@ -72,7 +72,30 @@ const RegistrationSchema = new mongoose.Schema({
     newInquiryId: { type: String },
     transferredAt: { type: Date, default: Date.now },
     reason: { type: String, default: '' }
-  }]
+  }],
+  mediaProvider: {
+    type: String,
+    enum: ['CLOUDINARY', 'R2', 'DRIVE_ARCHIVE', 'FALLBACK'],
+    default: 'CLOUDINARY'
+  },
+  r2Media: {
+    status: {
+      type: String,
+      enum: ['CLOUDINARY_ACTIVE', 'R2_COPYING', 'R2_VERIFIED', 'R2_PRIMARY', 'CLOUDINARY_FALLBACK', 'CLOUDINARY_CLEANUP_READY', 'CLOUDINARY_DELETED', 'MEDIA_UPLOAD_RETRY', 'REJECTED'],
+      default: 'CLOUDINARY_ACTIVE'
+    },
+    bucket: { type: String, default: null },
+    key: { type: String, default: null },
+    isPrivate: { type: Boolean, default: false },
+    thumbKey: { type: String, default: null },
+    normalKey: { type: String, default: null },
+    largeKey: { type: String, default: null },
+    thumbUrl: { type: String, default: null },
+    normalUrl: { type: String, default: null },
+    largeUrl: { type: String, default: null },
+    cloudinaryFallbackUrl: { type: String, default: null },
+    verifiedAt: { type: Date, default: null }
+  }
 }, {
   collection: 'submission',
   timestamps: true,

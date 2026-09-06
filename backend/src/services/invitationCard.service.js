@@ -6,6 +6,7 @@ import { Registration } from '../models/Registration.js';
 import { Event } from '../models/Event.js';
 import { eventService } from '../modules/events/event.service.js';
 import { storageService } from './storage.service.js';
+import { r2Provider } from '../integrations/r2/r2.provider.js';
 
 /**
  * Service to generate high-resolution, premium 1080x1350 personalized invitation cards
@@ -455,26 +456,63 @@ export class InvitationCardService {
     // Generate official EDKL card composite with transparent heart cutout and gold CPL text
     const jpegBuffer = await this.generateOfficialCardBuffer(reg, event);
 
-    // Upload to Cloudinary
-    const uploadRes = await storageService.upload({
-      data: `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`,
-      folder: 'invitation-cards',
-      filename: `invitation_${reg.inquiryId}_${Date.now()}`
-    });
+    // 128-bit opaque media identifier (Correction #2)
+    const opaqueMediaId = crypto.randomBytes(16).toString('hex');
+    const nextVersion = (reg.invitationVersion || 0) + 1;
+    const eventKey = String(event?.slug || event?.id || reg.programId || 'EK06').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const cleanInquiryId = String(reg.inquiryId || 'TEMP').replace(/[^a-zA-Z0-9_-]/g, '');
 
-    const cardUrl = typeof uploadRes === 'string' ? uploadRes : (uploadRes?.secure_url || uploadRes?.url);
+    // Server-controlled immutable versioned key (Correction #6)
+    // Never overwrite v1 on regeneration
+    const targetKey = `prod/events/${eventKey}/registrations/${cleanInquiryId}/invitation/${opaqueMediaId}/invitation-v${nextVersion}.jpg`;
 
-    reg.invitationHash = hash;
-    reg.invitationCardUrl = cardUrl;
-    reg.invitationVersion = (reg.invitationVersion || 0) + 1;
-    reg.invitationGeneratedAt = new Date();
-    await reg.save();
+    try {
+      // Direct R2 Public Bucket Upload (Zero Cloudinary write fallback)
+      await r2Provider.putObject({
+        bucket: r2Provider.publicBucket,
+        key: targetKey,
+        body: jpegBuffer,
+        contentType: 'image/jpeg',
+        cacheControl: 'public, max-age=31536000, immutable'
+      });
 
-    return {
-      cardUrl,
-      hash,
-      version: reg.invitationVersion
-    };
+      // R2 HEAD verification
+      const head = await r2Provider.headObject({
+        bucket: r2Provider.publicBucket,
+        key: targetKey
+      });
+
+      if (!head.exists || (head.contentLength || 0) <= 0) {
+        throw new Error(`R2 HEAD verification failed for invitation card: ${targetKey}`);
+      }
+
+      const cardUrl = r2Provider.getPublicUrl(targetKey);
+
+      reg.invitationHash = hash;
+      reg.invitationCardUrl = cardUrl;
+      reg.invitationKey = targetKey;
+      reg.invitationOpaqueId = opaqueMediaId;
+      reg.invitationVersion = nextVersion;
+      reg.invitationGeneratedAt = new Date();
+      await reg.save();
+
+      return {
+        cardUrl,
+        hash,
+        version: nextVersion,
+        key: targetKey
+      };
+    } catch (uploadErr) {
+      console.error(`[InvitationCardService] Critical: R2 upload failed for invitation card ${targetKey}:`, uploadErr.message);
+
+      // Queue retry state without corrupting communication state (Correction #31)
+      if (reg.r2Media) {
+        reg.r2Media.status = 'MEDIA_UPLOAD_RETRY';
+        await reg.save();
+      }
+
+      throw new Error(`[MEDIA_UPLOAD_RETRY] Failed to upload invitation card to R2: ${uploadErr.message}`);
+    }
   }
 }
 

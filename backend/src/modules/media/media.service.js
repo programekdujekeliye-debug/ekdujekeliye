@@ -38,6 +38,9 @@ export class MediaService {
     const targetPublicId = `${targetFolder}/${inquiryId}`;
 
     // Upload an independent transformed asset to Cloudinary
+    if (env.MEDIA_WRITE_PROVIDER === 'r2') {
+      throw new Error('[MediaService] Operational thumbnail writes to Cloudinary are strictly frozen when MEDIA_WRITE_PROVIDER is r2.');
+    }
     const uploadResult = await cloudinary.uploader.upload(sourceUrl, {
       public_id: inquiryId,
       folder: targetFolder,
@@ -99,6 +102,17 @@ export class MediaService {
 
   /**
    * Canonical media resolver: synchronous helper when archive & event are preloaded
+   * Enforces strict Resolution Order:
+   * ACTIVE EVENT:
+   *   IF R2_PRIMARY: R2
+   *   ELSE IF Cloudinary available: CLOUDINARY
+   *   ELSE IF R2 available: R2
+   *   ELSE: FALLBACK
+   * HISTORICAL EVENT:
+   *   IF Drive VERIFIED: DRIVE_ARCHIVE
+   *   ELSE IF R2 exists: R2
+   *   ELSE IF Cloudinary exists: CLOUDINARY
+   *   ELSE: FALLBACK
    */
   resolveRegistrationMediaSync(registration, archive = null, eventObj = null) {
     const rawPhoto = registration.couplePhoto || '';
@@ -106,29 +120,112 @@ export class MediaService {
     const isVerifiedArchive = archive && (archive.status === 'VERIFIED' || archive.status === 'ARCHIVED') && Boolean(archive.driveFileId);
     const isOriginalDeleted = archive && archive.cloudinaryOriginalStatus === 'DELETED';
 
-    // 1. ACTIVE / UPCOMING EVENT: Always active Cloudinary media with standardized presets
+    const r2Media = registration.r2Media || archive?.r2Media;
+    const hasR2 = Boolean(r2Media?.normalUrl || (rawPhoto && rawPhoto.includes('media.ekdujekeliye.in')));
+    const isR2Primary = hasR2 && (registration.mediaProvider === 'R2' || r2Media?.status === 'R2_PRIMARY' || rawPhoto.includes('media.ekdujekeliye.in'));
+    const isCloudinaryAvailable = Boolean(rawPhoto && rawPhoto.includes('cloudinary.com') && !isOriginalDeleted);
+
+    // ========================================================
+    // A. ACTIVE EVENT (EK06, EK07, EK08, Future)
+    // ========================================================
     if (!isCompleted) {
-      const thumbnailUrl = rawPhoto ? getOptimizedPhotoUrl(rawPhoto, 'thumbnail') : '';
-      const normalUrl = rawPhoto ? getOptimizedPhotoUrl(rawPhoto, 'normal') : '';
-      const largeUrl = rawPhoto ? getOptimizedPhotoUrl(rawPhoto, 'large') : '';
+      // 1. IF R2_PRIMARY: R2
+      if (isR2Primary) {
+        let thumbUrl = r2Media?.thumbUrl || rawPhoto;
+        let normUrl = r2Media?.normalUrl || rawPhoto;
+        let lrgUrl = r2Media?.largeUrl || normUrl;
+
+        // If couple photo is private, route access through authenticated secure backend endpoints
+        if (r2Media?.isPrivate) {
+          const regId = registration.inquiryId || registration._id;
+          thumbUrl = `/api/media/${regId}/couple-photo?preset=thumb`;
+          normUrl = `/api/media/${regId}/couple-photo?preset=normal`;
+          lrgUrl = `/api/media/${regId}/couple-photo?preset=large`;
+        }
+
+        return {
+          provider: 'R2',
+          photoThumbnailUrl: thumbUrl,
+          couplePhoto: normUrl,
+          thumbnailUrl: thumbUrl,
+          normalUrl: normUrl,
+          largeUrl: lrgUrl,
+          canDownloadOriginal: true,
+          downloadUrl: lrgUrl,
+          photoStorageStatus: 'ACTIVE',
+          hasArchivedOriginal: false,
+          archiveStatus: archive ? archive.status : null,
+          cloudinaryOriginalStatus: archive?.cloudinaryOriginalStatus || 'ACTIVE',
+          operationalThumbnailUrl: archive?.operationalThumbnailUrl || null
+        };
+      }
+
+      // 2. ELSE IF Cloudinary available: CLOUDINARY
+      if (isCloudinaryAvailable) {
+        const thumbnailUrl = getOptimizedPhotoUrl(rawPhoto, 'thumbnail');
+        const normalUrl = getOptimizedPhotoUrl(rawPhoto, 'normal');
+        const largeUrl = getOptimizedPhotoUrl(rawPhoto, 'large');
+        return {
+          provider: 'CLOUDINARY',
+          photoThumbnailUrl: thumbnailUrl,
+          couplePhoto: normalUrl || rawPhoto,
+          thumbnailUrl,
+          normalUrl,
+          largeUrl,
+          canDownloadOriginal: true,
+          downloadUrl: largeUrl,
+          photoStorageStatus: 'ACTIVE',
+          hasArchivedOriginal: false,
+          archiveStatus: archive ? archive.status : null,
+          cloudinaryOriginalStatus: archive?.cloudinaryOriginalStatus || 'ACTIVE',
+          operationalThumbnailUrl: archive?.operationalThumbnailUrl || null
+        };
+      }
+
+      // 3. ELSE IF R2 exists: R2
+      if (hasR2) {
+        const thumbUrl = r2Media?.thumbUrl || rawPhoto;
+        const normUrl = r2Media?.normalUrl || rawPhoto;
+        const lrgUrl = r2Media?.largeUrl || normUrl;
+        return {
+          provider: 'R2',
+          photoThumbnailUrl: thumbUrl,
+          couplePhoto: normUrl,
+          thumbnailUrl: thumbUrl,
+          normalUrl: normUrl,
+          largeUrl: lrgUrl,
+          canDownloadOriginal: true,
+          downloadUrl: lrgUrl,
+          photoStorageStatus: 'ACTIVE',
+          hasArchivedOriginal: false,
+          archiveStatus: archive ? archive.status : null,
+          cloudinaryOriginalStatus: archive?.cloudinaryOriginalStatus || 'ACTIVE',
+          operationalThumbnailUrl: archive?.operationalThumbnailUrl || null
+        };
+      }
+
+      // 4. ELSE: FALLBACK
       return {
-        provider: 'CLOUDINARY',
-        photoThumbnailUrl: thumbnailUrl,
-        couplePhoto: normalUrl || rawPhoto,
-        thumbnailUrl,
-        normalUrl,
-        largeUrl,
-        canDownloadOriginal: true,
-        downloadUrl: largeUrl,
+        provider: 'FALLBACK',
+        photoThumbnailUrl: '/sample_couple.png',
+        couplePhoto: '/sample_couple.png',
+        thumbnailUrl: '/sample_couple.png',
+        normalUrl: '/sample_couple.png',
+        largeUrl: '/sample_couple.png',
+        canDownloadOriginal: false,
+        downloadUrl: null,
         photoStorageStatus: 'ACTIVE',
         hasArchivedOriginal: false,
         archiveStatus: archive ? archive.status : null,
-        cloudinaryOriginalStatus: archive?.cloudinaryOriginalStatus || 'ACTIVE',
-        operationalThumbnailUrl: archive?.operationalThumbnailUrl || null
+        cloudinaryOriginalStatus: 'DELETED',
+        operationalThumbnailUrl: null
       };
     }
 
-    // 2. COMPLETED EVENT WITH VERIFIED DRIVE ARCHIVE: Use secure Drive-backed archive media routes
+    // ========================================================
+    // B. HISTORICAL EVENT
+    // ========================================================
+    // 1. IF Drive VERIFIED: DRIVE_ARCHIVE
     if (isVerifiedArchive && registration.inquiryId) {
       const regId = registration.inquiryId;
       const archiveId = archive._id ? archive._id.toString() : '';
@@ -160,27 +257,53 @@ export class MediaService {
       };
     }
 
-    // 3. FALLBACK: Drive archive unavailable or Cloudinary original deleted
-    if (isOriginalDeleted) {
+    // 2. ELSE IF R2 exists: R2
+    if (hasR2) {
+      const thumbUrl = r2Media?.thumbUrl || rawPhoto;
+      const normUrl = r2Media?.normalUrl || rawPhoto;
+      const lrgUrl = r2Media?.largeUrl || normUrl;
       return {
-        provider: 'FALLBACK',
-        photoThumbnailUrl: '/sample_couple.png',
-        couplePhoto: '/sample_couple.png',
-        thumbnailUrl: '/sample_couple.png',
-        normalUrl: '/sample_couple.png',
-        largeUrl: '/sample_couple.png',
-        canDownloadOriginal: false,
-        downloadUrl: null,
+        provider: 'R2',
+        photoThumbnailUrl: thumbUrl,
+        couplePhoto: normUrl,
+        thumbnailUrl: thumbUrl,
+        normalUrl: normUrl,
+        largeUrl: lrgUrl,
+        canDownloadOriginal: true,
+        downloadUrl: lrgUrl,
         photoStorageStatus: 'ARCHIVED',
         hasArchivedOriginal: false,
         archiveStatus: archive ? archive.status : null,
-        cloudinaryOriginalStatus: 'DELETED',
-        operationalThumbnailUrl: null
+        cloudinaryOriginalStatus: archive?.cloudinaryOriginalStatus || 'ACTIVE',
+        operationalThumbnailUrl: archive?.operationalThumbnailUrl || null
       };
     }
 
-    const fallbackUrl = rawPhoto || '/sample_couple.png';
-    const fallbackThumb = rawPhoto ? getOptimizedPhotoUrl(rawPhoto, 'thumbnail') : '/sample_couple.png';
+    // 3. ELSE IF Cloudinary exists: CLOUDINARY
+    if (isCloudinaryAvailable) {
+      const thumbnailUrl = getOptimizedPhotoUrl(rawPhoto, 'thumbnail');
+      const normalUrl = getOptimizedPhotoUrl(rawPhoto, 'normal');
+      const largeUrl = getOptimizedPhotoUrl(rawPhoto, 'large');
+      return {
+        provider: 'CLOUDINARY',
+        photoThumbnailUrl: thumbnailUrl,
+        couplePhoto: normalUrl || rawPhoto,
+        thumbnailUrl,
+        normalUrl,
+        largeUrl,
+        canDownloadOriginal: true,
+        downloadUrl: largeUrl,
+        photoStorageStatus: 'ARCHIVED',
+        hasArchivedOriginal: false,
+        archiveStatus: archive ? archive.status : null,
+        cloudinaryOriginalStatus: archive?.cloudinaryOriginalStatus || 'ACTIVE',
+        operationalThumbnailUrl: archive?.operationalThumbnailUrl || null
+      };
+    }
+
+    // 4. ELSE: FALLBACK
+    const fallbackUrl = (isOriginalDeleted || !rawPhoto) ? '/sample_couple.png' : rawPhoto;
+    const fallbackThumb = (isOriginalDeleted || !rawPhoto) ? '/sample_couple.png' : getOptimizedPhotoUrl(rawPhoto, 'thumbnail');
     return {
       provider: 'FALLBACK',
       photoThumbnailUrl: fallbackThumb,
@@ -188,12 +311,12 @@ export class MediaService {
       thumbnailUrl: fallbackThumb,
       normalUrl: fallbackUrl,
       largeUrl: fallbackUrl,
-      canDownloadOriginal: Boolean(rawPhoto),
-      downloadUrl: rawPhoto || null,
+      canDownloadOriginal: !isOriginalDeleted && Boolean(rawPhoto),
+      downloadUrl: (!isOriginalDeleted && rawPhoto) ? rawPhoto : null,
       photoStorageStatus: archive ? (archive.status === 'QUEUED' || archive.status === 'COPYING' ? 'QUEUED' : archive.status) : 'ACTIVE',
       hasArchivedOriginal: Boolean(archive?.driveFileId),
       archiveStatus: archive ? archive.status : null,
-      cloudinaryOriginalStatus: archive?.cloudinaryOriginalStatus || 'ACTIVE',
+      cloudinaryOriginalStatus: archive?.cloudinaryOriginalStatus || (isOriginalDeleted ? 'DELETED' : 'ACTIVE'),
       operationalThumbnailUrl: archive?.operationalThumbnailUrl || null
     };
   }

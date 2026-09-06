@@ -2,6 +2,7 @@ import { Registration } from '../../models/Registration.js';
 import { Event } from '../../models/Event.js';
 import { qrPassService } from './qrPass.service.js';
 import { eventService } from '../events/event.service.js';
+import { mediaService } from '../media/media.service.js';
 import { env } from '../../config/env.js';
 
 /**
@@ -93,6 +94,27 @@ export async function getPassDetails(req, res) {
     // Ensure asymmetric signed pass
     const pass = await qrPassService.ensurePass(submission, event);
 
+    let couplePhoto = submission.couplePhoto || '/sample_couple.png';
+    let photoThumbnailUrl = submission.couplePhoto || '/sample_couple.png';
+
+    // Authorized short-lived signed access for private couple photo on pass
+    if (submission.r2Media?.isPrivate) {
+      const normalToken = mediaService.generateSignedMediaToken({
+        registrationId: submission.inquiryId,
+        purpose: 'couple_photo',
+        preset: 'normal',
+        expiresIn: 7200
+      });
+      const thumbToken = mediaService.generateSignedMediaToken({
+        registrationId: submission.inquiryId,
+        purpose: 'couple_photo',
+        preset: 'thumb',
+        expiresIn: 7200
+      });
+      couplePhoto = `/api/media/${submission.inquiryId}/couple-photo?preset=normal&exp=${normalToken.expiresAt}&sig=${normalToken.sig}`;
+      photoThumbnailUrl = `/api/media/${submission.inquiryId}/couple-photo?preset=thumb&exp=${thumbToken.expiresAt}&sig=${thumbToken.sig}`;
+    }
+
     return res.json({
       passId: pass.passId,
       qrToken: pass.qrToken,
@@ -101,8 +123,8 @@ export async function getPassDetails(req, res) {
       wifeName: submission.wifeName,
       surname: submission.surname,
       coupleName: `${submission.husbandName || ''} & ${submission.wifeName || ''} ${submission.surname || ''}`.trim(),
-      couplePhoto: submission.couplePhoto,
-      photoThumbnailUrl: submission.couplePhoto,
+      couplePhoto,
+      photoThumbnailUrl,
       status: pass.status,
       programId: submission.programId,
       programName: event?.name || submission.programName,

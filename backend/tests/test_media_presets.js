@@ -211,5 +211,43 @@ import { mediaService } from '../src/modules/media/media.service.js';
   console.log('✔ Test 15 passed: Signed HMAC media token passes security tests (tamper-proof, expiry-enforced)');
 }
 
+// 16. Canonical Resolver — Active Event with R2 media resolves to R2
+{
+  const r2ActiveReg = {
+    inquiryId: 'EK06-001',
+    couplePhoto: 'https://media.ekdujekeliye.in/prod/events/EK06/registrations/EK06-001/couple/normal.webp',
+    mediaProvider: 'R2',
+    r2Media: {
+      status: 'R2_PRIMARY',
+      thumbUrl: 'https://media.ekdujekeliye.in/prod/events/EK06/registrations/EK06-001/couple/thumb.webp',
+      normalUrl: 'https://media.ekdujekeliye.in/prod/events/EK06/registrations/EK06-001/couple/normal.webp',
+      largeUrl: 'https://media.ekdujekeliye.in/prod/events/EK06/registrations/EK06-001/couple/large.webp'
+    }
+  };
+  const activeEvent = { id: 'prog-2026-09-07', status: 'few_seats', date: '2026-09-07' };
+  const res = mediaService.resolveRegistrationMediaSync(r2ActiveReg, null, activeEvent);
+  assert.strictEqual(res.provider, 'R2', 'Active event with R2 media must resolve to R2');
+  assert.strictEqual(res.normalUrl, 'https://media.ekdujekeliye.in/prod/events/EK06/registrations/EK06-001/couple/normal.webp');
+  assert.strictEqual(res.thumbnailUrl, 'https://media.ekdujekeliye.in/prod/events/EK06/registrations/EK06-001/couple/thumb.webp');
+  console.log('✔ Test 16 passed: Canonical Resolver for Active Event with R2 media resolves to R2');
+}
+
+// 17. Canonical Resolver — Historical Event with R2 fallback when Drive not yet verified
+{
+  const r2HistoricalReg = {
+    inquiryId: 'EK02-005',
+    couplePhoto: 'https://media.ekdujekeliye.in/prod/events/EK02/registrations/EK02-005/couple/normal.webp',
+    mediaProvider: 'R2',
+    r2Media: {
+      normalUrl: 'https://media.ekdujekeliye.in/prod/events/EK02/registrations/EK02-005/couple/normal.webp',
+      thumbUrl: 'https://media.ekdujekeliye.in/prod/events/EK02/registrations/EK02-005/couple/thumb.webp'
+    }
+  };
+  const historicalEvent = { id: 'prog-1785566789678', status: 'completed', date: '2026-08-09' };
+  const res = mediaService.resolveRegistrationMediaSync(r2HistoricalReg, null, historicalEvent);
+  assert.strictEqual(res.provider, 'R2', 'Historical event without Drive archive must resolve to R2 if available');
+  console.log('✔ Test 17 passed: Canonical Resolver for Historical Event with R2 fallback resolves to R2');
+}
+
 console.log('=== ALL MEDIA PRESET & RESOLVER UNIT TESTS PASSED SUCCESSFULLY! ===');
 process.exit(0);

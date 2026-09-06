@@ -13,6 +13,9 @@ export class CloudinaryStorageProvider {
    * @param {Object} params - { data, folder, filename }
    */
   async upload({ data, folder = 'ekdujekeliye', filename = null }) {
+    if (env.MEDIA_WRITE_PROVIDER === 'r2') {
+      throw new Error('[Cloudinary Provider] New writes to Cloudinary are strictly frozen when MEDIA_WRITE_PROVIDER is r2.');
+    }
     if (!data) return null;
     if (typeof data === 'string' && (data.startsWith('http://') || data.startsWith('https://'))) {
       return data;

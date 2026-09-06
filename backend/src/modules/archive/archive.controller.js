@@ -5,6 +5,45 @@ import { Registration } from '../../models/Registration.js';
 import { v2 as cloudinary } from 'cloudinary';
 import { env } from '../../config/env.js';
 import { mediaService } from '../media/media.service.js';
+import { r2Provider } from '../../integrations/r2/r2.provider.js';
+
+/**
+ * Format archive job metadata for Google Apps Script worker.
+ * For private R2 sources, generates a short-lived presigned GET (30 min)
+ * so the worker can securely download without exposing credentials or making bucket public.
+ */
+async function formatJobForWorker(job) {
+  let sourceUrl = job.sourceUrl;
+  if (job.sourceProvider === 'r2') {
+    const isPrivate = job.r2Bucket ? job.r2Bucket.includes('private') : true;
+    if (isPrivate) {
+      try {
+        const presigned = await r2Provider.generatePresignedDownloadUrl({
+          bucket: job.r2Bucket || r2Provider.privateBucket,
+          key: job.r2Key || job.sourcePublicId,
+          expiresIn: 1800 // 30 minutes for archive worker
+        });
+        sourceUrl = presigned.downloadUrl;
+      } catch (e) {
+        console.warn(`[ArchiveController] Failed to generate presigned download URL for R2 key ${job.r2Key}:`, e.message);
+      }
+    } else {
+      sourceUrl = r2Provider.getPublicUrl(job.r2Key || job.sourcePublicId);
+    }
+  }
+  return {
+    jobId: job._id.toString(),
+    eventId: job.eventId,
+    registrationId: job.registrationId,
+    mediaType: job.mediaType,
+    sourceProvider: job.sourceProvider || 'cloudinary',
+    r2Key: job.r2Key || null,
+    sourceUrl,
+    filename: job.filename,
+    mimeType: job.mimeType || 'image/jpeg',
+    folderPath: job.driveFolderPath || `Ek Duje Ke Liye/Events/${job.eventId}/Couple Photos`
+  };
+}
 
 /**
  * ==========================================================
@@ -192,17 +231,8 @@ export const claimActiveEventBatch = async (req, res) => {
       { $set: { 'archiveStats.lastWorkerAt': now } }
     );
 
-    // Format lightweight metadata batch for Google Apps Script
-    const formattedJobs = jobs.map(job => ({
-      jobId: job._id.toString(),
-      eventId: job.eventId,
-      registrationId: job.registrationId,
-      mediaType: job.mediaType,
-      sourceUrl: job.sourceUrl,
-      filename: job.filename,
-      mimeType: job.mimeType || 'image/jpeg',
-      folderPath: job.driveFolderPath || `Ek Duje Ke Liye/Events/${job.eventId}/Couple Photos`
-    }));
+    // Format lightweight metadata batch for Google Apps Script (supports safe R2 presigned URLs)
+    const formattedJobs = await Promise.all(jobs.map(formatJobForWorker));
 
     res.json({
       success: true,
@@ -241,16 +271,7 @@ export const claimSingleArchiveJob = async (req, res) => {
     job.attempts = (job.attempts || 0) + 1;
     await job.save();
 
-    const formattedJob = {
-      jobId: job._id.toString(),
-      eventId: job.eventId,
-      registrationId: job.registrationId,
-      mediaType: job.mediaType,
-      sourceUrl: job.sourceUrl,
-      filename: job.filename,
-      mimeType: job.mimeType || 'image/jpeg',
-      folderPath: job.driveFolderPath || `Ek Duje Ke Liye/Events/${job.eventId}/Couple Photos`
-    };
+    const formattedJob = await formatJobForWorker(job);
 
     res.json({
       success: true,
@@ -310,16 +331,7 @@ export const claimEventArchiveBatch = async (req, res) => {
       }
     );
 
-    const formattedJobs = jobs.map(job => ({
-      jobId: job._id.toString(),
-      eventId: job.eventId,
-      registrationId: job.registrationId,
-      mediaType: job.mediaType,
-      sourceUrl: job.sourceUrl,
-      filename: job.filename,
-      mimeType: job.mimeType || 'image/jpeg',
-      folderPath: job.driveFolderPath || `Ek Duje Ke Liye/Events/${job.eventId}/Couple Photos`
-    }));
+    const formattedJobs = await Promise.all(jobs.map(formatJobForWorker));
 
     res.json({
       success: true,
@@ -375,16 +387,7 @@ export const claimArchiveBatch = async (req, res) => {
       }
     );
 
-    const formattedJobs = jobs.map(job => ({
-      jobId: job._id.toString(),
-      eventId: job.eventId,
-      registrationId: job.registrationId,
-      mediaType: job.mediaType,
-      sourceUrl: job.sourceUrl,
-      filename: job.filename,
-      mimeType: job.mimeType || 'image/jpeg',
-      folderPath: job.driveFolderPath || `Ek Duje Ke Liye/Events/${job.eventId}/Couple Photos`
-    }));
+    const formattedJobs = await Promise.all(jobs.map(formatJobForWorker));
 
     res.json({
       success: true,
@@ -401,7 +404,7 @@ export const claimArchiveBatch = async (req, res) => {
  */
 export const verifyArchivedItem = async (req, res) => {
   try {
-    const { jobId, driveFileId, driveFolderId, fileSize, mimeType } = req.body;
+    const { jobId, driveFileId, driveFolderId, fileSize, mimeType, checksum, r2Key } = req.body;
 
     if (!jobId || !driveFileId) {
       return res.status(400).json({ error: 'jobId and driveFileId are required for verification.' });
@@ -438,6 +441,8 @@ export const verifyArchivedItem = async (req, res) => {
     if (driveFolderId) job.driveFolderId = driveFolderId;
     if (fileSize) job.originalSize = fileSize;
     if (mimeType) job.mimeType = mimeType;
+    if (checksum) job.r2Checksum = checksum;
+    if (r2Key && !job.r2Key) job.r2Key = r2Key;
     job.verifiedAt = new Date();
     job.driveVerifiedAt = new Date();
     job.driveVerificationSource = 'google_apps_script';
@@ -534,6 +539,15 @@ export const getArchiveCandidates = async (req, res) => {
               $sum: {
                 $cond: [
                   { $and: [{ $ne: ['$paymentScreenshot', null] }, { $ne: ['$paymentScreenshot', ''] }] },
+                  1,
+                  0
+                ]
+              }
+            },
+            r2Active: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$r2Media.status', 'R2_PRIMARY'] },
                   1,
                   0
                 ]
@@ -668,6 +682,9 @@ export const getArchiveCandidates = async (req, res) => {
         copyingAssets: copyingCount,
         failedAssets: failedCount,
         progressPercent,
+        r2ActiveAssets: r.r2Active || 0,
+        r2ProgressPercent: couplePhotosCount > 0 ? Math.min(100, Math.round(((r.r2Active || 0) / couplePhotosCount) * 100)) : 0,
+        activeStorageTier: (r.r2Active > 0 && r.r2Active >= couplePhotosCount) ? 'R2' : ((r.r2Active > 0) ? 'R2_HYBRID' : 'CLOUDINARY'),
         estimatedSizeMB: parseFloat((approxBytes / (1024 * 1024)).toFixed(1))
       };
     });
@@ -681,6 +698,7 @@ export const getArchiveCandidates = async (req, res) => {
     let failedArchiveCount = 0;
     let cleanupEligibleCount = 0;
     let protectedActiveAssets = 0;
+    let totalR2ActiveAssets = 0;
 
     candidates.forEach(c => {
       if (c.isProtected) {
@@ -692,6 +710,7 @@ export const getArchiveCandidates = async (req, res) => {
       }
       cloudinaryAssetCount += c.cloudinaryAssetsCount;
       verifiedArchiveCount += c.archivedAssets;
+      totalR2ActiveAssets += (c.r2ActiveAssets || 0);
       pendingArchiveCount += (c.queuedAssets + (c.copyingAssets || 0));
       failedArchiveCount += (c.failedAssets || 0);
     });
@@ -701,6 +720,7 @@ export const getArchiveCandidates = async (req, res) => {
       cloudinaryAssetCount,
       driveArchivedEvents,
       verifiedArchiveCount,
+      totalR2ActiveAssets,
       pendingArchiveCount,
       failedArchiveCount,
       cleanupEligibleCount,

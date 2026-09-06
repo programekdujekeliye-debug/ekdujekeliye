@@ -70,7 +70,7 @@ export function getOptimizedPhotoUrl(url: string | null | undefined, preset: Med
 }
 
 export interface CanonicalMediaResult {
-  provider: 'CLOUDINARY' | 'DRIVE_ARCHIVE' | 'FALLBACK';
+  provider: 'CLOUDINARY' | 'DRIVE_ARCHIVE' | 'R2' | 'FALLBACK';
   thumbnailUrl: string;
   normalUrl: string;
   largeUrl: string;
@@ -92,7 +92,7 @@ export function resolveRegistrationPhoto(
     downloadUrl?: string | null;
     inquiryId?: string;
     hasArchivedOriginal?: boolean;
-    provider?: 'CLOUDINARY' | 'DRIVE_ARCHIVE' | 'FALLBACK';
+    provider?: 'CLOUDINARY' | 'DRIVE_ARCHIVE' | 'R2' | 'FALLBACK';
   },
   event?: { status?: string; date?: string } | null,
   archive?: { status?: string; driveFileId?: string } | null
@@ -125,6 +125,19 @@ export function resolveRegistrationPhoto(
   }
 
   const rawPhoto = registration.couplePhoto || '';
+
+  // Cloudflare R2 direct public CDN URL
+  if (rawPhoto.includes('media.ekdujekeliye.in') || rawPhoto.includes('.r2.cloudflarestorage.com')) {
+    return {
+      provider: 'R2',
+      thumbnailUrl: registration.photoThumbnailUrl || registration.thumbnailUrl || rawPhoto,
+      normalUrl: rawPhoto,
+      largeUrl: registration.largeUrl || rawPhoto,
+      downloadUrl: registration.downloadUrl || rawPhoto,
+      canDownloadOriginal: true
+    };
+  }
+
   if (rawPhoto.includes('res.cloudinary.com')) {
     return {
       provider: 'CLOUDINARY',
@@ -138,10 +151,10 @@ export function resolveRegistrationPhoto(
 
   return {
     provider: 'FALLBACK',
-    thumbnailUrl: rawPhoto || '/sample_couple.png',
-    normalUrl: rawPhoto || '/sample_couple.png',
-    largeUrl: rawPhoto || '/sample_couple.png',
-    downloadUrl: rawPhoto || '/sample_couple.png',
+    thumbnailUrl: '/sample_couple.png',
+    normalUrl: '/sample_couple.png',
+    largeUrl: '/sample_couple.png',
+    downloadUrl: '',
     canDownloadOriginal: false
   };
 }
