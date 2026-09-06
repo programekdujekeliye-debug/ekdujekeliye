@@ -8,6 +8,10 @@ import { eventService } from '../modules/events/event.service.js';
 import { storageService } from './storage.service.js';
 import { r2Provider } from '../integrations/r2/r2.provider.js';
 
+// In-Memory Template & SVG Caches for sub-10ms response times
+const transparentTemplateCache = new Map();
+const svgCardCache = new Map();
+
 /**
  * Service to generate high-resolution, premium 1080x1350 personalized invitation cards
  */
@@ -223,6 +227,15 @@ export class InvitationCardService {
 
     const hash = this.calculateInvitationHash(reg, event);
 
+    if (svgCardCache.has(hash)) {
+      const cached = svgCardCache.get(hash);
+      return {
+        ...cached,
+        registration: reg,
+        event
+      };
+    }
+
     if (!reg.invitationHash || reg.invitationHash !== hash) {
       reg.invitationHash = hash;
       reg.invitationVersion = (reg.invitationVersion || 0) + 1;
@@ -244,7 +257,7 @@ export class InvitationCardService {
     }
 
     const buffer = await this.generateCardBuffer(reg, event);
-    return {
+    const resultObj = {
       buffer,
       registration: reg,
       event,
@@ -252,6 +265,8 @@ export class InvitationCardService {
       hash: reg.invitationHash,
       cardUrl: cardUrl || reg.invitationCardUrl || null
     };
+    svgCardCache.set(hash, resultObj);
+    return resultObj;
   }
 
   /**
@@ -285,58 +300,69 @@ export class InvitationCardService {
     const hW = event?.heartWidth ?? 260;
     const hH = event?.heartHeight ?? 312;
 
-    // 1. Resolve and prepare template image with transparent heart cutout
-    let templateBuf = null;
-    const tplUrl = event?.cardTemplateUrl || event?.cardTemplate;
-    if (tplUrl && tplUrl.startsWith('http')) {
+    // 1. Resolve and prepare template image with transparent heart cutout (In-Memory Cached)
+    const tplUrl = event?.cardTemplateUrl || event?.cardTemplate || '';
+    const cacheKey = `${tplUrl}_${hX}_${hY}_${hW}_${hH}`;
+    let transparentTemplateBuf = transparentTemplateCache.get(cacheKey) || null;
+
+    if (!transparentTemplateBuf && tplUrl && tplUrl.startsWith('http')) {
       try {
         const res = await fetch(tplUrl);
-        if (res.ok) templateBuf = Buffer.from(await res.arrayBuffer());
-      } catch (_) {}
-    }
-    // Strictly use event's uploaded template; never fall back to legacy 24 July static PNG
+        if (res.ok) {
+          const templateBuf = Buffer.from(await res.arrayBuffer());
+          const { data: tplPixels } = await sharp(templateBuf)
+            .resize(width, height, { fit: 'fill' })
+            .ensureAlpha()
+            .raw()
+            .toBuffer({ resolveWithObject: true });
 
-    let transparentTemplateBuf = null;
-    if (templateBuf) {
-      try {
-        // Resize template to canvas dimensions with alpha channel
-        const { data: tplPixels } = await sharp(templateBuf)
-          .resize(width, height, { fit: 'fill' })
-          .ensureAlpha()
-          .raw()
-          .toBuffer({ resolveWithObject: true });
-
-        // Cut out the white/cream heart area so couple photo shows through cleanly
-        for (let y = hY; y < hY + hH && y < height; y++) {
-          for (let x = hX; x < hX + hW && x < width; x++) {
-            const idx = (y * width + x) * 4;
-            const r = tplPixels[idx];
-            const g = tplPixels[idx + 1];
-            const b = tplPixels[idx + 2];
-            if (r > 215 && g > 215 && b > 215) {
-              tplPixels[idx + 3] = 0; // Transparent
+          // Cut out the white/cream heart area so couple photo shows through cleanly
+          for (let y = hY; y < hY + hH && y < height; y++) {
+            for (let x = hX; x < hX + hW && x < width; x++) {
+              const idx = (y * width + x) * 4;
+              const r = tplPixels[idx];
+              const g = tplPixels[idx + 1];
+              const b = tplPixels[idx + 2];
+              if (r > 215 && g > 215 && b > 215) {
+                tplPixels[idx + 3] = 0; // Transparent
+              }
             }
           }
-        }
 
-        transparentTemplateBuf = await sharp(tplPixels, {
-          raw: { width, height, channels: 4 }
-        }).png().toBuffer();
+          transparentTemplateBuf = await sharp(tplPixels, {
+            raw: { width, height, channels: 4 }
+          }).png().toBuffer();
+
+          transparentTemplateCache.set(cacheKey, transparentTemplateBuf);
+        }
       } catch (err) {
         console.warn('[InvitationCardService] Error preparing transparent template:', err.message);
-        transparentTemplateBuf = templateBuf;
       }
     }
 
-    // 2. Resolve couple photo buffer
+    // 2. Resolve couple photo buffer: Direct R2 Buffer -> Remote URL -> Local Sample
     let photoBuf = null;
-    const photoSrc = registration.couplePhoto;
-    if (photoSrc && photoSrc.startsWith('http')) {
+    const r2Media = registration.r2Media;
+    if (r2Media && (r2Media.normalKey || r2Media.key)) {
       try {
-        const res = await fetch(photoSrc);
-        if (res.ok) photoBuf = Buffer.from(await res.arrayBuffer());
-      } catch (_) {}
+        const targetBucket = r2Media.bucket || r2Provider.privateBucket;
+        const targetKey = r2Media.normalKey || r2Media.key;
+        photoBuf = await r2Provider.getObjectBuffer({ bucket: targetBucket, key: targetKey });
+      } catch (err) {
+        console.warn(`[InvitationCardService] Error loading photo from R2 for ${inquiryId}:`, err.message);
+      }
     }
+
+    if (!photoBuf) {
+      const photoSrc = registration.couplePhoto;
+      if (photoSrc && photoSrc.startsWith('http')) {
+        try {
+          const res = await fetch(photoSrc);
+          if (res.ok) photoBuf = Buffer.from(await res.arrayBuffer());
+        } catch (_) {}
+      }
+    }
+
     if (!photoBuf) {
       const localPhoto = path.resolve(process.cwd(), '..', 'frontend', 'public', 'sample_couple.png');
       if (fs.existsSync(localPhoto)) {

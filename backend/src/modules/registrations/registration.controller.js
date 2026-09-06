@@ -67,6 +67,7 @@ export const getRegistrationStatus = async (req, res) => {
   try {
     const result = await registrationService.getStatus(inquiryId);
     if (!result) return res.status(404).json({ error: 'Registration not found.' });
+    res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=3600');
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: 'Server error retrieving status.' });

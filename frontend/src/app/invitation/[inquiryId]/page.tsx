@@ -33,6 +33,7 @@ interface SubmissionData {
   venue?: string;
   cardTemplate?: string;
   cardTemplateUrl?: string;
+  invitationCardUrl?: string;
   heartX?: number;
   heartY?: number;
   heartWidth?: number;
@@ -63,6 +64,7 @@ export default function PersonalizedInvitationPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Canvas States
+  const [hasAdjusted, setHasAdjusted] = useState(false);
   const [cardReady, setCardReady] = useState(false);
   const [canvasDataUrl, setCanvasDataUrl] = useState<string>('');
   const [useCanvasDirectly, setUseCanvasDirectly] = useState(false);
@@ -356,10 +358,11 @@ export default function PersonalizedInvitationPage() {
   }, [userZoom, userOffsetY]);
 
   useEffect(() => {
-    if (submission && canvasElement) {
+    // Only execute heavy canvas operations if user adjusted framing or no pre-rendered R2 card exists
+    if (submission && canvasElement && (hasAdjusted || !submission.invitationCardUrl)) {
       drawCard(submission);
     }
-  }, [submission, userZoom, userOffsetY, canvasElement, drawCard]);
+  }, [submission, userZoom, userOffsetY, canvasElement, drawCard, hasAdjusted]);
 
   const handleSaveAdjustments = async () => {
     if (!inquiryId) return;
@@ -383,22 +386,51 @@ export default function PersonalizedInvitationPage() {
     }
   };
 
-  const handleDownloadCard = () => {
-    const coupleTitle = `${submission?.surname || 'Couple'}_${submission?.husbandName || 'Pass'}`.replace(/\s+/g, '_');
-    const imageSrc = canvasDataUrl || (canvasRef.current ? canvasRef.current.toDataURL('image/png') : '');
-    if (!imageSrc) return;
-
+  const triggerDirectDownload = (url: string, fileName: string) => {
     try {
       const link = document.createElement('a');
-      link.download = `${coupleTitle}_Invitation_Card.png`;
-      link.href = imageSrc;
+      link.download = fileName;
+      link.href = url;
       link.target = '_blank';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch (err) {
-      // Fallback for iOS Safari
-      window.open(imageSrc, '_blank');
+      window.open(url, '_blank');
+    }
+  };
+
+  const handleDownloadCard = async () => {
+    if (!submission) return;
+    const coupleTitle = `${submission?.surname || 'Couple'}_${submission?.husbandName || 'Pass'}`.replace(/\s+/g, '_');
+    const fileName = `${coupleTitle}_Invitation_Card.png`;
+
+    // 1. If user adjusted framing and canvas is ready, download customized canvas
+    if (hasAdjusted && (canvasDataUrl || canvasRef.current)) {
+      const imageSrc = canvasDataUrl || canvasRef.current!.toDataURL('image/png');
+      triggerDirectDownload(imageSrc, fileName);
+      return;
+    }
+
+    // 2. If pre-rendered official card is on R2 CDN, download directly as crisp JPEG
+    if (submission.invitationCardUrl) {
+      try {
+        const response = await fetch(submission.invitationCardUrl);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        triggerDirectDownload(blobUrl, `${coupleTitle}_Invitation_Card.jpg`);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        return;
+      } catch (_) {
+        window.open(submission.invitationCardUrl, '_blank');
+        return;
+      }
+    }
+
+    // 3. Fallback to canvas
+    const imageSrc = canvasDataUrl || (canvasRef.current ? canvasRef.current.toDataURL('image/png') : '');
+    if (imageSrc) {
+      triggerDirectDownload(imageSrc, fileName);
     }
   };
 
@@ -490,17 +522,39 @@ export default function PersonalizedInvitationPage() {
         </div>
 
         {/* Canvas Render Element */}
+        {/* Canvas / Pre-rendered Image Render Element */}
         <div
-          className="overflow-hidden rounded-2xl border border-stone-300 shadow-xl max-w-full relative bg-stone-950"
+          className="overflow-hidden rounded-2xl border border-stone-300 shadow-xl max-w-full relative bg-stone-950 flex items-center justify-center"
           style={{ width: '300px', height: '533px' }}
         >
           <canvas
             ref={setCanvasRef}
             style={{ width: '300px', height: '533px' }}
-            className={useCanvasDirectly ? 'mx-auto block bg-stone-950' : 'hidden'}
+            className={(useCanvasDirectly && hasAdjusted) ? 'mx-auto block bg-stone-950' : 'hidden'}
           />
-          {!useCanvasDirectly && (
+          {hasAdjusted ? (
             canvasDataUrl ? (
+              <img
+                src={canvasDataUrl}
+                alt="Personalized Invitation Card"
+                style={{ width: '300px', height: '533px' }}
+                className="mx-auto block bg-stone-950 object-contain"
+              />
+            ) : (
+              <div style={{ width: '300px', height: '533px' }} className="animate-pulse bg-stone-950 flex items-center justify-center text-xs text-stone-400">
+                Updating card preview...
+              </div>
+            )
+          ) : (
+            submission?.invitationCardUrl ? (
+              <img
+                src={submission.invitationCardUrl}
+                alt="Personalized Invitation Card"
+                loading="eager"
+                style={{ width: '300px', height: '533px' }}
+                className="mx-auto block bg-stone-950 object-contain"
+              />
+            ) : canvasDataUrl ? (
               <img
                 src={canvasDataUrl}
                 alt="Personalized Invitation Card"
@@ -549,7 +603,10 @@ export default function PersonalizedInvitationPage() {
                 max="2.0"
                 step="0.05"
                 value={userZoom}
-                onChange={(e) => setUserZoom(Number(e.target.value))}
+                onChange={(e) => {
+                  setHasAdjusted(true);
+                  setUserZoom(Number(e.target.value));
+                }}
                 className="w-full h-1.5 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
               />
             </div>
@@ -565,7 +622,10 @@ export default function PersonalizedInvitationPage() {
                 max="150"
                 step="5"
                 value={userOffsetY}
-                onChange={(e) => setUserOffsetY(Number(e.target.value))}
+                onChange={(e) => {
+                  setHasAdjusted(true);
+                  setUserOffsetY(Number(e.target.value));
+                }}
                 className="w-full h-1.5 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
               />
             </div>

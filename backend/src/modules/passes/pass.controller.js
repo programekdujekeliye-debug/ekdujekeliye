@@ -65,8 +65,10 @@ export async function getPassDetails(req, res) {
 
     const submission = await Registration.findOne({
       $or: [
-        { inquiryId: { $regex: new RegExp(`^${cleanInquiryId}$`, 'i') } },
-        { previousInquiryId: { $regex: new RegExp(`^${cleanInquiryId}$`, 'i') } }
+        { inquiryId: cleanInquiryId },
+        { inquiryId: inquiryId },
+        { previousInquiryId: cleanInquiryId },
+        { previousInquiryId: inquiryId }
       ],
       isDeleted: { $ne: true }
     });
@@ -114,6 +116,8 @@ export async function getPassDetails(req, res) {
       couplePhoto = `/api/media/${submission.inquiryId}/couple-photo?preset=normal&exp=${normalToken.expiresAt}&sig=${normalToken.sig}`;
       photoThumbnailUrl = `/api/media/${submission.inquiryId}/couple-photo?preset=thumb&exp=${thumbToken.expiresAt}&sig=${thumbToken.sig}`;
     }
+
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=86400');
 
     return res.json({
       passId: pass.passId,
