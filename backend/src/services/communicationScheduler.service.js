@@ -370,7 +370,7 @@ export class CommunicationSchedulerService {
         }
       }
 
-      const batchLimit = options.batchSize || 25;
+      const batchLimit = options.batchSize || 100;
 
       // 1. Stale Lease Recovery: Reclaim jobs locked > 5 minutes ago if worker crashed
       const staleThreshold = new Date(Date.now() - 5 * 60 * 1000);

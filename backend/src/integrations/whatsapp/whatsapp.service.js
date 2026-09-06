@@ -276,7 +276,7 @@ export async function sendWhatsAppMessage(rawParams = {}) {
     } catch (_) {}
   }
 
-  const resolvedLang = languageCode || templateDef.language || 'en_US';
+  const resolvedLang = templateDef.language || languageCode || 'en_US';
 
   // 6. Template Variable Validation
   const varValidation = validateTemplateVariables(templateDef.key, variables);
