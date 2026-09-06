@@ -6,7 +6,7 @@ import { invitationCardService } from '../src/services/invitationCard.service.js
 
 async function run() {
   console.log('Connecting to MongoDB...');
-  await mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority');
+  await mongoose.connect(process.env.MONGODB_URI || (process.env.PROD_MONGO_URI || process.env.MONGO_URI));
 
   console.log('Fetching approved registrations for upcoming events...');
   const registrations = await Registration.find({

@@ -54,8 +54,7 @@ async function dispatchLatestDemo() {
   const targetPhone = '918320594829';
   console.log(`\nDispatching latest approved templates to demo phone: +${targetPhone}`);
 
-  const prodUri = env.MONGO_URI.replace('/ekdujekeliye_test', '/ekdujekeliye');
-  await mongoose.connect(prodUri);
+  await mongoose.connect(env.MONGO_URI);
 
   const reg = await Registration.findOne({ inquiryId: 'EK06-263' });
   const event = await Event.findOne({ $or: [{ id: 'prog-2026-09-07' }, { slug: 'prog-2026-09-07' }] });

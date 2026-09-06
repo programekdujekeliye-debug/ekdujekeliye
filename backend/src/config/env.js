@@ -142,6 +142,7 @@ export const env = {
 
   // Database
   MONGO_URI: resolvedMongoUri,
+  PROD_MONGO_URI: readOptionalEnv('PROD_MONGO_URI'),
   DATABASE_NAME: databaseName,
   DATABASE_ENV: databaseName.includes('test') ? 'TEST' : (databaseName.includes('staging') ? 'STAGING' : 'PRODUCTION'),
 

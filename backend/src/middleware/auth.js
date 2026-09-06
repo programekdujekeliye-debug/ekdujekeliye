@@ -23,6 +23,23 @@ export const requireAuth = (req, res, next) => {
   return res.status(401).json({ error: 'Unauthorized: Invalid authentication credentials.' });
 };
 
+/**
+ * Attaches req.user if authorization header is valid, but allows unauthenticated to pass through
+ */
+export const optionalAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return next();
+
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (token === env.ADMIN_PASSWORD || token === env.SUPER_ADMIN_PASSWORD) {
+    req.user = {
+      role: token === env.SUPER_ADMIN_PASSWORD ? 'SUPER_ADMIN' : 'EVENT_ADMIN',
+      authenticated: true
+    };
+  }
+  return next();
+};
+
 export const requireSuperAuth = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {

@@ -498,8 +498,8 @@ export const failArchivedItem = async (req, res) => {
  */
 export const getArchiveCandidates = async (req, res) => {
   try {
-    const [events, regStatsList, archiveStatsList] = await Promise.all([
-      Event.find({}, { id: 1, name: 1, date: 1, city: 1, status: 1, archiveStatus: 1 }).sort({ date: -1 }).lean(),
+    const [events, regStatsList, archiveStatsList, cleanupCountsList] = await Promise.all([
+      Event.find({}, { id: 1, name: 1, sequenceNumber: 1, date: 1, city: 1, status: 1, archiveStatus: 1 }).sort({ sequenceNumber: 1, date: -1 }).lean(),
       Registration.aggregate([
         { $match: { isDeleted: { $ne: true } } },
         {
@@ -520,6 +520,24 @@ export const getArchiveCandidates = async (req, res) => {
                   0
                 ]
               }
+            },
+            invitationCards: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $ne: ['$invitationCardUrl', null] }, { $ne: ['$invitationCardUrl', ''] }] },
+                  1,
+                  0
+                ]
+              }
+            },
+            paymentScreenshots: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $ne: ['$paymentScreenshot', null] }, { $ne: ['$paymentScreenshot', ''] }] },
+                  1,
+                  0
+                ]
+              }
             }
           }
         }
@@ -528,7 +546,22 @@ export const getArchiveCandidates = async (req, res) => {
         {
           $group: {
             _id: { eventId: '$eventId', status: '$status' },
-            count: { $sum: 1 }
+            count: { $sum: 1 },
+            totalBytes: { $sum: '$originalSize' }
+          }
+        }
+      ]),
+      MediaArchive.aggregate([
+        {
+          $match: {
+            status: 'VERIFIED',
+            cloudinaryOriginalStatus: { $ne: 'DELETED' }
+          }
+        },
+        {
+          $group: {
+            _id: '$eventId',
+            cleanupEligible: { $sum: 1 }
           }
         }
       ])
@@ -538,6 +571,7 @@ export const getArchiveCandidates = async (req, res) => {
     regStatsList.forEach(r => { if (r && r._id) regStatsMap.set(r._id, r); });
 
     const archiveMap = new Map();
+    const bytesMap = new Map();
     archiveStatsList.forEach(a => {
       if (a && a._id && a._id.eventId) {
         const evId = a._id.eventId;
@@ -550,22 +584,59 @@ export const getArchiveCandidates = async (req, res) => {
         else if (st === 'QUEUED') s.queued += a.count;
         else if (st === 'COPYING') s.copying += a.count;
         else if (st === 'FAILED') s.failed += a.count;
+
+        bytesMap.set(evId, (bytesMap.get(evId) || 0) + (a.totalBytes || 0));
       }
     });
 
+    const cleanupMap = new Map();
+    cleanupCountsList.forEach(c => {
+      if (c && c._id) cleanupMap.set(c._id, c.cleanupEligible);
+    });
+
+    const PROTECTED_EVENTS = new Set(['prog-2026-09-07', 'prog-2026-09-11', 'prog-2026-09-19']);
+
     const candidates = events.map(ev => {
-      const r = regStatsMap.get(ev.id) || { total: 0, couplePhotos: 0 };
+      const r = regStatsMap.get(ev.id) || { total: 0, couplePhotos: 0, invitationCards: 0, paymentScreenshots: 0 };
       const a = archiveMap.get(ev.id) || { verified: 0, queued: 0, copying: 0, failed: 0 };
 
       const totalRegistrations = r.total;
       const couplePhotosCount = r.couplePhotos;
+      const invitationCardsCount = r.invitationCards || 0;
+      const paymentScreenshotsCount = r.paymentScreenshots || 0;
       const archivedCount = a.verified;
       const queuedCount = a.queued;
       const copyingCount = a.copying;
       const failedCount = a.failed;
+      const totalCloudinaryAssets = couplePhotosCount + invitationCardsCount + paymentScreenshotsCount;
 
       const isCompleted = ev.status === 'completed' || ev.status === 'archived';
       const progressPercent = couplePhotosCount > 0 ? Math.min(100, Math.round((archivedCount / couplePhotosCount) * 100)) : 0;
+
+      // Safe Classification Guard
+      const isProtected = PROTECTED_EVENTS.has(ev.id) || ev.status === 'upcoming' || ev.status === 'few_seats' || (ev.sequenceNumber >= 6 && ev.sequenceNumber <= 8);
+
+      let cleanupStatus = 'NOT_APPLICABLE';
+      let historicalViewer = 'CLOUDINARY';
+
+      if (isProtected) {
+        cleanupStatus = 'PROTECTED';
+        historicalViewer = 'CLOUDINARY';
+      } else if (isCompleted) {
+        if (archivedCount >= couplePhotosCount && couplePhotosCount > 0) {
+          cleanupStatus = 'READY';
+          historicalViewer = 'DRIVE';
+        } else {
+          cleanupStatus = 'PENDING_ARCHIVE';
+          historicalViewer = archivedCount > 0 ? 'DRIVE' : 'CLOUDINARY';
+        }
+      } else if (ev.status === 'date_tba' || !ev.date || ev.date === 'TBD' || ev.date === 'Date TBA' || ev.status === 'housefull') {
+        cleanupStatus = 'REVIEW_REQUIRED';
+        historicalViewer = archivedCount > 0 ? 'DRIVE' : 'CLOUDINARY';
+      }
+
+      const cleanupEligible = isProtected ? 0 : (cleanupMap.get(ev.id) || 0);
+      const approxBytes = bytesMap.get(ev.id) || Math.round(couplePhotosCount * 1.2 * 1024 * 1024);
 
       let derivedStatus = ev.archiveStatus || 'NOT_REQUIRED';
       if (!ev.archiveStatus || ev.archiveStatus === 'NOT_REQUIRED') {
@@ -575,25 +646,70 @@ export const getArchiveCandidates = async (req, res) => {
 
       return {
         id: ev.id,
+        sequence: ev.sequenceNumber,
         name: ev.name,
         date: ev.date,
         city: ev.city || 'Surat',
         status: ev.status,
         isCompleted,
+        isProtected,
+        cleanupStatus,
+        historicalViewer,
         archiveStatus: derivedStatus,
         isCurrentlyActive: derivedStatus === 'ARCHIVING',
         totalRegistrations,
         eligibleCouplePhotos: couplePhotosCount,
+        invitationCardsCount,
+        paymentScreenshotsCount,
+        cloudinaryAssetsCount: totalCloudinaryAssets,
+        cleanupEligible,
         archivedAssets: archivedCount,
         queuedAssets: queuedCount,
         copyingAssets: copyingCount,
         failedAssets: failedCount,
         progressPercent,
-        estimatedSizeMB: parseFloat(((couplePhotosCount * 1.2)).toFixed(1))
+        estimatedSizeMB: parseFloat((approxBytes / (1024 * 1024)).toFixed(1))
       };
     });
 
-    res.json({ success: true, candidates });
+    // Compute Super Admin Storage Summary
+    let cloudinaryActiveEvents = 0;
+    let cloudinaryAssetCount = 0;
+    let driveArchivedEvents = 0;
+    let verifiedArchiveCount = 0;
+    let pendingArchiveCount = 0;
+    let failedArchiveCount = 0;
+    let cleanupEligibleCount = 0;
+    let protectedActiveAssets = 0;
+
+    candidates.forEach(c => {
+      if (c.isProtected) {
+        cloudinaryActiveEvents++;
+        protectedActiveAssets += c.cloudinaryAssetsCount;
+      } else {
+        if (c.archivedAssets > 0) driveArchivedEvents++;
+        cleanupEligibleCount += c.cleanupEligible;
+      }
+      cloudinaryAssetCount += c.cloudinaryAssetsCount;
+      verifiedArchiveCount += c.archivedAssets;
+      pendingArchiveCount += (c.queuedAssets + (c.copyingAssets || 0));
+      failedArchiveCount += (c.failedAssets || 0);
+    });
+
+    const summary = {
+      cloudinaryActiveEvents,
+      cloudinaryAssetCount,
+      driveArchivedEvents,
+      verifiedArchiveCount,
+      pendingArchiveCount,
+      failedArchiveCount,
+      cleanupEligibleCount,
+      protectedActiveAssets,
+      lastArchiveRun: new Date().toISOString(),
+      lastCleanupRun: null
+    };
+
+    res.json({ success: true, candidates, summary });
   } catch (err) {
     res.status(500).json({ error: `Failed to load archive candidates: ${err.message}` });
   }

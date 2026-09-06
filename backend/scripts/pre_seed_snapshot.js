@@ -4,7 +4,7 @@ import path from 'path';
 import { env } from '../src/config/env.js';
 
 async function takeSnapshot() {
-  const uri = process.env.PROD_MONGO_URI || 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
+  const uri = process.env.PROD_MONGO_URI || (process.env.PROD_MONGO_URI || process.env.MONGO_URI);
   await mongoose.connect(uri);
   const db = mongoose.connection.db;
 

@@ -23,6 +23,7 @@ import {
   EditIcon
 } from '../../../components/Icons';
 import { BatchExportModal } from '../reports/BatchExportModal';
+import { getOptimizedPhotoUrl } from '../../../utils/mediaPresets';
 import { EditRegistrationModal } from '../registrations/EditRegistrationModal';
 import { registrationsApi } from '../../../services/admin/registrationsApi';
 import { LuxurySelect } from '../../../components/LuxurySelect';
@@ -629,7 +630,7 @@ export const VipPassesPage = () => {
                           {g.couplePhoto ? (
                             <button
                               type="button"
-                              onClick={() => setSelectedImage(g.photoThumbnailUrl || g.couplePhoto)}
+                              onClick={() => setSelectedImage(getOptimizedPhotoUrl(g.photoThumbnailUrl || g.couplePhoto, 'normal'))}
                               className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer shadow-xs hover:scale-105 transition-transform"
                               title="Click to zoom couple photo"
                             >
@@ -637,7 +638,7 @@ export const VipPassesPage = () => {
                                 src={
                                   (g.photoThumbnailUrl || g.couplePhoto).startsWith('http') ||
                                   (g.photoThumbnailUrl || g.couplePhoto).startsWith('data:')
-                                    ? g.photoThumbnailUrl || g.couplePhoto
+                                    ? getOptimizedPhotoUrl(g.photoThumbnailUrl || g.couplePhoto, 'thumbnail')
                                     : `${API_BASE_URL}${g.photoThumbnailUrl || g.couplePhoto}`
                                 }
                                 alt="VIP Couple"
@@ -789,7 +790,7 @@ export const VipPassesPage = () => {
                         {g.couplePhoto ? (
                           <button
                             type="button"
-                            onClick={() => setSelectedImage(g.photoThumbnailUrl || g.couplePhoto)}
+                            onClick={() => setSelectedImage(getOptimizedPhotoUrl(g.photoThumbnailUrl || g.couplePhoto, 'normal'))}
                             className="w-14 h-14 rounded-xl overflow-hidden border border-amber-200 bg-white cursor-pointer shadow-xs active:scale-95 transition-transform"
                             title="Tap to enlarge photo"
                           >
@@ -797,7 +798,7 @@ export const VipPassesPage = () => {
                               src={
                                 (g.photoThumbnailUrl || g.couplePhoto).startsWith('http') ||
                                 (g.photoThumbnailUrl || g.couplePhoto).startsWith('data:')
-                                  ? g.photoThumbnailUrl || g.couplePhoto
+                                  ? getOptimizedPhotoUrl(g.photoThumbnailUrl || g.couplePhoto, 'thumbnail')
                                   : `${API_BASE_URL}${g.photoThumbnailUrl || g.couplePhoto}`
                               }
                               alt="Couple"

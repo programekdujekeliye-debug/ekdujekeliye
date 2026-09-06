@@ -4,7 +4,7 @@ import { MediaArchive } from '../src/models/MediaArchive.js';
 import { Registration } from '../src/models/Registration.js';
 
 async function run() {
-  await mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority');
+  await mongoose.connect(process.env.MONGODB_URI || (process.env.PROD_MONGO_URI || process.env.MONGO_URI));
 
   const events = await Event.find({}).sort({ sequenceNumber: 1 }).lean();
   console.log('--- ALL EVENTS IN DB ---');

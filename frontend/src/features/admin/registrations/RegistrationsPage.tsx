@@ -21,6 +21,7 @@ import {
   DownloadIcon,
   EditIcon
 } from '../../../components/Icons';
+import { getOptimizedPhotoUrl } from '../../../utils/mediaPresets';
 import toast from 'react-hot-toast';
 
 export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean }) => {
@@ -663,7 +664,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                 {sub.couplePhoto && (
                                   <button
                                     type="button"
-                                    onClick={() => setSelectedImage(sub.photoThumbnailUrl || sub.couplePhoto)}
+                                    onClick={() => setSelectedImage(getOptimizedPhotoUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'normal'))}
                                     className="w-8 h-8 rounded-md overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform"
                                     title="View Thumbnail"
                                   >
@@ -671,7 +672,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                       src={
                                         (sub.photoThumbnailUrl || sub.couplePhoto).startsWith('http') ||
                                         (sub.photoThumbnailUrl || sub.couplePhoto).startsWith('data:')
-                                          ? (sub.photoThumbnailUrl || sub.couplePhoto)
+                                          ? getOptimizedPhotoUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'thumbnail')
                                           : `${API_BASE_URL}${sub.photoThumbnailUrl || sub.couplePhoto}`
                                       }
                                       alt="Photo"
@@ -929,7 +930,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                           {sub.couplePhoto ? (
                             <button
                               type="button"
-                              onClick={() => setSelectedImage(sub.photoThumbnailUrl || sub.couplePhoto)}
+                              onClick={() => setSelectedImage(getOptimizedPhotoUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'normal'))}
                               className="w-14 h-14 rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer shadow-xs active:scale-95 transition-transform"
                               title="Tap to enlarge photo"
                             >
@@ -937,7 +938,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                 src={
                                   (sub.photoThumbnailUrl || sub.couplePhoto).startsWith('http') ||
                                   (sub.photoThumbnailUrl || sub.couplePhoto).startsWith('data:')
-                                    ? sub.photoThumbnailUrl || sub.couplePhoto
+                                    ? getOptimizedPhotoUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'thumbnail')
                                     : `${API_BASE_URL}${sub.photoThumbnailUrl || sub.couplePhoto}`
                                 }
                                 alt="Couple"

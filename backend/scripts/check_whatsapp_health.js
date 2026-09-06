@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 async function run() {
-  await mongoose.connect('mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority');
+  await mongoose.connect((process.env.PROD_MONGO_URI || process.env.MONGO_URI));
   
   const WhatsappMessage = mongoose.model('WhatsappMessage', new mongoose.Schema({}, { collection: 'whatsapp_messages', strict: false }));
   

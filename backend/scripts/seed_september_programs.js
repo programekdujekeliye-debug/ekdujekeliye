@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import fs from 'fs';
 import path from 'path';
 
-let MONGO_URI = 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
+let MONGO_URI = (process.env.PROD_MONGO_URI || process.env.MONGO_URI);
 
 try {
   const envPath = fs.existsSync('.env') ? '.env' : path.join('..', '.env');

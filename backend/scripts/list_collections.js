@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 async function listCollections() {
-  const uri = 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
+  const uri = (process.env.PROD_MONGO_URI || process.env.MONGO_URI);
   await mongoose.connect(uri);
 
   const db = mongoose.connection.db;

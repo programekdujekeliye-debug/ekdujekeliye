@@ -3,6 +3,7 @@ import { Registration } from '../../models/Registration.js';
 import { MediaArchive } from '../../models/MediaArchive.js';
 import { Event } from '../../models/Event.js';
 import { env } from '../../config/env.js';
+import { getOptimizedPhotoUrl } from '../../utils/mediaPresets.js';
 import { v2 as cloudinary } from 'cloudinary';
 
 cloudinary.config({
@@ -16,15 +17,7 @@ export class MediaService {
    * Transforms a full Cloudinary URL into a fast, lightweight thumbnail transformation
    */
   getThumbnailUrl(rawUrl) {
-    if (!rawUrl || typeof rawUrl !== 'string') return '';
-    if (!rawUrl.includes('cloudinary.com') || !rawUrl.includes('/upload/')) {
-      return rawUrl;
-    }
-    if (rawUrl.includes('/archive-thumbnails/')) {
-      return rawUrl;
-    }
-    // Inject lightweight thumbnail transformation params: c_limit,w_400,q_auto,f_auto
-    return rawUrl.replace('/upload/', '/upload/c_limit,w_400,q_auto,f_auto/');
+    return getOptimizedPhotoUrl(rawUrl, 'thumbnail');
   }
 
   /**
@@ -77,11 +70,138 @@ export class MediaService {
   }
 
   /**
-   * Resolves safe media state for a registration without exposing raw Drive identifiers
+   * Generates short-lived signed HMAC token for secure media preview or download
    */
-  async resolveRegistrationMedia(registration, archiveRecord = null) {
-    const rawPhoto = registration.couplePhoto || '';
+  generateSignedMediaToken({ registrationId, archiveId = '', purpose = 'preview', preset = 'thumbnail', expiresIn = 1800 }) {
+    const secret = env.GOOGLE_MEDIA_VIEW_SECRET || 'edkl_default_media_secret_fallback';
+    const expiresAt = Math.floor(Date.now() / 1000) + expiresIn;
+    const message = `${registrationId}:${archiveId}:${purpose}:${preset}:${expiresAt}`;
+    const sig = crypto.createHmac('sha256', secret).update(message).digest('hex');
+    return { expiresAt, sig };
+  }
 
+  /**
+   * Cryptographically verifies signed media token
+   */
+  verifySignedMediaToken({ registrationId, archiveId = '', purpose = 'preview', preset = 'thumbnail', expiresAt, sig }) {
+    if (!expiresAt || !sig) return false;
+    const expNum = Number(expiresAt);
+    if (isNaN(expNum) || Math.floor(Date.now() / 1000) > expNum) return false;
+    const secret = env.GOOGLE_MEDIA_VIEW_SECRET || 'edkl_default_media_secret_fallback';
+    const message = `${registrationId}:${archiveId}:${purpose}:${preset}:${expNum}`;
+    const expectedSig = crypto.createHmac('sha256', secret).update(message).digest('hex');
+    try {
+      return crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expectedSig, 'hex'));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Canonical media resolver: synchronous helper when archive & event are preloaded
+   */
+  resolveRegistrationMediaSync(registration, archive = null, eventObj = null) {
+    const rawPhoto = registration.couplePhoto || '';
+    const isCompleted = eventObj?.status === 'completed' || eventObj?.status === 'archived' || (eventObj?.date && eventObj.date < '2026-09-01' && eventObj.date !== 'TBD');
+    const isVerifiedArchive = archive && (archive.status === 'VERIFIED' || archive.status === 'ARCHIVED') && Boolean(archive.driveFileId);
+    const isOriginalDeleted = archive && archive.cloudinaryOriginalStatus === 'DELETED';
+
+    // 1. ACTIVE / UPCOMING EVENT: Always active Cloudinary media with standardized presets
+    if (!isCompleted) {
+      const thumbnailUrl = rawPhoto ? getOptimizedPhotoUrl(rawPhoto, 'thumbnail') : '';
+      const normalUrl = rawPhoto ? getOptimizedPhotoUrl(rawPhoto, 'normal') : '';
+      const largeUrl = rawPhoto ? getOptimizedPhotoUrl(rawPhoto, 'large') : '';
+      return {
+        provider: 'CLOUDINARY',
+        photoThumbnailUrl: thumbnailUrl,
+        couplePhoto: normalUrl || rawPhoto,
+        thumbnailUrl,
+        normalUrl,
+        largeUrl,
+        canDownloadOriginal: true,
+        downloadUrl: largeUrl,
+        photoStorageStatus: 'ACTIVE',
+        hasArchivedOriginal: false,
+        archiveStatus: archive ? archive.status : null,
+        cloudinaryOriginalStatus: archive?.cloudinaryOriginalStatus || 'ACTIVE',
+        operationalThumbnailUrl: archive?.operationalThumbnailUrl || null
+      };
+    }
+
+    // 2. COMPLETED EVENT WITH VERIFIED DRIVE ARCHIVE: Use secure Drive-backed archive media routes
+    if (isVerifiedArchive && registration.inquiryId) {
+      const regId = registration.inquiryId;
+      const archiveId = archive._id ? archive._id.toString() : '';
+
+      const thumbToken = this.generateSignedMediaToken({ registrationId: regId, archiveId, purpose: 'preview', preset: 'thumbnail' });
+      const normalToken = this.generateSignedMediaToken({ registrationId: regId, archiveId, purpose: 'preview', preset: 'normal' });
+      const largeToken = this.generateSignedMediaToken({ registrationId: regId, archiveId, purpose: 'preview', preset: 'large' });
+      const downloadToken = this.generateSignedMediaToken({ registrationId: regId, archiveId, purpose: 'download', preset: 'large' });
+
+      const thumbnailUrl = `/api/admin/media/${encodeURIComponent(regId)}/preview?preset=thumbnail&exp=${thumbToken.expiresAt}&sig=${thumbToken.sig}`;
+      const normalUrl = `/api/admin/media/${encodeURIComponent(regId)}/preview?preset=normal&exp=${normalToken.expiresAt}&sig=${normalToken.sig}`;
+      const largeUrl = `/api/admin/media/${encodeURIComponent(regId)}/preview?preset=large&exp=${largeToken.expiresAt}&sig=${largeToken.sig}`;
+      const downloadUrl = `/api/admin/media/${encodeURIComponent(regId)}/download?exp=${downloadToken.expiresAt}&sig=${downloadToken.sig}`;
+
+      return {
+        provider: 'DRIVE_ARCHIVE',
+        photoThumbnailUrl: thumbnailUrl,
+        couplePhoto: normalUrl,
+        thumbnailUrl,
+        normalUrl,
+        largeUrl,
+        canDownloadOriginal: true,
+        downloadUrl,
+        photoStorageStatus: 'ARCHIVED',
+        hasArchivedOriginal: true,
+        archiveStatus: archive.status,
+        cloudinaryOriginalStatus: archive.cloudinaryOriginalStatus || 'ACTIVE',
+        operationalThumbnailUrl: archive.operationalThumbnailUrl || null
+      };
+    }
+
+    // 3. FALLBACK: Drive archive unavailable or Cloudinary original deleted
+    if (isOriginalDeleted) {
+      return {
+        provider: 'FALLBACK',
+        photoThumbnailUrl: '/sample_couple.png',
+        couplePhoto: '/sample_couple.png',
+        thumbnailUrl: '/sample_couple.png',
+        normalUrl: '/sample_couple.png',
+        largeUrl: '/sample_couple.png',
+        canDownloadOriginal: false,
+        downloadUrl: null,
+        photoStorageStatus: 'ARCHIVED',
+        hasArchivedOriginal: false,
+        archiveStatus: archive ? archive.status : null,
+        cloudinaryOriginalStatus: 'DELETED',
+        operationalThumbnailUrl: null
+      };
+    }
+
+    const fallbackUrl = rawPhoto || '/sample_couple.png';
+    const fallbackThumb = rawPhoto ? getOptimizedPhotoUrl(rawPhoto, 'thumbnail') : '/sample_couple.png';
+    return {
+      provider: 'FALLBACK',
+      photoThumbnailUrl: fallbackThumb,
+      couplePhoto: fallbackUrl,
+      thumbnailUrl: fallbackThumb,
+      normalUrl: fallbackUrl,
+      largeUrl: fallbackUrl,
+      canDownloadOriginal: Boolean(rawPhoto),
+      downloadUrl: rawPhoto || null,
+      photoStorageStatus: archive ? (archive.status === 'QUEUED' || archive.status === 'COPYING' ? 'QUEUED' : archive.status) : 'ACTIVE',
+      hasArchivedOriginal: Boolean(archive?.driveFileId),
+      archiveStatus: archive ? archive.status : null,
+      cloudinaryOriginalStatus: archive?.cloudinaryOriginalStatus || 'ACTIVE',
+      operationalThumbnailUrl: archive?.operationalThumbnailUrl || null
+    };
+  }
+
+  /**
+   * Resolves safe media state for a registration with canonical media rules
+   */
+  async resolveRegistrationMedia(registration, archiveRecord = null, eventObj = null) {
     let archive = archiveRecord;
     if (!archive && registration.inquiryId) {
       archive = await MediaArchive.findOne({
@@ -89,41 +209,14 @@ export class MediaService {
       }).select('status driveFileId filename verifiedAt operationalThumbnailUrl operationalThumbnailPublicId cloudinaryOriginalStatus').lean();
     }
 
-    const isArchived = archive && (archive.status === 'VERIFIED' || archive.status === 'ARCHIVED');
-    const isQueued = archive && (archive.status === 'QUEUED' || archive.status === 'COPYING');
-    const isOriginalDeleted = archive && archive.cloudinaryOriginalStatus === 'DELETED';
-
-    // 1. Determine safe thumbnail URL (prioritize independent operational thumbnail)
-    let photoThumbnailUrl = '';
-    if (archive?.operationalThumbnailUrl) {
-      photoThumbnailUrl = archive.operationalThumbnailUrl;
-    } else if (rawPhoto) {
-      photoThumbnailUrl = this.getThumbnailUrl(rawPhoto);
+    let event = eventObj;
+    if (!event && registration.programId) {
+      event = await Event.findOne({
+        $or: [{ id: registration.programId }, { slug: registration.programId }]
+      }).select('status date id slug').lean();
     }
 
-    // 2. Determine safe couple photo URL (fallback to operational thumbnail if original was deleted)
-    let couplePhoto = rawPhoto;
-    if (isOriginalDeleted && archive?.operationalThumbnailUrl) {
-      couplePhoto = archive.operationalThumbnailUrl;
-    }
-
-    // Auto-transcode HEIC/HEIF Cloudinary URLs to universal standard JPEG
-    if (couplePhoto && couplePhoto.includes('cloudinary.com') && /\.(heic|heif)$/i.test(couplePhoto)) {
-      couplePhoto = couplePhoto.replace(/\.(heic|heif)$/i, '.jpg');
-    }
-    if (photoThumbnailUrl && photoThumbnailUrl.includes('cloudinary.com') && /\.(heic|heif)$/i.test(photoThumbnailUrl)) {
-      photoThumbnailUrl = photoThumbnailUrl.replace(/\.(heic|heif)$/i, '.jpg');
-    }
-
-    return {
-      photoThumbnailUrl,
-      couplePhoto,
-      photoStorageStatus: isArchived ? 'ARCHIVED' : (isQueued ? 'QUEUED' : 'ACTIVE'),
-      hasArchivedOriginal: Boolean(isArchived && archive.driveFileId),
-      archiveStatus: archive ? archive.status : null,
-      cloudinaryOriginalStatus: archive?.cloudinaryOriginalStatus || 'ACTIVE',
-      operationalThumbnailUrl: archive?.operationalThumbnailUrl || null
-    };
+    return this.resolveRegistrationMediaSync(registration, archive, event);
   }
 
   /**

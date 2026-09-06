@@ -2,7 +2,11 @@ import mongoose from 'mongoose';
 
 async function run() {
   console.log('[Requeue Script] Connecting to production database...');
-  await mongoose.connect('mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority');
+  const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+  if (!mongoUri) {
+    throw new Error('[SECURITY ERROR] MONGO_URI is required.');
+  }
+  await mongoose.connect(mongoUri);
   
   const Msg = mongoose.model('WhatsappMessage', new mongoose.Schema({}, { collection: 'whatsapp_messages', strict: false }));
   const Reg = mongoose.model('Submission', new mongoose.Schema({}, { collection: 'submission', strict: false }));

@@ -5,7 +5,7 @@ if (dns.setDefaultResultOrder) {
 import mongoose from 'mongoose';
 import { env } from '../src/config/env.js';
 
-const prodUri = env.MONGODB_URI || 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
+const prodUri = env.MONGODB_URI || (process.env.PROD_MONGO_URI || process.env.MONGO_URI);
 
 async function run() {
   await mongoose.connect(prodUri);

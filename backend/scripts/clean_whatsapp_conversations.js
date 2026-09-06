@@ -7,7 +7,7 @@ import { WhatsappMessage } from '../src/models/WhatsappMessage.js';
 import { Registration } from '../src/models/Registration.js';
 import { normalizePhoneNumber, maskPhoneNumber, hashPhoneNumber } from '../src/integrations/whatsapp/whatsapp.service.js';
 
-const prodUri = env.MONGODB_URI || 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
+const prodUri = env.MONGODB_URI || (process.env.PROD_MONGO_URI || process.env.MONGO_URI);
 
 function formatPhoneDisplay(phone) {
   if (!phone) return 'WhatsApp Guest';

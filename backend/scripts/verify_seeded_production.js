@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const PROD_MONGO_URI = 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
+const PROD_MONGO_URI = (process.env.PROD_MONGO_URI || process.env.MONGO_URI);
 
 async function verify() {
   console.log('--- STARTING THOROUGH POST-SEEDING VERIFICATION ---');

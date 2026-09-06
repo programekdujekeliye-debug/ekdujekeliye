@@ -2,7 +2,11 @@ import mongoose from 'mongoose';
 
 async function run() {
   console.log('[Cleanup Script] Connecting to database...');
-  await mongoose.connect('mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority');
+  const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+  if (!mongoUri) {
+    throw new Error('[SECURITY ERROR] MONGO_URI is required.');
+  }
+  await mongoose.connect(mongoUri);
   const Sub = mongoose.model('Submission', new mongoose.Schema({}, { collection: 'submission', strict: false }));
 
   // Find all unpaid or rejected records that have frameExportStatus = 'EXPORTED'

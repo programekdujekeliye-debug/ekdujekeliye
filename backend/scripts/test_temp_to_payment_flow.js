@@ -15,7 +15,7 @@ async function runTestSuite() {
   console.log('RUNNING EDKL TEMP REGISTRATION -> PAYMENT ACTIVATION TEST SUITE');
   console.log('====================================================');
 
-  const uri = process.env.MONGODB_URI || 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
+  const uri = process.env.MONGODB_URI || (process.env.PROD_MONGO_URI || process.env.MONGO_URI);
   await mongoose.connect(uri);
 
   const testEventId = `test-prog-${Date.now()}`;

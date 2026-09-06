@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getOptimizedPhotoUrl } from '@/utils/mediaPresets';
 
 interface WhatsAppAvatarProps {
   name: string;
@@ -47,7 +48,7 @@ export const WhatsAppAvatar: React.FC<WhatsAppAvatarProps> = ({
     <div className={`relative flex-shrink-0 select-none ${className}`}>
       {hasValidPhoto ? (
         <img
-          src={photoUrl}
+          src={getOptimizedPhotoUrl(photoUrl, 'thumbnail')}
           alt={name}
           onError={() => setImageError(true)}
           className={`${sizeClasses} rounded-full object-cover border border-slate-200/90 shadow-2xs bg-slate-100`}

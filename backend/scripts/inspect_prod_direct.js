@@ -1,7 +1,7 @@
 import { connectDatabase } from '../src/config/database.js';
 import mongoose from 'mongoose';
 
-const prodUri = 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
+const prodUri = (process.env.PROD_MONGO_URI || process.env.MONGO_URI);
 
 async function run() {
   await mongoose.connect(prodUri, { family: 4 });

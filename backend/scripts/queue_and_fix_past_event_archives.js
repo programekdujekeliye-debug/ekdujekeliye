@@ -4,7 +4,7 @@ import { MediaArchive } from '../src/models/MediaArchive.js';
 import { Registration } from '../src/models/Registration.js';
 import { updateEventArchiveProgress } from '../src/modules/archive/archive.controller.js';
 
-const PROD_MONGO_URI = process.env.MONGODB_URI || 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
+const PROD_MONGO_URI = process.env.MONGODB_URI || (process.env.PROD_MONGO_URI || process.env.MONGO_URI);
 
 async function main() {
   console.log('====================================================');

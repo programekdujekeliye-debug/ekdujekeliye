@@ -11,7 +11,7 @@ cloudinary.config({
   secure: true
 });
 
-const PROD_MONGO_URI = process.env.MONGODB_URI || 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
+const PROD_MONGO_URI = process.env.MONGODB_URI || (process.env.PROD_MONGO_URI || process.env.MONGO_URI);
 
 const PROTECTED_EVENTS = new Set(['prog-2026-09-07', 'prog-2026-09-11', 'prog-2026-09-19']);
 const PROTECTED_PREFIXES = ['EK06-', 'EK07-', 'EK08-'];

@@ -9,6 +9,7 @@ import { API_BASE_URL } from '../../../config';
 import { DownloadIcon, CheckCircleIcon, SparklesIcon, XIcon, SearchIcon, CameraIcon } from '../../../components/Icons';
 import { LuxurySelect } from '../../../components/LuxurySelect';
 import { FrameReviewExportModal } from './FrameReviewExportModal';
+import { getOptimizedPhotoUrl } from '../../../utils/mediaPresets';
 import toast from 'react-hot-toast';
 
 interface BatchExportModalProps {
@@ -185,7 +186,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
 
       try {
         const photoPath = sub.couplePhoto!;
-        const fullPhotoUrl = resolvePhotoUrl(photoPath);
+        const fullPhotoUrl = getOptimizedPhotoUrl(resolvePhotoUrl(photoPath), 'large');
         const coupleImg = await loadImage(fullPhotoUrl);
 
         // Clear canvas
@@ -301,7 +302,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
 
       try {
         const photoPath = sub.couplePhoto!;
-        const fullPhotoUrl = resolvePhotoUrl(photoPath);
+        const fullPhotoUrl = getOptimizedPhotoUrl(resolvePhotoUrl(photoPath), 'large');
 
         const res = await fetch(fullPhotoUrl);
         if (!res.ok) throw new Error('Fetch failed');

@@ -8,7 +8,7 @@ import mongoose from 'mongoose';
 import { env } from '../src/config/env.js';
 import { sendUtilityTemplate } from '../src/integrations/whatsapp/whatsapp.service.js';
 
-const prodUri = 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
+const prodUri = (process.env.PROD_MONGO_URI || process.env.MONGO_URI);
 
 async function broadcastRichRoyal() {
   if (process.argv.includes('--live')) {

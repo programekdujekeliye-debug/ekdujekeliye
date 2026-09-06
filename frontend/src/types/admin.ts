@@ -65,21 +65,42 @@ export interface SiteSettings {
 
 export interface ArchiveCandidate {
   id: string;
+  sequence?: number;
   name: string;
   date: string;
   city: string;
   status: string;
   isCompleted: boolean;
+  isProtected?: boolean;
+  cleanupStatus?: 'PROTECTED' | 'READY' | 'PENDING_ARCHIVE' | 'REVIEW_REQUIRED' | 'NOT_APPLICABLE' | string;
+  historicalViewer?: 'CLOUDINARY' | 'DRIVE' | string;
   archiveStatus: string;
   isCurrentlyActive?: boolean;
   totalRegistrations: number;
   eligibleCouplePhotos: number;
+  invitationCardsCount?: number;
+  paymentScreenshotsCount?: number;
+  cloudinaryAssetsCount?: number;
+  cleanupEligible?: number;
   archivedAssets: number;
   queuedAssets: number;
   copyingAssets?: number;
   failedAssets?: number;
   progressPercent?: number;
   estimatedSizeMB: number;
+}
+
+export interface MediaStorageSummary {
+  cloudinaryActiveEvents: number;
+  cloudinaryAssetCount: number;
+  driveArchivedEvents: number;
+  verifiedArchiveCount: number;
+  pendingArchiveCount: number;
+  failedArchiveCount: number;
+  cleanupEligibleCount: number;
+  protectedActiveAssets: number;
+  lastArchiveRun: string | null;
+  lastCleanupRun: string | null;
 }
 
 export interface MediaArchiveJob {

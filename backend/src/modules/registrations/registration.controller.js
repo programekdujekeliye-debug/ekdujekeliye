@@ -12,6 +12,8 @@ import { invitationCardService } from '../../services/invitationCard.service.js'
 import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
 import { transferNotificationService } from '../../services/transferNotification.service.js';
 import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
+import { getOptimizedPhotoUrl } from '../../utils/mediaPresets.js';
+import { mediaService } from '../media/media.service.js';
 
 export const submitRegistration = async (req, res) => {
   const { husbandName, wifeName, surname, phoneNumber, programId, whatsappOptIn } = req.body;
@@ -552,34 +554,31 @@ export const getSubmissionsList = async (req, res) => {
 
     // Batch resolve media storage status for fast Admin UI rendering
     const inquiryIds = submissions.map(s => s.inquiryId);
-    const archives = inquiryIds.length > 0 ? await MediaArchive.find({
-      registrationId: { $in: inquiryIds },
-      status: { $in: ['VERIFIED', 'ARCHIVED', 'QUEUED', 'COPYING'] }
-    }).select('registrationId status driveFileId filename operationalThumbnailUrl operationalThumbnailPublicId cloudinaryOriginalStatus').lean() : [];
+    const programIds = Array.from(new Set(submissions.map(s => s.programId).filter(Boolean)));
+
+    const [archives, events] = await Promise.all([
+      inquiryIds.length > 0 ? MediaArchive.find({
+        registrationId: { $in: inquiryIds },
+        status: { $in: ['VERIFIED', 'ARCHIVED', 'QUEUED', 'COPYING'] }
+      }).select('registrationId status driveFileId filename operationalThumbnailUrl operationalThumbnailPublicId cloudinaryOriginalStatus').lean() : [],
+      programIds.length > 0 ? Event.find({
+        $or: [{ id: { $in: programIds } }, { slug: { $in: programIds } }]
+      }).select('id slug status date').lean() : []
+    ]);
 
     const archiveMap = new Map();
     archives.forEach(a => archiveMap.set(a.registrationId, a));
 
+    const eventMap = new Map();
+    events.forEach(e => {
+      if (e.id) eventMap.set(e.id, e);
+      if (e.slug) eventMap.set(e.slug, e);
+    });
+
     const enrichedSubmissions = submissions.map(sub => {
       const archive = archiveMap.get(sub.inquiryId);
-      const isArchived = archive && (archive.status === 'VERIFIED' || archive.status === 'ARCHIVED');
-      const isQueued = archive && (archive.status === 'QUEUED' || archive.status === 'COPYING');
-      const isOriginalDeleted = archive && archive.cloudinaryOriginalStatus === 'DELETED';
-      const rawPhoto = sub.couplePhoto || '';
-
-      let photoThumbnailUrl = '';
-      if (archive?.operationalThumbnailUrl) {
-        photoThumbnailUrl = archive.operationalThumbnailUrl;
-      } else if (rawPhoto.includes('cloudinary.com') && rawPhoto.includes('/upload/') && !rawPhoto.includes('/archive-thumbnails/')) {
-        photoThumbnailUrl = rawPhoto.replace('/upload/', '/upload/c_limit,w_400,q_auto,f_auto/');
-      } else {
-        photoThumbnailUrl = rawPhoto;
-      }
-
-      let couplePhoto = rawPhoto;
-      if (isOriginalDeleted && archive?.operationalThumbnailUrl) {
-        couplePhoto = archive.operationalThumbnailUrl;
-      }
+      const eventObj = eventMap.get(sub.programId);
+      const mediaState = mediaService.resolveRegistrationMediaSync(sub, archive, eventObj);
 
       const isOldEvent = sub.programDate?.startsWith('2026-08') || sub.inquiryId?.startsWith('EK05') || sub.inquiryId?.startsWith('IP') || sub.inquiryId?.startsWith('EK01') || sub.inquiryId?.startsWith('EK02') || sub.inquiryId?.startsWith('EK03') || sub.inquiryId?.startsWith('EK04');
       const defaultAmount = isOldEvent ? 1000 : 1500;
@@ -597,12 +596,7 @@ export const getSubmissionsList = async (req, res) => {
         ...sub,
         payment: paymentObj,
         amount: paymentObj.amount,
-        couplePhoto,
-        photoThumbnailUrl,
-        photoStorageStatus: isArchived ? 'ARCHIVED' : (isQueued ? 'QUEUED' : 'ACTIVE'),
-        hasArchivedOriginal: Boolean(isArchived && archive.driveFileId),
-        archiveStatus: archive ? archive.status : null,
-        cloudinaryOriginalStatus: archive?.cloudinaryOriginalStatus || 'ACTIVE'
+        ...mediaState
       };
     });
 
@@ -971,10 +965,27 @@ export const bulkUpdateFrameAlignments = async (req, res) => {
 export const getCouplePhotoRedirect = async (req, res) => {
   const { inquiryId } = req.params;
   try {
-    const sub = await Registration.findOne({ inquiryId }, { couplePhoto: 1 }).lean();
+    const sub = await Registration.findOne({ inquiryId }, { couplePhoto: 1, programId: 1 }).lean();
     if (!sub || !sub.couplePhoto) {
       return res.redirect(302, '/sample_couple.png');
     }
+
+    // Check if verified archive exists in Google Drive
+    const archive = await MediaArchive.findOne({
+      registrationId: inquiryId,
+      status: { $in: ['VERIFIED', 'ARCHIVED'] }
+    }).select('status driveFileId cloudinaryOriginalStatus').lean();
+
+    if (archive && archive.driveFileId) {
+      const token = mediaService.generateSignedMediaToken({
+        registrationId: inquiryId,
+        archiveId: archive._id ? archive._id.toString() : '',
+        purpose: 'preview',
+        preset: 'normal'
+      });
+      return res.redirect(302, `/api/admin/media/${encodeURIComponent(inquiryId)}/preview?preset=normal&exp=${token.expiresAt}&sig=${token.sig}`);
+    }
+
     if (sub.couplePhoto.startsWith('http://') || sub.couplePhoto.startsWith('https://')) {
       return res.redirect(302, sub.couplePhoto);
     }

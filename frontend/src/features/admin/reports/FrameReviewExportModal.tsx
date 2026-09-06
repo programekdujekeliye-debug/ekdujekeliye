@@ -56,22 +56,25 @@ export const resolvePhotoUrl = (photoPath: string): string => {
   return `${API_BASE_URL}${photoPath.startsWith('/') ? photoPath : `/${photoPath}`}`;
 };
 
+import { getOptimizedPhotoUrl as getPresetPhotoUrl, MediaPreset } from '../../../utils/mediaPresets';
+
 /**
  * Cloudinary fast thumbnail / preview optimizer:
- * Converts raw 5-15MB camera uploads into super-fast ~25KB WebP/JPEGs
+ * Enforces standardized presets ('thumbnail' w_240, 'normal' w_720, 'large' w_1200)
+ * to prevent generating arbitrary width variants.
  */
-export const getOptimizedPhotoUrl = (url: string, width = 360, height = 480): string => {
+export const getOptimizedPhotoUrl = (url: string, presetOrWidth?: MediaPreset | number, height?: number): string => {
   if (!url) return '';
   const full = resolvePhotoUrl(url);
-  if (full.includes('res.cloudinary.com') && full.includes('/image/upload/')) {
-    if (!full.includes('/image/upload/w_') && !full.includes('/image/upload/c_')) {
-      return full.replace(
-        '/image/upload/',
-        `/image/upload/w_${width},h_${height},c_limit,q_auto,f_auto/`
-      );
-    }
+  let preset: MediaPreset = 'thumbnail';
+  if (typeof presetOrWidth === 'string' && (presetOrWidth === 'thumbnail' || presetOrWidth === 'normal' || presetOrWidth === 'large')) {
+    preset = presetOrWidth;
+  } else if (typeof presetOrWidth === 'number') {
+    if (presetOrWidth >= 1000) preset = 'large';
+    else if (presetOrWidth >= 500) preset = 'normal';
+    else preset = 'thumbnail';
   }
-  return full;
+  return getPresetPhotoUrl(full, preset);
 };
 
 // Global memory cache for loaded images to eliminate redundant network fetches
@@ -993,7 +996,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
           return;
         }
         try {
-          const photoUrl = resolvePhotoUrl(sub.couplePhoto);
+          const photoUrl = getOptimizedPhotoUrl(sub.couplePhoto, 'large');
           const res = await fetch(photoUrl, { mode: 'cors' });
           if (res.ok) {
             const blob = await res.blob();

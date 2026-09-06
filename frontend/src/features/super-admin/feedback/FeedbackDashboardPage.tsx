@@ -22,6 +22,7 @@ import {
   AwardIcon,
   HeartIcon
 } from '../../../components/Icons';
+import { getOptimizedPhotoUrl } from '../../../utils/mediaPresets';
 import toast from 'react-hot-toast';
 
 const TAKEAWAY_LABELS: Record<string, { eng: string; guj: string }> = {
@@ -697,7 +698,7 @@ export const FeedbackDashboardPage = () => {
                         <div className="flex items-center gap-2.5">
                           {fb.couplePhoto ? (
                             <img
-                              src={fb.couplePhoto}
+                              src={getOptimizedPhotoUrl(fb.couplePhoto, 'thumbnail')}
                               alt={fb.coupleName}
                               className="w-8 h-8 rounded-full object-cover border border-slate-200 flex-shrink-0"
                             />
@@ -874,7 +875,7 @@ export const FeedbackDashboardPage = () => {
               <div className="flex items-center gap-3">
                 {selectedFeedback.couplePhoto ? (
                   <img
-                    src={selectedFeedback.couplePhoto}
+                    src={getOptimizedPhotoUrl(selectedFeedback.couplePhoto, 'normal')}
                     alt={selectedFeedback.coupleName}
                     className="w-12 h-12 rounded-full object-cover border-2 border-rose-200"
                   />

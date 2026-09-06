@@ -6,7 +6,7 @@ import { archiveApi } from '../../../services/admin/archiveApi';
 import { backupsApi } from '../../../services/admin/backupsApi';
 import { resourcesApi } from '../../../services/admin/resourcesApi';
 import { settingsApi } from '../../../services/admin/settingsApi';
-import { ArchiveCandidate, MediaArchiveJob, BackupRecordItem, DatabaseStats } from '../../../types';
+import { ArchiveCandidate, MediaArchiveJob, BackupRecordItem, DatabaseStats, MediaStorageSummary } from '../../../types';
 import { ArchiveIcon, RefreshCwIcon, ShieldCheckIcon, HourglassIcon, CameraIcon, CheckIcon, CogIcon, XIcon, DatabaseIcon, ExternalLinkIcon } from '../../../components/Icons';
 import toast from 'react-hot-toast';
 
@@ -21,6 +21,7 @@ export const StoragePage = () => {
 
   // Candidates
   const [candidates, setCandidates] = useState<ArchiveCandidate[]>([]);
+  const [mediaSummary, setMediaSummary] = useState<MediaStorageSummary | null>(null);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [queuingEventId, setQueuingEventId] = useState<string | null>(null);
 
@@ -55,8 +56,9 @@ export const StoragePage = () => {
   const fetchCandidates = async () => {
     try {
       setLoadingCandidates(true);
-      const data = await archiveApi.getCandidates();
-      setCandidates(data);
+      const res = await archiveApi.getCandidatesWithSummary();
+      setCandidates(res.candidates);
+      if (res.summary) setMediaSummary(res.summary);
     } catch (err) {
       console.error('Failed to fetch candidates:', err);
     } finally {
@@ -365,6 +367,52 @@ export const StoragePage = () => {
         </button>
       </div>
 
+      {/* Super Admin Media Storage Engine Monitor */}
+      {mediaSummary && (
+        <div className="bg-gradient-to-r from-purple-900 to-indigo-900 text-white rounded-2xl p-5 shadow-xs space-y-3">
+          <div className="flex flex-wrap justify-between items-center gap-2 border-b border-purple-700/50 pb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <h3 className="font-extrabold text-sm uppercase tracking-wider text-purple-100">Media Storage Engine & Recovery Monitor</h3>
+            </div>
+            <span className="text-[11px] font-mono text-purple-200">
+              Protected Active Assets: <strong>{mediaSummary.protectedActiveAssets}</strong> (EK06, EK07, EK08)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 pt-1 text-center">
+            <div className="bg-purple-950/40 rounded-xl p-2.5 border border-purple-700/30">
+              <span className="text-[10px] text-purple-300 font-bold block uppercase">Cloudinary Active</span>
+              <span className="text-xl font-extrabold text-white">{mediaSummary.cloudinaryActiveEvents} Events</span>
+            </div>
+            <div className="bg-purple-950/40 rounded-xl p-2.5 border border-purple-700/30">
+              <span className="text-[10px] text-purple-300 font-bold block uppercase">Total Cloudinary</span>
+              <span className="text-xl font-extrabold text-amber-300">{mediaSummary.cloudinaryAssetCount} Assets</span>
+            </div>
+            <div className="bg-purple-950/40 rounded-xl p-2.5 border border-purple-700/30">
+              <span className="text-[10px] text-purple-300 font-bold block uppercase">Drive Archived</span>
+              <span className="text-xl font-extrabold text-white">{mediaSummary.driveArchivedEvents} Events</span>
+            </div>
+            <div className="bg-purple-950/40 rounded-xl p-2.5 border border-purple-700/30">
+              <span className="text-[10px] text-purple-300 font-bold block uppercase">Verified in Drive</span>
+              <span className="text-xl font-extrabold text-emerald-400">{mediaSummary.verifiedArchiveCount} Files</span>
+            </div>
+            <div className="bg-purple-950/40 rounded-xl p-2.5 border border-purple-700/30">
+              <span className="text-[10px] text-purple-300 font-bold block uppercase">Pending Archive</span>
+              <span className="text-xl font-extrabold text-sky-300">{mediaSummary.pendingArchiveCount}</span>
+            </div>
+            <div className="bg-purple-950/40 rounded-xl p-2.5 border border-purple-700/30">
+              <span className="text-[10px] text-purple-300 font-bold block uppercase">Failed Archive</span>
+              <span className="text-xl font-extrabold text-rose-400">{mediaSummary.failedArchiveCount}</span>
+            </div>
+            <div className="bg-purple-950/40 rounded-xl p-2.5 border border-purple-700/30">
+              <span className="text-[10px] text-purple-300 font-bold block uppercase">Cleanup Eligible</span>
+              <span className="text-xl font-extrabold text-emerald-300">{mediaSummary.cleanupEligibleCount}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tab 1: Candidates View */}
       {tab === 'candidates' && (
         <div className="bg-white border border-slate-200 shadow-xs rounded-2xl p-4 sm:p-6 space-y-4">
@@ -372,7 +420,7 @@ export const StoragePage = () => {
             <div>
               <h3 className="font-extrabold text-slate-900 text-sm">Completed &amp; Historical Event Candidates</h3>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Select events to discover couple photos and queue them for direct Google Drive transfer.
+                Manage Google Drive archive lifecycle and verified Cloudinary storage recovery.
               </p>
             </div>
             <button
@@ -410,35 +458,62 @@ export const StoragePage = () => {
                         <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-700 font-bold rounded-md uppercase">
                           {cand.city} &bull; {cand.date}
                         </span>
+                        {cand.isProtected && (
+                          <span className="text-[10px] px-2 py-0.5 bg-blue-100 text-blue-800 font-extrabold rounded-md uppercase tracking-wider border border-blue-200">
+                            🛡️ ACTIVE CDN PROTECTED
+                          </span>
+                        )}
+                        {/* Historical Viewer Indicator */}
+                        <span
+                          className={`text-[10px] px-2 py-0.5 font-extrabold rounded-md uppercase whitespace-nowrap ${
+                            cand.historicalViewer === 'DRIVE'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : 'bg-purple-100 text-purple-800 border border-purple-300'
+                          }`}
+                        >
+                          Viewer: {cand.historicalViewer || 'CLOUDINARY'}
+                        </span>
+                        {/* Cleanup Status Badge */}
+                        <span
+                          className={`text-[10px] px-2 py-0.5 font-extrabold rounded-md uppercase whitespace-nowrap ${
+                            cand.cleanupStatus === 'PROTECTED'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-300'
+                              : cand.cleanupStatus === 'READY'
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                              : cand.cleanupStatus === 'REVIEW_REQUIRED'
+                              ? 'bg-rose-50 text-rose-800 border border-rose-300'
+                              : 'bg-amber-50 text-amber-800 border border-amber-300'
+                          }`}
+                        >
+                          Cleanup: {cand.cleanupStatus || (cand.isProtected ? 'PROTECTED' : 'READY')}
+                        </span>
                         {isArchiving && (
                           <span className="text-[10px] px-2.5 py-0.5 bg-purple-600 text-white font-extrabold rounded-full uppercase tracking-wider animate-pulse whitespace-nowrap">
                             CURRENT ARCHIVE
                           </span>
                         )}
-                        <span
-                          className={`text-[10px] px-2 py-0.5 font-extrabold rounded-md uppercase whitespace-nowrap ${
-                            isCompletedArchive
-                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                              : isArchiving
-                              ? 'bg-purple-100 text-purple-800 border border-purple-300'
-                              : isPaused
-                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                              : isPartial
-                              ? 'bg-rose-50 text-rose-800 border border-rose-200'
-                              : 'bg-slate-100 text-slate-700'
-                          }`}
-                        >
-                          {cand.archiveStatus}
-                        </span>
                       </div>
 
                       <div className="text-xs text-slate-500 flex items-center gap-4 flex-wrap">
-                        <span className="inline-flex items-center gap-1"><CameraIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" /> Eligible: <strong>{cand.eligibleCouplePhotos}</strong></span>
-                        <span className="inline-flex items-center gap-1"><CheckIcon className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" /> Verified: <strong className="text-emerald-700">{cand.archivedAssets}</strong></span>
+                        <span className="inline-flex items-center gap-1">
+                          <CameraIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                          Cloudinary: <strong>{cand.cloudinaryAssetsCount ?? cand.eligibleCouplePhotos} assets (~{cand.estimatedSizeMB} MB)</strong>
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <CheckIcon className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                          Drive: <strong className="text-emerald-700">{cand.archivedAssets} verified</strong>
+                        </span>
+                        {cand.cleanupEligible !== undefined && cand.cleanupEligible > 0 && (
+                          <span className="inline-flex items-center gap-1">
+                            <ShieldCheckIcon className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />
+                            Eligible Deletes: <strong className="text-purple-700">{cand.cleanupEligible}</strong>
+                          </span>
+                        )}
                         <span className="inline-flex items-center gap-1"><HourglassIcon className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" /> Queued: <strong className="text-amber-700">{cand.queuedAssets}</strong></span>
                         <span className="inline-flex items-center gap-1"><CogIcon className="w-3.5 h-3.5 text-sky-600 flex-shrink-0" /> Copying: <strong className="text-sky-700">{cand.copyingAssets || 0}</strong></span>
-                        <span className="inline-flex items-center gap-1"><XIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" /> Failed: <strong className="text-rose-700">{cand.failedAssets || 0}</strong></span>
-                        <span className="inline-flex items-center gap-1"><DatabaseIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" /> Est. Size: <strong>{cand.estimatedSizeMB} MB</strong></span>
+                        {cand.failedAssets !== undefined && cand.failedAssets > 0 && (
+                          <span className="inline-flex items-center gap-1"><XIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" /> Failed: <strong className="text-rose-700">{cand.failedAssets}</strong></span>
+                        )}
                       </div>
 
                       {cand.eligibleCouplePhotos > 0 && (

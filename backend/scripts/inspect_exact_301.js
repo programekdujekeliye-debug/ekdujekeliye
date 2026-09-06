@@ -1,7 +1,11 @@
 import mongoose from 'mongoose';
 
 async function run() {
-  await mongoose.connect('mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority');
+  const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+  if (!mongoUri) {
+    throw new Error('[SECURITY ERROR] MONGO_URI is required.');
+  }
+  await mongoose.connect(mongoUri);
   const Sub = mongoose.model('Submission', new mongoose.Schema({}, { collection: 'submission', strict: false }));
   
   const eventIds = ['prog-2026-09-07', 'surat-7-september-2026', '2026-09-07'];

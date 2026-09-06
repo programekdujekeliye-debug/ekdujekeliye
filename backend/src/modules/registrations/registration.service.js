@@ -372,7 +372,7 @@ export class RegistrationService {
       }
     }
 
-    const mediaState = await mediaService.resolveRegistrationMedia(submission);
+    const mediaState = await mediaService.resolveRegistrationMedia(submission, null, program);
     // Prioritize the Event's current active card template over any stale registration cardTemplate!
     // NEVER fall back to legacy /card_template.png with 24 July graphics
     let resolvedTemplate = program?.cardTemplateUrl || program?.cardTemplate || '';

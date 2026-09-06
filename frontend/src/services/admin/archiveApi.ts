@@ -1,5 +1,5 @@
 import { apiClient } from '../apiClient';
-import { ArchiveCandidate, MediaArchiveJob } from '../../types/admin';
+import { ArchiveCandidate, MediaArchiveJob, MediaStorageSummary } from '../../types/admin';
 
 export interface GetArchiveJobsParams {
   page?: number;
@@ -25,8 +25,16 @@ export interface ArchiveJobsResponse {
 
 export const archiveApi = {
   async getCandidates(): Promise<ArchiveCandidate[]> {
-    const res = await apiClient<{ success: boolean; candidates: ArchiveCandidate[] }>('/api/super-admin/archive/candidates');
+    const res = await apiClient<{ success: boolean; candidates: ArchiveCandidate[]; summary?: MediaStorageSummary }>('/api/super-admin/archive/candidates');
     return res.candidates || [];
+  },
+
+  async getCandidatesWithSummary(): Promise<{ candidates: ArchiveCandidate[]; summary?: MediaStorageSummary }> {
+    const res = await apiClient<{ success: boolean; candidates: ArchiveCandidate[]; summary?: MediaStorageSummary }>('/api/super-admin/archive/candidates');
+    return {
+      candidates: res.candidates || [],
+      summary: res.summary
+    };
   },
 
   async startEventArchive(eventId: string): Promise<any> {

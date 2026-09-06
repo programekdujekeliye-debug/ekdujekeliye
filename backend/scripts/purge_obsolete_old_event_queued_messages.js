@@ -8,7 +8,7 @@ async function run() {
   const isProd = process.argv.includes('--prod');
   let mongoUri = process.env.MONGO_URI || env.MONGO_URI;
   if (isProd) {
-    mongoUri = "mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority";
+    mongoUri = (process.env.PROD_MONGO_URI || process.env.MONGO_URI);
   }
   console.log(`Connecting to MongoDB (${isProd ? 'PRODUCTION ekdujekeliye' : 'CONFIGURED'} database)...`);
   const conn = await mongoose.connect(mongoUri);
