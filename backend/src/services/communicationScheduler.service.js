@@ -391,7 +391,15 @@ export class CommunicationSchedulerService {
         scheduledFor: { $lte: currentNow }
       };
       if (options.eventId && options.eventId !== 'all') {
-        candidateQuery.eventId = options.eventId;
+        const eventDoc = await Event.findOne({
+          $or: [
+            { id: options.eventId },
+            { slug: options.eventId },
+            ...(mongoose.isValidObjectId(options.eventId) ? [{ _id: options.eventId }] : [])
+          ]
+        }).lean();
+        const eventIds = [options.eventId, eventDoc?.id, eventDoc?.slug, eventDoc?.date].filter(Boolean);
+        candidateQuery.eventId = { $in: eventIds };
       }
 
       const candidateJobs = await WhatsappMessage.find(candidateQuery)
