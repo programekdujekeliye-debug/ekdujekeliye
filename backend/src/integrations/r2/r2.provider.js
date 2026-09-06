@@ -18,7 +18,7 @@ export class R2StorageProvider {
     this.enabled = env.R2_ENABLED;
     this.publicBucket = env.R2_PUBLIC_BUCKET || 'edkl-public-media';
     this.privateBucket = env.R2_PRIVATE_BUCKET || 'edkl-private-media';
-    this.publicBaseUrl = (env.R2_PUBLIC_BASE_URL || 'https://media.ekdujekeliye.in').replace(/\/$/, '');
+    this.publicBaseUrl = (env.R2_PUBLIC_BASE_URL || 'https://pub-b443f0b5d5cd4f0e854c148656b56760.r2.dev').replace(/\/$/, '');
 
     if (this.enabled) {
       const httpsAgent = new https.Agent({

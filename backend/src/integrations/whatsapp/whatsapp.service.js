@@ -475,7 +475,13 @@ export async function sendWhatsAppMessage(rawParams = {}) {
 
   const headerComponent = templateDef.components?.find(c => c.type === 'HEADER');
   if (headerComponent && headerComponent.format === 'IMAGE') {
-    const mediaUrl = variables.headerImageUrl || variables.imageUrl || variables.invitationImageUrl || 'https://www.ekdujekeliye.in/sample_couple.png';
+    let mediaUrl = variables.headerImageUrl || variables.imageUrl || variables.invitationImageUrl || 'https://www.ekdujekeliye.in/sample_couple.png';
+
+    // Safety Normalizer: rewrite any unresolvable media.ekdujekeliye.in domain to active Cloudflare R2 public URL
+    if (mediaUrl && mediaUrl.includes('media.ekdujekeliye.in')) {
+      mediaUrl = mediaUrl.replace('https://media.ekdujekeliye.in', 'https://pub-b443f0b5d5cd4f0e854c148656b56760.r2.dev');
+    }
+
     componentsPayload.push({
       type: 'header',
       parameters: [

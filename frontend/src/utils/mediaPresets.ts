@@ -129,7 +129,7 @@ export function resolveRegistrationPhoto(
   const rawPhoto = registration.couplePhoto || '';
 
   // Cloudflare R2 direct public CDN URL
-  if (rawPhoto.includes('media.ekdujekeliye.in') || rawPhoto.includes('.r2.cloudflarestorage.com')) {
+  if (rawPhoto.includes('media.ekdujekeliye.in') || rawPhoto.includes('.r2.cloudflarestorage.com') || rawPhoto.includes('.r2.dev')) {
     return {
       provider: 'R2',
       thumbnailUrl: registration.photoThumbnailUrl || registration.thumbnailUrl || rawPhoto,

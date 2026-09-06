@@ -203,7 +203,7 @@ export const env = {
   R2_ENDPOINT: readOptionalEnv('R2_ENDPOINT') || (readOptionalEnv('R2_ACCOUNT_ID') || readOptionalEnv('CLOUDFLARE_ACCOUNT_ID') ? `https://${readOptionalEnv('R2_ACCOUNT_ID') || readOptionalEnv('CLOUDFLARE_ACCOUNT_ID')}.r2.cloudflarestorage.com` : ''),
   R2_PUBLIC_BUCKET: readOptionalEnv('R2_PUBLIC_BUCKET') || 'edkl-public-media',
   R2_PRIVATE_BUCKET: readOptionalEnv('R2_PRIVATE_BUCKET') || 'edkl-private-media',
-  R2_PUBLIC_BASE_URL: readOptionalEnv('R2_PUBLIC_BASE_URL') || 'https://media.ekdujekeliye.in',
+  R2_PUBLIC_BASE_URL: readOptionalEnv('R2_PUBLIC_BASE_URL') || 'https://pub-b443f0b5d5cd4f0e854c148656b56760.r2.dev',
   R2_ENABLED: Boolean(readOptionalEnv('R2_ACCESS_KEY_ID') && readOptionalEnv('R2_SECRET_ACCESS_KEY')),
 
   // Authoritative Media Tier Settings

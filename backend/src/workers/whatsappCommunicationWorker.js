@@ -67,9 +67,17 @@ export async function runAutomaticWhatsAppWorker() {
         trigger: msg.trigger
       });
       if (res.success) processedCount++;
+
+      // If Meta returns Spam Rate Limit or Throttling, stop processing to protect sender health
+      if (res.code === '131048' || res.code === '131056' || (res.error && res.error.includes('Spam'))) {
+        console.warn(`[WhatsApp Worker] Meta Spam Rate Limit detected (${res.code}). Pausing worker execution to protect sender score.`);
+        break;
+      }
     } catch (e) {
       console.warn(`[WhatsApp Worker] Error retrying message ${msg.messageId}:`, e.message);
     }
+    // Respect Meta rate limits with 800ms pacing
+    await new Promise(r => setTimeout(r, 800));
   }
 
   // 2. Scan Active Events for 48h Invitation, 24h Reminder, and Post-Event Reviews
@@ -180,6 +188,15 @@ export async function runAutomaticWhatsAppWorker() {
         });
 
         if (res.success && res.status === 'SENT') processedCount++;
+
+        // If Meta returns Spam Rate Limit or Throttling, stop processing to protect sender health
+        if (res.code === '131048' || res.code === '131056' || (res.error && res.error.includes('Spam'))) {
+          console.warn(`[WhatsApp Worker] Meta Spam Rate Limit detected (${res.code}). Pausing worker execution to protect sender score.`);
+          break;
+        }
+
+        // Respect Meta rate limits with 800ms pacing
+        await new Promise(r => setTimeout(r, 800));
       }
     }
 

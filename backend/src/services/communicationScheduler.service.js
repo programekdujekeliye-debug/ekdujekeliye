@@ -543,13 +543,14 @@ export class CommunicationSchedulerService {
       let effectiveVariables = { ...job.templateParameters };
       if (job.messageType === 'invitation') {
         try {
-          await invitationCardService.ensureInvitationCard(registration.inquiryId);
-          const photo = registration.couplePhoto || 'https://www.ekdujekeliye.in/sample_couple.png';
-          effectiveVariables.headerImageUrl = photo;
-          effectiveVariables.imageUrl = photo;
-          effectiveVariables.invitationImageUrl = photo;
+          const cardRes = await invitationCardService.ensureInvitationCardImage(registration, event);
+          const cardUrl = cardRes?.cardUrl || registration.invitationCardUrl || registration.couplePhoto || 'https://www.ekdujekeliye.in/sample_couple.png';
+          effectiveVariables.headerImageUrl = cardUrl;
+          effectiveVariables.imageUrl = cardUrl;
+          effectiveVariables.invitationImageUrl = cardUrl;
         } catch (_) {
-          effectiveVariables.headerImageUrl = 'https://www.ekdujekeliye.in/sample_couple.png';
+          const fallback = registration.invitationCardUrl || registration.couplePhoto || 'https://www.ekdujekeliye.in/sample_couple.png';
+          effectiveVariables.headerImageUrl = fallback;
         }
       }
 
@@ -602,8 +603,12 @@ export class CommunicationSchedulerService {
           summary.failed++;
         }
 
-        // Throttle 250ms between messages to respect Meta Cloud API rate limits
-        await new Promise(r => setTimeout(r, 250));
+        // Throttle 800ms between messages to respect Meta Cloud API rate limits
+        if (sendResult && (sendResult.code === '131048' || sendResult.code === '131056' || (sendResult.error && sendResult.error.includes('Spam')))) {
+          console.warn('[CommunicationScheduler] Spam rate limit detected from Meta. Pausing scheduled processing to protect phone rating.');
+          break;
+        }
+        await new Promise(r => setTimeout(r, 800));
       } catch (err) {
         summary.failed++;
         job.status = WHATSAPP_MESSAGE_STATUSES.FAILED;

@@ -1747,7 +1747,7 @@ export const retryEventFailedMessages = async (req, res) => {
       query.recipientPhone = { $nin: optedOutPhones };
     }
 
-    const failedMessages = await WhatsappMessage.find(query).limit(100);
+    const failedMessages = await WhatsappMessage.find(query).limit(250);
     if (failedMessages.length === 0) {
       return res.json({
         success: true,
@@ -1785,24 +1785,39 @@ export const retryEventFailedMessages = async (req, res) => {
         }
       }
 
-      // Schedule with 250ms spacing between jobs to prevent burst rate limits
-      const scheduledTime = new Date(now.getTime() + requeuedCount * 250);
+      // Schedule with 800ms spacing between jobs to prevent burst rate limits
+      const scheduledTime = new Date(now.getTime() + requeuedCount * 800);
+
+      const updatePayload = {
+        status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
+        scheduledFor: scheduledTime,
+        lockedAt: null,
+        attemptCount: 0,
+        providerErrorCode: null,
+        providerErrorMessage: null,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        idempotencyKey: `RETRY:${msg.templateName || msg.messageType}:${msg.inquiryId || msg.recipientPhone}:${Date.now()}_${requeuedCount}`
+      };
+
+      // Sanitize broken media.ekdujekeliye.in in templateParameters to active Cloudflare R2 URL
+      if (msg.templateParameters) {
+        const sanitizedParams = { ...msg.templateParameters };
+        let modified = false;
+        ['headerImageUrl', 'imageUrl', 'invitationImageUrl'].forEach(k => {
+          if (typeof sanitizedParams[k] === 'string' && sanitizedParams[k].includes('media.ekdujekeliye.in')) {
+            sanitizedParams[k] = sanitizedParams[k].replace('https://media.ekdujekeliye.in', 'https://pub-b443f0b5d5cd4f0e854c148656b56760.r2.dev');
+            modified = true;
+          }
+        });
+        if (modified) {
+          updatePayload.templateParameters = sanitizedParams;
+        }
+      }
 
       await WhatsappMessage.updateOne(
         { _id: msg._id },
-        {
-          $set: {
-            status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
-            scheduledFor: scheduledTime,
-            lockedAt: null,
-            attemptCount: 0,
-            providerErrorCode: null,
-            providerErrorMessage: null,
-            lastErrorCode: null,
-            lastErrorMessage: null,
-            idempotencyKey: `RETRY:${msg.templateName || msg.messageType}:${msg.inquiryId || msg.recipientPhone}:${Date.now()}_${requeuedCount}`
-          }
-        }
+        { $set: updatePayload }
       );
       requeuedCount++;
     }
