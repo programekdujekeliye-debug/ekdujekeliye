@@ -49,7 +49,11 @@ export const resolvePhotoUrl = (photoPath: string): string => {
   if (
     photoPath.startsWith('data:') ||
     photoPath.startsWith('http://') ||
-    photoPath.startsWith('https://')
+    photoPath.startsWith('https://') ||
+    photoPath.startsWith('/sample_couple.png') ||
+    photoPath.startsWith('/logo.png') ||
+    photoPath.startsWith('/frame_template.png') ||
+    photoPath.startsWith('/card_template.png')
   ) {
     return photoPath;
   }

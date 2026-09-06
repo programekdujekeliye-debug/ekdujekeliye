@@ -23,7 +23,7 @@ import {
   EditIcon
 } from '../../../components/Icons';
 import { BatchExportModal } from '../reports/BatchExportModal';
-import { getOptimizedPhotoUrl } from '../../../utils/mediaPresets';
+import { getOptimizedPhotoUrl, resolveDisplayImageUrl } from '../../../utils/mediaPresets';
 import { EditRegistrationModal } from '../registrations/EditRegistrationModal';
 import { registrationsApi } from '../../../services/admin/registrationsApi';
 import { LuxurySelect } from '../../../components/LuxurySelect';
@@ -630,17 +630,12 @@ export const VipPassesPage = () => {
                           {g.couplePhoto ? (
                             <button
                               type="button"
-                              onClick={() => setSelectedImage(getOptimizedPhotoUrl(g.couplePhoto || g.photoThumbnailUrl, 'normal'))}
+                              onClick={() => setSelectedImage(resolveDisplayImageUrl(g.couplePhoto || g.photoThumbnailUrl, 'normal'))}
                               className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer shadow-xs hover:scale-105 transition-transform"
                               title="Click to zoom couple photo"
                             >
                               <img
-                                src={
-                                  (g.photoThumbnailUrl || g.couplePhoto).startsWith('http') ||
-                                  (g.photoThumbnailUrl || g.couplePhoto).startsWith('data:')
-                                    ? getOptimizedPhotoUrl(g.photoThumbnailUrl || g.couplePhoto, 'thumbnail')
-                                    : `${API_BASE_URL}${g.photoThumbnailUrl || g.couplePhoto}`
-                                }
+                                src={resolveDisplayImageUrl(g.photoThumbnailUrl || g.couplePhoto, 'thumbnail')}
                                 alt="VIP Couple"
                                 className="w-full h-full object-cover"
                                 loading="lazy"
@@ -790,17 +785,12 @@ export const VipPassesPage = () => {
                         {g.couplePhoto ? (
                           <button
                             type="button"
-                            onClick={() => setSelectedImage(getOptimizedPhotoUrl(g.couplePhoto || g.photoThumbnailUrl, 'normal'))}
+                            onClick={() => setSelectedImage(resolveDisplayImageUrl(g.couplePhoto || g.photoThumbnailUrl, 'normal'))}
                             className="w-14 h-14 rounded-xl overflow-hidden border border-amber-200 bg-white cursor-pointer shadow-xs active:scale-95 transition-transform"
                             title="Tap to enlarge photo"
                           >
                             <img
-                              src={
-                                (g.photoThumbnailUrl || g.couplePhoto).startsWith('http') ||
-                                (g.photoThumbnailUrl || g.couplePhoto).startsWith('data:')
-                                  ? getOptimizedPhotoUrl(g.photoThumbnailUrl || g.couplePhoto, 'thumbnail')
-                                  : `${API_BASE_URL}${g.photoThumbnailUrl || g.couplePhoto}`
-                              }
+                              src={resolveDisplayImageUrl(g.photoThumbnailUrl || g.couplePhoto, 'thumbnail')}
                               alt="Couple"
                               className="w-full h-full object-cover"
                               loading="lazy"
@@ -1126,7 +1116,7 @@ export const VipPassesPage = () => {
         >
           <div className="relative max-w-lg w-full bg-white rounded-3xl overflow-hidden shadow-2xl p-2 animate-in fade-in-50 zoom-in-95">
             <img
-              src={selectedImage}
+              src={resolveDisplayImageUrl(selectedImage, 'large')}
               alt="VIP Couple Full"
               className="w-full h-auto max-h-[80vh] object-contain rounded-2xl"
             />

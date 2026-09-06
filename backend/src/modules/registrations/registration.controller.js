@@ -16,6 +16,7 @@ import { transferNotificationService } from '../../services/transferNotification
 import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
 import { getOptimizedPhotoUrl } from '../../utils/mediaPresets.js';
 import { mediaService } from '../media/media.service.js';
+import { warmRegistrationMediaCache, invalidateRegistrationMediaCache } from '../media/media.controller.js';
 
 export const submitRegistration = async (req, res) => {
   const { husbandName, wifeName, surname, phoneNumber, programId, whatsappOptIn } = req.body;
@@ -647,6 +648,9 @@ export const getSubmissionsList = async (req, res) => {
       };
     });
 
+    // Warm high-speed in-memory media cache for fast thumbnail delivery
+    warmRegistrationMediaCache(submissions);
+
     res.json({
       success: true,
       data: enrichedSubmissions,
@@ -887,6 +891,9 @@ export const updateSubmission = async (req, res) => {
       { $set: updateData },
       { returnDocument: 'after' }
     );
+
+    invalidateRegistrationMediaCache(existing.inquiryId);
+    if (updated?.inquiryId) invalidateRegistrationMediaCache(updated.inquiryId);
 
     // Asynchronously handle cryptographic pass re-sign, invitation card re-render, WhatsApp notification & lifecycle reschedule on single transfer
     if (isEventTransferred && updated && targetEventObj) {

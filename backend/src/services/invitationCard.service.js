@@ -364,8 +364,10 @@ export class InvitationCardService {
     }
 
     if (!photoBuf) {
-      const localPhoto = path.resolve(process.cwd(), '..', 'frontend', 'public', 'sample_couple.png');
-      if (fs.existsSync(localPhoto)) {
+      const p1 = path.resolve(process.cwd(), 'public', 'sample_couple.png');
+      const p2 = path.resolve(process.cwd(), '..', 'frontend', 'public', 'sample_couple.png');
+      const localPhoto = fs.existsSync(p1) ? p1 : fs.existsSync(p2) ? p2 : null;
+      if (localPhoto) {
         photoBuf = fs.readFileSync(localPhoto);
       }
     }
@@ -380,8 +382,10 @@ export class InvitationCardService {
       } catch (err) {
         console.warn(`[InvitationCardService] Error resizing couple photo for ${inquiryId}, falling back to sample photo:`, err.message);
         try {
-          const localPhoto = path.resolve(process.cwd(), '..', 'frontend', 'public', 'sample_couple.png');
-          if (fs.existsSync(localPhoto)) {
+          const p1 = path.resolve(process.cwd(), 'public', 'sample_couple.png');
+          const p2 = path.resolve(process.cwd(), '..', 'frontend', 'public', 'sample_couple.png');
+          const localPhoto = fs.existsSync(p1) ? p1 : fs.existsSync(p2) ? p2 : null;
+          if (localPhoto) {
             resizedPhotoBuf = await sharp(localPhoto)
               .resize(hW, hH, { fit: 'cover', position: 'center' })
               .toBuffer();

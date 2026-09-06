@@ -9,6 +9,8 @@ import {
   CopyObjectCommand
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import https from 'https';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { env } from '../../config/env.js';
 
 export class R2StorageProvider {
@@ -19,10 +21,21 @@ export class R2StorageProvider {
     this.publicBaseUrl = (env.R2_PUBLIC_BASE_URL || 'https://media.ekdujekeliye.in').replace(/\/$/, '');
 
     if (this.enabled) {
+      const httpsAgent = new https.Agent({
+        keepAlive: true,
+        maxSockets: 64,
+        timeout: 60000
+      });
+
       this.client = new S3Client({
         region: 'auto',
         endpoint: env.R2_ENDPOINT,
         forcePathStyle: true,
+        requestHandler: new NodeHttpHandler({
+          httpsAgent,
+          connectionTimeout: 5000,
+          requestTimeout: 20000
+        }),
         credentials: {
           accessKeyId: env.R2_ACCESS_KEY_ID,
           secretAccessKey: env.R2_SECRET_ACCESS_KEY

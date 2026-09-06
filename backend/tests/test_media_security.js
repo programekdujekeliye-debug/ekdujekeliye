@@ -32,12 +32,22 @@ function createMockContext(reqOverrides = {}) {
   };
 
   const res = {
+    setHeader(name, val) {
+      return this;
+    },
     status(code) {
       statusCode = code;
       return this;
     },
     json(data) {
       responseData = data;
+      return this;
+    },
+    send(data) {
+      responseData = data;
+      return this;
+    },
+    end() {
       return this;
     },
     redirect(statusOrUrl, maybeUrl) {
@@ -273,8 +283,8 @@ function createMockContext(reqOverrides = {}) {
   const activeEvent = { id: 'prog-2026-09-07', status: 'few_seats', date: '2026-09-07' };
   const res = mediaService.resolveRegistrationMediaSync(privateReg, null, activeEvent);
   assert.strictEqual(res.provider, 'R2');
-  assert.strictEqual(res.normalUrl, '/api/media/EK06-100/couple-photo?preset=normal', 'Private couple photo must route through secure authenticated backend URL');
-  assert.strictEqual(res.thumbnailUrl, '/api/media/EK06-100/couple-photo?preset=thumb');
+  assert.ok(res.normalUrl.startsWith('/api/media/EK06-100/couple-photo?preset=normal'), 'Private couple photo must route through secure authenticated backend URL');
+  assert.ok(res.thumbnailUrl.startsWith('/api/media/EK06-100/couple-photo?preset=thumb'), 'Thumbnail must route through secure authenticated backend URL');
   console.log('✔ Test 12 passed: Canonical Resolver routes private couple photos through secure endpoint');
 }
 

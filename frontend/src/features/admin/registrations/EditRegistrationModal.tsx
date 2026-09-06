@@ -154,8 +154,8 @@ export const EditRegistrationModal: React.FC<EditRegistrationModalProps> = ({
 
   const getFullImageUrl = (url?: string | null) => {
     if (!url) return '';
-    if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:')) return url;
-    return `${API_BASE_URL}${url}`;
+    if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('/sample_couple.png') || url.startsWith('/logo.png')) return url;
+    return `${API_BASE_URL}${url.startsWith('/') ? url : `/${url}`}`;
   };
 
   return (

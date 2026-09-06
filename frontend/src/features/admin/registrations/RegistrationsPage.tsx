@@ -21,7 +21,7 @@ import {
   DownloadIcon,
   EditIcon
 } from '../../../components/Icons';
-import { getOptimizedPhotoUrl } from '../../../utils/mediaPresets';
+import { getOptimizedPhotoUrl, resolveDisplayImageUrl } from '../../../utils/mediaPresets';
 import toast from 'react-hot-toast';
 
 export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean }) => {
@@ -664,17 +664,12 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                 {sub.couplePhoto && (
                                   <button
                                     type="button"
-                                    onClick={() => setSelectedImage(getOptimizedPhotoUrl(sub.couplePhoto || sub.photoThumbnailUrl, 'normal'))}
+                                    onClick={() => setSelectedImage(resolveDisplayImageUrl(sub.couplePhoto || sub.photoThumbnailUrl, 'normal'))}
                                     className="w-8 h-8 rounded-md overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform"
                                     title="View Thumbnail"
                                   >
                                     <img
-                                      src={
-                                        (sub.photoThumbnailUrl || sub.couplePhoto).startsWith('http') ||
-                                        (sub.photoThumbnailUrl || sub.couplePhoto).startsWith('data:')
-                                          ? getOptimizedPhotoUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'thumbnail')
-                                          : `${API_BASE_URL}${sub.photoThumbnailUrl || sub.couplePhoto}`
-                                      }
+                                      src={resolveDisplayImageUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'thumbnail')}
                                       alt="Photo"
                                       className="w-full h-full object-cover"
                                       loading="lazy"
@@ -930,17 +925,12 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                           {sub.couplePhoto ? (
                             <button
                               type="button"
-                              onClick={() => setSelectedImage(getOptimizedPhotoUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'normal'))}
+                              onClick={() => setSelectedImage(resolveDisplayImageUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'normal'))}
                               className="w-14 h-14 rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer shadow-xs active:scale-95 transition-transform"
                               title="Tap to enlarge photo"
                             >
                               <img
-                                src={
-                                  (sub.photoThumbnailUrl || sub.couplePhoto).startsWith('http') ||
-                                  (sub.photoThumbnailUrl || sub.couplePhoto).startsWith('data:')
-                                    ? getOptimizedPhotoUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'thumbnail')
-                                    : `${API_BASE_URL}${sub.photoThumbnailUrl || sub.couplePhoto}`
-                                }
+                                src={resolveDisplayImageUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'thumbnail')}
                                 alt="Couple"
                                 className="w-full h-full object-cover"
                                 loading="lazy"
@@ -1153,11 +1143,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
         >
           <div className="max-w-2xl max-h-[90vh] bg-white rounded-2xl overflow-hidden p-2 shadow-2xl">
             <img
-              src={
-                selectedImage.startsWith('http') || selectedImage.startsWith('data:')
-                  ? selectedImage
-                  : `${API_BASE_URL}${selectedImage}`
-              }
+              src={resolveDisplayImageUrl(selectedImage, 'large')}
               alt="Enlarged view"
               className="max-h-[80vh] w-auto object-contain rounded-xl"
             />

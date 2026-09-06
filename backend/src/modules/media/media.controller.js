@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import { mediaService } from './media.service.js';
 import { MediaArchive } from '../../models/MediaArchive.js';
 import { Registration } from '../../models/Registration.js';
@@ -7,6 +9,55 @@ import { getOptimizedPhotoUrl } from '../../utils/mediaPresets.js';
 import { r2Provider } from '../../integrations/r2/r2.provider.js';
 import { mediaVariantWorker } from '../../workers/mediaVariantWorker.js';
 import { env } from '../../config/env.js';
+
+// --- High Performance In-Memory Caches for Rapid Photo Delivery ---
+const MAX_BUFFER_CACHE_ITEMS = 600;
+const MAX_REG_CACHE_ITEMS = 1500;
+const REG_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// Cache mapping: `${bucket}:${key}` -> { buffer, contentType, etag, cachedAt }
+const mediaBufferCache = new Map();
+// Cache mapping: `registrationId` -> { r2Media, couplePhoto, expiresAt }
+const regMediaCache = new Map();
+// In-flight deduplication: `${bucket}:${key}` -> Promise<Buffer>
+const inFlightFetches = new Map();
+
+// Preload sample couple fallback buffer in memory for 0ms direct response (avoids 404/ORB)
+let sampleCoupleBuffer = null;
+try {
+  const p1 = path.resolve(process.cwd(), 'public', 'sample_couple.png');
+  const p2 = path.resolve(process.cwd(), '..', 'frontend', 'public', 'sample_couple.png');
+  if (fs.existsSync(p1)) sampleCoupleBuffer = fs.readFileSync(p1);
+  else if (fs.existsSync(p2)) sampleCoupleBuffer = fs.readFileSync(p2);
+} catch (e) {
+  console.warn('[MediaController] Could not preload sample_couple.png buffer:', e.message);
+}
+
+export const warmRegistrationMediaCache = (registrations = []) => {
+  if (!Array.isArray(registrations)) return;
+  const now = Date.now();
+  for (const reg of registrations) {
+    if (!reg) continue;
+    const entry = {
+      r2Media: reg.r2Media || null,
+      couplePhoto: reg.couplePhoto || null,
+      expiresAt: now + REG_CACHE_TTL_MS
+    };
+    if (reg.inquiryId) regMediaCache.set(reg.inquiryId, entry);
+    if (reg._id) regMediaCache.set(String(reg._id), entry);
+  }
+  if (regMediaCache.size > MAX_REG_CACHE_ITEMS) {
+    const keys = Array.from(regMediaCache.keys());
+    for (let i = 0; i < 200 && i < keys.length; i++) {
+      regMediaCache.delete(keys[i]);
+    }
+  }
+};
+
+export const invalidateRegistrationMediaCache = (registrationId) => {
+  if (!registrationId) return;
+  regMediaCache.delete(registrationId);
+};
 
 const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB strict limit
 const ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -374,15 +425,38 @@ export const getPrivateCouplePhoto = async (req, res) => {
       });
     }
 
-    const registration = await Registration.findOne({
-      $or: [{ inquiryId: registrationId }, { _id: registrationId.match(/^[0-9a-fA-F]{24}$/) ? registrationId : null }]
-    }).lean();
+    // 1. Resolve registration media from in-memory cache or MongoDB
+    let regData = regMediaCache.get(registrationId);
+    if (!regData || Date.now() > regData.expiresAt) {
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(registrationId);
+      const query = isObjectId
+        ? { $or: [{ inquiryId: registrationId }, { _id: registrationId }] }
+        : { inquiryId: registrationId };
 
-    if (!registration) {
-      return res.status(404).json({ error: 'Registration not found.' });
+      const regDoc = await Registration.findOne(query).select('r2Media couplePhoto inquiryId').lean();
+      if (!regDoc) {
+        // Return sample couple buffer directly with image/png instead of 404/ORB
+        if (sampleCoupleBuffer) {
+          res.setHeader('Content-Type', 'image/png');
+          res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          return res.send(sampleCoupleBuffer);
+        }
+        return res.redirect(302, 'https://www.ekdujekeliye.in/sample_couple.png');
+      }
+
+      regData = {
+        r2Media: regDoc.r2Media || null,
+        couplePhoto: regDoc.couplePhoto || null,
+        expiresAt: Date.now() + REG_CACHE_TTL_MS
+      };
+      regMediaCache.set(registrationId, regData);
+      if (regDoc.inquiryId && regDoc.inquiryId !== registrationId) {
+        regMediaCache.set(regDoc.inquiryId, regData);
+      }
     }
 
-    const r2Media = registration.r2Media;
+    const r2Media = regData.r2Media;
 
     // A. Private R2 Resolution
     if (r2Media && (r2Media.isPrivate || r2Media.bucket === r2Provider.privateBucket || r2Media.key || r2Media.normalKey)) {
@@ -395,11 +469,37 @@ export const getPrivateCouplePhoto = async (req, res) => {
       else if (!isThumb && !isLarge && r2Media.normalKey) targetKey = r2Media.normalKey;
 
       if (targetKey) {
+        const bucket = r2Media.bucket || r2Provider.privateBucket;
+        const cacheKey = `${bucket}:${targetKey}`;
+
+        // Fast In-Memory Buffer Cache Hit (< 1ms)
+        const cached = mediaBufferCache.get(cacheKey);
+        if (cached) {
+          const clientEtag = req.headers['if-none-match'];
+          if (clientEtag && clientEtag === cached.etag) {
+            return res.status(304).end();
+          }
+          res.setHeader('Content-Type', cached.contentType);
+          res.setHeader('ETag', cached.etag);
+          res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          return res.send(cached.buffer);
+        }
+
         try {
-          const buffer = await r2Provider.getObjectBuffer({
-            bucket: r2Media.bucket || r2Provider.privateBucket,
-            key: targetKey
-          });
+          // In-flight deduplication: reuse ongoing fetch promise across concurrent requests
+          let fetchPromise = inFlightFetches.get(cacheKey);
+          if (!fetchPromise) {
+            fetchPromise = r2Provider.getObjectBuffer({ bucket, key: targetKey });
+            inFlightFetches.set(cacheKey, fetchPromise);
+          }
+
+          let buffer;
+          try {
+            buffer = await fetchPromise;
+          } finally {
+            inFlightFetches.delete(cacheKey);
+          }
 
           const contentType = targetKey.endsWith('.webp')
             ? 'image/webp'
@@ -407,24 +507,51 @@ export const getPrivateCouplePhoto = async (req, res) => {
               ? 'image/png'
               : 'image/jpeg';
 
+          const etag = `"${crypto.createHash('md5').update(buffer).digest('hex')}"`;
+
+          // Cache thumbnails and normal images in memory (up to 600KB)
+          if (buffer.length <= 600 * 1024) {
+            mediaBufferCache.set(cacheKey, {
+              buffer,
+              contentType,
+              etag,
+              cachedAt: Date.now()
+            });
+
+            if (mediaBufferCache.size > MAX_BUFFER_CACHE_ITEMS) {
+              const firstKey = mediaBufferCache.keys().next().value;
+              if (firstKey) mediaBufferCache.delete(firstKey);
+            }
+          }
+
+          const clientEtag = req.headers['if-none-match'];
+          if (clientEtag && clientEtag === etag) {
+            return res.status(304).end();
+          }
+
           res.setHeader('Content-Type', contentType);
+          res.setHeader('ETag', etag);
           res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
           res.setHeader('Access-Control-Allow-Origin', '*');
           return res.send(buffer);
         } catch (bufErr) {
           console.warn(`[MediaController] Buffer stream failed for ${targetKey}, falling back to presigned download URL:`, bufErr.message);
-          const presigned = await r2Provider.generatePresignedDownloadUrl({
-            bucket: r2Media.bucket || r2Provider.privateBucket,
-            key: targetKey,
-            expiresIn: 300 // 5 minutes max
-          });
-          return res.redirect(302, presigned.downloadUrl);
+          try {
+            const presigned = await r2Provider.generatePresignedDownloadUrl({
+              bucket,
+              key: targetKey,
+              expiresIn: 300 // 5 minutes max
+            });
+            return res.redirect(302, presigned.downloadUrl);
+          } catch (presignErr) {
+            console.warn(`[MediaController] Presigned URL failed for ${targetKey}:`, presignErr.message);
+          }
         }
       }
     }
 
     // B. Legacy Cloudinary Read Fallback
-    const rawPhoto = registration.couplePhoto || '';
+    const rawPhoto = regData.couplePhoto || '';
     if (rawPhoto && rawPhoto.includes('cloudinary.com')) {
       const optimized = getOptimizedPhotoUrl(rawPhoto, preset === 'large' ? 'large' : (preset === 'thumb' || preset === 'thumbnail') ? 'thumbnail' : 'normal');
       return res.redirect(302, optimized);
@@ -433,12 +560,28 @@ export const getPrivateCouplePhoto = async (req, res) => {
     // C. Public R2 Direct Fallback
     if (rawPhoto && rawPhoto.includes('media.ekdujekeliye.in')) {
       const extractedKey = rawPhoto.replace(/^https?:\/\/[^/]+\//, '');
+      const cacheKey = `${r2Provider.publicBucket}:${extractedKey}`;
+      const cached = mediaBufferCache.get(cacheKey);
+      if (cached) {
+        res.setHeader('Content-Type', cached.contentType);
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        return res.send(cached.buffer);
+      }
       try {
         const buffer = await r2Provider.getObjectBuffer({
           bucket: r2Provider.publicBucket,
           key: extractedKey
         });
         const contentType = extractedKey.endsWith('.png') ? 'image/png' : 'image/jpeg';
+        if (buffer.length <= 600 * 1024) {
+          mediaBufferCache.set(cacheKey, {
+            buffer,
+            contentType,
+            etag: `"${crypto.createHash('md5').update(buffer).digest('hex')}"`,
+            cachedAt: Date.now()
+          });
+        }
         res.setHeader('Content-Type', contentType);
         res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
         res.setHeader('Access-Control-Allow-Origin', '*');
@@ -448,11 +591,23 @@ export const getPrivateCouplePhoto = async (req, res) => {
       }
     }
 
-    // D. Default Fallback
-    return res.redirect(302, '/sample_couple.png');
+    // D. Default Fallback - Serve fallback couple photo directly (NEVER 404 / ORB)
+    if (sampleCoupleBuffer) {
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      return res.send(sampleCoupleBuffer);
+    }
+    return res.redirect(302, 'https://www.ekdujekeliye.in/sample_couple.png');
   } catch (err) {
     console.error('[MediaController] Error serving private couple photo:', err);
-    res.status(500).json({ error: 'Failed to retrieve private couple photo.' });
+    if (sampleCoupleBuffer) {
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      return res.send(sampleCoupleBuffer);
+    }
+    res.redirect(302, 'https://www.ekdujekeliye.in/sample_couple.png');
   }
 };
 

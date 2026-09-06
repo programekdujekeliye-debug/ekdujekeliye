@@ -77,6 +77,25 @@ app.use('/uploads', express.static(uploadsDir, {
   etag: true
 }));
 
+// Sample couple static image route (prevents ORB/404 if requested directly from backend API host)
+const publicDir = path.resolve(process.cwd(), 'public');
+const sampleCouplePath = path.resolve(publicDir, 'sample_couple.png');
+const fallbackFrontendSample = path.resolve(process.cwd(), '..', 'frontend', 'public', 'sample_couple.png');
+
+app.get('/sample_couple.png', (req, res) => {
+  res.setHeader('Content-Type', 'image/png');
+  res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  if (fs.existsSync(sampleCouplePath)) {
+    return res.sendFile(sampleCouplePath);
+  }
+  if (fs.existsSync(fallbackFrontendSample)) {
+    return res.sendFile(fallbackFrontendSample);
+  }
+  return res.redirect(302, 'https://www.ekdujekeliye.in/sample_couple.png');
+});
+
 // --- System & Discovery Endpoints ---
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'Backend server is running successfully.', version: '2.0.0' });

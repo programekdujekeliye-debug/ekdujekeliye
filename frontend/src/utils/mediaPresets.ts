@@ -10,6 +10,8 @@
  * Preserves non-Cloudinary, Drive, local, and data URLs unchanged.
  */
 
+import { API_BASE_URL } from '@/config';
+
 export const MEDIA_PRESETS = {
   thumbnail: 'c_limit,w_240,q_auto,f_auto',
   normal: 'c_limit,w_720,q_auto,f_auto',
@@ -158,3 +160,40 @@ export function resolveRegistrationPhoto(
     canDownloadOriginal: false
   };
 }
+
+/**
+ * Resolves any image path into a safe, full display URL.
+ * Strictly avoids prefixing API_BASE_URL onto local static assets (/sample_couple.png, /logo.png).
+ */
+export function resolveDisplayImageUrl(
+  url: string | null | undefined,
+  preset: MediaPreset = 'thumbnail'
+): string {
+  if (!url || typeof url !== 'string') return '/sample_couple.png';
+  const trimmed = url.trim();
+  if (!trimmed) return '/sample_couple.png';
+
+  // Local static public assets in frontend (never prefix with backend API_BASE_URL)
+  if (
+    trimmed.startsWith('/sample_couple.png') ||
+    trimmed.startsWith('/logo.png') ||
+    trimmed.startsWith('/frame_template.png') ||
+    trimmed.startsWith('/card_template.png')
+  ) {
+    return trimmed;
+  }
+
+  // Data or blob URIs
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
+    return trimmed;
+  }
+
+  // Remote HTTP/HTTPS URLs
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return getOptimizedPhotoUrl(trimmed, preset);
+  }
+
+  // Backend relative endpoints (e.g. /api/media/...)
+  return `${API_BASE_URL}${trimmed.startsWith('/') ? trimmed : `/${trimmed}`}`;
+}
+
