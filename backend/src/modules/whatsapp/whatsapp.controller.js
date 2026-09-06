@@ -62,7 +62,7 @@ export const getMetaTemplates = async (req, res) => {
 export const sendTestMessage = async (req, res) => {
   const { recipientPhone, templateKey, submissionId, customVariables } = req.body;
 
-  const tplKey = templateKey || 'edkl_payment_confirmed_pass_v2';
+  const tplKey = templateKey || 'edkl_payment_confirmed_pass_v1';
   let cleanPhone = recipientPhone ? recipientPhone.replace(/\D/g, '') : '';
 
   try {

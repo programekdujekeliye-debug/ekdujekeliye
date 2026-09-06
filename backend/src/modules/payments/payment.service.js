@@ -204,7 +204,7 @@ export class PaymentService {
       // Dispatch M3: Payment Confirmation & Digital Pass
       await sendUtilityTemplate({
         recipientPhone: submission.phoneNumber,
-        templateKey: 'edkl_payment_confirmed_pass_v2',
+        templateKey: 'edkl_payment_confirmed_pass_v1',
         languageCode: 'en_US',
         variables: {
           customerName,
@@ -333,7 +333,7 @@ export class PaymentService {
         // Dispatch M3: Payment Confirmation & Pass
         await sendUtilityTemplate({
           recipientPhone: submission.phoneNumber,
-          templateKey: 'edkl_payment_confirmed_pass_v2',
+          templateKey: 'edkl_payment_confirmed_pass_v1',
           languageCode: 'en_US',
           variables: {
             customerName,

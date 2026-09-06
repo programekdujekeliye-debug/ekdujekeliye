@@ -4,15 +4,14 @@
  */
 
 export const CORE_TEMPLATES = {
-  // 1. Payment Confirmed + Digital Pass (Primary Pass Delivery - v1 Fallback)
+  // 1. Payment Confirmed + Digital Pass (Primary Pass Delivery)
   edkl_payment_confirmed_pass_v1: {
     key: 'edkl_payment_confirmed_pass_v1',
     metaName: 'edkl_payment_confirmed_pass_v1',
     category: 'UTILITY',
-    section: 'FALLBACK',
-    isFallbackOnly: true,
+    section: 'CORE',
     language: 'en_US',
-    purpose: 'Sent immediately after payment is captured/verified to deliver registration confirmation & digital pass (v1 Fallback)',
+    purpose: 'Sent immediately after payment is captured/verified to deliver registration confirmation & digital pass',
     trigger: 'payment_verified',
     bodyVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
     buttonVariables: ['inquiryId'],
@@ -240,138 +239,9 @@ export const CORE_TEMPLATES = {
     ]
   },
 
-  // 8. 48-Hour Personalized Couple Invitation (v1 Fallback for edkl_personal_invitation_24h_v2)
-  edkl_personal_invitation_48h_v1: {
-    key: 'edkl_personal_invitation_48h_v1',
-    metaName: 'edkl_personal_invitation_48h_v1',
-    category: 'UTILITY',
-    section: 'FALLBACK',
-    isFallbackOnly: true,
-    language: 'en_US',
-    purpose: 'Sent approximately 48 hours before event with personalized couple invitation card attached as header image (v1 Fallback)',
-    trigger: 'invitation_48h',
-    headerType: 'IMAGE',
-    bodyVariables: ['customerName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
-    buttonVariables: ['inquiryId'],
-    requiredVariables: ['customerName', 'eventDate', 'eventTime', 'venue', 'registrationId', 'inquiryId'],
-    components: [
-      {
-        type: 'BODY',
-        text: 'Hello {{1}},\n\nWe look forward to welcoming you to your registered Ek Duje Ke Liye event.\n\nDate: {{2}}\nTime: {{3}}\nVenue: {{4}}\nRegistration ID: {{5}}\n\nYour personalized invitation is attached.\n\nEk Duje Ke Liye',
-        example: {
-          body_text: [
-            [
-              'Jaynesh & Pooja',
-              '15 September 2026',
-              '8:30 PM',
-              'Sardar Smruti Bhavan, Surat',
-              'EK06-02'
-            ]
-          ]
-        }
-      },
-      {
-        type: 'BUTTONS',
-        buttons: [
-          {
-            type: 'URL',
-            text: 'View Digital Pass',
-            url: 'https://www.ekdujekeliye.in/pass/{{1}}',
-            example: ['EK06-02']
-          }
-        ]
-      }
-    ]
-  },
-
-  // 11. Post-Event Feedback Request (DEPRECATED - Replaced by edkl_post_event_memories_feedback_v1)
-  edkl_event_feedback_v1: {
-    key: 'edkl_event_feedback_v1',
-    metaName: 'edkl_event_feedback_v1',
-    category: 'UTILITY',
-    section: 'DEPRECATED',
-    isDeprecated: true,
-    language: 'en_US',
-    purpose: 'Deprecated standalone feedback template (Replaced by edkl_post_event_memories_feedback_v1)',
-    trigger: 'event_feedback',
-    bodyVariables: ['customerName', 'eventName', 'registrationId'],
-    buttonVariables: ['feedbackToken'],
-    requiredVariables: ['customerName', 'eventName', 'registrationId', 'feedbackToken'],
-    components: [
-      {
-        type: 'BODY',
-        text: 'Hello {{1}},\n\nThank you for attending {{2}}.\n\nWe would appreciate your feedback about your experience.\n\nRegistration ID: {{3}}\n\nEk Duje Ke Liye',
-        example: {
-          body_text: [
-            [
-              'Jaynesh & Pooja',
-              'Ek Duje Ke Liye Seminar',
-              'EK06-02'
-            ]
-          ]
-        }
-      },
-      {
-        type: 'BUTTONS',
-        buttons: [
-          {
-            type: 'URL',
-            text: 'Share Feedback',
-            url: 'https://www.ekdujekeliye.in/feedback/{{1}}',
-            example: ['fb-789a6b12']
-          }
-        ]
-      }
-    ]
-  },
-
   // =========================================================================
   // CORE LIFECYCLE V2 TEMPLATES (Mixed Gujarati + English & Evergreen Invitation)
   // =========================================================================
-
-  // Core 2: Payment Confirmed + Digital Pass (Mixed Gujarati + English)
-  edkl_payment_confirmed_pass_v2: {
-    key: 'edkl_payment_confirmed_pass_v2',
-    metaName: 'edkl_payment_confirmed_pass_v2',
-    category: 'UTILITY',
-    section: 'CORE',
-    language: 'en_US',
-    purpose: 'Authoritative payment confirmation and Digital Pass delivery (Mixed Gujarati + English)',
-    trigger: 'payment_verified',
-    bodyVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId'],
-    buttonVariables: ['inquiryId'],
-    requiredVariables: ['customerName', 'eventName', 'eventDate', 'eventTime', 'venue', 'registrationId', 'inquiryId'],
-    fallbackTemplateKey: 'edkl_payment_confirmed_pass_v1',
-    components: [
-      {
-        type: 'BODY',
-        text: 'નમસ્તે {{1}},\n\n{{2}} માટે તમારું રજીસ્ટ્રેશન અને પેમેન્ટ સફળતાપૂર્વક કન્ફર્મ થઈ ગયું છે.\n(Your registration and payment have been successfully confirmed.)\n\nતારીખ (Date): {{3}}\nસમય (Time): {{4}}\nસ્થળ (Venue): {{5}}\nRegistration ID: {{6}}\n\nતમારી સીટ કન્ફર્મ છે. કૃપા કરીને કાર્યક્રમમાં પ્રવેશ સમયે તમારો Digital QR Pass તૈયાર રાખશો.\n(Your seat is confirmed. Please keep your Digital QR Pass ready at the event entrance.)\n\nઆભાર,\nએક દુજે કે લિયે\nEk Duje Ke Liye',
-        example: {
-          body_text: [
-            [
-              'Jaynesh & Pooja',
-              'Ek Duje Ke Liye Seminar',
-              '7 September 2026',
-              '8:30 PM',
-              'Sardar Patel Smruti Bhavan, Surat',
-              'EK06-02'
-            ]
-          ]
-        }
-      },
-      {
-        type: 'BUTTONS',
-        buttons: [
-          {
-            type: 'URL',
-            text: 'View Digital Pass',
-            url: 'https://www.ekdujekeliye.in/pass/{{1}}',
-            example: ['EK06-02']
-          }
-        ]
-      }
-    ]
-  },
 
   // Core 3: 48-Hour Pass / Event Reminder (Mixed Gujarati + English)
   edkl_event_pass_reminder_v2: {
@@ -573,45 +443,6 @@ export const CORE_TEMPLATES = {
     ]
   },
 
-  // 13. September 7 & 11 Couple Seminar Schedule & Reference Info (Rich & Royal Salon Broadcast)
-  edkl_september_schedule_info_v1: {
-    key: 'edkl_september_schedule_info_v1',
-    metaName: 'edkl_september_schedule_info_v1',
-    category: 'UTILITY',
-    section: 'CORE',
-    language: 'gu',
-    purpose: 'Event schedule and reference info broadcast for upcoming 7 & 11 September seminar in Surat',
-    trigger: 'marketing_broadcast',
-    bodyVariables: [],
-    buttonVariables: [],
-    requiredVariables: [],
-    components: [
-      {
-        type: 'BODY',
-        text: `નમસ્તે, કેમ છો દોસ્તો?\n\n“એક દુજે કે લિયે” કાર્યક્રમની આગામી તારીખોની માહિતી નીચે મુજબ છે.\n\nતારીખ: 7 અને 11 સપ્ટેમ્બર, 2026\nસમય: સાંજે 8:30 વાગ્યે\nસ્થળ: સરદાર પટેલ સ્મૃતિ ભવન, મીની બજાર, સુરત\n\nરજીસ્ટ્રેશન ફી: ₹1,500 પ્રતિ કપલ\n\nProgram Details & Registration:\nekdujekeliye.in\n\nવધુ માહિતી માટે:\n8200302328 / 9213532835\n\nઆ માહિતી તમારા reference માટે શેર કરવામાં આવી છે.\n\nManish Vaghasiya\n& Ek Duje Ke Liye Team`
-      }
-    ]
-  },
-
-  // 14. September 7 & 11 Couple Seminar Emotional Message & Seat Booking by Manish Vaghasiya (Marketing)
-  edkl_september_special_invite_v1: {
-    key: 'edkl_september_special_invite_v1',
-    metaName: 'edkl_september_special_invite_v1',
-    category: 'MARKETING',
-    section: 'CORE',
-    language: 'gu',
-    purpose: 'Special couple seminar invitation and emotional reflection message by Manish Vaghasiya with seat booking details',
-    trigger: 'marketing_broadcast',
-    bodyVariables: [],
-    buttonVariables: [],
-    requiredVariables: [],
-    components: [
-      {
-        type: 'BODY',
-        text: `દોડધામ ભરેલી જિંદગીમાં ક્યારેક સાથે બેસીને એકબીજાની આંખોમાં જોવાનો સમય પણ નથી મળતો. લગ્નજીવનમાં પ્રેમ તો હોય જ છે, પણ સમય જતાં વાતો અને સંવાદ ક્યાંક ખોવાઈ જાય છે. આ કાર્યક્રમ કોઈ ઉપદેશ આપવા માટે નથી, પણ તમારા સંબંધને ફરીથી એ જ તાજગી અને ઊંડાણ આપવા માટે એક ખાસ સાંજ છે.-મનીષ વઘાસીયા \n\nસંબંધમાં ફરી એ જ પ્રેમ અને સમજણ જીવંત કરવાનો અવસર એટલે—“એક દુજે કે લિયે”\nજ્યાં તમે તમારા પાર્ટનર સાથે બેસીને એકબીજાને ફરીથી ઓળખશો, સમજશો અને તમારા સંબંધને વધુ મજબૂત બનાવશો.\n\nકાર્યક્રમની વિગત:\nતારીખ: 7 અને 11 સપ્ટેમ્બર, 2026\nસમય: સાંજે 8:30 વાગ્યે\nસ્થળ: સરદાર પટેલ સ્મૃતિ ભવન, મીની બજાર, સુરત\nપ્રવેશ: ₹1,500/કપલ (સીમિત બેઠકો)\nતમારા લગ્નજીવન માટે આપેલી આ બે-ત્રણ કલાકની ભેટ આખી જિંદગી યાદ રહેશે.\n\nસીટ બુકિંગ માટે:\nekdujekeliye.in\nસંપર્ક:\n8200302328 / 9213532835\nતમારી અને તમારા જીવનસાથીની રાહ જોશે,\nમનીષ વઘાસિયા અને ‘એક દુજે કે લિયે’ પરિવાર`
-      }
-    ]
-  }
 };
 
 export const TEMPLATE_REGISTRY = CORE_TEMPLATES;
@@ -635,8 +466,8 @@ export function validateTemplateVariables(templateKey, providedVariables = {}) {
     }
   }
 
-  // Auto-fill smart aliases for reminder & invitation
-  if (templateKey === 'edkl_event_pass_reminder_v2' || templateKey === 'edkl_personal_invitation_24h_v2') {
+  // Auto-fill smart aliases for reminder, pass delivery & invitation
+  if (templateKey === 'edkl_event_pass_reminder_v2' || templateKey === 'edkl_personal_invitation_24h_v2' || templateKey === 'edkl_payment_confirmed_pass_v1') {
     if (!providedVariables.inquiryId && providedVariables.registrationId) {
       providedVariables.inquiryId = providedVariables.registrationId;
     }

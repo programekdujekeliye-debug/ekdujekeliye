@@ -46,7 +46,7 @@ export const WhatsAppBroadcastPage: React.FC = () => {
 
   // New Campaign Modal
   const [showLaunchModal, setShowLaunchModal] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState('edkl_september_special_invite_v1');
+  const [selectedTemplate, setSelectedTemplate] = useState('edkl_all_couples_invite_v1');
   const [selectedCohort, setSelectedCohort] = useState('RICH_ROYAL_SALON');
   const [testPhoneNumber, setTestPhoneNumber] = useState('918320594829');
   const [sendingTest, setSendingTest] = useState(false);
@@ -630,9 +630,6 @@ export const WhatsAppBroadcastPage: React.FC = () => {
                   onChange={e => setSelectedTemplate(e.target.value)}
                   className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-medium text-stone-800 focus:outline-none focus:border-rose-500"
                 >
-                  <option value="edkl_september_special_invite_v1">
-                    edkl_september_special_invite_v1 (દોડધામ ભરેલી જિંદગીમાં... - Manish Vaghasiya - MARKETING)
-                  </option>
                   <option value="edkl_all_couples_invite_v1">
                     edkl_all_couples_invite_v1 (All Couples - Married, Engaged &amp; Committed - MARKETING)
                   </option>

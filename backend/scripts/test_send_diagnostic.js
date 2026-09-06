@@ -3,10 +3,10 @@ import { sendWhatsAppMessage } from '../src/integrations/whatsapp/whatsapp.servi
 
 async function test() {
   await connectDatabase();
-  console.log('Testing WhatsApp dispatch to 918401473276...');
+  console.log('Testing WhatsApp dispatch to 918320594829...');
   
   const res = await sendWhatsAppMessage({
-    recipientPhone: '918401473276',
+    recipientPhone: '918320594829',
     templateName: 'edkl_payment_confirmed_pass_v1',
     languageCode: 'en_US',
     templateParameters: {

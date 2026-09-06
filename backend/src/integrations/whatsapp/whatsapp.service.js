@@ -241,6 +241,17 @@ export async function sendWhatsAppMessage(rawParams = {}) {
     }
   }
 
+  // Handle alias redirects for legacy/uncreated keys
+  if (templateKey === 'edkl_payment_confirmed_pass_v2') {
+    templateKey = 'edkl_payment_confirmed_pass_v1';
+  }
+  if (templateKey === 'edkl_personal_invitation_48h_v1') {
+    templateKey = 'edkl_personal_invitation_24h_v2';
+  }
+  if (templateKey === 'edkl_event_feedback_v1') {
+    templateKey = 'edkl_post_event_memories_feedback_v1';
+  }
+
   // 5. Template Registry Existence & Schema Check
   let templateDef = TEMPLATE_REGISTRY[templateKey];
   if (!templateDef) {

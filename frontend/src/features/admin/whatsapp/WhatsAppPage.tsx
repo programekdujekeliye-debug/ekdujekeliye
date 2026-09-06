@@ -130,7 +130,7 @@ export const WhatsAppPage = () => {
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string>('');
   const [customPhone, setCustomPhone] = useState('918320594829');
   const [customName, setCustomName] = useState('Jaynesh & Partner');
-  const [selectedTemplateKey, setSelectedTemplateKey] = useState('edkl_payment_confirmed_pass_v2');
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState('edkl_payment_confirmed_pass_v1');
   const [sendingTest, setSendingTest] = useState(false);
   const [dispatchResult, setDispatchResult] = useState<{ success?: boolean; message?: string } | null>(null);
 

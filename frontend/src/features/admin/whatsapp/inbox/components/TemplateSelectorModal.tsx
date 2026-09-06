@@ -12,11 +12,6 @@ interface TemplateSelectorModalProps {
 }
 
 const HUMAN_FRIENDLY_TEMPLATES: Record<string, { title: string; gujarati: string; description: string }> = {
-  edkl_september_special_invite_v1: {
-    title: 'September Couple Seminar Special Invite',
-    gujarati: '૭ & ૧૧ સપ્ટેમ્બર ખાસ કપલ સેમિનાર આમંત્રણ (મનીષ વઘાસીયા)',
-    description: 'Special couple seminar invitation and emotional reflection message with seat booking details.'
-  },
   edkl_payment_confirmed_pass_v1: {
     title: 'Digital Pass Delivery',
     gujarati: 'ડિજિટલ પાસ અને સીટ કન્ફર્મેશન',
@@ -48,7 +43,7 @@ export const TemplateSelectorModal: React.FC<TemplateSelectorModalProps> = ({
   sending
 }) => {
   const [selectedKey, setSelectedKey] = useState<string>(
-    metaTemplates[0]?.key || 'edkl_september_special_invite_v1'
+    metaTemplates[0]?.key || 'edkl_payment_confirmed_pass_v1'
   );
 
   if (!isOpen) return null;
