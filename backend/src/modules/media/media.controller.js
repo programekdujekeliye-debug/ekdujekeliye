@@ -11,9 +11,11 @@ import { mediaVariantWorker } from '../../workers/mediaVariantWorker.js';
 import { env } from '../../config/env.js';
 
 // --- High Performance In-Memory Caches for Rapid Photo Delivery ---
-const MAX_BUFFER_CACHE_ITEMS = 600;
-const MAX_REG_CACHE_ITEMS = 1500;
-const REG_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+// Strictly tuned for 512MB RAM environments (capping memory buffer usage to < 5MB)
+const MAX_BUFFER_CACHE_ITEMS = 60;
+const MAX_BUFFER_ITEM_SIZE = 80 * 1024; // strictly small thumbnails <= 80KB
+const MAX_REG_CACHE_ITEMS = 300;
+const REG_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
 
 // Cache mapping: `${bucket}:${key}` -> { buffer, contentType, etag, cachedAt }
 const mediaBufferCache = new Map();
@@ -35,8 +37,10 @@ try {
 
 export const warmRegistrationMediaCache = (registrations = []) => {
   if (!Array.isArray(registrations)) return;
+  // Safety guard: Never loop or allocate thousands of records in RAM on bulk exports
+  const slice = registrations.length > 50 ? registrations.slice(0, 50) : registrations;
   const now = Date.now();
-  for (const reg of registrations) {
+  for (const reg of slice) {
     if (!reg) continue;
     const entry = {
       r2Media: reg.r2Media || null,
@@ -48,7 +52,7 @@ export const warmRegistrationMediaCache = (registrations = []) => {
   }
   if (regMediaCache.size > MAX_REG_CACHE_ITEMS) {
     const keys = Array.from(regMediaCache.keys());
-    for (let i = 0; i < 200 && i < keys.length; i++) {
+    for (let i = 0; i < 50 && i < keys.length; i++) {
       regMediaCache.delete(keys[i]);
     }
   }
@@ -518,8 +522,8 @@ export const getPrivateCouplePhoto = async (req, res) => {
 
           const etag = `"${crypto.createHash('md5').update(buffer).digest('hex')}"`;
 
-          // Cache thumbnails and normal images in memory (up to 600KB)
-          if (buffer.length <= 600 * 1024) {
+          // Cache only small thumbnails in memory (<= 80KB) to strictly conserve memory on 512MB instances
+          if (buffer.length <= MAX_BUFFER_ITEM_SIZE) {
             mediaBufferCache.set(cacheKey, {
               buffer,
               contentType,

@@ -27,10 +27,11 @@ export async function ensureEarlyRegistrationEvents() {
       await WhatsappMessage.createIndexes();
     } catch (_) {}
 
-    // 2. Self-heal WhatsApp messageType categorizations
+    // 2. Self-heal WhatsApp messageType categorizations (Only scans un-migrated messages)
     try {
       await WhatsappMessage.updateMany(
         {
+          messageType: { $in: [null, undefined, 'custom'] },
           $or: [
             { templateName: { $regex: 'payment_pending|polite_payment', $options: 'i' } },
             { trigger: 'payment_pending' },
@@ -41,6 +42,7 @@ export async function ensureEarlyRegistrationEvents() {
       );
       await WhatsappMessage.updateMany(
         {
+          messageType: { $in: [null, undefined, 'custom'] },
           $or: [
             { templateName: { $regex: 'registration_received', $options: 'i' } },
             { trigger: 'registration_received' }
@@ -50,6 +52,7 @@ export async function ensureEarlyRegistrationEvents() {
       );
       await WhatsappMessage.updateMany(
         {
+          messageType: { $in: [null, undefined, 'custom'] },
           $and: [
             {
               $or: [

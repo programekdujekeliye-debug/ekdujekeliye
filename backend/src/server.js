@@ -11,6 +11,16 @@ import { initializeBackupCron } from './jobs/backup.job.js';
 import { ensureEarlyRegistrationEvents } from './services/eventInit.service.js';
 import { communicationSchedulerService } from './services/communicationScheduler.service.js';
 import { runPaymentReminders } from './jobs/paymentReminders.job.js';
+import sharp from 'sharp';
+
+// Strictly constrain Sharp memory & concurrency for 512MB container environments
+try {
+  sharp.cache({ memory: 20, files: 0, items: 50 });
+  sharp.concurrency(1);
+  sharp.simd(true);
+} catch (e) {
+  console.warn('[Sharp Config] Notice:', e.message);
+}
 
 process.on('uncaughtException', (err) => {
   console.error('[Uncaught Exception]:', err);
@@ -60,6 +70,15 @@ const startServer = async () => {
             console.warn('[Render Keepalive] Ping warning:', pingErr.message);
           }
         }, 9 * 60 * 1000);
+
+        // 7. Memory Telemetry (Logs every 5 mins to track 512MB container health)
+        setInterval(() => {
+          const mem = process.memoryUsage();
+          const rssMb = Math.round(mem.rss / 1024 / 1024);
+          const heapUsedMb = Math.round(mem.heapUsed / 1024 / 1024);
+          const heapTotalMb = Math.round(mem.heapTotal / 1024 / 1024);
+          console.log(`[Memory Monitor] RSS: ${rssMb}MB, Heap: ${heapUsedMb}MB / ${heapTotalMb}MB (512MB limit)`);
+        }, 5 * 60 * 1000);
       }
     });
 

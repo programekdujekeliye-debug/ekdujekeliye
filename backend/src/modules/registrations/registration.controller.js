@@ -954,12 +954,15 @@ export const getSubmissionsList = async (req, res) => {
       };
     });
 
-    // Warm high-speed in-memory media cache for fast thumbnail delivery
-    warmRegistrationMediaCache(submissions);
+    // Only warm media cache for standard small pages (<= 100). Never warm bulk exports.
+    if (safeLimit <= 100) {
+      warmRegistrationMediaCache(submissions);
+    } else {
+      warmRegistrationMediaCache(submissions.slice(0, 30));
+    }
 
     const responsePayload = {
       success: true,
-      data: enrichedSubmissions,
       submissions: enrichedSubmissions,
       totalSubmissions: total,
       total,
@@ -967,20 +970,27 @@ export const getSubmissionsList = async (req, res) => {
       page: safePage,
       totalPages: Math.ceil(total / safeLimit) || 1
     };
+    // Include data alias only for small payloads to prevent doubling 5,000-item arrays during JSON serialization
+    if (safeLimit <= 100) {
+      responsePayload.data = enrichedSubmissions;
+    }
 
     const firstSubId = submissions[0]?.inquiryId || '';
     const lastSubId = submissions[submissions.length - 1]?.inquiryId || '';
     const etag = `W/"subs-${total}-${safePage}-${safeLimit}-${firstSubId}-${lastSubId}"`;
 
-    submissionsQueryCache.set(cacheKey, {
-      data: responsePayload,
-      etag,
-      expiry: now + SUBMISSIONS_CACHE_TTL_MS
-    });
+    // ONLY cache standard paginated queries (safeLimit <= 100). NEVER cache bulk exports (5,000 items) in RAM!
+    if (safeLimit <= 100) {
+      submissionsQueryCache.set(cacheKey, {
+        data: responsePayload,
+        etag,
+        expiry: now + SUBMISSIONS_CACHE_TTL_MS
+      });
 
-    if (submissionsQueryCache.size > 100) {
-      const oldest = submissionsQueryCache.keys().next().value;
-      submissionsQueryCache.delete(oldest);
+      if (submissionsQueryCache.size > 20) {
+        const oldest = submissionsQueryCache.keys().next().value;
+        submissionsQueryCache.delete(oldest);
+      }
     }
 
     res.set('Cache-Control', 'private, max-age=15, stale-while-revalidate=60');
