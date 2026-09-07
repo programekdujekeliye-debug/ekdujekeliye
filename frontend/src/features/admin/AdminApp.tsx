@@ -14,6 +14,11 @@ import { VipPassesPage } from './vip/VipPassesPage';
 import { SettingsPage } from './settings/SettingsPage';
 import { BatchExportModal } from './reports/BatchExportModal';
 import { apiClient } from '../../services/apiClient';
+import { AdminSection } from '../../types';
+
+interface AdminAppProps {
+  initialSection?: AdminSection;
+}
 
 const NormalAdminAppContent = () => {
   const {
@@ -93,9 +98,9 @@ const NormalAdminAppContent = () => {
   );
 };
 
-export const AdminApp = () => {
+export const AdminApp: React.FC<AdminAppProps> = ({ initialSection }) => {
   return (
-    <AdminProvider>
+    <AdminProvider initialSection={initialSection}>
       <NormalAdminAppContent />
     </AdminProvider>
   );

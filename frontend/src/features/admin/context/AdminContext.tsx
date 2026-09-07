@@ -100,11 +100,31 @@ export const computeDefaultUpcomingEvent = (
   return sortedRecent[0] || null;
 };
 
-export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
+export const AdminProvider = ({
+  children,
+  initialSection
+}: {
+  children: React.ReactNode;
+  initialSection?: AdminSection;
+}) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [password, setPassword] = useState<string>('');
   const [role, setRole] = useState<AdminRole>('admin');
-  const [activeSection, setActiveSection] = useState<AdminSection>('dashboard');
+  const [activeSection, setActiveSection] = useState<AdminSection>(() => {
+    if (initialSection) return initialSection;
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const secParam = urlParams.get('section') || urlParams.get('tab');
+      if (secParam === 'vip' || secParam === 'vip_passes' || secParam === 'vip-passes') return 'vip_passes';
+      if (secParam === 'registrations') return 'registrations';
+      if (secParam === 'programs' || secParam === 'events') return 'programs';
+      if (secParam === 'scanner') return 'scanner';
+      if (secParam === 'whatsapp') return 'whatsapp';
+      if (secParam === 'whatsapp_inbox' || secParam === 'inbox') return 'whatsapp_inbox';
+      if (secParam === 'settings') return 'settings';
+    }
+    return 'dashboard';
+  });
   const [selectedProgramId, setSelectedProgramIdState] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const saved = sessionStorage.getItem('admin_selected_program_id');
