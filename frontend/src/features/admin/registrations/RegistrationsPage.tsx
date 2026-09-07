@@ -1217,6 +1217,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
           setSubmissions((prev) =>
             prev.map((s) => (s.inquiryId === updatedSub.inquiryId ? updatedSub : s))
           );
+          fetchList(currentPage);
         }}
       />
     </div>

@@ -57,6 +57,12 @@ export const warmRegistrationMediaCache = (registrations = []) => {
 export const invalidateRegistrationMediaCache = (registrationId) => {
   if (!registrationId) return;
   regMediaCache.delete(registrationId);
+  // Also clear in-memory buffer cache for this registration
+  for (const k of mediaBufferCache.keys()) {
+    if (k.includes(registrationId)) {
+      mediaBufferCache.delete(k);
+    }
+  }
 };
 
 const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB strict limit

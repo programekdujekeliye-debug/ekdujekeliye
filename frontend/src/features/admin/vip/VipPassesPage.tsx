@@ -1763,6 +1763,7 @@ export const VipPassesPage = () => {
           setVipGuests((prev) =>
             prev.map((item) => (item.inquiryId === updated.inquiryId ? updated : item))
           );
+          fetchVipGuests();
         }}
       />
 

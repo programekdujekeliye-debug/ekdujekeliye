@@ -1200,20 +1200,76 @@ export const updateSubmission = async (req, res) => {
       }
     }
 
-    // Handle new photo upload if provided
+    // Handle new photo upload if provided with direct R2 private variants
+    let newPhotoUploaded = false;
     const couplePhotoFile = req.files && req.files['couplePhoto'] ? req.files['couplePhoto'][0] : null;
     if (couplePhotoFile && couplePhotoFile.buffer) {
-      const base64Data = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
-      const couplePhotoUrl = await storageService.upload({
-        data: base64Data,
-        folder: 'couplePhotos',
-        filename: `${existing.inquiryId}_couple`
-      });
-      updateData.couplePhoto = couplePhotoUrl;
+      newPhotoUploaded = true;
+      try {
+        const opaqueMediaId = crypto.randomBytes(16).toString('hex');
+        const eventKey = existing.programId?.startsWith('prog-')
+          ? (existing.inquiryId.split('-')[0] || 'EK06')
+          : (existing.programId || 'EK06');
+        const baseKey = `prod/events/${eventKey}/registrations/${existing.inquiryId}/couple/${opaqueMediaId}`;
+        const thumbKey = `${baseKey}/thumb.webp`;
+        const normalKey = `${baseKey}/normal.webp`;
+        const largeKey = `${baseKey}/large.webp`;
+
+        // Generate WebP variants via Sharp
+        const [thumbBuf, normBuf, largeBuf] = await Promise.all([
+          sharp(couplePhotoFile.buffer).rotate().resize(240, null, { withoutEnlargement: true }).webp({ quality: 80, effort: 4 }).toBuffer(),
+          sharp(couplePhotoFile.buffer).rotate().resize(720, null, { withoutEnlargement: true }).webp({ quality: 82, effort: 4 }).toBuffer(),
+          sharp(couplePhotoFile.buffer).rotate().resize(1200, null, { withoutEnlargement: true }).webp({ quality: 85, effort: 4 }).toBuffer()
+        ]);
+
+        // Upload directly to private R2 bucket
+        await Promise.all([
+          r2Provider.putObject({ bucket: r2Provider.privateBucket, key: thumbKey, body: thumbBuf, contentType: 'image/webp', cacheControl: 'private, max-age=3600, no-transform' }),
+          r2Provider.putObject({ bucket: r2Provider.privateBucket, key: normalKey, body: normBuf, contentType: 'image/webp', cacheControl: 'private, max-age=3600, no-transform' }),
+          r2Provider.putObject({ bucket: r2Provider.privateBucket, key: largeKey, body: largeBuf, contentType: 'image/webp', cacheControl: 'private, max-age=3600, no-transform' })
+        ]);
+
+        updateData.mediaProvider = 'R2';
+        updateData.r2Media = {
+          status: 'R2_PRIMARY',
+          bucket: r2Provider.privateBucket,
+          isPrivate: true,
+          key: normalKey,
+          thumbKey,
+          normalKey,
+          largeKey,
+          verifiedAt: new Date()
+        };
+        updateData.invitationHash = null;
+        updateData.invitationCardUrl = null;
+        updateData.frameExportStatus = 'MODIFIED';
+
+        // Also upload to storageService for fallback
+        try {
+          const base64Data = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
+          const couplePhotoUrl = await storageService.upload({
+            data: base64Data,
+            folder: 'couplePhotos',
+            filename: `${existing.inquiryId}_couple`
+          });
+          updateData.couplePhoto = couplePhotoUrl;
+        } catch (_) {
+          updateData.couplePhoto = `/api/media/${existing.inquiryId}/couple-photo?preset=normal`;
+        }
+      } catch (uploadErr) {
+        console.error(`[updateSubmission] Direct private R2 upload failed for ${existing.inquiryId}, falling back:`, uploadErr.message);
+        const base64Data = `data:${couplePhotoFile.mimetype};base64,${couplePhotoFile.buffer.toString('base64')}`;
+        const couplePhotoUrl = await storageService.upload({
+          data: base64Data,
+          folder: 'couplePhotos',
+          filename: `${existing.inquiryId}_couple`
+        });
+        updateData.couplePhoto = couplePhotoUrl;
+      }
     }
 
     // If photo or framing alignment is modified after export, mark as MODIFIED so admin knows it needs reprint
-    if (updateData.photoZoom !== undefined || updateData.photoOffsetX !== undefined || updateData.photoOffsetY !== undefined || updateData.couplePhoto) {
+    if (updateData.photoZoom !== undefined || updateData.photoOffsetX !== undefined || updateData.photoOffsetY !== undefined || updateData.couplePhoto || newPhotoUploaded) {
       if (existing.frameExportStatus === 'EXPORTED') {
         updateData.frameExportStatus = 'MODIFIED';
       }
@@ -1228,6 +1284,19 @@ export const updateSubmission = async (req, res) => {
     invalidateRegistrationMediaCache(existing.inquiryId);
     if (updated?.inquiryId) invalidateRegistrationMediaCache(updated.inquiryId);
     clearSubmissionsCache();
+
+    // If new photo was uploaded, regenerate invitation card asynchronously
+    if (newPhotoUploaded && updated) {
+      Promise.resolve().then(async () => {
+        try {
+          const eventObj = await eventService.getEventBySlug(updated.programId);
+          await invitationCardService.ensureCard(updated, eventObj);
+          console.log(`[updateSubmission] Successfully regenerated invitation card for ${updated.inquiryId}`);
+        } catch (e) {
+          console.warn(`[updateSubmission] Invitation card regen error for ${updated.inquiryId}:`, e.message);
+        }
+      });
+    }
 
     // Asynchronously handle cryptographic pass re-sign, invitation card re-render, WhatsApp notification & lifecycle reschedule on single transfer
     if (isEventTransferred && updated && targetEventObj) {
@@ -1255,7 +1324,9 @@ export const updateSubmission = async (req, res) => {
       }
     }
 
-    res.json({ success: true, submission: updated });
+    const rawUpdated = updated?.toObject ? updated.toObject() : updated;
+    const mediaState = rawUpdated ? mediaService.resolveRegistrationMediaSync(rawUpdated) : {};
+    res.json({ success: true, submission: { ...rawUpdated, ...mediaState } });
   } catch (err) {
     console.error('[Registration Controller] Error updating submission:', err);
     res.status(500).json({ error: 'Server error updating submission.' });

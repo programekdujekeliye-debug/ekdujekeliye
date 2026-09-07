@@ -149,8 +149,8 @@ export class MediaService {
         let normUrl = r2Media?.normalUrl || rawPhoto;
         let lrgUrl = r2Media?.largeUrl || normUrl;
 
-        // If couple photo is private or references internal media.ekdujekeliye.in, route access through authenticated secure backend endpoints with signed token
-        if (r2Media?.isPrivate || rawPhoto.includes('media.ekdujekeliye.in')) {
+        // If couple photo is private or references R2 / media.ekdujekeliye.in, route access through authenticated secure backend endpoints with signed token
+        if (r2Media?.isPrivate || isR2Url) {
           const regId = registration.inquiryId || registration._id;
           const token = this.generateSignedMediaToken({
             registrationId: regId,
@@ -209,7 +209,7 @@ export class MediaService {
         let normUrl = r2Media?.normalUrl || rawPhoto;
         let lrgUrl = r2Media?.largeUrl || normUrl;
 
-        if (r2Media?.isPrivate || rawPhoto.includes('media.ekdujekeliye.in')) {
+        if (r2Media?.isPrivate || isR2Url) {
           const regId = registration.inquiryId || registration._id;
           const token = this.generateSignedMediaToken({
             registrationId: regId,
