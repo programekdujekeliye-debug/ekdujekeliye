@@ -482,24 +482,24 @@ export const VipPassesPage = () => {
       </div>
 
       {/* VIP Public Self-Registration Share Banner */}
-      <div className="bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent border border-amber-300 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+      <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
         <div className="flex items-start sm:items-center gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-black text-xl shadow-md flex-shrink-0">
-            👑
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-500 to-rose-600 text-white flex items-center justify-center shadow-xs flex-shrink-0">
+            <SparklesIcon className="w-6 h-6 text-white" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-black uppercase tracking-wider text-amber-900">
                 Today&apos;s VIP Entry Link &bull; મહેમાન રજીસ્ટ્રેશન લિંક
               </span>
-              <span className="px-2 py-0.5 bg-amber-200 text-amber-900 text-[10px] font-black rounded-full uppercase">
+              <span className="px-2 py-0.5 bg-amber-100 text-amber-900 text-[10px] font-bold rounded-full uppercase border border-amber-300">
                 Awaiting Your Approval
               </span>
             </div>
-            <p className="text-xs text-amber-800 font-medium mt-0.5">
-              Share this link with VIPs. Their entries will appear here under <strong className="font-bold">Pending Approval</strong> for your 1-click authorization.
+            <p className="text-xs text-stone-600 font-medium mt-0.5">
+              Share this link with VIPs. Their entries will appear here under <strong className="font-bold text-stone-900">Pending Approval</strong> for your 1-click authorization.
             </p>
-            <div className="text-xs font-mono font-bold text-amber-950 mt-1 select-all bg-amber-100/60 px-2.5 py-1 rounded-lg border border-amber-200 inline-block">
+            <div className="text-xs font-mono font-bold text-stone-800 mt-1 select-all bg-white px-2.5 py-1 rounded-lg border border-amber-200 inline-block shadow-2xs">
               {typeof window !== 'undefined' ? `${window.location.origin}/vip-entry` : 'https://www.ekdujekeliye.in/vip-entry'}
             </div>
           </div>
@@ -509,17 +509,19 @@ export const VipPassesPage = () => {
           <button
             type="button"
             onClick={handleCopyVipLink}
-            className="flex-1 sm:flex-none px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer whitespace-nowrap"
+            className="flex-1 sm:flex-none px-4 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer whitespace-nowrap"
           >
-            <span>📋 Copy VIP Link</span>
+            <CheckIcon className="w-4 h-4" />
+            <span>Copy VIP Link</span>
           </button>
           <a
             href="/vip-entry"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-slate-50 text-amber-900 border border-amber-300 rounded-xl text-xs font-extrabold transition-all shadow-xs flex items-center justify-center gap-1.5 whitespace-nowrap"
+            className="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-stone-50 text-stone-800 border border-stone-300 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
-            <span>Open Form ↗</span>
+            <span>Open Form</span>
+            <ExternalLinkIcon className="w-3.5 h-3.5 text-stone-500" />
           </a>
         </div>
       </div>
