@@ -73,7 +73,17 @@ export class CommunicationSchedulerService {
       // Backwards compatible aliases
       invitationSendAt: new Date(eventStartAt.getTime() - 24 * 60 * 60 * 1000),
       reminderSendAt: new Date(eventStartAt.getTime() - 48 * 60 * 60 * 1000),
-      feedbackSendAt: new Date(eventEndAt.getTime() + 3 * 60 * 60 * 1000)
+      // Post-Event combined memories & feedback: 12:00 AM (midnight IST) on the day following the event
+      feedbackSendAt: (() => {
+        if (date && String(date).includes('-')) {
+          const parts = String(date).split('-').map(Number);
+          if (parts.length === 3) {
+            const [year, month, day] = parts;
+            return new Date(Date.UTC(year, month - 1, day + 1, 0, 0, 0) - (5.5 * 60 * 60 * 1000));
+          }
+        }
+        return new Date(eventEndAt.getTime());
+      })()
     };
   }
 
