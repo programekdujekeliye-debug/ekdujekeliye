@@ -446,12 +446,16 @@ export default function PersonalizedInvitationPage() {
       }
 
       // 2. If pre-rendered official card is on R2 CDN, fetch blob for local saving
-      if (!finalBlob && submission.invitationCardUrl) {
+      const defaultCardUrl = submission.invitationCardUrl
+        ? (submission.invitationCardUrl.startsWith('http') ? submission.invitationCardUrl : `${API_BASE_URL}${submission.invitationCardUrl}`)
+        : `${API_BASE_URL}/api/invitations/${encodeURIComponent(submission.inquiryId)}/card.jpg`;
+
+      if (!finalBlob && defaultCardUrl) {
         try {
-          const res = await fetch(submission.invitationCardUrl);
+          const res = await fetch(defaultCardUrl);
           if (res.ok) {
             finalBlob = await res.blob();
-            finalDataUrl = submission.invitationCardUrl;
+            finalDataUrl = defaultCardUrl;
             isJpeg = true;
           }
         } catch (_) {}
@@ -630,7 +634,7 @@ export default function PersonalizedInvitationPage() {
           ) : (
             submission?.invitationCardUrl ? (
               <img
-                src={submission.invitationCardUrl}
+                src={submission.invitationCardUrl.startsWith('http') ? submission.invitationCardUrl : `${API_BASE_URL}${submission.invitationCardUrl}`}
                 alt="Personalized Invitation Card"
                 loading="eager"
                 style={{ width: '300px', height: '533px' }}
@@ -644,9 +648,13 @@ export default function PersonalizedInvitationPage() {
                 className="mx-auto block bg-stone-950 object-contain"
               />
             ) : (
-              <div style={{ width: '300px', height: '533px' }} className="animate-pulse bg-stone-950 flex items-center justify-center text-xs text-stone-400">
-                Rendering invitation card...
-              </div>
+              <img
+                src={`${API_BASE_URL}/api/invitations/${encodeURIComponent(submission.inquiryId)}/card.jpg`}
+                alt="Personalized Invitation Card"
+                loading="eager"
+                style={{ width: '300px', height: '533px' }}
+                className="mx-auto block bg-stone-950 object-contain"
+              />
             )
           )}
         </div>

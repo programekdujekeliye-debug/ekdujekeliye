@@ -49,25 +49,7 @@ export async function getInvitationCardJpeg(req, res) {
     const reg = await Registration.findOne({ inquiryId: { $regex: new RegExp(`^${cleanInquiryId}$`, 'i') } });
     if (!reg) return res.status(404).json({ error: 'Registration not found' });
 
-    // 1. Try reading pre-rendered card buffer from R2
-    if (reg.invitationKey) {
-      try {
-        const buf = await r2Provider.getObjectBuffer({
-          bucket: r2Provider.publicBucket,
-          key: reg.invitationKey
-        });
-        if (buf && buf.length > 0) {
-          res.setHeader('Content-Type', 'image/jpeg');
-          res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=3600, immutable');
-          res.setHeader('Content-Disposition', `inline; filename="invitation-${cleanInquiryId}.jpg"`);
-          return res.send(buf);
-        }
-      } catch (r2Err) {
-        console.warn(`[getInvitationCardJpeg] Could not read from R2 (${reg.invitationKey}), generating fresh composite:`, r2Err.message);
-      }
-    }
-
-    // 2. Fetch Event details
+    // Fetch Event details
     const event = await Event.findOne({
       $or: [
         { id: reg.programId },
@@ -76,7 +58,13 @@ export async function getInvitationCardJpeg(req, res) {
       ]
     }).lean();
 
-    // 3. Generate official JPEG composite on the fly
+    // Ensure valid, hash-matched card exists on R2
+    const cardResult = await invitationCardService.ensureInvitationCardImage(reg, event);
+    if (cardResult && cardResult.cardUrl) {
+      return res.redirect(302, cardResult.cardUrl);
+    }
+
+    // Fallback: Generate official JPEG composite on the fly
     const jpegBuffer = await invitationCardService.generateOfficialCardBuffer(reg, event);
     if (!jpegBuffer) {
       return res.status(500).json({ error: 'Could not generate invitation card JPEG' });

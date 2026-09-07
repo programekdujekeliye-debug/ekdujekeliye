@@ -1,6 +1,7 @@
 import { eventService } from './event.service.js';
 import { Event } from '../../models/Event.js';
 import { Registration } from '../../models/Registration.js';
+import { WhatsappMessage } from '../../models/WhatsappMessage.js';
 import { generateEventSlug } from '../../utils/slug.js';
 import { storageService } from '../../services/storage.service.js';
 
@@ -248,7 +249,25 @@ export const updateEvent = async (req, res) => {
     if (cardVisualsChanged) {
       await Registration.updateMany(
         { programId: { $in: [event.id, event.slug, id].filter(Boolean) } },
-        { $set: { invitationHash: null, invitationCardUrl: null } }
+        { $set: { invitationHash: null, invitationCardUrl: null, invitationKey: null } }
+      );
+      // Invalidate queued WhatsApp invitation messages so freshest rendered card is attached
+      await WhatsappMessage.updateMany(
+        {
+          eventId: { $in: [event.id, event.slug, id].filter(Boolean) },
+          status: 'QUEUED',
+          $or: [
+            { messageType: 'invitation' },
+            { templateName: 'edkl_personal_invitation_24h_v2' }
+          ]
+        },
+        {
+          $set: {
+            'templateParameters.headerImageUrl': null,
+            'templateParameters.imageUrl': null,
+            'templateParameters.invitationImageUrl': null
+          }
+        }
       );
     }
 

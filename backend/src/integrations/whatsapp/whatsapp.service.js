@@ -221,23 +221,20 @@ export async function sendWhatsAppMessage(rawParams = {}) {
     }
   }
 
-  // Bulletproof Guard: Guarantee that personalized invitation always uses the rendered official invitation card
+  // Bulletproof Guard: Guarantee that personalized invitation always uses the freshest rendered official invitation card
   if (templateKey === 'edkl_personal_invitation_24h_v2' || messageType === 'invitation') {
-    const currentHeader = variables.headerImageUrl || variables.imageUrl || variables.invitationImageUrl || '';
-    if (!currentHeader || currentHeader.includes('couplePhotos') || currentHeader.includes('sample_couple.png')) {
-      try {
-        const targetLookup = inquiryId || registrationId || variables.inquiryId || variables.registrationId;
-        if (targetLookup) {
-          const cardRes = await invitationCardService.ensureInvitationCardImage(targetLookup, eventId);
-          if (cardRes && cardRes.cardUrl) {
-            variables.headerImageUrl = cardRes.cardUrl;
-            variables.imageUrl = cardRes.cardUrl;
-            variables.invitationImageUrl = cardRes.cardUrl;
-          }
+    try {
+      const targetLookup = inquiryId || registrationId || variables.inquiryId || variables.registrationId;
+      if (targetLookup) {
+        const cardRes = await invitationCardService.ensureInvitationCardImage(targetLookup, eventId);
+        if (cardRes && cardRes.cardUrl) {
+          variables.headerImageUrl = cardRes.cardUrl;
+          variables.imageUrl = cardRes.cardUrl;
+          variables.invitationImageUrl = cardRes.cardUrl;
         }
-      } catch (cardErr) {
-        console.warn('[WhatsApp Service] Dynamic invitation card rendering warning:', cardErr.message);
       }
+    } catch (cardErr) {
+      console.warn('[WhatsApp Service] Dynamic invitation card rendering warning:', cardErr.message);
     }
   }
 

@@ -9,6 +9,7 @@ import { mediaService } from '../media/media.service.js';
 import { r2Provider } from '../../integrations/r2/r2.provider.js';
 import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
 import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
+import { invitationCardService } from '../../services/invitationCard.service.js';
 
 const registrationLocks = new Set();
 
@@ -426,9 +427,19 @@ export class RegistrationService {
       resolvedTemplate = submission.cardTemplate;
     }
 
+    let resolvedInvitationCardUrl = submission.invitationCardUrl;
+    if (!resolvedInvitationCardUrl) {
+      resolvedInvitationCardUrl = `/api/invitations/${encodeURIComponent(submission.inquiryId)}/card.jpg`;
+      // Pre-warm card generation in background so subsequent loads hit CDN directly
+      invitationCardService.ensureInvitationCardImage(submission, program).catch(err => {
+        console.warn(`[getStatus] Background card pre-render notice for ${submission.inquiryId}:`, err.message);
+      });
+    }
+
     return {
       ...submission,
       ...mediaState,
+      invitationCardUrl: resolvedInvitationCardUrl,
       cardTemplate: resolvedTemplate || null,
       program: program ? {
         ...program,
