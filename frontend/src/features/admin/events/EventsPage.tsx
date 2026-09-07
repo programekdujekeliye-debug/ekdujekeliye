@@ -3,7 +3,8 @@
 import React, { useState, useRef } from 'react';
 import { useAdmin } from '../context/AdminContext';
 import { eventsApi } from '../../../services/admin/eventsApi';
-import { Program } from '../../../types';
+import { registrationsApi } from '../../../services/admin/registrationsApi';
+import { Program, Submission } from '../../../types';
 import { LuxurySelect, SelectOption } from '../../../components/LuxurySelect';
 import {
   MapPinIcon,
@@ -24,7 +25,8 @@ import {
   UploadIcon,
   SearchIcon,
   TicketIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  FileTextIcon
 } from '../../../components/Icons';
 import toast from 'react-hot-toast';
 import { clearApiClientCache } from '../../../services/apiClient';
@@ -278,6 +280,349 @@ export const EventsPage: React.FC = () => {
       [secId]: !prev[secId]
     }));
     setActiveSection(secId);
+  };
+
+  const [exportingPdfId, setExportingPdfId] = useState<string | null>(null);
+
+  const handleExportCheckInPdf = async (prog: Program) => {
+    try {
+      setExportingPdfId(prog.id);
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error('Pop-up blocked. Please allow pop-ups for this site to generate the PDF report.');
+        return;
+      }
+
+      printWindow.document.write('<p style="font-family: sans-serif; padding: 20px;">Preparing Check-In PDF for ' + prog.name + '...</p>');
+
+      const res = await registrationsApi.getSubmissions({
+        programId: prog.id,
+        status: 'all',
+        paymentStatus: 'all',
+        limit: 5000
+      });
+
+      const list: Submission[] = (res.submissions || []).filter(
+        (s: any) => s.status === 'approved' || s.payment?.status === 'captured'
+      );
+
+      if (list.length === 0) {
+        printWindow.close();
+        toast.error('No approved/paid attendees found for this event slot.');
+        return;
+      }
+
+      const progName = prog.name || 'Seminar Slot';
+      const progDate = prog.date || '';
+      const progVenue = prog.venue || '';
+
+      const extractNumericToken = (token?: string) => {
+        if (!token) return 0;
+        const match = token.match(/(\d+)$/);
+        return match ? parseInt(match[1], 10) : 0;
+      };
+
+      const escapeHtml = (str?: string) => {
+        if (!str) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      };
+
+      const regularList = list.filter((s) => !s.inquiryId?.includes('IP'));
+      const ipList = list.filter((s) => s.inquiryId?.includes('IP'));
+
+      const bucketByTokenRange = (items: Submission[], bucketSize = 50) => {
+        if (!items || items.length === 0) return [];
+        const sorted = [...items].sort((a, b) => extractNumericToken(a.inquiryId) - extractNumericToken(b.inquiryId));
+        const maxToken = Math.max(...sorted.map((s) => extractNumericToken(s.inquiryId)));
+
+        const buckets: { rangeStart: number; rangeEnd: number; items: Submission[] }[] = [];
+        for (let start = 1; start <= maxToken; start += bucketSize) {
+          const end = start + bucketSize - 1;
+          const inRange = sorted.filter((s) => {
+            const n = extractNumericToken(s.inquiryId);
+            return n >= start && n <= end;
+          });
+
+          if (inRange.length > 0) {
+            buckets.push({ rangeStart: start, rangeEnd: end, items: inRange });
+          }
+        }
+        return buckets;
+      };
+
+      const regularBuckets = bucketByTokenRange(regularList, 50);
+      const ipBuckets = bucketByTokenRange(ipList, 50);
+      const totalPages = (regularBuckets.length + ipBuckets.length) || 1;
+
+      let pagesHtml = '';
+      let globalPageNum = 1;
+
+      const renderPageSection = (
+        buckets: { rangeStart: number; rangeEnd: number; items: Submission[] }[],
+        sectionPrefix: string,
+        badgeClass: string
+      ) => {
+        buckets.forEach((bucket) => {
+          pagesHtml += `
+            <div class="page">
+              <div class="header">
+                <div class="header-left">
+                  <h1>Ek Duje Ke Liye</h1>
+                  <p>${escapeHtml(progVenue || progName)}${progDate ? ` &bull; ${escapeHtml(progDate)}` : ''}</p>
+                </div>
+                <div class="header-right">
+                  <span class="badge ${badgeClass}">${sectionPrefix}TOKENS ${bucket.rangeStart} - ${bucket.rangeEnd} (${bucket.items.length})</span>
+                  <div class="page-info">Page ${globalPageNum} of ${totalPages}</div>
+                </div>
+              </div>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th class="col-token" style="text-align: center;">Registration Number</th>
+                    <th class="col-husband">Husband Name</th>
+                    <th class="col-wife">Wife Name</th>
+                    <th class="col-surname">Surname</th>
+                    <th class="col-mobile" style="text-align: center;">Mobile Number</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+
+          bucket.items.forEach((item) => {
+            const husband = escapeHtml(item.husbandName || (item as any).partner1Name || '-');
+            const wife = escapeHtml(item.wifeName || (item as any).partner2Name || '-');
+            const surname = escapeHtml(item.surname && item.surname !== '.' ? item.surname : '');
+            const phone = escapeHtml(item.phoneNumber || '-');
+            const token = escapeHtml(item.inquiryId || '-');
+            const isIp = token.includes('IP');
+
+            pagesHtml += `
+              <tr>
+                <td class="col-token ${isIp ? 'token-ip' : 'token-regular'}">${token}</td>
+                <td class="col-husband">${husband}</td>
+                <td class="col-wife">${wife}</td>
+                <td class="col-surname">${surname}</td>
+                <td class="col-mobile">${phone}</td>
+              </tr>
+            `;
+          });
+
+          pagesHtml += `
+                </tbody>
+              </table>
+            </div>
+          `;
+          globalPageNum++;
+        });
+      };
+
+      if (regularBuckets.length > 0) {
+        renderPageSection(regularBuckets, '', 'badge-regular');
+      }
+      if (ipBuckets.length > 0) {
+        renderPageSection(ipBuckets, 'IP ', 'badge-ip');
+      }
+
+      printWindow.document.open();
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <title>Ek Duje Ke Liye (${progDate || progName})</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 8mm 8mm 8mm 8mm;
+            }
+            * {
+              box-sizing: border-box;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+              color: #0f172a;
+              background: #ffffff;
+              font-size: 10px;
+            }
+            .page {
+              width: 100%;
+              height: 280mm;
+              max-height: 280mm;
+              page-break-after: always;
+              break-after: page;
+              display: flex;
+              flex-direction: column;
+              justify-content: flex-start;
+              overflow: hidden;
+            }
+            .page:last-child {
+              page-break-after: avoid;
+              break-after: avoid;
+            }
+            .header {
+              border-bottom: 2px solid #be123c;
+              padding-bottom: 4px;
+              margin-bottom: 5px;
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-end;
+            }
+            .header-left h1 {
+              margin: 0;
+              font-size: 15px;
+              font-weight: 900;
+              color: #881337;
+              letter-spacing: 0.5px;
+              text-transform: uppercase;
+            }
+            .header-left p {
+              margin: 2px 0 0 0;
+              font-size: 9.5px;
+              color: #475569;
+              font-weight: 600;
+            }
+            .header-right {
+              text-align: right;
+            }
+            .badge {
+              display: inline-block;
+              padding: 2px 8px;
+              border-radius: 4px;
+              font-size: 9px;
+              font-weight: 800;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            }
+            .badge-regular {
+              background-color: #ffe4e6;
+              color: #9f1239;
+              border: 1px solid #fecdd3;
+            }
+            .badge-ip {
+              background-color: #fef3c7;
+              color: #92400e;
+              border: 1px solid #fde68a;
+            }
+            .page-info {
+              font-size: 9px;
+              color: #64748b;
+              font-weight: 700;
+              margin-top: 2px;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              table-layout: fixed;
+            }
+            th {
+              background-color: #f1f5f9;
+              color: #0f172a;
+              font-weight: 800;
+              font-size: 9px;
+              text-transform: uppercase;
+              letter-spacing: 0.3px;
+              padding: 3.5px 6px;
+              border: 1px solid #94a3b8;
+              text-align: left;
+            }
+            td {
+              padding: 2.6px 6px;
+              border: 1px solid #cbd5e1;
+              font-size: 9.5px;
+              line-height: 1.15;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+            tr:nth-child(even) {
+              background-color: #f8fafc;
+            }
+            .col-token {
+              width: 20%;
+              font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+              font-weight: 800;
+              text-align: center;
+            }
+            .token-regular {
+              color: #be123c;
+            }
+            .token-ip {
+              color: #b45309;
+            }
+            .col-husband {
+              width: 24%;
+              font-weight: 700;
+              color: #0f172a;
+            }
+            .col-wife {
+              width: 24%;
+              font-weight: 700;
+              color: #0f172a;
+            }
+            .col-surname {
+              width: 16%;
+              color: #334155;
+              font-weight: 600;
+            }
+            .col-mobile {
+              width: 16%;
+              font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+              text-align: center;
+              font-weight: 700;
+              color: #1e293b;
+            }
+            .print-btn-bar {
+              position: fixed;
+              top: 12px;
+              right: 12px;
+              z-index: 9999;
+              background: #ffffff;
+              padding: 8px 12px;
+              border-radius: 10px;
+              box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+              border: 1px solid #e2e8f0;
+            }
+            .print-btn {
+              background: #be123c;
+              color: #ffffff;
+              border: none;
+              padding: 8px 16px;
+              font-weight: 800;
+              font-size: 12px;
+              border-radius: 6px;
+              cursor: pointer;
+            }
+            @media print {
+              .print-btn-bar {
+                display: none !important;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-btn-bar">
+            <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF (${totalPages} Pages, 50/Page)</button>
+          </div>
+          ${pagesHtml}
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (err: any) {
+      toast.error('Failed to generate Check-In PDF: ' + (err.message || 'Unknown error'));
+    } finally {
+      setExportingPdfId(null);
+    }
   };
 
   const handleDuplicate = async (prog: Program) => {
@@ -1410,6 +1755,17 @@ export const EventsPage: React.FC = () => {
                         <TicketIcon className="w-4 h-4" />
                       </a>
                     )}
+
+                    <button
+                      type="button"
+                      disabled={exportingPdfId === prog.id}
+                      onClick={() => handleExportCheckInPdf(prog)}
+                      className="px-2.5 py-2 bg-stone-50 hover:bg-rose-50 text-stone-700 hover:text-rose-700 font-bold text-xs rounded-xl border border-stone-200 hover:border-rose-200 flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50 min-h-[38px]"
+                      title="Check-In PDF (50 tokens per sheet)"
+                    >
+                      <FileTextIcon className="w-3.5 h-3.5 text-rose-600" />
+                      <span>{exportingPdfId === prog.id ? 'Loading...' : 'Check-In PDF'}</span>
+                    </button>
                   </div>
 
                   {isSuperAdmin && (
@@ -1448,14 +1804,28 @@ export const EventsPage: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="p-2 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-200/60 transition-colors cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center"
-                aria-label="Close Modal"
-              >
-                <XIcon className="w-5 h-5 sm:w-4 sm:h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                {editingProgram && (
+                  <button
+                    type="button"
+                    disabled={exportingPdfId === editingProgram.id}
+                    onClick={() => handleExportCheckInPdf(editingProgram)}
+                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl border border-rose-200 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                    title="Export Check-In PDF (50 tokens per sheet)"
+                  >
+                    <FileTextIcon className="w-3.5 h-3.5 text-rose-600" />
+                    <span>{exportingPdfId === editingProgram.id ? 'Generating...' : 'Check-In PDF'}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="p-2 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-200/60 transition-colors cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center"
+                  aria-label="Close Modal"
+                >
+                  <XIcon className="w-5 h-5 sm:w-4 sm:h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Desktop 2-Column Layout */}

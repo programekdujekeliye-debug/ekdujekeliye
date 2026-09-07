@@ -21,6 +21,26 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+function bucketByTokenRange(items, bucketSize = 50) {
+  if (!items || items.length === 0) return [];
+  const sorted = [...items].sort((a, b) => extractNumericToken(a.inquiryId) - extractNumericToken(b.inquiryId));
+  const maxToken = Math.max(...sorted.map(s => extractNumericToken(s.inquiryId)));
+
+  const buckets = [];
+  for (let start = 1; start <= maxToken; start += bucketSize) {
+    const end = start + bucketSize - 1;
+    const inRange = sorted.filter(s => {
+      const n = extractNumericToken(s.inquiryId);
+      return n >= start && n <= end;
+    });
+
+    if (inRange.length > 0) {
+      buckets.push({ rangeStart: start, rangeEnd: end, items: inRange });
+    }
+  }
+  return buckets;
+}
+
 async function run() {
   const conn = await mongoose.createConnection(PROD_URI).asPromise();
   const regColl = conn.collection('submission');
@@ -50,26 +70,14 @@ async function run() {
   const regularList = allApproved.filter(r => !r.inquiryId?.includes('IP'));
   const ipList = allApproved.filter(r => r.inquiryId?.includes('IP'));
 
-  // 2. Sort number-wise
-  regularList.sort((a, b) => extractNumericToken(a.inquiryId) - extractNumericToken(b.inquiryId));
-  ipList.sort((a, b) => extractNumericToken(a.inquiryId) - extractNumericToken(b.inquiryId));
+  // 2. Bucket by Token Range (1-50, 51-100, 101-150, etc.)
+  const regularBuckets = bucketByTokenRange(regularList, 50);
+  const ipBuckets = bucketByTokenRange(ipList, 50);
 
-  console.log(`Regular Attendees: ${regularList.length} (Tokens ${regularList[0]?.inquiryId} - ${regularList[regularList.length - 1]?.inquiryId})`);
-  console.log(`IP Attendees     : ${ipList.length} (Tokens ${ipList[0]?.inquiryId} - ${ipList[ipList.length - 1]?.inquiryId})`);
-
-  // 3. Chunk into 50 per page
-  const PAGE_SIZE = 50;
-  const chunk = (arr, size) => {
-    const res = [];
-    for (let i = 0; i < arr.length; i += size) {
-      res.push(arr.slice(i, i + size));
-    }
-    return res;
-  };
-
-  const regularPages = chunk(regularList, PAGE_SIZE);
-  const ipPages = chunk(ipList, PAGE_SIZE);
-  const totalPages = regularPages.length + ipPages.length;
+  const totalPages = regularBuckets.length + ipBuckets.length;
+  console.log(`Regular Buckets: ${regularBuckets.length} pages`);
+  console.log(`IP Buckets     : ${ipBuckets.length} pages`);
+  console.log(`Total Pages    : ${totalPages} pages`);
 
   let html = `<!DOCTYPE html>
 <html lang="en">
@@ -258,11 +266,8 @@ async function run() {
 
   let globalPageNum = 1;
 
-  // Render Regular Section Pages
-  regularPages.forEach((pageItems) => {
-    const firstToken = pageItems[0]?.inquiryId || '';
-    const lastToken = pageItems[pageItems.length - 1]?.inquiryId || '';
-
+  // Render Regular Section Pages by Token Range
+  regularBuckets.forEach((bucket) => {
     html += `
   <div class="page">
     <div class="header">
@@ -271,7 +276,7 @@ async function run() {
         <p>Sardar Patel Smruti Bhavan, Surat &bull; 07-Sep-2026 (8:30 PM)</p>
       </div>
       <div class="header-right">
-        <span class="badge badge-regular">REGULAR (${firstToken} - ${lastToken})</span>
+        <span class="badge badge-regular">TOKENS ${bucket.rangeStart} - ${bucket.rangeEnd} (${bucket.items.length})</span>
         <div class="page-info">Page ${globalPageNum} of ${totalPages}</div>
       </div>
     </div>
@@ -289,7 +294,7 @@ async function run() {
       <tbody>
 `;
 
-    pageItems.forEach((item) => {
+    bucket.items.forEach((item) => {
       const husband = escapeHtml(item.husbandName || item.partner1Name || '-');
       const wife = escapeHtml(item.wifeName || item.partner2Name || '-');
       const surname = escapeHtml(item.surname && item.surname !== '.' ? item.surname : '');
@@ -315,11 +320,8 @@ async function run() {
     globalPageNum++;
   });
 
-  // Render IP Section Pages
-  ipPages.forEach((pageItems) => {
-    const firstToken = pageItems[0]?.inquiryId || '';
-    const lastToken = pageItems[pageItems.length - 1]?.inquiryId || '';
-
+  // Render IP Section Pages by Token Range
+  ipBuckets.forEach((bucket) => {
     html += `
   <div class="page">
     <div class="header">
@@ -328,7 +330,7 @@ async function run() {
         <p>Sardar Patel Smruti Bhavan, Surat &bull; 07-Sep-2026 (8:30 PM)</p>
       </div>
       <div class="header-right">
-        <span class="badge badge-ip">IP REGISTRATIONS (${firstToken} - ${lastToken})</span>
+        <span class="badge badge-ip">IP TOKENS ${bucket.rangeStart} - ${bucket.rangeEnd} (${bucket.items.length})</span>
         <div class="page-info">Page ${globalPageNum} of ${totalPages}</div>
       </div>
     </div>
@@ -346,7 +348,7 @@ async function run() {
       <tbody>
 `;
 
-    pageItems.forEach((item) => {
+    bucket.items.forEach((item) => {
       const husband = escapeHtml(item.husbandName || item.partner1Name || '-');
       const wife = escapeHtml(item.wifeName || item.partner2Name || '-');
       const surname = escapeHtml(item.surname && item.surname !== '.' ? item.surname : '');
