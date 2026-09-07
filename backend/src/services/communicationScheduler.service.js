@@ -546,8 +546,15 @@ export class CommunicationSchedulerService {
       }
 
       // Revalidate: Post-event memories & feedback message requires attendance === 'PRESENT'
-      if (job.messageType === 'feedback_request' || job.messageType === 'post_event') {
-        const isPresent = registration.attendance === 'PRESENT' || registration.attendance === 'present';
+      if (
+        job.messageType === 'feedback_request' ||
+        job.messageType === 'post_event' ||
+        job.trigger === 'post_event_memories_feedback'
+      ) {
+        const isPresent =
+          registration.attendance === 'PRESENT' ||
+          registration.attendance === 'present' ||
+          registration.attendance === true;
         if (!isPresent) {
           job.status = WHATSAPP_MESSAGE_STATUSES.CANCELLED;
           job.lastErrorMessage = `No-show attendee (attendance: ${registration.attendance || 'unmarked'}). Post-event memories cancelled.`;
