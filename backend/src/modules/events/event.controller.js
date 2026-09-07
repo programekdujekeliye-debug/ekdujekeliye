@@ -4,6 +4,7 @@ import { Registration } from '../../models/Registration.js';
 import { WhatsappMessage } from '../../models/WhatsappMessage.js';
 import { generateEventSlug } from '../../utils/slug.js';
 import { storageService } from '../../services/storage.service.js';
+import { invalidateDashboardCache } from '../admin/admin.controller.js';
 
 export const getPublicEvents = async (req, res) => {
   try {
@@ -170,6 +171,7 @@ export const createEvent = async (req, res) => {
 
     await newEvent.save();
     eventService.invalidateCache();
+    invalidateDashboardCache();
     res.status(201).json({ success: true, message: 'Event program created successfully.', program: newEvent });
   } catch (err) {
     res.status(500).json({ error: `Server error creating event: ${err.message}` });
@@ -242,6 +244,7 @@ export const updateEvent = async (req, res) => {
     Object.assign(event, updates);
     await event.save();
     eventService.invalidateCache();
+    invalidateDashboardCache();
 
     // Invalidate cached invitation cards so newly uploaded template/coordinates reflect everywhere
     const cardVisualsChanged = (previousCardTemplate !== (event.cardTemplate || event.cardTemplateUrl)) ||
@@ -358,6 +361,7 @@ export const deleteEvent = async (req, res) => {
     const deleted = await Event.findOneAndDelete({ id });
     if (!deleted) return res.status(404).json({ error: 'Event program not found.' });
     eventService.invalidateCache();
+    invalidateDashboardCache();
     res.json({ success: true, message: 'Event program deleted successfully.' });
   } catch (err) {
     res.status(500).json({ error: `Server error deleting event: ${err.message}` });

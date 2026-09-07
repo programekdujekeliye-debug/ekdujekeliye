@@ -1264,8 +1264,8 @@ export const EventsPage: React.FC = () => {
             const capacity = prog.capacity && prog.capacity > 0 ? prog.capacity : 1000;
             const approved = prog.approvedCount ?? prog.bookingsCount ?? 0;
             const pending = prog.pendingCount ?? 0;
-            const isHousefull = prog.isHousefull || approved >= capacity;
-            const availableSlots = Math.max(0, capacity - approved);
+            const isHousefull = prog.status === 'housefull' || Boolean(prog.isHousefull) || approved >= capacity;
+            const availableSlots = isHousefull ? 0 : Math.max(0, capacity - approved);
             const fillPercentage = Math.min(100, Math.round((approved / capacity) * 100));
 
             return (

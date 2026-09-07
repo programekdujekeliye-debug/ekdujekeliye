@@ -327,7 +327,8 @@ export class EventService {
 
       const capacity = prog.capacity && prog.capacity > 0 ? prog.capacity : 1000;
       const isCapacityReached = approved >= capacity;
-      const availableSlots = Math.max(0, capacity - approved);
+      const isHousefull = prog.status === 'housefull' || isCapacityReached;
+      const availableSlots = isHousefull ? 0 : Math.max(0, capacity - approved);
       const totalBooked = approved + pending;
 
       let eventStatus = prog.status;
@@ -339,7 +340,7 @@ export class EventService {
         ...prog,
         capacity,
         status: eventStatus,
-        isHousefull: isCapacityReached,
+        isHousefull,
         totalBooked,
         bookingsCount: approved,
         approvedCount: approved,

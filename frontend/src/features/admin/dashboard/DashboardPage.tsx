@@ -25,6 +25,7 @@ export const DashboardPage = () => {
   const [capacity, setCapacity] = useState<number>(1184);
   const [availableSlots, setAvailableSlots] = useState<number>(1184);
   const [isHousefull, setIsHousefull] = useState<boolean>(false);
+  const [eventStatus, setEventStatus] = useState<string>('upcoming');
   const [latestTokenId, setLatestTokenId] = useState<string>('N/A');
   const [selectedEventName, setSelectedEventName] = useState<string>('');
 
@@ -40,9 +41,12 @@ export const DashboardPage = () => {
         const vTot = data.stats.vipTotal || 0;
         const regApp = data.stats.regularApproved || 0;
         const vApp = data.stats.vipApproved || 0;
-        const cap = data.stats.capacity || 1184;
-        const avail = data.stats.availableSlots !== undefined ? data.stats.availableSlots : Math.max(0, cap - app);
-        const housefull = data.stats.isHousefull || app >= cap;
+        const matched = programs.find((p) => p.id === selectedProgramId || p.slug === selectedProgramId);
+        const cap = matched?.capacity && matched.capacity > 0 ? matched.capacity : (data.selectedEvent?.capacity || data.stats.capacity || 1000);
+        const status = matched?.status || data.selectedEvent?.status || data.stats.status || 'upcoming';
+        const housefull = status === 'housefull' || Boolean(matched?.isHousefull) || Boolean(data.stats.isHousefull) || (cap > 0 && app >= cap);
+        const isClosed = status === 'registration_closed' || Boolean(data.stats.isClosed);
+        const avail = (housefull || isClosed) ? 0 : Math.max(0, cap - app);
 
         setTotalInquiries(total);
         setApprovedCount(app);
@@ -55,13 +59,14 @@ export const DashboardPage = () => {
         setCapacity(cap);
         setAvailableSlots(avail);
         setIsHousefull(housefull);
-
+        setEventStatus(status);
 
         if (data.selectedEvent) {
           setSelectedEventName(`${data.selectedEvent.name} (${data.selectedEvent.date})`);
+        } else if (matched) {
+          setSelectedEventName(`${matched.name} (${matched.date})`);
         } else {
-          const matched = programs.find((p) => p.id === selectedProgramId || p.slug === selectedProgramId);
-          setSelectedEventName(matched ? `${matched.name} (${matched.date})` : 'All Events Scope');
+          setSelectedEventName('All Events Scope');
         }
 
         if (data.recentSubmissions && data.recentSubmissions.length > 0) {
@@ -99,7 +104,11 @@ export const DashboardPage = () => {
                 <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-rose-600 text-white shadow-xs animate-pulse">
                   🚨 HOUSEFULL / SOLD OUT
                 </span>
-              ) : fillPercentage >= 85 ? (
+              ) : eventStatus === 'registration_closed' ? (
+                <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-stone-600 text-white shadow-xs">
+                  🔒 REGISTRATION CLOSED
+                </span>
+              ) : fillPercentage >= 85 || eventStatus === 'few_seats' ? (
                 <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-amber-500 text-white shadow-xs">
                   ⚡ Few Seats Left
                 </span>

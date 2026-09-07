@@ -417,7 +417,11 @@ export const clearAllData = async (req, res) => {
 /**
  * Optimized Single-Roundtrip Admin Operational Dashboard Summary (< 50ms)
  */
-const dashboardCacheMap = new Map();
+export const dashboardCacheMap = new Map();
+
+export function invalidateDashboardCache() {
+  dashboardCacheMap.clear();
+}
 
 export const getAdminDashboardSummary = async (req, res) => {
   try {
@@ -519,8 +523,9 @@ export const getAdminDashboardSummary = async (req, res) => {
 
     const s = statsList[0] || { total: 0, approved: 0, pending: 0, inquiry: 0, rejected: 0, present: 0, vipTotal: 0, vipApproved: 0, regularTotal: 0, regularApproved: 0 };
     const eventCapacity = selectedEventObj?.capacity || 1000;
-    const isHousefull = s.approved >= eventCapacity;
-    const availableSlots = Math.max(0, eventCapacity - s.approved);
+    const isHousefull = selectedEventObj ? (selectedEventObj.status === 'housefull' || s.approved >= eventCapacity) : (s.approved >= eventCapacity);
+    const isClosed = selectedEventObj?.status === 'registration_closed';
+    const availableSlots = (isHousefull || isClosed) ? 0 : Math.max(0, eventCapacity - s.approved);
 
     const result = {
       stats: {
@@ -537,6 +542,8 @@ export const getAdminDashboardSummary = async (req, res) => {
         capacity: eventCapacity,
         availableSlots,
         isHousefull,
+        isClosed,
+        status: selectedEventObj?.status || (isHousefull ? 'housefull' : 'upcoming'),
         attendanceRate: s.approved > 0 ? parseFloat(((s.present / s.approved) * 100).toFixed(1)) : 0
       },
       selectedEvent: selectedEventObj ? {
@@ -546,7 +553,9 @@ export const getAdminDashboardSummary = async (req, res) => {
         time: selectedEventObj.time,
         venue: selectedEventObj.venue,
         capacity: eventCapacity,
-        isHousefull
+        status: selectedEventObj.status,
+        isHousefull,
+        isClosed
       } : null,
       recentSubmissions,
       activeEvents
