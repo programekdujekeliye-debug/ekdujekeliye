@@ -28,8 +28,8 @@ export class RegistrationService {
       throw err;
     }
 
-    if (program.status === 'housefull' || program.status === 'registration_closed' || program.isRegistrationOpen === false) {
-      const err = new Error('Registrations for this seminar date are currently full/closed (Housefull).');
+    if (program.status === 'registration_closed' || program.isRegistrationOpen === false) {
+      const err = new Error('Registrations for this seminar date are currently closed.');
       err.status = 400;
       throw err;
     }
@@ -75,13 +75,26 @@ export class RegistrationService {
         ]
       };
 
+      // In-flight active pending cutoff: only count pending checkouts initiated within the last 30 minutes.
+      // Stale abandoned inquiries (>30m) must never hold up seats or block admin capacity changes.
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
       const activeCount = await Registration.countDocuments({
-        ...eventFilter,
-        status: { $in: ['approved', 'pending'] },
-        isDeleted: { $ne: true }
+        $and: [
+          eventFilter,
+          { isDeleted: { $ne: true } },
+          {
+            $or: [
+              { status: 'approved' },
+              { 'payment.status': 'captured' },
+              { 'payment.provider': 'manual' },
+              { whatsappConsentSource: 'admin_direct' },
+              { status: 'pending', createdAt: { $gte: thirtyMinutesAgo } }
+            ]
+          }
+        ]
       });
 
-      if (activeCount >= capacity) {
+      if (activeCount >= capacity || (program.status === 'housefull' && activeCount >= capacity)) {
         const err = new Error('Housefull: This program slot has reached maximum seating capacity.');
         err.status = 400;
         throw err;

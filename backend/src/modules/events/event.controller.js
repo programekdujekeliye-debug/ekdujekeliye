@@ -207,7 +207,26 @@ export const updateEvent = async (req, res) => {
     delete updates.archiveStats;
     delete updates.archiveStatus;
 
-    if (updates.capacity) updates.capacity = Number(updates.capacity);
+    if (updates.capacity !== undefined) {
+      updates.capacity = Number(updates.capacity);
+      // Dynamic capacity check: if capacity expanded beyond confirmed registrations,
+      // and status is 'housefull', automatically reopen to 'upcoming'
+      try {
+        const approvedCount = await Registration.countDocuments({
+          $or: [
+            { programId: event.id },
+            ...(event.date ? [{ programDate: event.date }] : [])
+          ],
+          status: 'approved',
+          isDeleted: { $ne: true }
+        });
+        if (updates.capacity > approvedCount && (updates.status === 'housefull' || event.status === 'housefull')) {
+          updates.status = 'upcoming';
+        }
+      } catch (countErr) {
+        console.warn('[updateEvent] Error checking approved count for dynamic reopening:', countErr.message);
+      }
+    }
     if (updates.price !== undefined) updates.price = Number(updates.price);
     if (updates.sortOrder !== undefined) updates.sortOrder = Number(updates.sortOrder);
     if (updates.heartX !== undefined) updates.heartX = Number(updates.heartX);
