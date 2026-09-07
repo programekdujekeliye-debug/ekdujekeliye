@@ -1,97 +1,136 @@
-import mongoose from 'mongoose';
 import { env } from '../src/config/env.js';
-import { Registration } from '../src/models/Registration.js';
+import mongoose from 'mongoose';
 import { Event } from '../src/models/Event.js';
-import { mediaService } from '../src/modules/media/media.service.js';
+import { Registration } from '../src/models/Registration.js';
+import { WhatsappMessage } from '../src/models/WhatsappMessage.js';
 
-const parseArgs = () => {
-  const args = {};
-  process.argv.slice(2).forEach(arg => {
-    if (arg.startsWith('--')) {
-      const [key, val] = arg.replace(/^--/, '').split('=');
-      args[key] = val !== undefined ? val : true;
-    }
-  });
-  return args;
-};
+async function main() {
+  await mongoose.connect(env.PROD_MONGO_URI);
+  console.log('Connected to Prod MongoDB\n');
 
-async function audit() {
-  const args = parseArgs();
-  const isProd = Boolean(args.prod);
-  const targetUri = isProd
-    ? (process.env.PROD_MONGO_URI || env.PROD_MONGO_URI || process.env.MONGO_URI)
-    : (process.env.MONGO_URI || env.MONGO_URI);
+  // Find all upcoming programs with date >= today
+  const events = await Event.find({
+    date: { $gte: '2026-09-07' }
+  }).sort({ date: 1 }).lean();
 
-  console.log(`Connecting to ${isProd ? 'PRODUCTION' : 'TEST'} DB...`);
-  await mongoose.connect(targetUri);
-
-  const upcomingEvents = [
-    { name: '7 September (EK06)', eventId: 'prog-2026-09-07', date: '2026-09-07' },
-    { name: '11 September (EK07)', eventId: 'prog-2026-09-11', date: '2026-09-11' },
-    { name: '19 September (EK08)', eventId: 'prog-2026-09-19', date: '2026-09-19' }
-  ];
-
-  for (const ev of upcomingEvents) {
-    console.log(`\n======================================================`);
-    console.log(`AUDIT FOR EVENT: ${ev.name} [${ev.eventId}]`);
-    console.log(`======================================================`);
-
-    const registrations = await Registration.find({
-      $or: [
-        { programId: ev.eventId },
-        { programDate: ev.date },
-        { inquiryId: new RegExp(`^EK0${ev.name.match(/EK0(\d)/)?.[1] || '6'}-`, 'i') }
-      ],
-      isDeleted: { $ne: true }
-    }).sort({ inquiryId: 1 }).lean();
-
-    console.log(`Total active registrations: ${registrations.length}`);
-
-    let countPrivateR2 = 0;
-    let countPublicR2 = 0;
-    let countCloudinary = 0;
-    let countNoPhoto = 0;
-    let countBroken = 0;
-
-    const needsMigration = [];
-    const missingPhotos = [];
-
-    for (const reg of registrations) {
-      const rawPhoto = reg.couplePhoto || '';
-      const r2Media = reg.r2Media;
-
-      if ((!rawPhoto && !r2Media?.key) || rawPhoto === '/sample_couple.png' || rawPhoto.includes('sample_couple.png')) {
-        countNoPhoto++;
-        missingPhotos.push(reg.inquiryId);
-        continue;
-      }
-
-      if (r2Media?.isPrivate) {
-        countPrivateR2++;
-      } else if (r2Media && !r2Media.isPrivate && r2Media.key) {
-        countPublicR2++;
-      } else if (rawPhoto.includes('cloudinary.com')) {
-        countCloudinary++;
-        needsMigration.push({ inquiryId: reg.inquiryId, rawPhoto });
-      } else {
-        countBroken++;
-        console.log(`  [BROKEN] ${reg.inquiryId}: rawPhoto=${rawPhoto}, r2Media=${JSON.stringify(r2Media)}`);
-      }
-    }
-
-    console.log(`- Private R2 couple photos: ${countPrivateR2}`);
-    console.log(`- Public R2 couple photos:  ${countPublicR2} (MUST BE 0!)`);
-    console.log(`- Cloudinary fallback:      ${countCloudinary}`);
-    console.log(`- No photo uploaded:        ${countNoPhoto} (${missingPhotos.join(', ') || 'None'})`);
-    console.log(`- Broken references:        ${countBroken}`);
-
-    if (needsMigration.length > 0) {
-      console.log(`- Registrations still in Cloudinary needing migration (${needsMigration.length}):`);
-      needsMigration.forEach(m => console.log(`    ${m.inquiryId}`));
-    }
+  console.log(`Found ${events.length} upcoming events (>= 2026-09-07):`);
+  for (const e of events) {
+    console.log(`- [${e.date}] ${e.id} | Slug: ${e.slug} | Name: ${e.name} | Status: ${e.status}`);
   }
 
-  await mongoose.disconnect();
+  for (const e of events) {
+    console.log(`\n======================================================`);
+    console.log(`EVENT: ${e.date} | ${e.name} (${e.id})`);
+    console.log(`======================================================`);
+
+    const eventAliases = [e.id, e.slug, e.date, e._id.toString()];
+
+    // 1. Registrations
+    const allRegs = await Registration.find({
+      programId: { $in: eventAliases },
+      isDeleted: { $ne: true }
+    }).lean();
+
+    const paidRegs = allRegs.filter(r => r.status === 'approved' || r.payment?.status === 'captured');
+    const pendingRegs = allRegs.filter(r => r.status !== 'approved' && r.payment?.status !== 'captured');
+
+    console.log(`Total Registrations: ${allRegs.length} (${paidRegs.length} Paid/Approved, ${pendingRegs.length} Pending)`);
+
+    // 2. Check Payment Confirmed Pass (edkl_payment_confirmed_pass_v1)
+    let paymentConfirmedSent = 0;
+    let paymentConfirmedDelivered = 0;
+    let paymentConfirmedRead = 0;
+    let paymentConfirmedFailed = 0;
+    let paymentConfirmedMissing = [];
+
+    for (const r of paidRegs) {
+      if (r.whatsappOptOutAt) continue;
+
+      const msg = await WhatsappMessage.findOne({
+        inquiryId: r.inquiryId,
+        templateName: 'edkl_payment_confirmed_pass_v1'
+      }).sort({ createdAt: -1 }).lean();
+
+      if (!msg) {
+        paymentConfirmedMissing.push({ inquiryId: r.inquiryId, name: `${r.husbandName} & ${r.wifeName}`, phone: r.phoneNumber });
+      } else if (msg.status === 'READ') {
+        paymentConfirmedRead++;
+        paymentConfirmedDelivered++;
+      } else if (msg.status === 'DELIVERED') {
+        paymentConfirmedDelivered++;
+      } else if (msg.status === 'SENT') {
+        paymentConfirmedSent++;
+      } else if (msg.status === 'FAILED') {
+        paymentConfirmedFailed++;
+      }
+    }
+
+    console.log(`\n--- Stage 1: Payment Confirmed Pass ---`);
+    console.log(`Delivered/Read: ${paymentConfirmedDelivered} (Read: ${paymentConfirmedRead})`);
+    console.log(`Sent (pending delivery): ${paymentConfirmedSent}`);
+    console.log(`Failed: ${paymentConfirmedFailed}`);
+    console.log(`Missing Payment Confirmation: ${paymentConfirmedMissing.length}`);
+    if (paymentConfirmedMissing.length > 0) {
+      console.log('Sample missing:', paymentConfirmedMissing.slice(0, 5));
+    }
+
+    // 3. Check 48h Reminder (edkl_event_pass_reminder_v2)
+    const reminderMsgs = await WhatsappMessage.aggregate([
+      {
+        $match: {
+          eventId: { $in: eventAliases },
+          templateName: 'edkl_event_pass_reminder_v2'
+        }
+      },
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+    console.log(`\n--- Stage 2: 48h Reminder Status ---`);
+    console.log(reminderMsgs);
+
+    // 4. Check 24h Personal Invitation (edkl_personal_invitation_24h_v2)
+    const invitationMsgs = await WhatsappMessage.aggregate([
+      {
+        $match: {
+          eventId: { $in: eventAliases },
+          templateName: 'edkl_personal_invitation_24h_v2'
+        }
+      },
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+    console.log(`\n--- Stage 3: 24h Invitation Status ---`);
+    console.log(invitationMsgs);
+
+    // 5. Check Media URLs in Registrations & Queued Messages
+    const legacyMediaRegs = await Registration.countDocuments({
+      programId: { $in: eventAliases },
+      $or: [
+        { couplePhoto: { $regex: 'media.ekdujekeliye.in' } },
+        { invitationCardUrl: { $regex: 'media.ekdujekeliye.in' } }
+      ]
+    });
+    console.log(`\nRegistrations with legacy media.ekdujekeliye.in URLs: ${legacyMediaRegs}`);
+
+    const legacyMediaMsgs = await WhatsappMessage.countDocuments({
+      eventId: { $in: eventAliases },
+      status: 'QUEUED',
+      $or: [
+        { 'templateParameters.headerImageUrl': { $regex: 'media.ekdujekeliye.in' } },
+        { 'templateParameters.imageUrl': { $regex: 'media.ekdujekeliye.in' } },
+        { 'templateParameters.invitationImageUrl': { $regex: 'media.ekdujekeliye.in' } }
+      ]
+    });
+    console.log(`Queued messages with legacy media.ekdujekeliye.in URLs: ${legacyMediaMsgs}`);
+
+    // Check language of queued messages
+    const queuedGuLang = await WhatsappMessage.countDocuments({
+      eventId: { $in: eventAliases },
+      status: 'QUEUED',
+      templateLanguage: 'gu'
+    });
+    console.log(`Queued messages with incorrect 'gu' language: ${queuedGuLang}`);
+  }
+
+  process.exit(0);
 }
 
-audit().catch(console.error);
+main().catch(console.error);
