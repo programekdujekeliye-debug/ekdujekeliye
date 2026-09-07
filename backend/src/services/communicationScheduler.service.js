@@ -62,8 +62,8 @@ export class CommunicationSchedulerService {
     const eventStartAt = this.parseEventDateTime(date, time);
     if (!eventStartAt) return null;
 
-    // Default duration 3.5 hours
-    const eventEndAt = new Date(eventStartAt.getTime() + 3.5 * 60 * 60 * 1000);
+    // Default duration 3 hours (8:30 PM to 11:30 PM)
+    const eventEndAt = new Date(eventStartAt.getTime() + 3 * 60 * 60 * 1000);
 
     return {
       eventStartAt,
