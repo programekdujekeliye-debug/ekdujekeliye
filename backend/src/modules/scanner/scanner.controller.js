@@ -666,3 +666,92 @@ export async function getScannerStats(req, res) {
     return res.status(500).json({ error: 'Failed to fetch scanner stats.' });
   }
 }
+
+/**
+ * 6. Admin Reset Scanner Attendance & Scans for Event
+ */
+export async function handleResetScannerAttendance(req, res) {
+  try {
+    const { eventId } = req.body;
+    if (!eventId) {
+      return res.status(400).json({ error: 'eventId is required in request body.' });
+    }
+
+    const event = await Event.findOne({
+      $or: [
+        { id: eventId },
+        { slug: eventId },
+        { date: eventId },
+        ...(typeof eventId === 'string' && eventId.match(/^[0-9a-fA-F]{24}$/) ? [{ _id: eventId }] : [])
+      ]
+    });
+
+    const eventIds = [eventId, event?.id, event?.slug, event?.date].filter(Boolean);
+
+    // 1. Reset Attendance on Registrations
+    const regResult = await Registration.updateMany(
+      {
+        $or: [
+          { programId: { $in: eventIds } },
+          ...(event?.date ? [{ programDate: event.date }] : [])
+        ]
+      },
+      {
+        $set: { attendance: 'unmarked' },
+        $unset: {
+          attendanceAt: '',
+          attendanceMethod: '',
+          checkedIn: '',
+          checkedInAt: '',
+          admittedAt: '',
+          scannedBy: '',
+          gateNumber: ''
+        }
+      }
+    );
+
+    // 2. Reset Passes
+    const passResult = await Pass.updateMany(
+      {
+        $or: [
+          { eventId: { $in: eventIds } },
+          ...(event?.date ? [{ eventDate: event.date }] : [])
+        ]
+      },
+      {
+        $set: {
+          firstScannedAt: null,
+          lastScannedAt: null,
+          firstScannedBy: null,
+          scanCount: 0
+        }
+      }
+    );
+
+    // 3. Delete ScanRecords
+    const scanResult = await ScanRecord.deleteMany({
+      $or: [
+        { eventId: { $in: eventIds } },
+        ...(event?.date ? [{ eventDate: event.date }] : [])
+      ]
+    });
+
+    // 4. Invalidate Cache
+    invalidateLiveAttendanceStatsCache();
+
+    const stats = await getEventLiveAttendanceStats(eventId);
+
+    return res.json({
+      success: true,
+      message: 'Scanner attendance and scan records successfully reset.',
+      registrationsReset: regResult.modifiedCount,
+      passesReset: passResult.modifiedCount,
+      scansDeleted: scanResult.deletedCount,
+      stats
+    });
+  } catch (err) {
+    console.error('[handleResetScannerAttendance Error]:', err);
+    return res.status(500).json({ error: 'Failed to reset scanner attendance: ' + err.message });
+  }
+}
+

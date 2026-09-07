@@ -5,7 +5,8 @@ import {
   prepareOfflineEvent,
   handleOfflineSync,
   handleManualAttendance,
-  getScannerStats
+  getScannerStats,
+  handleResetScannerAttendance
 } from './scanner.controller.js';
 
 export const scannerRouter = Router();
@@ -15,3 +16,4 @@ scannerRouter.post('/prepare', requireAuth, prepareOfflineEvent);
 scannerRouter.post('/sync', requireAuth, handleOfflineSync);
 scannerRouter.post('/manual', requireAuth, handleManualAttendance);
 scannerRouter.get('/stats', requireAuth, getScannerStats);
+scannerRouter.post('/reset', requireAuth, handleResetScannerAttendance);

@@ -185,6 +185,41 @@ export const ScannerPage: React.FC = () => {
     } catch (_) {}
   }, [isOnline, activeEventId]);
 
+  const [resettingAttendance, setResettingAttendance] = useState(false);
+
+  const handleResetAttendance = async () => {
+    if (!activeEventId) return;
+    if (!confirm('Are you sure you want to RESET all attendance, present counts, and scan records for this event back to zero? This action cannot be undone.')) {
+      return;
+    }
+    try {
+      setResettingAttendance(true);
+      const savedPass = sessionStorage.getItem('adminPassword') || '';
+      const res = await fetch(`${API_BASE_URL}/api/admin/scanner/reset`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${savedPass}`
+        },
+        body: JSON.stringify({ eventId: activeEventId })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to reset scanner attendance.');
+      }
+      toast.success('Attendance and scan history have been reset to 0.');
+      if (data.stats) {
+        setServerStats(data.stats);
+      } else {
+        await fetchServerStats();
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to reset attendance.');
+    } finally {
+      setResettingAttendance(false);
+    }
+  };
+
   useEffect(() => {
     fetchServerStats();
 
@@ -880,11 +915,21 @@ export const ScannerPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-stone-500 font-bold uppercase">Scanner ID:</span>
-            <span className="font-mono text-[10px] text-rose-700 font-bold bg-rose-50 px-2.5 py-0.5 rounded-lg border border-rose-200/60">
-              {deviceId}
-            </span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-stone-500 font-bold uppercase">Scanner ID:</span>
+              <span className="font-mono text-[10px] text-rose-700 font-bold bg-rose-50 px-2.5 py-0.5 rounded-lg border border-rose-200/60">
+                {deviceId}
+              </span>
+            </div>
+            <button
+              onClick={handleResetAttendance}
+              disabled={resettingAttendance}
+              title="Reset all attendance and scan records for this event"
+              className="text-[10px] font-extrabold px-2 py-0.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1"
+            >
+              <span>{resettingAttendance ? 'Resetting...' : 'Reset Scans'}</span>
+            </button>
           </div>
         </div>
 
