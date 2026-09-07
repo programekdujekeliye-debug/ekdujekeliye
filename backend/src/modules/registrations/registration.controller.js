@@ -1265,6 +1265,43 @@ export const updateSubmission = async (req, res) => {
           filename: `${existing.inquiryId}_couple`
         });
         updateData.couplePhoto = couplePhotoUrl;
+        const rawKey = couplePhotoUrl.replace(/^https?:\/\/[^/]+\//, '');
+        updateData.mediaProvider = 'R2';
+        updateData.r2Media = {
+          status: 'R2_PRIMARY',
+          bucket: r2Provider.publicBucket,
+          isPrivate: false,
+          key: rawKey,
+          thumbKey: rawKey,
+          normalKey: rawKey,
+          largeKey: rawKey,
+          verifiedAt: new Date()
+        };
+        updateData.invitationHash = null;
+        updateData.invitationCardUrl = null;
+        if (existing.frameExportStatus === 'EXPORTED') {
+          updateData.frameExportStatus = 'MODIFIED';
+        }
+      }
+    } else if (updateData.couplePhoto && updateData.couplePhoto !== existing.couplePhoto) {
+      if (existing.frameExportStatus === 'EXPORTED') {
+        updateData.frameExportStatus = 'MODIFIED';
+      }
+      updateData.invitationHash = null;
+      updateData.invitationCardUrl = null;
+      if (updateData.couplePhoto.includes('.r2.dev') || updateData.couplePhoto.includes('media.ekdujekeliye.in')) {
+        const rawKey = updateData.couplePhoto.replace(/^https?:\/\/[^/]+\//, '');
+        updateData.mediaProvider = 'R2';
+        updateData.r2Media = {
+          status: 'R2_PRIMARY',
+          bucket: r2Provider.publicBucket,
+          isPrivate: false,
+          key: rawKey,
+          thumbKey: rawKey,
+          normalKey: rawKey,
+          largeKey: rawKey,
+          verifiedAt: new Date()
+        };
       }
     }
 
@@ -1290,13 +1327,14 @@ export const updateSubmission = async (req, res) => {
       Promise.resolve().then(async () => {
         try {
           const eventObj = await eventService.getEventBySlug(updated.programId);
-          await invitationCardService.ensureCard(updated, eventObj);
+          await invitationCardService.ensureInvitationCard(updated, eventObj);
           console.log(`[updateSubmission] Successfully regenerated invitation card for ${updated.inquiryId}`);
         } catch (e) {
           console.warn(`[updateSubmission] Invitation card regen error for ${updated.inquiryId}:`, e.message);
         }
       });
     }
+
 
     // Asynchronously handle cryptographic pass re-sign, invitation card re-render, WhatsApp notification & lifecycle reschedule on single transfer
     if (isEventTransferred && updated && targetEventObj) {

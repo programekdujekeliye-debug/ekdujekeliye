@@ -69,7 +69,7 @@ import { getOptimizedPhotoUrl as getPresetPhotoUrl, MediaPreset } from '../../..
  */
 export const getOptimizedPhotoUrl = (url: string, presetOrWidth?: MediaPreset | number, height?: number): string => {
   if (!url) return '';
-  const full = resolvePhotoUrl(url);
+  let full = resolvePhotoUrl(url);
   let preset: MediaPreset = 'thumbnail';
   if (typeof presetOrWidth === 'string' && (presetOrWidth === 'thumbnail' || presetOrWidth === 'normal' || presetOrWidth === 'large')) {
     preset = presetOrWidth;
@@ -78,11 +78,22 @@ export const getOptimizedPhotoUrl = (url: string, presetOrWidth?: MediaPreset | 
     else if (presetOrWidth >= 500) preset = 'normal';
     else preset = 'thumbnail';
   }
+
+  // Handle internal proxy endpoint preset swapping (e.g. /api/media/.../couple-photo?preset=normal)
+  if (full.includes('/couple-photo?') || full.includes('/preview?')) {
+    const targetPreset = preset === 'large' ? 'large' : preset === 'normal' ? 'normal' : 'thumb';
+    full = full.replace(/preset=(normal|large|thumb|thumbnail)/, `preset=${targetPreset}`);
+  }
+
   return getPresetPhotoUrl(full, preset);
 };
 
 // Global memory cache for loaded images to eliminate redundant network fetches
 const imageMemoryCache = new Map<string, HTMLImageElement>();
+
+export const clearFrameImageMemoryCache = () => {
+  imageMemoryCache.clear();
+};
 
 /**
  * High-performance, CORS-safe image loader for Canvas Export and AI analysis
@@ -278,13 +289,14 @@ const LivePreviewCanvas: React.FC<{
   const activeFrame = frameImg || localFrameImg;
 
   useEffect(() => {
-    if (!sub.couplePhoto) {
+    const photoSrc = sub.normalUrl || sub.couplePhoto;
+    if (!photoSrc) {
       setCoupleImg(null);
       setLoadingImg(false);
       return;
     }
     setLoadingImg(true);
-    const fullUrl = getOptimizedPhotoUrl(sub.couplePhoto, 360, 480);
+    const fullUrl = getOptimizedPhotoUrl(photoSrc, 360, 480);
     if (imageMemoryCache.has(fullUrl)) {
       setCoupleImg(imageMemoryCache.get(fullUrl)!);
       setLoadingImg(false);
@@ -302,7 +314,7 @@ const LivePreviewCanvas: React.FC<{
       setLoadingImg(false);
     };
     img.src = fullUrl;
-  }, [sub.couplePhoto]);
+  }, [sub.normalUrl, sub.couplePhoto]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -467,9 +479,11 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
 
     try {
       setLoadingSubmissions(true);
+      clearFrameImageMemoryCache();
       const res = await registrationsApi.getSubmissions({
         programId: selectedProgramId !== 'all' ? selectedProgramId : undefined,
-        limit: 5000
+        limit: 5000,
+        _t: Date.now()
       });
 
       const selectedProg = programs.find((p) => p.id === selectedProgramId);
@@ -704,7 +718,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
 
     try {
       const toastId = toast.loading(`Preparing frame for ${sub.inquiryId}...`);
-      const highResUrl = getOptimizedPhotoUrl(sub.couplePhoto, 1200, 1600);
+      const highResUrl = getOptimizedPhotoUrl(sub.largeUrl || sub.downloadUrl || sub.couplePhoto, 1200, 1600);
       const coupleImg = await loadSafeCanvasImage(highResUrl);
       const frameImg = globalFrameImg || (await loadSafeCanvasImage('/frame_template.png'));
 
@@ -828,7 +842,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         try {
           let coupleImg: HTMLImageElement | null = null;
           if (sub.couplePhoto) {
-            const highResPhotoUrl = getOptimizedPhotoUrl(sub.couplePhoto, 1200, 1600);
+            const highResPhotoUrl = getOptimizedPhotoUrl(sub.largeUrl || sub.downloadUrl || sub.couplePhoto, 1200, 1600);
             coupleImg = await loadSafeCanvasImage(highResPhotoUrl, 15000);
           }
 

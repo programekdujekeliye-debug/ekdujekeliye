@@ -8,6 +8,10 @@ export interface Submission {
   phoneNumber: string;
   couplePhoto: string;
   photoThumbnailUrl?: string;
+  thumbnailUrl?: string;
+  normalUrl?: string;
+  largeUrl?: string;
+  downloadUrl?: string;
   photoStorageStatus?: 'ACTIVE' | 'QUEUED' | 'ARCHIVED';
   hasArchivedOriginal?: boolean;
   archiveStatus?: string;

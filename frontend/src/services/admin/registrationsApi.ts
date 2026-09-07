@@ -13,6 +13,7 @@ export interface GetSubmissionsParams {
   frameExportStatus?: string;
   sortBy?: string;
   sortOrder?: string;
+  _t?: number;
 }
 
 export const registrationsApi = {
@@ -29,6 +30,7 @@ export const registrationsApi = {
     if (params.frameExportStatus && params.frameExportStatus !== 'all') query.append('frameExportStatus', params.frameExportStatus);
     if (params.sortBy) query.append('sortBy', params.sortBy);
     if (params.sortOrder) query.append('sortOrder', params.sortOrder);
+    if (params._t) query.append('_t', String(params._t));
 
     const queryString = query.toString();
     return apiClient<SubmissionsResponse>(`/api/submissions${queryString ? `?${queryString}` : ''}`);

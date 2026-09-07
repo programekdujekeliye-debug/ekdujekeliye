@@ -487,7 +487,10 @@ export const getPrivateCouplePhoto = async (req, res) => {
           }
           res.setHeader('Content-Type', cached.contentType);
           res.setHeader('ETag', cached.etag);
-          res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+          const cacheControl = req.query.v
+            ? 'public, max-age=31536000, immutable'
+            : 'private, no-cache, must-revalidate';
+          res.setHeader('Cache-Control', cacheControl);
           res.setHeader('Access-Control-Allow-Origin', '*');
           return res.send(cached.buffer);
         }
@@ -537,7 +540,10 @@ export const getPrivateCouplePhoto = async (req, res) => {
 
           res.setHeader('Content-Type', contentType);
           res.setHeader('ETag', etag);
-          res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+          const cacheControl = req.query.v
+            ? 'public, max-age=31536000, immutable'
+            : 'private, no-cache, must-revalidate';
+          res.setHeader('Cache-Control', cacheControl);
           res.setHeader('Access-Control-Allow-Origin', '*');
           return res.send(buffer);
         } catch (bufErr) {

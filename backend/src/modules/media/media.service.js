@@ -12,6 +12,18 @@ cloudinary.config({
   api_secret: env.CLOUDINARY_API_SECRET
 });
 
+function getRegistrationMediaVersion(registration, r2Media) {
+  if (r2Media?.key) {
+    const parts = r2Media.key.split('/').filter(Boolean);
+    const hashPart = parts.find(p => /^[0-9a-fA-F]{16,64}$/.test(p));
+    if (hashPart) return hashPart;
+  }
+  if (registration?.updatedAt) {
+    return String(new Date(registration.updatedAt).getTime());
+  }
+  return '';
+}
+
 export class MediaService {
   /**
    * Transforms a full Cloudinary URL into a fast, lightweight thumbnail transformation
@@ -158,7 +170,9 @@ export class MediaService {
             preset: 'any',
             expiresIn: 604800 // 7 days
           });
-          const qs = `exp=${token.expiresAt}&sig=${token.sig}`;
+          const vToken = getRegistrationMediaVersion(registration, r2Media);
+          const vParam = vToken ? `&v=${encodeURIComponent(vToken)}` : '';
+          const qs = `exp=${token.expiresAt}&sig=${token.sig}${vParam}`;
           thumbUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=thumb&${qs}`;
           normUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=normal&${qs}`;
           lrgUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=large&${qs}`;
@@ -217,7 +231,9 @@ export class MediaService {
             preset: 'any',
             expiresIn: 604800 // 7 days
           });
-          const qs = `exp=${token.expiresAt}&sig=${token.sig}`;
+          const vToken = getRegistrationMediaVersion(registration, r2Media);
+          const vParam = vToken ? `&v=${encodeURIComponent(vToken)}` : '';
+          const qs = `exp=${token.expiresAt}&sig=${token.sig}${vParam}`;
           thumbUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=thumb&${qs}`;
           normUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=normal&${qs}`;
           lrgUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=large&${qs}`;
@@ -301,9 +317,26 @@ export class MediaService {
 
     // 2. ELSE IF R2 exists: R2
     if (hasR2) {
-      const thumbUrl = r2Media?.thumbUrl || rawPhoto;
-      const normUrl = r2Media?.normalUrl || rawPhoto;
-      const lrgUrl = r2Media?.largeUrl || normUrl;
+      let thumbUrl = r2Media?.thumbUrl || rawPhoto;
+      let normUrl = r2Media?.normalUrl || rawPhoto;
+      let lrgUrl = r2Media?.largeUrl || normUrl;
+
+      if (r2Media?.isPrivate || isR2Url) {
+        const regId = registration.inquiryId || registration._id;
+        const token = this.generateSignedMediaToken({
+          registrationId: regId,
+          purpose: 'couple_photo',
+          preset: 'any',
+          expiresIn: 604800 // 7 days
+        });
+        const vToken = getRegistrationMediaVersion(registration, r2Media);
+        const vParam = vToken ? `&v=${encodeURIComponent(vToken)}` : '';
+        const qs = `exp=${token.expiresAt}&sig=${token.sig}${vParam}`;
+        thumbUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=thumb&${qs}`;
+        normUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=normal&${qs}`;
+        lrgUrl = `/api/media/${encodeURIComponent(regId)}/couple-photo?preset=large&${qs}`;
+      }
+
       return {
         provider: 'R2',
         photoThumbnailUrl: thumbUrl,
