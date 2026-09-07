@@ -29,6 +29,22 @@ import { registrationsApi } from '../../../services/admin/registrationsApi';
 import { LuxurySelect } from '../../../components/LuxurySelect';
 import toast from 'react-hot-toast';
 
+export interface VipLinkItem {
+  _id: string;
+  name: string;
+  code: string;
+  programId?: string;
+  programName?: string;
+  programDate?: string;
+  maxSeats: number;
+  usedSeats: number;
+  approvedSeats: number;
+  status: 'ACTIVE' | 'HOUSEFULL' | 'CLOSED';
+  isDefault: boolean;
+  notes?: string;
+  createdAt?: string;
+}
+
 export const VipPassesPage = () => {
   const { programs, password, selectedProgramId: globalProgramId, setSelectedProgramId: setGlobalProgramId } = useAdmin();
 
@@ -43,6 +59,23 @@ export const VipPassesPage = () => {
   const [editingGuest, setEditingGuest] = useState<Submission | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [approvalFilter, setApprovalFilter] = useState<'all' | 'approved' | 'pending'>('all');
+
+  // Dynamic VIP Links state
+  const [vipLinks, setVipLinks] = useState<VipLinkItem[]>([]);
+  const [loadingLinks, setLoadingLinks] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [showCustomLinksSection, setShowCustomLinksSection] = useState(false);
+  const [editingLink, setEditingLink] = useState<VipLinkItem | null>(null);
+  const [linkName, setLinkName] = useState('');
+  const [linkCode, setLinkCode] = useState('');
+  const [linkProgramId, setLinkProgramId] = useState('');
+  const [linkMaxSeats, setLinkMaxSeats] = useState<number>(0);
+  const [linkStatus, setLinkStatus] = useState<'ACTIVE' | 'HOUSEFULL' | 'CLOSED'>('ACTIVE');
+  const [linkNotes, setLinkNotes] = useState('');
+  const [savingLink, setSavingLink] = useState(false);
+  const [togglingLinkId, setTogglingLinkId] = useState<string | null>(null);
+  const [deletingLinkId, setDeletingLinkId] = useState<string | null>(null);
+  const [copiedLinkCode, setCopiedLinkCode] = useState<string | null>(null);
 
   // Sync with global topbar event selector
   useEffect(() => {
@@ -141,9 +174,24 @@ export const VipPassesPage = () => {
     }
   }, [selectedProgramId, programs]);
 
+  const fetchVipLinks = useCallback(async () => {
+    try {
+      setLoadingLinks(true);
+      const res: any = await apiClient('/api/admin/vip-links?_t=' + Date.now(), { skipCache: true });
+      if (res?.data && Array.isArray(res.data)) {
+        setVipLinks(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch VIP links:', err);
+    } finally {
+      setLoadingLinks(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchVipGuests();
-  }, [fetchVipGuests]);
+    fetchVipLinks();
+  }, [fetchVipGuests, fetchVipLinks]);
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -284,13 +332,131 @@ export const VipPassesPage = () => {
     }
   };
 
-  const handleCopyVipLink = () => {
-    const link = `${window.location.origin}/vip-entry`;
+  const handleToggleLinkStatus = async (link: VipLinkItem) => {
+    try {
+      setTogglingLinkId(link._id);
+      const res: any = await apiClient(`/api/admin/vip-links/${link._id}/toggle`, {
+        method: 'POST'
+      });
+      if (res?.data) {
+        setVipLinks((prev) => prev.map((l) => (l._id === link._id ? res.data : l)));
+        const newStatus = res.data.status;
+        if (newStatus === 'HOUSEFULL') {
+          toast.success(`VIP Link "${link.name}" is now marked HOUSEFULL! Registration closed.`);
+        } else {
+          toast.success(`VIP Link "${link.name}" is now OPEN & ACTIVE!`);
+        }
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to toggle VIP link status.');
+    } finally {
+      setTogglingLinkId(null);
+    }
+  };
+
+  const handleDeleteLink = async (link: VipLinkItem) => {
+    if (link.isDefault || link.code === 'default') {
+      toast.error('The default VIP entry link cannot be deleted.');
+      return;
+    }
+    if (!confirm(`Are you sure you want to delete VIP link "${link.name}" (${link.code})? Any visitor using this link will see page closed.`)) {
+      return;
+    }
+    try {
+      setDeletingLinkId(link._id);
+      await apiClient(`/api/admin/vip-links/${link._id}`, { method: 'DELETE' });
+      setVipLinks((prev) => prev.filter((l) => l._id !== link._id));
+      toast.success(`VIP link "${link.name}" deleted.`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete VIP link.');
+    } finally {
+      setDeletingLinkId(null);
+    }
+  };
+
+  const handleOpenCreateLinkModal = () => {
+    setEditingLink(null);
+    setLinkName('');
+    setLinkCode('');
+    setLinkProgramId(selectedProgramId && selectedProgramId !== 'all' ? selectedProgramId : (programs[0]?.id || ''));
+    setLinkMaxSeats(0);
+    setLinkStatus('ACTIVE');
+    setLinkNotes('');
+    setShowLinkModal(true);
+  };
+
+  const handleOpenEditLinkModal = (link: VipLinkItem) => {
+    setEditingLink(link);
+    setLinkName(link.name);
+    setLinkCode(link.code);
+    setLinkProgramId(link.programId || (programs[0]?.id || ''));
+    setLinkMaxSeats(link.maxSeats || 0);
+    setLinkStatus(link.status || 'ACTIVE');
+    setLinkNotes(link.notes || '');
+    setShowLinkModal(true);
+  };
+
+  const handleSaveLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!linkName.trim() || !linkCode.trim()) {
+      toast.error('Link name and code are required.');
+      return;
+    }
+    try {
+      setSavingLink(true);
+      const selectedProg = programs.find((p) => p.id === linkProgramId);
+      const payload = {
+        name: linkName.trim(),
+        code: linkCode.trim().toLowerCase().replace(/[^a-z0-9_-]/g, ''),
+        programId: linkProgramId || undefined,
+        programName: selectedProg?.name || undefined,
+        programDate: selectedProg?.date || undefined,
+        maxSeats: Number(linkMaxSeats) || 0,
+        status: linkStatus,
+        notes: linkNotes.trim()
+      };
+
+      if (editingLink) {
+        const res: any = await apiClient(`/api/admin/vip-links/${editingLink._id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res?.data) {
+          setVipLinks((prev) => prev.map((l) => (l._id === editingLink._id ? res.data : l)));
+          toast.success(`VIP link "${res.data.name}" updated!`);
+        }
+      } else {
+        const res: any = await apiClient('/api/admin/vip-links', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res?.data) {
+          setVipLinks((prev) => [res.data, ...prev]);
+          toast.success(`New VIP link "${res.data.name}" created!`);
+        }
+      }
+      setShowLinkModal(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save VIP link.');
+    } finally {
+      setSavingLink(false);
+    }
+  };
+
+  const handleCopySpecificLink = (code: string) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.ekdujekeliye.in';
+    const url = code === 'default'
+      ? `${origin}/vip-entry`
+      : `${origin}/vip-entry?code=${encodeURIComponent(code)}`;
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(link);
-      toast.success('VIP Entry link copied to clipboard!');
+      navigator.clipboard.writeText(url);
+      setCopiedLinkCode(code);
+      setTimeout(() => setCopiedLinkCode(null), 2500);
+      toast.success(`VIP link copied! (${url})`);
     } else {
-      prompt('Copy this VIP link:', link);
+      prompt('Copy VIP link:', url);
     }
   };
 
@@ -500,50 +666,305 @@ export const VipPassesPage = () => {
         </div>
       </div>
 
-      {/* VIP Public Self-Registration Share Banner */}
-      <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
-        <div className="flex items-start sm:items-center gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-500 to-rose-600 text-white flex items-center justify-center shadow-xs flex-shrink-0">
-            <SparklesIcon className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-black uppercase tracking-wider text-amber-900">
-                Today&apos;s VIP Entry Link &bull; મહેમાન રજીસ્ટ્રેશન લિંક
-              </span>
-              <span className="px-2 py-0.5 bg-amber-100 text-amber-900 text-[10px] font-bold rounded-full uppercase border border-amber-300">
-                Awaiting Your Approval
-              </span>
-            </div>
-            <p className="text-xs text-stone-600 font-medium mt-0.5">
-              Share this link with VIPs. Their entries will appear here under <strong className="font-bold text-stone-900">Pending Approval</strong> for your 1-click authorization.
-            </p>
-            <div className="text-xs font-mono font-bold text-stone-800 mt-1 select-all bg-white px-2.5 py-1 rounded-lg border border-amber-200 inline-block shadow-2xs">
-              {typeof window !== 'undefined' ? `${window.location.origin}/vip-entry` : 'https://www.ekdujekeliye.in/vip-entry'}
-            </div>
-          </div>
-        </div>
+      {/* VIP Public Self-Registration Share Banner & Dynamic VIP Links */}
+      {(() => {
+        const defaultLink = vipLinks.find((l) => l.isDefault || l.code === 'default') || {
+          _id: '',
+          name: "Today's VIP Entry Link",
+          code: 'default',
+          status: 'HOUSEFULL' as const,
+          maxSeats: 0,
+          usedSeats: 0,
+          approvedSeats: approvedVipCount,
+          isDefault: true
+        };
+        const customLinks = vipLinks.filter((l) => !l.isDefault && l.code !== 'default');
+        const isDefaultHousefull = defaultLink.status === 'HOUSEFULL' || defaultLink.status === 'CLOSED';
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={handleCopyVipLink}
-            className="flex-1 sm:flex-none px-4 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer whitespace-nowrap"
-          >
-            <CheckIcon className="w-4 h-4" />
-            <span>Copy VIP Link</span>
-          </button>
-          <a
-            href="/vip-entry"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-stone-50 text-stone-800 border border-stone-300 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 whitespace-nowrap"
-          >
-            <span>Open Form</span>
-            <ExternalLinkIcon className="w-3.5 h-3.5 text-stone-500" />
-          </a>
-        </div>
-      </div>
+        return (
+          <div className="space-y-3">
+            {/* Main Default VIP Link Banner */}
+            <div className={`border rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shadow-xs transition-all ${
+              isDefaultHousefull 
+                ? 'bg-gradient-to-r from-rose-50/90 via-amber-50/40 to-white border-rose-200' 
+                : 'bg-gradient-to-r from-emerald-50/90 via-amber-50/40 to-white border-emerald-200'
+            }`}>
+              <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
+                <div className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center shadow-xs flex-shrink-0 ${
+                  isDefaultHousefull ? 'bg-gradient-to-br from-rose-600 to-amber-600' : 'bg-gradient-to-br from-emerald-600 to-teal-600'
+                }`}>
+                  <SparklesIcon className="w-6 h-6 text-white" />
+                </div>
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-900">
+                      Today&apos;s VIP Entry Link &bull; મહેમાન રજીસ્ટ્રેશન લિંક
+                    </span>
+                    {isDefaultHousefull ? (
+                      <span className="px-2.5 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-black rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
+                        <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
+                        🔴 HOUSEFULL &bull; હાલ બંધ છે (Closed)
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
+                        <span className="w-2 h-2 rounded-full bg-emerald-600" />
+                        🟢 ACTIVE &bull; એન્ટ્રી ચાલુ છે (Open)
+                      </span>
+                    )}
+                    <span className="px-2 py-0.5 bg-amber-100 text-amber-900 text-[10px] font-bold rounded-full border border-amber-300">
+                      Approved: {defaultLink.approvedSeats || approvedVipCount} VIPs
+                    </span>
+                  </div>
+                  <p className="text-xs text-stone-600 font-medium">
+                    {isDefaultHousefull
+                      ? 'આ લિંક હાલમાં હાઉસફુલ (Housefull) છે. જાહેર મહેમાનો ફોર્મ ભરી શકશે નહીં.'
+                      : 'આ લિંક હાલમાં એક્ટિવ છે. મહેમાનો ફોર્મ ભરી શકશે અને અહીં Pending Approval માં આવશે.'}
+                  </p>
+                  <div className="text-xs font-mono font-bold text-stone-800 select-all bg-white px-2.5 py-1 rounded-lg border border-slate-200 inline-block shadow-2xs break-all">
+                    {typeof window !== 'undefined' ? `${window.location.origin}/vip-entry` : 'https://www.ekdujekeliye.in/vip-entry'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                {/* 1-Click Toggle Default Status */}
+                {defaultLink._id ? (
+                  <button
+                    type="button"
+                    disabled={togglingLinkId === defaultLink._id}
+                    onClick={() => handleToggleLinkStatus(defaultLink)}
+                    className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-black transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95 disabled:opacity-50 ${
+                      isDefaultHousefull
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        : 'bg-rose-600 hover:bg-rose-700 text-white'
+                    }`}
+                    title={isDefaultHousefull ? 'Open this link to accept VIP entries' : 'Close this link and show Housefull'}
+                  >
+                    {togglingLinkId === defaultLink._id ? (
+                      <span>Updating...</span>
+                    ) : isDefaultHousefull ? (
+                      <span>🟢 Re-open Link (ચાલુ કરો)</span>
+                    ) : (
+                      <span>🔴 Mark Housefull (બંધ કરો)</span>
+                    )}
+                  </button>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => handleCopySpecificLink('default')}
+                  className="flex-1 sm:flex-none px-4 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer whitespace-nowrap"
+                >
+                  <CheckIcon className="w-4 h-4" />
+                  <span>{copiedLinkCode === 'default' ? 'Copied!' : 'Copy VIP Link'}</span>
+                </button>
+
+                <a
+                  href="/vip-entry"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-stone-50 text-stone-800 border border-stone-300 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 whitespace-nowrap"
+                >
+                  <span>Open Form</span>
+                  <ExternalLinkIcon className="w-3.5 h-3.5 text-stone-500" />
+                </a>
+
+                <button
+                  type="button"
+                  onClick={handleOpenCreateLinkModal}
+                  className="flex-1 sm:flex-none px-4 py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-xl text-xs font-extrabold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                >
+                  <span>+ Create Specific Link</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Custom / Specific VIP Links Accordion & Manager */}
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <TicketIcon className="w-4 h-4 text-amber-500" />
+                    <span>Specific VIP Links &amp; Quotas &bull; ખાસ મહેમાન/ટ્રસ્ટી લિંક્સ ({customLinks.length})</span>
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    (Create links with seat quotas for sponsors, committee, or trustees)
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomLinksSection((prev) => !prev)}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    <span>{showCustomLinksSection ? 'Hide Details ▲' : `Manage Custom Links (${customLinks.length}) ▼`}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenCreateLinkModal}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    <span>+ New Link</span>
+                  </button>
+                </div>
+              </div>
+
+              {showCustomLinksSection && (
+                <div className="pt-3 space-y-3">
+                  {loadingLinks ? (
+                    <div className="py-6 text-center text-xs text-slate-400 font-medium">
+                      Loading VIP links...
+                    </div>
+                  ) : customLinks.length === 0 ? (
+                    <div className="py-6 text-center space-y-2 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                      <p className="text-xs font-bold text-slate-600">
+                        No custom VIP links created yet.
+                      </p>
+                      <p className="text-[11px] text-slate-400 max-w-md mx-auto">
+                        Create a specific link for a group (e.g. &quot;Diamond Sponsors&quot; or &quot;Trustee Family&quot;) with a max seat limit. Once seats are approved, it automatically closes!
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleOpenCreateLinkModal}
+                        className="mt-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+                      >
+                        + Create First Specific Link
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500 bg-slate-50/80">
+                            <th className="py-2.5 px-3">Link Name &amp; Code</th>
+                            <th className="py-2.5 px-3">Event Slot</th>
+                            <th className="py-2.5 px-3 text-center">Seat Quota</th>
+                            <th className="py-2.5 px-3 text-center">Status</th>
+                            <th className="py-2.5 px-3 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {customLinks.map((link) => {
+                            const isLinkHousefull = link.status === 'HOUSEFULL' || link.status === 'CLOSED';
+                            const isQuotaReached = link.maxSeats > 0 && link.approvedSeats >= link.maxSeats;
+
+                            return (
+                              <tr key={link._id} className="hover:bg-amber-50/30 transition-colors">
+                                <td className="py-3 px-3">
+                                  <div className="font-bold text-slate-900 text-xs">{link.name}</div>
+                                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                    <span className="font-mono text-[10px] text-amber-900 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-bold">
+                                      code={link.code}
+                                    </span>
+                                    {link.notes && (
+                                      <span className="text-[10px] text-slate-400 italic">
+                                        &bull; {link.notes}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3 text-slate-600">
+                                  <div className="font-medium text-xs">{link.programName || 'Any / All Event Slots'}</div>
+                                  {link.programDate && (
+                                    <div className="text-[10px] text-slate-400">{link.programDate}</div>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3 text-center">
+                                  <div className="inline-flex flex-col items-center">
+                                    <span className={`text-xs font-black ${isQuotaReached ? 'text-rose-600' : 'text-slate-800'}`}>
+                                      {link.approvedSeats || 0} / {link.maxSeats > 0 ? link.maxSeats : '∞'}
+                                    </span>
+                                    <span className="text-[9px] uppercase font-bold text-slate-400">
+                                      {link.maxSeats > 0 ? (isQuotaReached ? 'Quota Full' : `${link.maxSeats - (link.approvedSeats || 0)} left`) : 'Unlimited'}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3 text-center">
+                                  {isLinkHousefull ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-[10px] font-black uppercase">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
+                                      Housefull
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-black uppercase">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                                      Active
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    {/* 1-Click Toggle */}
+                                    <button
+                                      type="button"
+                                      disabled={togglingLinkId === link._id}
+                                      onClick={() => handleToggleLinkStatus(link)}
+                                      className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition-all cursor-pointer ${
+                                        isLinkHousefull
+                                          ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'
+                                          : 'bg-rose-100 hover:bg-rose-200 text-rose-800'
+                                      }`}
+                                      title={isLinkHousefull ? 'Re-open this VIP link' : 'Close this link (Mark Housefull)'}
+                                    >
+                                      {togglingLinkId === link._id ? '...' : isLinkHousefull ? 'Open' : 'Close'}
+                                    </button>
+
+                                    {/* Copy */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopySpecificLink(link.code)}
+                                      className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors cursor-pointer"
+                                      title="Copy Link URL"
+                                    >
+                                      <CheckIcon className={`w-3.5 h-3.5 ${copiedLinkCode === link.code ? 'text-emerald-600' : 'text-slate-500'}`} />
+                                    </button>
+
+                                    {/* Open Link */}
+                                    <a
+                                      href={`/vip-entry?code=${encodeURIComponent(link.code)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
+                                      title="Open in new tab"
+                                    >
+                                      <ExternalLinkIcon className="w-3.5 h-3.5 text-slate-500" />
+                                    </a>
+
+                                    {/* Edit */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditLinkModal(link)}
+                                      className="p-1.5 hover:bg-amber-100 rounded-lg text-amber-700 transition-colors cursor-pointer"
+                                      title="Edit Link & Seats"
+                                    >
+                                      <EditIcon className="w-3.5 h-3.5" />
+                                    </button>
+
+                                    {/* Delete */}
+                                    <button
+                                      type="button"
+                                      disabled={deletingLinkId === link._id}
+                                      onClick={() => handleDeleteLink(link)}
+                                      className="p-1.5 hover:bg-rose-100 rounded-lg text-rose-600 transition-colors cursor-pointer disabled:opacity-50"
+                                      title="Delete Link"
+                                    >
+                                      <TrashIcon className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Approval Status Filter Tabs */}
       <div className="flex items-center gap-1.5 p-1 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold w-fit">
@@ -1344,6 +1765,144 @@ export const VipPassesPage = () => {
           );
         }}
       />
+
+      {/* Create / Edit Specific VIP Link Modal */}
+      {showLinkModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 border border-amber-100 animate-in fade-in-50 zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <SparklesIcon className="w-5 h-5 text-amber-500" />
+                <h3 className="text-base font-extrabold text-slate-900">
+                  {editingLink ? 'Edit VIP Link & Quota' : 'Create Specific VIP Link'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLinkModal(false)}
+                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <XIcon className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveLink} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                  Link Name / Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={linkName}
+                  onChange={(e) => setLinkName(e.target.value)}
+                  placeholder="e.g. Trustee Quota, Diamond Sponsors"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl text-xs text-slate-900 font-medium outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                  Custom Code (Slug) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={linkCode}
+                  onChange={(e) => setLinkCode(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                  placeholder="e.g. trustees, sponsor10"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl text-xs font-mono text-slate-900 font-bold outline-none transition-all"
+                />
+                <span className="text-[10px] text-slate-400 block mt-1">
+                  URL: <strong className="text-amber-700 font-mono">/vip-entry?code={linkCode || 'code'}</strong>
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                  Event Program Slot (Optional)
+                </label>
+                <select
+                  value={linkProgramId}
+                  onChange={(e) => setLinkProgramId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl text-xs text-slate-900 font-medium outline-none transition-all"
+                >
+                  <option value="">-- Any / All Event Slots --</option>
+                  {programs.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.date})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                    Max Seats Quota
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={linkMaxSeats}
+                    onChange={(e) => setLinkMaxSeats(parseInt(e.target.value, 10) || 0)}
+                    placeholder="0 = Unlimited"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl text-xs text-slate-900 font-bold outline-none transition-all"
+                  />
+                  <span className="text-[9px] text-slate-400 block mt-0.5">
+                    (0 = unlimited seats)
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={linkStatus}
+                    onChange={(e) => setLinkStatus(e.target.value as any)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl text-xs text-slate-900 font-bold outline-none transition-all"
+                  >
+                    <option value="ACTIVE">ACTIVE (Open)</option>
+                    <option value="HOUSEFULL">HOUSEFULL (Closed)</option>
+                    <option value="CLOSED">CLOSED</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                  Admin Notes / Remarks (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={linkNotes}
+                  onChange={(e) => setLinkNotes(e.target.value)}
+                  placeholder="e.g. Reserved for Shri ABC / Sponsor"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl text-xs text-slate-900 font-medium outline-none transition-all"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowLinkModal(false)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingLink}
+                  className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold rounded-xl text-xs transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {savingLink ? 'Saving...' : editingLink ? 'Update Link' : 'Create VIP Link'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

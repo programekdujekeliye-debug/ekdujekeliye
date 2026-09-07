@@ -37,6 +37,7 @@ const RegistrationSchema = new mongoose.Schema({
     paidAt: { type: Date },
     createdAt: { type: Date, default: Date.now }
   },
+  vipLinkCode: { type: String, default: null, index: true },
   attendance: { type: mongoose.Schema.Types.Mixed, default: 'unmarked' },
   attendanceAt: { type: Date, default: null },
   attendanceMarkedAt: { type: Date, default: null },

@@ -4,6 +4,7 @@ import { registrationService } from './registration.service.js';
 import { Registration } from '../../models/Registration.js';
 import { Event } from '../../models/Event.js';
 import { Pass } from '../../models/Pass.js';
+import { VipLink } from '../../models/VipLink.js';
 import { MediaArchive } from '../../models/MediaArchive.js';
 import { eventService } from '../events/event.service.js';
 import { Counter, getNextSequence } from '../../models/Counter.js';
@@ -124,6 +125,14 @@ export const approveRegistration = async (req, res) => {
         }
       } catch (passErr) {
         console.warn(`[approveRegistration] Pass/Card generation notice for ${inquiryId}:`, passErr.message);
+      }
+
+      // Increment approved count on dynamic VIP link if applicable
+      if (sub.vipLinkCode) {
+        await VipLink.updateOne(
+          { code: sub.vipLinkCode },
+          { $inc: { approvedSeats: 1 } }
+        ).catch(() => {});
       }
     }
 
@@ -538,7 +547,44 @@ export const submitVipRequest = async (req, res) => {
       return res.status(400).json({ error: 'Event slot not found.' });
     }
 
-    // 2. Prevent duplicate active registrations for this phone number and event
+    // 2. Check VIP Link status & seat limits
+    const linkCode = (req.body.linkCode || req.body.code || 'default').trim().toLowerCase();
+    let vipLink = await VipLink.findOne({ code: linkCode });
+
+    if (!vipLink && linkCode !== 'default') {
+      return res.status(404).json({
+        error: 'Invalid or expired VIP invitation link.'
+      });
+    }
+
+    if (vipLink) {
+      if (vipLink.status === 'HOUSEFULL' || vipLink.status === 'CLOSED') {
+        return res.status(403).json({
+          error: 'HOUSEFULL: આ VIP એન્ટ્રી લિંક પર રજીસ્ટ્રેશન પૂર્ણ થઈ ગયેલ છે (Housefull).',
+          housefull: true,
+          status: vipLink.status
+        });
+      }
+
+      if (vipLink.maxSeats > 0 && vipLink.usedSeats >= vipLink.maxSeats) {
+        vipLink.status = 'HOUSEFULL';
+        await vipLink.save();
+        return res.status(403).json({
+          error: 'HOUSEFULL: આ લિંક પર ઉપલબ્ધ તમામ VIP બેઠકો પૂર્ણ થઈ ગઈ છે (Housefull).',
+          housefull: true,
+          status: 'HOUSEFULL'
+        });
+      }
+    } else {
+      // Default link fallback if not in DB: treat as HOUSEFULL
+      return res.status(403).json({
+        error: 'HOUSEFULL: આજના કાર્યક્રમ માટે VIP મહેમાન એન્ટ્રી બેઠકો પૂર્ણ થઈ ગયેલ છે (Housefull).',
+        housefull: true,
+        status: 'HOUSEFULL'
+      });
+    }
+
+    // 3. Prevent duplicate active registrations for this phone number and event
     const existing = await Registration.findOne({
       phoneNumber: cleanPhone,
       programId: program.id,
@@ -663,6 +709,7 @@ export const submitVipRequest = async (req, res) => {
       surname: cleanSurname,
       phoneNumber: cleanPhone,
       isVip: true,
+      vipLinkCode: linkCode,
       programId: program.id,
       programName: program.name,
       programDate: program.date,
@@ -680,6 +727,16 @@ export const submitVipRequest = async (req, res) => {
     });
 
     await reg.save();
+
+    // Increment used seats on dynamic VIP link and mark Housefull if quota reached
+    if (vipLink) {
+      vipLink.usedSeats = (vipLink.usedSeats || 0) + 1;
+      if (vipLink.maxSeats > 0 && vipLink.usedSeats >= vipLink.maxSeats) {
+        vipLink.status = 'HOUSEFULL';
+      }
+      await vipLink.save().catch(() => {});
+    }
+
     clearSubmissionsCache();
 
     res.json({

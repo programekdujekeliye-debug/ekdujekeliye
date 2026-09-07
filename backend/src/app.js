@@ -20,6 +20,7 @@ import { passRouter } from './modules/passes/pass.routes.js';
 import { scannerRouter } from './modules/scanner/scanner.routes.js';
 import { invitationRouter } from './modules/invitations/invitation.routes.js';
 import { feedbackRouter } from './modules/feedback/feedback.routes.js';
+import { vipLinkPublicRouter, vipLinkAdminRouter } from './modules/vip/vipLink.routes.js';
 
 // Controller direct mappings for total legacy URL compatibility
 import { getPublicEvents, getEventBySlug } from './modules/events/event.controller.js';
@@ -181,6 +182,8 @@ app.post('/api/submit', upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), s
 app.post('/api/vip/request', upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), submitVipRequest);
 app.post('/api/vip/submit', upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), submitVipRequest);
 app.post('/api/vip-entry', upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), submitVipRequest);
+app.use('/api/vip-links', vipLinkPublicRouter);
+app.use('/api/admin/vip-links', vipLinkAdminRouter);
 app.get('/api/submissions/status/:inquiryId', getRegistrationStatus);
 app.get('/api/registrations/status/:inquiryId', getRegistrationStatus);
 app.use('/api/submissions', registrationRouter);
