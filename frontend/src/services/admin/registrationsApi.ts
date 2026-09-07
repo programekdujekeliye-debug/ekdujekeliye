@@ -144,6 +144,15 @@ export const registrationsApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ alignments })
     });
+  },
+
+  async createAdminRegistration(
+    formData: FormData
+  ): Promise<{ success: boolean; data: Submission; inquiryId: string; paymentUrl: string }> {
+    return apiClient('/api/submissions/admin-create', {
+      method: 'POST',
+      body: formData
+    });
   }
 };
 

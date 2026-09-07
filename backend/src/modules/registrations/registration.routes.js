@@ -22,7 +22,8 @@ import {
   bulkUpdateFrameAlignments,
   getCouplePhotoRedirect,
   getPaymentScreenshotRedirect,
-  submitVipRequest
+  submitVipRequest,
+  adminCreateRegistration
 } from './registration.controller.js';
 import { requireAuth } from '../../middleware/auth.js';
 
@@ -44,7 +45,8 @@ registrationRouter.get('/list', requireAuth, getSubmissionsList);
 registrationRouter.get('/duplicates', requireAuth, getDuplicateSubmissions);
 registrationRouter.get('/trash', requireAuth, getTrashSubmissions);
 
-// Admin Bulk Operations
+// Admin Create & Bulk Operations
+registrationRouter.post('/admin-create', requireAuth, upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), adminCreateRegistration);
 registrationRouter.post('/manual', requireAuth, upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), manualInviteeRegistration);
 registrationRouter.post('/bulk-attendance', requireAuth, bulkUpdateAttendance);
 registrationRouter.post('/attendance-by-absentees', requireAuth, attendanceByAbsentees);

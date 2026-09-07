@@ -518,6 +518,198 @@ export const manualInviteeRegistration = async (req, res) => {
 };
 
 /**
+ * Admin: Manually Add a Normal Couple Registration
+ * Creates a standard registration (e.g. EK06-560) with pending or captured payment,
+ * enabling immediate payment link sharing, photo uploading, and pass issuance.
+ */
+export const adminCreateRegistration = async (req, res) => {
+  const {
+    husbandName,
+    wifeName,
+    surname,
+    phoneNumber,
+    programId,
+    status = 'pending',
+    paymentStatus = 'pending',
+    paymentAmount,
+    paymentProvider = 'manual',
+    whatsappOptIn = true
+  } = req.body;
+
+  if (!husbandName || !wifeName || !surname || !phoneNumber || !programId) {
+    return res.status(400).json({
+      error: 'Husband name, wife name, surname, phone number, and program slot are required.'
+    });
+  }
+
+  const cleanPhone = String(phoneNumber).replace(/\D/g, '').slice(-10);
+  if (!cleanPhone || cleanPhone.length !== 10) {
+    return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number.' });
+  }
+
+  try {
+    const program = await Event.findOne({
+      $or: [{ id: programId }, { slug: programId }, { date: programId }]
+    });
+    if (!program) return res.status(404).json({ error: 'Selected event program not found.' });
+
+    const progIdentifiers = [program.id, program.slug, program.date].filter(Boolean);
+    const eventFilter = {
+      $or: [
+        { programId: { $in: progIdentifiers } },
+        ...(program.date ? [{ programDate: program.date }] : [])
+      ]
+    };
+
+    // Duplicate phone check for the same event date
+    const existing = await Registration.findOne({
+      phoneNumber: { $in: [cleanPhone, `91${cleanPhone}`, `+91${cleanPhone}`] },
+      ...eventFilter,
+      status: { $ne: 'rejected' },
+      isDeleted: { $ne: true }
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        error: `This mobile number is already registered for this event date (${existing.inquiryId}).`
+      });
+    }
+
+    // Generate Standard Sequence Inquiry ID (e.g. EK06-560 or CPL-xxx)
+    const seqPad = String(program.sequenceNumber || 1).padStart(2, '0');
+    const counterKey = program.sequenceNumber ? `inquiryNumber_${program.id}` : 'inquiryNumber';
+
+    let inquiryId = '';
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const counterVal = await getNextSequence(counterKey);
+      const candidateId = program.sequenceNumber
+        ? `EK${seqPad}-${String(counterVal).padStart(2, '0')}`
+        : `CPL-${counterVal}`;
+
+      const exists = await Registration.findOne({ inquiryId: candidateId }).select('_id').lean();
+      if (!exists) {
+        inquiryId = candidateId;
+        break;
+      }
+    }
+
+    if (!inquiryId) {
+      const rand = crypto.randomBytes(3).toString('hex').toUpperCase();
+      inquiryId = program.sequenceNumber ? `EK${seqPad}-${rand}` : `CPL-${rand}`;
+    }
+
+    let couplePhotoUrl = '/sample_couple.png';
+    let r2MediaData = null;
+    const couplePhotoFile = req.files && req.files['couplePhoto'] ? req.files['couplePhoto'][0] : null;
+
+    if (couplePhotoFile && couplePhotoFile.buffer) {
+      try {
+        const opaqueMediaId = crypto.randomBytes(16).toString('hex');
+        const eventKey = program.sequenceNumber ? `EK${String(program.sequenceNumber).padStart(2, '0')}` : (inquiryId.split('-')[0] || 'EK06');
+        const baseKey = `prod/events/${eventKey}/registrations/${inquiryId}/couple/${opaqueMediaId}`;
+        const thumbKey = `${baseKey}/thumb.webp`;
+        const normalKey = `${baseKey}/normal.webp`;
+        const largeKey = `${baseKey}/large.webp`;
+
+        const [thumbBuf, normBuf, largeBuf] = await Promise.all([
+          sharp(couplePhotoFile.buffer).rotate().resize(240, null, { withoutEnlargement: true }).webp({ quality: 80, effort: 4 }).toBuffer(),
+          sharp(couplePhotoFile.buffer).rotate().resize(720, null, { withoutEnlargement: true }).webp({ quality: 82, effort: 4 }).toBuffer(),
+          sharp(couplePhotoFile.buffer).rotate().resize(1200, null, { withoutEnlargement: true }).webp({ quality: 85, effort: 4 }).toBuffer()
+        ]);
+
+        await Promise.all([
+          r2Provider.putObject({ bucket: r2Provider.privateBucket, key: thumbKey, body: thumbBuf, contentType: 'image/webp', cacheControl: 'private, max-age=3600, no-transform' }),
+          r2Provider.putObject({ bucket: r2Provider.privateBucket, key: normalKey, body: normBuf, contentType: 'image/webp', cacheControl: 'private, max-age=3600, no-transform' }),
+          r2Provider.putObject({ bucket: r2Provider.privateBucket, key: largeKey, body: largeBuf, contentType: 'image/webp', cacheControl: 'private, max-age=3600, no-transform' })
+        ]);
+
+        r2MediaData = {
+          status: 'R2_PRIMARY',
+          bucket: r2Provider.privateBucket,
+          isPrivate: true,
+          key: normalKey,
+          thumbKey,
+          normalKey,
+          largeKey,
+          verifiedAt: new Date()
+        };
+        couplePhotoUrl = `/api/media/${inquiryId}/couple-photo?preset=normal`;
+      } catch (uploadErr) {
+        console.error(`[AdminCreateRegistration] Direct private R2 upload failed for ${inquiryId}:`, uploadErr.message);
+      }
+    }
+
+    const isPaid = paymentStatus === 'captured' || status === 'approved';
+    const finalStatus = isPaid ? 'approved' : (status === 'rejected' ? 'rejected' : 'pending');
+    const finalPaymentStatus = isPaid ? 'captured' : 'pending';
+    const amount = Number(paymentAmount) || (program.price !== undefined ? Number(program.price) : 1500);
+
+    const sub = new Registration({
+      inquiryId,
+      customerToken: crypto.randomBytes(16).toString('hex'),
+      husbandName: husbandName.trim(),
+      wifeName: wifeName.trim(),
+      surname: surname.trim(),
+      phoneNumber: cleanPhone,
+      whatsappOptIn: Boolean(whatsappOptIn !== false),
+      whatsappOptInAt: new Date(),
+      whatsappConsentSource: 'admin_direct',
+      whatsappMarketingOptIn: false,
+      whatsappOptOutAt: null,
+      whatsappOptOutReason: '',
+      isVip: false,
+      programId: program.id,
+      programName: program.name,
+      programDate: program.date,
+      programTime: program.time || '8:30 PM',
+      venue: program.venue,
+      venueAddress: program.venueAddress,
+      couplePhoto: couplePhotoFile ? couplePhotoUrl : null,
+      paymentScreenshot: null,
+      mediaProvider: r2MediaData ? 'R2' : 'CLOUDINARY',
+      ...(r2MediaData ? { r2Media: r2MediaData } : {}),
+      status: finalStatus,
+      payment: {
+        provider: paymentProvider || 'manual',
+        status: finalPaymentStatus,
+        amount,
+        currency: 'INR',
+        attempts: 1,
+        paidAt: isPaid ? new Date() : null,
+        createdAt: new Date()
+      },
+      attendance: 'unmarked',
+      frameExportStatus: 'NOT_EXPORTED',
+      transferHistory: []
+    });
+
+    await sub.save();
+    clearSubmissionsCache();
+
+    // If marked paid/captured, schedule communication lifecycle
+    if (isPaid) {
+      try {
+        await communicationSchedulerService.scheduleRegistrationLifecycle(sub, program);
+      } catch (schErr) {
+        console.warn(`[AdminCreateRegistration] Scheduling notice for ${inquiryId}:`, schErr.message);
+      }
+    }
+
+    const paymentUrl = `https://www.ekdujekeliye.in/payment/${inquiryId}`;
+    res.status(201).json({
+      success: true,
+      message: 'Registration created successfully.',
+      data: sub,
+      inquiryId: sub.inquiryId,
+      paymentUrl
+    });
+  } catch (err) {
+    console.error('[AdminCreateRegistration] Error creating registration:', err);
+    res.status(500).json({ error: err.message || 'Error creating registration.' });
+  }
+};
+
+/**
  * Public Self-Service VIP Registration Request
  * Creates temporary VIP registration with status: 'pending' for organizer approval
  */
