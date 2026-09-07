@@ -8,7 +8,9 @@ import { storageService } from '../../services/storage.service.js';
 export const getPublicEvents = async (req, res) => {
   try {
     const events = await eventService.getPublicEvents();
-    res.setHeader('Cache-Control', 'public, max-age=180, s-maxage=300, stale-while-revalidate=60');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.json(events);
   } catch (err) {
     console.error('[getPublicEvents Error]:', err);
@@ -20,7 +22,9 @@ export const getEventBySlug = async (req, res) => {
   try {
     const event = await eventService.getEventBySlug(req.params.slug);
     if (!event) return res.status(404).json({ error: 'Event not found.' });
-    res.setHeader('Cache-Control', 'public, max-age=120, s-maxage=180, stale-while-revalidate=30');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.json(event);
   } catch (err) {
     console.error('[getEventBySlug Error]:', err);
@@ -31,7 +35,7 @@ export const getEventBySlug = async (req, res) => {
 export const getEventOptions = async (req, res) => {
   try {
     const options = await eventService.getEventOptions();
-    res.setHeader('Cache-Control', 'private, max-age=30');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.json(options);
   } catch (err) {
     console.error('[getEventOptions Error]:', err);
@@ -209,23 +213,6 @@ export const updateEvent = async (req, res) => {
 
     if (updates.capacity !== undefined) {
       updates.capacity = Number(updates.capacity);
-      // Dynamic capacity check: if capacity expanded beyond confirmed registrations,
-      // and status is 'housefull', automatically reopen to 'upcoming'
-      try {
-        const approvedCount = await Registration.countDocuments({
-          $or: [
-            { programId: event.id },
-            ...(event.date ? [{ programDate: event.date }] : [])
-          ],
-          status: 'approved',
-          isDeleted: { $ne: true }
-        });
-        if (updates.capacity > approvedCount && (updates.status === 'housefull' || event.status === 'housefull')) {
-          updates.status = 'upcoming';
-        }
-      } catch (countErr) {
-        console.warn('[updateEvent] Error checking approved count for dynamic reopening:', countErr.message);
-      }
     }
     if (updates.price !== undefined) updates.price = Number(updates.price);
     if (updates.sortOrder !== undefined) updates.sortOrder = Number(updates.sortOrder);

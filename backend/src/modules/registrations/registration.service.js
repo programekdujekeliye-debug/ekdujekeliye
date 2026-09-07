@@ -94,8 +94,8 @@ export class RegistrationService {
         ]
       });
 
-      if (activeCount >= capacity || (program.status === 'housefull' && activeCount >= capacity)) {
-        const err = new Error('Housefull: This program slot has reached maximum seating capacity.');
+      if (program.status === 'housefull' || program.status === 'registration_closed' || program.isInquiryClosed === true || activeCount >= capacity) {
+        const err = new Error('Housefull: This program slot is currently closed for new registrations.');
         err.status = 400;
         throw err;
       }

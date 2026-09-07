@@ -48,6 +48,8 @@ interface ProgramDetail {
   earlyRegistrationMode?: boolean;
   paymentOpenedAt?: string | null;
   paymentOpeningNote?: string;
+  isHousefull?: boolean;
+  isClosed?: boolean;
 }
 
 export const formatIndianDate = (dateStr?: string): string => {
@@ -367,10 +369,10 @@ export default function EventDetailPage() {
       setError(null);
 
       // Try fetching by slug first
-      let res = await fetch(`${API_BASE_URL}/api/programs/slug/${encodeURIComponent(slug)}`);
+      let res = await fetch(`${API_BASE_URL}/api/programs/slug/${encodeURIComponent(slug)}?t=${Date.now()}`, { cache: 'no-store' });
       if (!res.ok) {
         // Fallback: search in all programs
-        const allRes = await fetch(`${API_BASE_URL}/api/programs`);
+        const allRes = await fetch(`${API_BASE_URL}/api/programs?t=${Date.now()}`, { cache: 'no-store' });
         if (allRes.ok) {
           const programs: ProgramDetail[] = await allRes.json();
           const match = programs.find((p) => (p.slug && p.slug.toLowerCase() === slug.toLowerCase()) || p.id === slug);
@@ -584,7 +586,7 @@ export default function EventDetailPage() {
     );
   }
 
-  const isClosed = event.status === 'housefull' || event.status === 'registration_closed' || event.isInquiryClosed;
+  const isClosed = event.status === 'housefull' || event.isHousefull === true || event.status === 'registration_closed' || event.isInquiryClosed === true;
   const isEarlyReg = Boolean(event.earlyRegistrationMode || event.isPaymentEnabled === false);
   const price = event.price !== undefined ? event.price : 1500;
 

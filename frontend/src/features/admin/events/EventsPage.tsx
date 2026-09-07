@@ -27,6 +27,8 @@ import {
   ShieldCheckIcon
 } from '../../../components/Icons';
 import toast from 'react-hot-toast';
+import { clearApiClientCache } from '../../../services/apiClient';
+import { safeSessionStorage } from '../../../utils/safeStorage';
 
 type SectionId = 'schedule' | 'pricing' | 'media' | 'invitation' | 'speaker' | 'pass_seo';
 
@@ -352,6 +354,13 @@ export const EventsPage: React.FC = () => {
         await eventsApi.createEvent(formData);
         toast.success(`Event "${formData.name}" created successfully.`);
       }
+
+      // Invalidate local client-side caches so updates reflect immediately
+      clearApiClientCache();
+      safeSessionStorage.removeItem('edkl_events');
+      if (editingProgram?.slug) safeSessionStorage.removeItem(`edkl_event_${editingProgram.slug.toLowerCase()}`);
+      if (editingProgram?.id) safeSessionStorage.removeItem(`edkl_event_${editingProgram.id.toLowerCase()}`);
+      if (formData.slug) safeSessionStorage.removeItem(`edkl_event_${formData.slug.toLowerCase()}`);
 
       setIsModalOpen(false);
       resetForm();

@@ -57,6 +57,8 @@ interface Program {
   earlyRegistrationMode?: boolean;
   paymentOpenedAt?: string | null;
   paymentOpeningNote?: string;
+  isHousefull?: boolean;
+  isClosed?: boolean;
 }
 
 const FAQ_ITEMS = [
@@ -281,8 +283,8 @@ export default function HomePage() {
       setLoadingEvents(true);
       try {
         const [eventsRes, configRes] = await Promise.allSettled([
-          fetch(`${API_BASE_URL}/api/public/home`),
-          fetch(`${API_BASE_URL}/api/config/public`)
+          fetch(`${API_BASE_URL}/api/public/home?t=${Date.now()}`, { cache: 'no-store' }),
+          fetch(`${API_BASE_URL}/api/config/public?t=${Date.now()}`, { cache: 'no-store' })
         ]);
 
         if (!isMounted) return;
@@ -602,8 +604,8 @@ export default function HomePage() {
               {(selectedCity === 'All' ? programs : programs.filter(p => p.city === selectedCity)).map((prog) => {
                 const isExternal = prog.registrationMode === 'external';
                 const isCompleted = prog.status === 'completed';
-                const isHousefull = prog.status === 'housefull';
-                const isClosed = prog.status === 'registration_closed';
+                const isHousefull = prog.status === 'housefull' || prog.isHousefull === true;
+                const isClosed = prog.status === 'registration_closed' || prog.isClosed === true || prog.isInquiryClosed === true;
                 const isTba = prog.status === 'date_tba';
                 const isEarlyReg = Boolean(prog.earlyRegistrationMode || prog.isPaymentEnabled === false);
                 const eventPrice = prog.price !== undefined ? prog.price : 1500;
@@ -613,18 +615,18 @@ export default function HomePage() {
                 if (isCompleted) {
                   statusLabel = 'COMPLETED';
                   statusClass = 'bg-stone-100 text-stone-600 border-stone-200';
+                } else if (isHousefull) {
+                  statusLabel = 'HOUSEFULL';
+                  statusClass = 'bg-rose-50 text-rose-800 border-rose-300 font-extrabold';
+                } else if (isClosed) {
+                  statusLabel = 'REGISTRATION CLOSED';
+                  statusClass = 'bg-stone-100 text-stone-600 border-stone-200';
                 } else if (isEarlyReg) {
                   statusLabel = 'EARLY REGISTRATION OPEN';
                   statusClass = 'bg-rose-50 text-rose-800 border-rose-300 font-extrabold';
                 } else if (prog.status === 'few_seats') {
                   statusLabel = 'FEW SEATS LEFT';
                   statusClass = 'bg-amber-50 text-amber-800 border-amber-200';
-                } else if (isHousefull) {
-                  statusLabel = 'HOUSEFULL';
-                  statusClass = 'bg-rose-50 text-rose-800 border-rose-200';
-                } else if (isClosed) {
-                  statusLabel = 'REGISTRATION CLOSED';
-                  statusClass = 'bg-stone-100 text-stone-600 border-stone-200';
                 } else if (isTba) {
                   statusLabel = 'DATE TBA';
                   statusClass = 'bg-blue-50 text-blue-800 border-blue-200';
