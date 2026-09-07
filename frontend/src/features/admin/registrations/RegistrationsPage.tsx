@@ -51,6 +51,9 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
     viewerUrl: string;
     filename: string;
     registrationId: string;
+    fileId?: string;
+    driveUrl?: string;
+    isAppsScriptConfigured?: boolean;
     error: string | null;
   }>({
     isOpen: false,
@@ -61,41 +64,50 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
     error: null
   });
 
-  const handleOpenArchivedOriginal = async (registrationId: string) => {
+
+  const handleOpenArchivedOriginal = async (registrationId: string, directDriveUrl?: string) => {
+    const fallbackDriveUrl = directDriveUrl || '';
     setArchivedViewer({
       isOpen: true,
-      loading: true,
-      viewerUrl: '',
-      filename: '',
+      loading: !fallbackDriveUrl,
+      viewerUrl: fallbackDriveUrl,
+      filename: `Photo ${registrationId}`,
       registrationId,
+      driveUrl: fallbackDriveUrl,
+      isAppsScriptConfigured: false,
       error: null
     });
 
     try {
       const res = await mediaApi.getViewToken(registrationId);
-      if (res.viewerUrl) {
-        setArchivedViewer({
-          isOpen: true,
-          loading: false,
-          viewerUrl: res.viewerUrl,
-          filename: res.filename || 'Couple Photo',
-          registrationId,
-          error: null
-        });
-      } else {
-        throw new Error('Viewer URL not returned by server.');
-      }
-    } catch (err: any) {
+      const resolvedDriveUrl = res.driveUrl || (res.fileId ? `https://drive.google.com/open?id=${res.fileId}` : fallbackDriveUrl);
       setArchivedViewer({
         isOpen: true,
         loading: false,
-        viewerUrl: '',
-        filename: '',
+        viewerUrl: res.viewerUrl || resolvedDriveUrl,
+        filename: res.filename || `Archived Photo ${registrationId}`,
         registrationId,
-        error: err.message || 'Archived original unavailable in Google Drive.'
+        fileId: res.fileId,
+        driveUrl: resolvedDriveUrl,
+        isAppsScriptConfigured: Boolean(res.isAppsScriptConfigured),
+        error: null
       });
+    } catch (err: any) {
+      if (fallbackDriveUrl) {
+        setArchivedViewer(prev => ({ ...prev, loading: false, driveUrl: fallbackDriveUrl }));
+      } else {
+        setArchivedViewer({
+          isOpen: true,
+          loading: false,
+          viewerUrl: '',
+          filename: '',
+          registrationId,
+          error: err.message || 'Archived original unavailable in Google Drive.'
+        });
+      }
     }
   };
+
 
   // Bulk Selection
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -665,9 +677,15 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                 {sub.couplePhoto && (
                                   <button
                                     type="button"
-                                    onClick={() => setSelectedImage(resolveDisplayImageUrl(sub.couplePhoto || sub.photoThumbnailUrl, 'normal'))}
+                                    onClick={() => {
+                                      if (sub.hasArchivedOriginal) {
+                                        handleOpenArchivedOriginal(sub.inquiryId, sub.driveUrl || (sub.driveFileId ? `https://drive.google.com/open?id=${sub.driveFileId}` : undefined));
+                                      } else {
+                                        setSelectedImage(resolveDisplayImageUrl(sub.couplePhoto || sub.photoThumbnailUrl, 'normal'));
+                                      }
+                                    }}
                                     className="w-8 h-8 rounded-md overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform"
-                                    title="View Thumbnail"
+                                    title={sub.hasArchivedOriginal ? "View Archived Google Drive Photo" : "View Thumbnail"}
                                   >
                                     <img
                                       src={resolveDisplayImageUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'thumbnail')}
@@ -675,19 +693,29 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                       className="w-full h-full object-cover"
                                       loading="lazy"
                                       decoding="async"
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).src = '/sample_couple.png';
+                                      }}
                                     />
                                   </button>
                                 )}
                                 {sub.hasArchivedOriginal && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenArchivedOriginal(sub.inquiryId)}
-                                    className="px-2 py-0.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-md text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                                    title="View Original Google Drive Photo"
+                                  <a
+                                    href={sub.driveUrl || (sub.driveFileId ? `https://drive.google.com/open?id=${sub.driveFileId}` : undefined)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => {
+                                      if (!sub.driveUrl && !sub.driveFileId) {
+                                        e.preventDefault();
+                                        handleOpenArchivedOriginal(sub.inquiryId);
+                                      }
+                                    }}
+                                    className="px-2 py-0.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-md text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs hover:shadow-xs active:scale-95"
+                                    title="Open Original Photo in Google Drive (New Tab)"
                                   >
                                     <span>Drive</span>
                                     <span>↗</span>
-                                  </button>
+                                  </a>
                                 )}
                               </div>
                               {sub.photoStorageStatus === 'ARCHIVED' && (
@@ -927,9 +955,15 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                           {sub.couplePhoto ? (
                             <button
                               type="button"
-                              onClick={() => setSelectedImage(resolveDisplayImageUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'normal'))}
+                              onClick={() => {
+                                if (sub.hasArchivedOriginal) {
+                                  handleOpenArchivedOriginal(sub.inquiryId, sub.driveUrl || (sub.driveFileId ? `https://drive.google.com/open?id=${sub.driveFileId}` : undefined));
+                                } else {
+                                  setSelectedImage(resolveDisplayImageUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'normal'));
+                                }
+                              }}
                               className="w-14 h-14 rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer shadow-xs active:scale-95 transition-transform"
-                              title="Tap to enlarge photo"
+                              title={sub.hasArchivedOriginal ? "Tap to view Google Drive photo" : "Tap to enlarge photo"}
                             >
                               <img
                                 src={resolveDisplayImageUrl(sub.photoThumbnailUrl || sub.couplePhoto, 'thumbnail')}
@@ -937,6 +971,9 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                                 className="w-full h-full object-cover"
                                 loading="lazy"
                                 decoding="async"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = '/sample_couple.png';
+                                }}
                               />
                             </button>
                           ) : (
@@ -946,13 +983,22 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                           )}
 
                           {sub.hasArchivedOriginal && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenArchivedOriginal(sub.inquiryId)}
-                              className="px-1.5 py-0.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded text-[9px] font-bold transition-colors"
+                            <a
+                              href={sub.driveUrl || (sub.driveFileId ? `https://drive.google.com/open?id=${sub.driveFileId}` : undefined)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => {
+                                if (!sub.driveUrl && !sub.driveFileId) {
+                                  e.preventDefault();
+                                  handleOpenArchivedOriginal(sub.inquiryId);
+                                }
+                              }}
+                              className="px-1.5 py-0.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded text-[9px] font-bold transition-colors inline-flex items-center gap-0.5 cursor-pointer shadow-2xs active:scale-95"
+                              title="Open Original Photo in Google Drive (New Tab)"
                             >
-                              Drive ↗
-                            </button>
+                              <span>Drive</span>
+                              <span>↗</span>
+                            </a>
                           )}
                         </div>
 
@@ -1168,19 +1214,32 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                   Google Drive Private Archive
                 </span>
               </div>
-              <button
-                onClick={() => setArchivedViewer((prev) => ({ ...prev, isOpen: false }))}
-                className="text-slate-400 hover:text-white px-2.5 py-1 text-sm font-bold rounded-lg hover:bg-slate-800 cursor-pointer flex items-center gap-1"
-              >
-                <span>Close</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {archivedViewer.driveUrl && (
+                  <a
+                    href={archivedViewer.driveUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 transition-colors shadow-xs"
+                  >
+                    <span>Open in Drive</span>
+                    <span>↗</span>
+                  </a>
+                )}
+                <button
+                  onClick={() => setArchivedViewer((prev) => ({ ...prev, isOpen: false }))}
+                  className="text-slate-400 hover:text-white px-2.5 py-1 text-sm font-bold rounded-lg hover:bg-slate-800 cursor-pointer flex items-center gap-1"
+                >
+                  <span>Close</span>
+                </button>
+              </div>
             </div>
 
-            <div className="flex-1 min-h-[500px] flex items-center justify-center p-2 bg-slate-950/50">
+            <div className="flex-1 min-h-[420px] flex items-center justify-center p-6 bg-slate-950/50">
               {archivedViewer.loading ? (
                 <div className="flex flex-col items-center gap-2 text-slate-400 text-xs">
                   <div className="w-8 h-8 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
-                  <span>Generating secure signed session token...</span>
+                  <span>Locating Google Drive archive...</span>
                 </div>
               ) : archivedViewer.error ? (
                 <div className="text-center p-6 bg-rose-950/40 border border-rose-800/60 rounded-xl text-rose-300 max-w-md">
@@ -1188,13 +1247,49 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                   <h4 className="font-bold text-sm text-rose-200 mb-1">Archived Original Unavailable</h4>
                   <p className="text-xs text-rose-400">{archivedViewer.error}</p>
                 </div>
-              ) : (
+              ) : archivedViewer.isAppsScriptConfigured && archivedViewer.viewerUrl.startsWith('https://script.google.com') ? (
                 <iframe
                   src={archivedViewer.viewerUrl}
                   title={`Archived Photo ${archivedViewer.registrationId}`}
                   className="w-full h-[650px] border-0 rounded-xl bg-transparent"
                   sandbox="allow-scripts allow-same-origin allow-popups"
                 />
+              ) : (
+                <div className="flex flex-col items-center justify-center max-w-lg w-full bg-slate-900/90 border border-slate-700/60 rounded-2xl p-8 text-center shadow-xl">
+                  <div className="w-16 h-16 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center mb-4 text-sky-400">
+                    <svg className="w-9 h-9" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4 0-2.05 1.53-3.76 3.56-3.97l1.07-.11.5-.95C8.08 7.14 9.94 6 12 6c2.62 0 4.88 1.86 5.39 4.43l.3 1.5 1.53.11c1.56.1 2.78 1.41 2.78 2.96 0 1.65-1.35 3-3 3z"/>
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-bold text-white mb-1">
+                    {archivedViewer.filename || `Photo ${archivedViewer.registrationId}`}
+                  </h3>
+                  <p className="text-xs text-slate-400 mb-6">
+                    Registration ID: <span className="font-mono text-sky-400 font-semibold">{archivedViewer.registrationId}</span> • Securely archived in Google Drive
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
+                    {archivedViewer.driveUrl && (
+                      <a
+                        href={archivedViewer.driveUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-5 py-2.5 bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold rounded-xl cursor-pointer flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-sky-500/20 active:scale-95"
+                      >
+                        <span>Open Original in Google Drive</span>
+                        <span>↗</span>
+                      </a>
+                    )}
+                    <a
+                      href={`/api/admin/media/${encodeURIComponent(archivedViewer.registrationId)}/download`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-sm font-bold rounded-xl cursor-pointer flex items-center justify-center gap-2 transition-all active:scale-95"
+                    >
+                      <DownloadIcon className="w-4 h-4" />
+                      <span>Download Original</span>
+                    </a>
+                  </div>
+                </div>
               )}
             </div>
           </div>

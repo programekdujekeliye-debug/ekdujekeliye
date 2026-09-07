@@ -4,39 +4,61 @@ import { Registration } from '../src/models/Registration.js';
 import { MediaArchive } from '../src/models/MediaArchive.js';
 import { env } from '../src/config/env.js';
 
+const uri = process.env.PROD_MONGO_URI || env.MONGO_URI;
+
 async function checkDetails() {
-  await mongoose.connect(env.MONGO_URI);
+  await mongoose.connect(uri);
 
-  const event1 = await Event.findOne({ id: 'prog-1785566789678' }).lean();
-  console.log('Event 1 (2026-08-09):', event1?.name, '| Status:', event1?.status, '| ArchiveStatus:', event1?.archiveStatus, '| Stats:', event1?.archiveStats);
-  const archives1 = await MediaArchive.find({ eventId: 'prog-1785566789678' }).lean();
-  console.log('Event 1 Archives:', {
-    total: archives1.length,
-    QUEUED: archives1.filter(a => a.status === 'QUEUED').length,
-    COPYING: archives1.filter(a => a.status === 'COPYING').length,
-    VERIFIED: archives1.filter(a => a.status === 'VERIFIED').length,
-    FAILED: archives1.filter(a => a.status === 'FAILED').length
-  });
+  const total = await MediaArchive.countDocuments({});
+  const verified = await MediaArchive.countDocuments({ status: { $in: ['VERIFIED', 'ARCHIVED'] } });
+  const withThumb = await MediaArchive.countDocuments({ operationalThumbnailUrl: { $ne: null } });
+  
+  console.log({ total, verified, withThumb });
 
-  const event2 = await Event.findOne({ id: 'prog-1786621655629' }).lean();
-  console.log('\nEvent 2 (2026-08-21):', event2?.name, '| Status:', event2?.status, '| ArchiveStatus:', event2?.archiveStatus, '| Stats:', event2?.archiveStats);
-  const archives2 = await MediaArchive.find({ eventId: 'prog-1786621655629' }).lean();
-  console.log('Event 2 Archives:', {
-    total: archives2.length,
-    QUEUED: archives2.filter(a => a.status === 'QUEUED').length,
-    COPYING: archives2.filter(a => a.status === 'COPYING').length,
-    VERIFIED: archives2.filter(a => a.status === 'VERIFIED').length,
-    FAILED: archives2.filter(a => a.status === 'FAILED').length
-  });
+  const breakdownByEvent = await MediaArchive.aggregate([
+    {
+      $group: {
+        _id: '$eventId',
+        total: { $sum: 1 },
+        verified: { $sum: { $cond: [{ $in: ['$status', ['VERIFIED', 'ARCHIVED']] }, 1, 0] } },
+        withThumb: { $sum: { $cond: [{ $ne: ['$operationalThumbnailUrl', null] }, 1, 0] } },
+        cldActive: { $sum: { $cond: [{ $ne: ['$cloudinaryOriginalStatus', 'DELETED'] }, 1, 0] } }
+      }
+    }
+  ]);
+  console.log('Breakdown by event:', breakdownByEvent);
 
-  const allVerified = await MediaArchive.find({ status: 'VERIFIED' }).lean();
-  console.log('\nAll Verified MediaArchives:');
-  for (const v of allVerified) {
-    const reg = await Registration.findOne({ inquiryId: v.registrationId }).lean();
-    console.log(`- RegId: ${v.registrationId} | Event: ${v.eventId} | PublicId: ${v.sourcePublicId} | DriveFileId: ${v.driveFileId} | SourceUrl: ${v.sourceUrl} | RegPhoto: ${reg?.couplePhoto}`);
+  // Sample 5 verified archives
+  const samples = await MediaArchive.find({ status: { $in: ['VERIFIED', 'ARCHIVED'] } }).limit(5).lean();
+  for (const s of samples) {
+    console.log('Sample:', {
+      regId: s.registrationId,
+      eventId: s.eventId,
+      driveFileId: s.driveFileId,
+      operationalThumbnailUrl: s.operationalThumbnailUrl,
+      sourceUrl: s.sourceUrl,
+      cloudinaryOriginalStatus: s.cloudinaryOriginalStatus
+    });
+    // Test if sourceUrl is still alive on Cloudinary
+    if (s.sourceUrl) {
+      try {
+        const cldRes = await fetch(s.sourceUrl, { method: 'HEAD' });
+        console.log(`  Cloudinary sourceUrl HTTP: ${cldRes.status}`);
+      } catch (e) {
+        console.log(`  Cloudinary sourceUrl fetch error: ${e.message}`);
+      }
+    }
+    if (s.operationalThumbnailUrl) {
+      try {
+        const thumbRes = await fetch(s.operationalThumbnailUrl, { method: 'HEAD' });
+        console.log(`  operationalThumbnailUrl HTTP: ${thumbRes.status}`);
+      } catch (e) {
+        console.log(`  operationalThumbnailUrl fetch error: ${e.message}`);
+      }
+    }
   }
 
   await mongoose.disconnect();
 }
 
-checkDetails();
+checkDetails().catch(console.error);

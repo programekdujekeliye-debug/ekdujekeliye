@@ -11,6 +11,8 @@ export interface Submission {
   photoStorageStatus?: 'ACTIVE' | 'QUEUED' | 'ARCHIVED';
   hasArchivedOriginal?: boolean;
   archiveStatus?: string;
+  driveFileId?: string;
+  driveUrl?: string;
   paymentScreenshot?: string;
   status: 'pending' | 'approved' | 'rejected';
   rejectionReason?: string;

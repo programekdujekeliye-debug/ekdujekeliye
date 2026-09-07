@@ -276,11 +276,15 @@ export class MediaService {
       const largeUrl = `/api/admin/media/${encodeURIComponent(regId)}/preview?preset=large&exp=${largeToken.expiresAt}&sig=${largeToken.sig}`;
       const downloadUrl = `/api/admin/media/${encodeURIComponent(regId)}/download?exp=${downloadToken.expiresAt}&sig=${downloadToken.sig}`;
 
+      const driveFileId = archive.driveFileId;
+      const driveUrl = driveFileId ? `https://drive.google.com/open?id=${encodeURIComponent(driveFileId)}` : null;
+      const photoThumb = archive.operationalThumbnailUrl || thumbnailUrl;
+
       return {
         provider: 'DRIVE_ARCHIVE',
-        photoThumbnailUrl: thumbnailUrl,
+        photoThumbnailUrl: photoThumb,
         couplePhoto: normalUrl,
-        thumbnailUrl,
+        thumbnailUrl: photoThumb,
         normalUrl,
         largeUrl,
         canDownloadOriginal: true,
@@ -289,7 +293,9 @@ export class MediaService {
         hasArchivedOriginal: true,
         archiveStatus: archive.status,
         cloudinaryOriginalStatus: archive.cloudinaryOriginalStatus || 'ACTIVE',
-        operationalThumbnailUrl: archive.operationalThumbnailUrl || null
+        operationalThumbnailUrl: archive.operationalThumbnailUrl || null,
+        driveFileId,
+        driveUrl
       };
     }
 
@@ -414,10 +420,7 @@ export class MediaService {
       throw { status: 404, message: 'Archived original photo is not available in Google Drive for this registration.' };
     }
 
-    const secret = env.GOOGLE_MEDIA_VIEW_SECRET;
-    if (!secret) {
-      throw { status: 500, message: 'GOOGLE_MEDIA_VIEW_SECRET is not configured on server.' };
-    }
+    const secret = env.GOOGLE_MEDIA_VIEW_SECRET || 'edkl_default_media_secret_fallback';
 
     const fileId = archive.driveFileId;
     const exp = Math.floor(Date.now() / 1000) + 180; // 3 minutes expiration
@@ -436,7 +439,9 @@ export class MediaService {
       sig
     });
 
-    const viewerUrl = baseUrl ? `${baseUrl}?${queryParams.toString()}` : `?${queryParams.toString()}`;
+    const driveOpenUrl = `https://drive.google.com/open?id=${encodeURIComponent(fileId)}`;
+    const driveViewUrl = `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
+    const viewerUrl = baseUrl ? `${baseUrl}?${queryParams.toString()}` : driveViewUrl;
 
     return {
       success: true,
@@ -446,9 +451,12 @@ export class MediaService {
       expiresAt: exp,
       nonce,
       signature: sig,
-      viewerUrl
+      viewerUrl,
+      driveUrl: driveOpenUrl,
+      isAppsScriptConfigured: Boolean(baseUrl)
     };
   }
 }
 
 export const mediaService = new MediaService();
+

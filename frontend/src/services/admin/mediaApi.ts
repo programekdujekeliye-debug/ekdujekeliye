@@ -9,7 +9,10 @@ export interface MediaViewTokenResponse {
   nonce: string;
   signature: string;
   viewerUrl: string;
+  driveUrl?: string;
+  isAppsScriptConfigured?: boolean;
 }
+
 
 export const mediaApi = {
   /**

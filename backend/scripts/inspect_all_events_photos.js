@@ -3,10 +3,10 @@ import { Event } from '../src/models/Event.js';
 import { Registration } from '../src/models/Registration.js';
 import { MediaArchive } from '../src/models/MediaArchive.js';
 
-const PROD_MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
-if (!PROD_MONGO_URI) {
-  throw new Error('[SECURITY ERROR] MONGO_URI is not set. Please provide it via process.env.MONGO_URI.');
-}
+import { env } from '../src/config/env.js';
+
+const PROD_MONGO_URI = process.env.PROD_MONGO_URI || env.MONGO_URI;
+
 
 async function main() {
   await mongoose.connect(PROD_MONGO_URI);
