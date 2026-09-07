@@ -28,4 +28,3 @@ feedbackRouter.delete('/admin/:id', requireSuperAuth, deleteFeedbackRecord);
 // Public couple feedback form retrieval & submission
 feedbackRouter.get('/:token', getFeedbackForm);
 feedbackRouter.post('/:token', submitFeedback);
-feedbackRouter.post('/:token/reset', resetFeedbackSubmission);

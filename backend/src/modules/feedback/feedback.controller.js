@@ -106,6 +106,15 @@ export async function submitFeedback(req, res) {
       return res.status(404).json({ error: 'Feedback form not found.' });
     }
 
+    // Strictly enforce single submission per attendee
+    if (feedback.isSubmitted) {
+      return res.status(400).json({
+        error: 'Feedback has already been submitted for this registration. (આપનો પ્રતિભાવ પહેલેથી જ નોંધાઈ ગયો છે.)',
+        alreadySubmitted: true,
+        submittedAt: feedback.submittedAt
+      });
+    }
+
     feedback.overallRating = Math.max(1, Math.min(5, Number(overallRating) || 5));
     feedback.contentRating = Math.max(1, Math.min(5, Number(contentRating) || 5));
     feedback.speakerRating = Math.max(1, Math.min(5, Number(speakerRating) || 5));

@@ -106,32 +106,6 @@ export default function FeedbackPage() {
 
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submitted, setSubmitted] = useState<boolean>(false);
-  const [resetting, setResetting] = useState<boolean>(false);
-
-  const handleResetForm = async () => {
-    try {
-      setResetting(true);
-      const res = await fetch(`${API_BASE_URL}/api/feedback/${encodeURIComponent(token)}/reset`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resetAttendance: true })
-      });
-      if (res.ok) {
-        toast.success('Feedback form and attendance reset successfully!');
-        setSubmitted(false);
-        setData((prev) => prev ? { ...prev, isSubmitted: false } : null);
-        setOverallRating(5);
-        setFeedbackText('');
-        setSelectedTakeaways(['communication', 'appreciation']);
-      } else {
-        toast.error('Failed to reset feedback form.');
-      }
-    } catch (_) {
-      toast.error('Network error resetting form.');
-    } finally {
-      setResetting(false);
-    }
-  };
 
   useEffect(() => {
     if (!token) return;
@@ -407,18 +381,6 @@ export default function FeedbackPage() {
               >
                 Return to Home
               </Link>
-            </div>
-
-            {/* Test Reset Helper */}
-            <div className="pt-4 border-t border-stone-100 max-w-sm mx-auto">
-              <button
-                type="button"
-                onClick={handleResetForm}
-                disabled={resetting}
-                className="text-[11px] font-bold text-stone-500 hover:text-rose-700 underline transition-colors flex items-center justify-center gap-1 mx-auto"
-              >
-                <span>{resetting ? 'Resetting...' : '🔄 Reset form for testing (પ્રતિભાવ રીસેટ કરો)'}</span>
-              </button>
             </div>
           </div>
         ) : (
