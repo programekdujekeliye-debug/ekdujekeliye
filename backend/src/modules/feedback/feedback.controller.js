@@ -463,7 +463,10 @@ export async function resetFeedbackSubmission(req, res) {
         attendanceReset = true;
         await Pass.updateMany(
           { inquiryId: feedback.inquiryId },
-          { $set: { firstScannedAt: null, lastScannedAt: null, firstScannedBy: null, scanCount: 0 } }
+          {
+            $set: { firstScannedAt: null, lastScannedAt: null, scanCount: 0 },
+            $unset: { firstScannedBy: '' }
+          }
         );
       }
     }

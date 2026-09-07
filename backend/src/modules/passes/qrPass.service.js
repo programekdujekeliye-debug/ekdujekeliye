@@ -5,7 +5,16 @@ import { Pass } from '../../models/Pass.js';
 import { env } from '../../config/env.js';
 
 const KEY_ID = 'edkl-k1';
-const KEYS_FILE = path.resolve(process.cwd(), '.edkl_keys.json');
+
+function getCandidateKeyFiles() {
+  const currentDir = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+  return [
+    path.resolve(process.cwd(), '.edkl_keys.json'),
+    path.resolve(process.cwd(), 'backend', '.edkl_keys.json'),
+    path.resolve(currentDir, '../../../.edkl_keys.json'),
+    path.resolve(currentDir, '../../../../.edkl_keys.json')
+  ];
+}
 
 let privateKeyObject = null;
 let publicKeyObject = null;
@@ -32,18 +41,21 @@ function initKeys() {
     }
   }
 
-  // 2. Check if keys exist in local keys file
-  if (fs.existsSync(KEYS_FILE)) {
-    try {
-      const fileData = JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8'));
-      if (fileData.privateKeyPem && fileData.publicKeyPem) {
-        privateKeyObject = crypto.createPrivateKey(fileData.privateKeyPem);
-        publicKeyObject = crypto.createPublicKey(fileData.publicKeyPem);
-        publicKeySpkiBase64 = publicKeyObject.export({ type: 'spki', format: 'der' }).toString('base64');
-        return;
+  // 2. Check if keys exist in local keys file (searches multiple candidate locations)
+  const candidateFiles = getCandidateKeyFiles();
+  for (const candidate of candidateFiles) {
+    if (fs.existsSync(candidate)) {
+      try {
+        const fileData = JSON.parse(fs.readFileSync(candidate, 'utf8'));
+        if (fileData.privateKeyPem && fileData.publicKeyPem) {
+          privateKeyObject = crypto.createPrivateKey(fileData.privateKeyPem);
+          publicKeyObject = crypto.createPublicKey(fileData.publicKeyPem);
+          publicKeySpkiBase64 = publicKeyObject.export({ type: 'spki', format: 'der' }).toString('base64');
+          return;
+        }
+      } catch (e) {
+        console.warn(`[QrPassService] Failed to parse keys file at ${candidate}:`, e.message);
       }
-    } catch (e) {
-      console.warn('[QrPassService] Failed to parse existing keys file:', e.message);
     }
   }
 

@@ -527,7 +527,21 @@ export const ScannerPage: React.FC = () => {
       })
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({ error: 'Invalid server response' }));
+
+    // Handle HTTP non-200 responses cleanly
+    if (!res.ok) {
+      playScanFeedback('INVALID');
+      setLatestResult({
+        type: 'INVALID_SIGNATURE',
+        title: res.status >= 500 ? 'SERVER ERROR' : 'SCAN FAILED',
+        message: data.error || data.message || `Server responded with error ${res.status}. Please try again.`,
+        scannedByDevice: deviceId,
+        scannedByOperator: 'Gate Staff',
+        timestamp: new Date().toLocaleTimeString()
+      });
+      return;
+    }
 
     // Instantly update liveStats across UI from this scan response (0ms latency)
     if (data.liveStats) {
@@ -583,12 +597,43 @@ export const ScannerPage: React.FC = () => {
         scannedByOperator: 'Gate Staff',
         timestamp: new Date().toLocaleTimeString()
       });
+    } else if (data.result === 'REVOKED') {
+      playScanFeedback('INVALID');
+      setLatestResult({
+        type: 'INVALID_SIGNATURE',
+        title: 'PASS CANCELLED / REVOKED',
+        message: data.message || 'This pass has been cancelled or revoked.',
+        passId: data.passId,
+        scannedByDevice: deviceId,
+        scannedByOperator: 'Gate Staff',
+        timestamp: new Date().toLocaleTimeString()
+      });
+    } else if (data.result === 'UNKNOWN_PASS') {
+      playScanFeedback('INVALID');
+      setLatestResult({
+        type: 'INVALID_SIGNATURE',
+        title: 'PASS NOT FOUND',
+        message: data.message || 'Pass record not found in system.',
+        scannedByDevice: deviceId,
+        scannedByOperator: 'Gate Staff',
+        timestamp: new Date().toLocaleTimeString()
+      });
+    } else if (data.result === 'INVALID_SIGNATURE') {
+      playScanFeedback('INVALID');
+      setLatestResult({
+        type: 'INVALID_SIGNATURE',
+        title: 'INVALID PASS SIGNATURE',
+        message: data.message || 'Cryptographic signature is invalid or tampered.',
+        scannedByDevice: deviceId,
+        scannedByOperator: 'Gate Staff',
+        timestamp: new Date().toLocaleTimeString()
+      });
     } else {
       playScanFeedback('INVALID');
       setLatestResult({
         type: 'INVALID_SIGNATURE',
-        title: 'INVALID PASS',
-        message: data.message || 'Cryptographic signature is invalid or tampered.',
+        title: data.result || 'SCAN REJECTED',
+        message: data.message || data.error || 'Scan could not be processed.',
         scannedByDevice: deviceId,
         scannedByOperator: 'Gate Staff',
         timestamp: new Date().toLocaleTimeString()
@@ -614,10 +659,11 @@ export const ScannerPage: React.FC = () => {
     const verifyResult = await verifyQrTokenOffline(qrToken, preparedEvent.publicKey.publicKeySpkiBase64);
     if (!verifyResult.valid || !verifyResult.payload) {
       playScanFeedback('INVALID');
+      const isCryptoUnavailable = verifyResult.error === 'CRYPTO_UNAVAILABLE';
       setLatestResult({
         type: 'INVALID_SIGNATURE',
-        title: 'SIGNATURE VERIFICATION FAILED',
-        message: `Cryptographic check failed: ${verifyResult.error || 'Invalid token'}`,
+        title: isCryptoUnavailable ? 'OFFLINE CRYPTO NOT SUPPORTED' : 'SIGNATURE VERIFICATION FAILED',
+        message: verifyResult.message || `Cryptographic check failed: ${verifyResult.error || 'Invalid token'}`,
         scannedByDevice: deviceId,
         scannedByOperator: 'Gate Staff (Offline)',
         timestamp: new Date().toLocaleTimeString()

@@ -148,9 +148,11 @@ export async function handleOnlineScan(req, res) {
         $set: {
           firstScannedAt: new Date(),
           lastScannedAt: new Date(),
-          'firstScannedBy.deviceId': deviceId,
-          'firstScannedBy.operatorUserId': operatorUserId,
-          'firstScannedBy.mode': 'ONLINE'
+          firstScannedBy: {
+            deviceId,
+            operatorUserId,
+            mode: 'ONLINE'
+          }
         },
         $inc: { scanCount: 1 }
       },
@@ -454,9 +456,11 @@ export async function handleOfflineSync(req, res) {
           $set: {
             firstScannedAt: scannedAt,
             lastScannedAt: new Date(),
-            'firstScannedBy.deviceId': deviceId,
-            'firstScannedBy.operatorUserId': operatorUserId,
-            'firstScannedBy.mode': 'OFFLINE_SYNC'
+            firstScannedBy: {
+              deviceId,
+              operatorUserId,
+              mode: 'OFFLINE_SYNC'
+            }
           },
           $inc: { scanCount: 1 }
         },
@@ -728,8 +732,10 @@ export async function handleResetScannerAttendance(req, res) {
         $set: {
           firstScannedAt: null,
           lastScannedAt: null,
-          firstScannedBy: null,
           scanCount: 0
+        },
+        $unset: {
+          firstScannedBy: ''
         }
       }
     );
