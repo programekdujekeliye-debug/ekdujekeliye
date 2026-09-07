@@ -438,69 +438,309 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
         ? programs.find((p) => p.id === exportProgramId)?.name || exportProgramId
         : 'All Seminar Batches';
 
-    const rowsHtml = list
-      .map((s, idx) => {
-        const programObj = programs.find((p) => p.id === s.programId || p.slug === s.programId || p.date === s.programDate);
-        const dynamicPrice = programObj?.price !== undefined ? programObj.price : 1500;
-        const isVip = s.inquiryId?.startsWith('IP') || Boolean((s as any).isVip);
-        const amt = s.payment?.amount !== undefined ? s.payment.amount : isVip ? 0 : dynamicPrice;
+    const progObj = programs.find((p) => p.id === exportProgramId);
+    const progDate = progObj?.date || '';
+    const progVenue = progObj?.venue || '';
 
-        return `
-      <tr style="border-bottom: 1px solid #e2e8f0; height: 22px;">
-        <td style="padding: 4px 6px; text-align: center; border: 1px solid #cbd5e1; font-size: 10px;">${idx + 1}</td>
-        <td style="padding: 4px 6px; font-weight: bold; border: 1px solid #cbd5e1; color: ${isVip ? '#d97706' : '#be123c'}; font-family: monospace; font-size: 10px;">${s.inquiryId}</td>
-        <td style="padding: 4px 6px; border: 1px solid #cbd5e1; font-size: 11px;"><strong>${s.husbandName} & ${s.wifeName}</strong> ${s.surname}</td>
-        <td style="padding: 4px 6px; text-align: center; border: 1px solid #cbd5e1; font-family: monospace; font-size: 10px;">${s.phoneNumber}</td>
-        <td style="padding: 4px 6px; border: 1px solid #cbd5e1; font-size: 10px;">${s.programName || progName}</td>
-        <td style="padding: 4px 6px; text-align: center; border: 1px solid #cbd5e1; font-weight: bold; font-size: 10px;">₹${amt}</td>
-        <td style="padding: 4px 6px; text-align: center; border: 1px solid #cbd5e1; text-transform: uppercase; font-size: 9px; font-weight: bold;">${s.status}</td>
-        <td style="padding: 4px 6px; text-align: center; border: 1px solid #cbd5e1; font-size: 10px; font-weight: bold; color: ${s.attendance === 'present' ? '#059669' : '#64748b'};">
-          ${s.attendance === 'present' ? '✓ Present' : s.attendance === 'absent' ? 'Absent' : 'Unmarked'}
-        </td>
-      </tr>
-    `;
-      })
-      .join('');
+    // Helper for extracting numeric token for ascending sort
+    const extractNumericToken = (token?: string) => {
+      if (!token) return 0;
+      const match = token.match(/(\d+)$/);
+      return match ? parseInt(match[1], 10) : 0;
+    };
+
+    const escapeHtml = (str?: string) => {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    };
+
+    // 1. Separate into Regular and IP
+    const regularList = list.filter((s) => !s.inquiryId?.includes('IP'));
+    const ipList = list.filter((s) => s.inquiryId?.includes('IP'));
+
+    // 2. Sort number-wise
+    regularList.sort((a, b) => extractNumericToken(a.inquiryId) - extractNumericToken(b.inquiryId));
+    ipList.sort((a, b) => extractNumericToken(a.inquiryId) - extractNumericToken(b.inquiryId));
+
+    // 3. Chunk into 50 per page
+    const PAGE_SIZE = 50;
+    const chunk = <T,>(arr: T[], size: number): T[][] => {
+      const res: T[][] = [];
+      for (let i = 0; i < arr.length; i += size) {
+        res.push(arr.slice(i, i + size));
+      }
+      return res;
+    };
+
+    const regularPages = chunk(regularList, PAGE_SIZE);
+    const ipPages = chunk(ipList, PAGE_SIZE);
+    const totalPages = (regularPages.length + ipPages.length) || 1;
+
+    let pagesHtml = '';
+    let globalPageNum = 1;
+
+    const renderPageSection = (
+      pages: Submission[][],
+      sectionTitle: string,
+      badgeClass: string,
+      totalSectionCount: number
+    ) => {
+      pages.forEach((pageItems, pageIdx) => {
+        const startIdx = pageIdx * PAGE_SIZE + 1;
+        const endIdx = startIdx + pageItems.length - 1;
+        const firstToken = pageItems[0]?.inquiryId || '';
+        const lastToken = pageItems[pageItems.length - 1]?.inquiryId || '';
+
+        pagesHtml += `
+          <div class="page">
+            <div class="header">
+              <div class="header-left">
+                <h1>Ek Duje Ke Liye</h1>
+                <p>${escapeHtml(progVenue || progName)}${progDate ? ` &bull; ${escapeHtml(progDate)}` : ''}</p>
+              </div>
+              <div class="header-right">
+                <span class="badge ${badgeClass}">${sectionTitle} (${escapeHtml(firstToken)} - ${escapeHtml(lastToken)})</span>
+                <div class="page-info">Page ${globalPageNum} of ${totalPages}</div>
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th class="col-token" style="text-align: center;">Registration Number</th>
+                  <th class="col-husband">Husband Name</th>
+                  <th class="col-wife">Wife Name</th>
+                  <th class="col-surname">Surname</th>
+                  <th class="col-mobile" style="text-align: center;">Mobile Number</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+
+        pageItems.forEach((item) => {
+          const husband = escapeHtml(item.husbandName || (item as any).partner1Name || '-');
+          const wife = escapeHtml(item.wifeName || (item as any).partner2Name || '-');
+          const surname = escapeHtml(item.surname && item.surname !== '.' ? item.surname : '');
+          const phone = escapeHtml(item.phoneNumber || '-');
+          const token = escapeHtml(item.inquiryId || '-');
+          const isIp = token.includes('IP');
+
+          pagesHtml += `
+            <tr>
+              <td class="col-token ${isIp ? 'token-ip' : 'token-regular'}">${token}</td>
+              <td class="col-husband">${husband}</td>
+              <td class="col-wife">${wife}</td>
+              <td class="col-surname">${surname}</td>
+              <td class="col-mobile">${phone}</td>
+            </tr>
+          `;
+        });
+
+        pagesHtml += `
+              </tbody>
+            </table>
+          </div>
+        `;
+        globalPageNum++;
+      });
+    };
+
+    if (regularPages.length > 0) {
+      renderPageSection(regularPages, 'REGULAR', 'badge-regular', regularList.length);
+    }
+    if (ipPages.length > 0) {
+      renderPageSection(ipPages, 'IP REGISTRATIONS', 'badge-ip', ipList.length);
+    }
 
     printWindow.document.write(`
       <!DOCTYPE html>
-      <html>
+      <html lang="en">
       <head>
-        <title>Ek Duje Ke Liye - Registrations Roster Report</title>
+        <meta charset="UTF-8">
+        <title>Ek Duje Ke Liye (${progDate || progName})</title>
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; margin: 20px; color: #0f172a; }
-          table { width: 100%; border-collapse: collapse; margin-top: 14px; }
-          th { background-color: #f8fafc; font-weight: bold; padding: 6px; border: 1px solid #94a3b8; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-          @media print { button { display: none; } }
+          @page {
+            size: A4 portrait;
+            margin: 8mm 8mm 8mm 8mm;
+          }
+          * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #0f172a;
+            background: #ffffff;
+            font-size: 10px;
+          }
+          .page {
+            width: 100%;
+            height: 280mm;
+            max-height: 280mm;
+            page-break-after: always;
+            break-after: page;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            overflow: hidden;
+          }
+          .page:last-child {
+            page-break-after: avoid;
+            break-after: avoid;
+          }
+          .header {
+            border-bottom: 2px solid #be123c;
+            padding-bottom: 4px;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+          }
+          .header-left h1 {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 900;
+            color: #881337;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+          }
+          .header-left p {
+            margin: 2px 0 0 0;
+            font-size: 9.5px;
+            color: #475569;
+            font-weight: 600;
+          }
+          .header-right {
+            text-align: right;
+          }
+          .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          .badge-regular {
+            background-color: #ffe4e6;
+            color: #9f1239;
+            border: 1px solid #fecdd3;
+          }
+          .badge-ip {
+            background-color: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+          }
+          .page-info {
+            font-size: 9px;
+            color: #64748b;
+            font-weight: 700;
+            margin-top: 2px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+          }
+          th {
+            background-color: #f1f5f9;
+            color: #0f172a;
+            font-weight: 800;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            padding: 3.5px 6px;
+            border: 1px solid #94a3b8;
+            text-align: left;
+          }
+          td {
+            padding: 2.6px 6px;
+            border: 1px solid #cbd5e1;
+            font-size: 9.5px;
+            line-height: 1.15;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          tr:nth-child(even) {
+            background-color: #f8fafc;
+          }
+          .col-token {
+            width: 20%;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-weight: 800;
+            text-align: center;
+          }
+          .token-regular {
+            color: #be123c;
+          }
+          .token-ip {
+            color: #b45309;
+          }
+          .col-husband {
+            width: 24%;
+            font-weight: 700;
+            color: #0f172a;
+          }
+          .col-wife {
+            width: 24%;
+            font-weight: 700;
+            color: #0f172a;
+          }
+          .col-surname {
+            width: 16%;
+            color: #334155;
+            font-weight: 600;
+          }
+          .col-mobile {
+            width: 16%;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            text-align: center;
+            font-weight: 700;
+            color: #1e293b;
+          }
+          .print-btn-bar {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            z-index: 9999;
+            background: #ffffff;
+            padding: 8px 12px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            border: 1px solid #e2e8f0;
+          }
+          .print-btn {
+            background: #be123c;
+            color: #ffffff;
+            border: none;
+            padding: 8px 16px;
+            font-weight: 800;
+            font-size: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+          }
+          @media print {
+            .print-btn-bar {
+              display: none !important;
+            }
+          }
         </style>
       </head>
       <body>
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #be123c; padding-bottom: 8px;">
-          <div>
-            <h2 style="margin: 0; color: #881337; font-size: 18px;">Ek Duje Ke Liye &bull; Registrations Master Roster</h2>
-            <p style="margin: 3px 0 0 0; color: #475569; font-size: 11px;">
-              Scope: <strong>${progName}</strong> &bull; Total Filtered Records: <strong>${list.length} couples</strong>
-            </p>
-          </div>
-          <button onclick="window.print()" style="padding: 8px 16px; background-color: #be123c; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 12px;">
-            Print / Save as PDF
-          </button>
+        <div class="print-btn-bar">
+          <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF (${totalPages} Pages, 50/Page)</button>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 30px;">#</th>
-              <th style="width: 85px;">Token ID</th>
-              <th>Couple Name</th>
-              <th style="width: 100px;">Phone Number</th>
-              <th style="width: 140px;">Program Slot</th>
-              <th style="width: 65px;">Amount</th>
-              <th style="width: 75px;">Status</th>
-              <th style="width: 85px;">Gate Attendance</th>
-            </tr>
-          </thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
+        ${pagesHtml}
       </body>
       </html>
     `);
