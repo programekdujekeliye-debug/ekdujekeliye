@@ -41,6 +41,8 @@ export const VipPassesPage = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [editingGuest, setEditingGuest] = useState<Submission | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [approvalFilter, setApprovalFilter] = useState<'all' | 'approved' | 'pending'>('all');
 
   // Sync with global topbar event selector
   useEffect(() => {
@@ -248,7 +250,32 @@ export const VipPassesPage = () => {
     }
   };
 
-  // Filter VIP list by search and attendance
+  const handleApproveVip = async (inquiryId: string, name: string) => {
+    try {
+      setApprovingId(inquiryId);
+      await apiClient(`/api/submissions/${inquiryId}/approve`, {
+        method: 'POST'
+      });
+      toast.success(`VIP Pass for ${name} approved successfully!`);
+      fetchVipGuests();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to approve VIP pass.');
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const handleCopyVipLink = () => {
+    const link = `${window.location.origin}/vip-entry`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(link);
+      toast.success('VIP Entry link copied to clipboard!');
+    } else {
+      prompt('Copy this VIP link:', link);
+    }
+  };
+
+  // Filter VIP list by search, attendance, and approval status
   const filteredGuests = vipGuests.filter((g) => {
     const q = searchQuery.toLowerCase();
     const matchSearch =
@@ -264,11 +291,17 @@ export const VipPassesPage = () => {
       (attendanceFilter === 'unmarked' && (!g.attendance || g.attendance === 'unmarked')) ||
       g.attendance === attendanceFilter;
 
-    return matchSearch && matchAttendance;
+    const matchApproval =
+      approvalFilter === 'all' ||
+      (approvalFilter === 'approved' && g.status !== 'pending') ||
+      (approvalFilter === 'pending' && g.status === 'pending');
+
+    return matchSearch && matchAttendance && matchApproval;
   });
 
-
   const totalVipCount = vipGuests.length;
+  const pendingApprovalCount = vipGuests.filter((g) => g.status === 'pending').length;
+  const approvedVipCount = totalVipCount - pendingApprovalCount;
   const presentCount = vipGuests.filter((g) => g.attendance === 'present').length;
   const pendingCheckinCount = totalVipCount - presentCount;
 
@@ -448,6 +481,77 @@ export const VipPassesPage = () => {
         </div>
       </div>
 
+      {/* VIP Public Self-Registration Share Banner */}
+      <div className="bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent border border-amber-300 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-black text-xl shadow-md flex-shrink-0">
+            👑
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-black uppercase tracking-wider text-amber-900">
+                Today&apos;s VIP Entry Link &bull; મહેમાન રજીસ્ટ્રેશન લિંક
+              </span>
+              <span className="px-2 py-0.5 bg-amber-200 text-amber-900 text-[10px] font-black rounded-full uppercase">
+                Awaiting Your Approval
+              </span>
+            </div>
+            <p className="text-xs text-amber-800 font-medium mt-0.5">
+              Share this link with VIPs. Their entries will appear here under <strong className="font-bold">Pending Approval</strong> for your 1-click authorization.
+            </p>
+            <div className="text-xs font-mono font-bold text-amber-950 mt-1 select-all bg-amber-100/60 px-2.5 py-1 rounded-lg border border-amber-200 inline-block">
+              {typeof window !== 'undefined' ? `${window.location.origin}/vip-entry` : 'https://www.ekdujekeliye.in/vip-entry'}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={handleCopyVipLink}
+            className="flex-1 sm:flex-none px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer whitespace-nowrap"
+          >
+            <span>📋 Copy VIP Link</span>
+          </button>
+          <a
+            href="/vip-entry"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-slate-50 text-amber-900 border border-amber-300 rounded-xl text-xs font-extrabold transition-all shadow-xs flex items-center justify-center gap-1.5 whitespace-nowrap"
+          >
+            <span>Open Form ↗</span>
+          </a>
+        </div>
+      </div>
+
+      {/* Approval Status Filter Tabs */}
+      <div className="flex items-center gap-1.5 p-1 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold w-fit">
+        <button
+          type="button"
+          onClick={() => setApprovalFilter('all')}
+          className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${approvalFilter === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+        >
+          All VIPs ({totalVipCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setApprovalFilter('approved')}
+          className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${approvalFilter === 'approved' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+        >
+          Approved Passes ({approvedVipCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setApprovalFilter('pending')}
+          className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${approvalFilter === 'pending' ? 'bg-white text-amber-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+        >
+          <span>Pending Approval ({pendingApprovalCount})</span>
+          {pendingApprovalCount > 0 && (
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+          )}
+        </button>
+      </div>
+
       {/* Search & Filter Toolbar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
         <div className="relative flex-1">
@@ -601,10 +705,17 @@ export const VipPassesPage = () => {
 
                         {/* Payment Pill */}
                         <td className="py-3.5 px-4">
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-amber-50 border border-amber-300 text-amber-900 inline-flex items-center gap-1 whitespace-nowrap">
-                            <SparklesIcon className="w-3 h-3 text-amber-600" />
-                            <span>Paid (₹0) MANUAL_INVITE</span>
-                          </span>
+                          {g.status === 'pending' ? (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-amber-100 border border-amber-300 text-amber-900 inline-flex items-center gap-1 whitespace-nowrap animate-pulse">
+                              <ClockIcon className="w-3 h-3 text-amber-700" />
+                              <span>⏳ Pending Approval</span>
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-amber-50 border border-amber-300 text-amber-900 inline-flex items-center gap-1 whitespace-nowrap">
+                              <SparklesIcon className="w-3 h-3 text-amber-600" />
+                              <span>Paid (₹0) MANUAL_INVITE</span>
+                            </span>
+                          )}
                         </td>
 
                         {/* Attendance Dropdown */}
@@ -651,33 +762,65 @@ export const VipPassesPage = () => {
                         {/* Actions */}
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            <a
-                              href={`/pass/${g.inquiryId}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap"
-                              title="Open Gate Entry Pass"
-                            >
-                              Pass ↗
-                            </a>
-                            <a
-                              href={`/invitation/${g.inquiryId}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap"
-                              title="Open Personalized Invitation Card"
-                            >
-                              Card ↗
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => handleResendWhatsApp(g)}
-                              disabled={resendingId === g.inquiryId}
-                              className="p-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
-                              title="Send Official VIP Pass & Invitation Card via Meta WhatsApp API"
-                            >
-                              <WhatsappIcon className={`w-3.5 h-3.5 ${resendingId === g.inquiryId ? 'animate-spin' : ''}`} />
-                            </button>
+                            {g.status === 'pending' ? (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={approvingId === g.inquiryId}
+                                  onClick={() => handleApproveVip(g.inquiryId, `${g.husbandName} & ${g.wifeName}`)}
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-black transition-all shadow-xs flex items-center gap-1 cursor-pointer whitespace-nowrap disabled:opacity-50"
+                                  title="Approve and activate this VIP pass"
+                                >
+                                  {approvingId === g.inquiryId ? (
+                                    <span>Approving...</span>
+                                  ) : (
+                                    <>
+                                      <CheckIcon className="w-3.5 h-3.5" />
+                                      <span>Approve Pass</span>
+                                    </>
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteVip(g._id || g.inquiryId, `${g.husbandName} & ${g.wifeName}`)}
+                                  className="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                                  title="Decline / Delete Request"
+                                >
+                                  <span>✕</span>
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <a
+                                  href={`/pass/${g.inquiryId}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap"
+                                  title="Open Gate Entry Pass"
+                                >
+                                  Pass ↗
+                                </a>
+                                <a
+                                  href={`/invitation/${g.inquiryId}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap"
+                                  title="Open Personalized Invitation Card"
+                                >
+                                  Card ↗
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => handleResendWhatsApp(g)}
+                                  disabled={resendingId === g.inquiryId}
+                                  className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 whitespace-nowrap disabled:opacity-50"
+                                  title="Send VIP Pass & Invitation via WhatsApp"
+                                >
+                                  <WhatsappIcon className="w-3 h-3 text-emerald-600" />
+                                  <span>{resendingId === g.inquiryId ? 'Sending...' : 'WhatsApp'}</span>
+                                </button>
+                              </>
+                            )}
                             <a
                               href={getWhatsAppMessageUrl(g)}
                               target="_blank"
@@ -760,10 +903,17 @@ export const VipPassesPage = () => {
 
                     {/* Row 2: Status Chips */}
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-50 border border-amber-300 text-amber-900 inline-flex items-center gap-1">
-                        <SparklesIcon className="w-3 h-3 text-amber-600" />
-                        <span>Paid (₹0) MANUAL_INVITE</span>
-                      </span>
+                      {g.status === 'pending' ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-100 border border-amber-300 text-amber-900 inline-flex items-center gap-1 animate-pulse">
+                          <ClockIcon className="w-3 h-3 text-amber-700" />
+                          <span>⏳ Pending Approval</span>
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-50 border border-amber-300 text-amber-900 inline-flex items-center gap-1">
+                          <SparklesIcon className="w-3 h-3 text-amber-600" />
+                          <span>Paid (₹0) MANUAL_INVITE</span>
+                        </span>
+                      )}
                       <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-100 text-amber-900 border border-amber-200">
                         Honorary VIP
                       </span>
@@ -858,39 +1008,71 @@ export const VipPassesPage = () => {
 
                       {/* Action Buttons */}
                       <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <a
-                          href={`/pass/${g.inquiryId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-2.5 py-1.5 min-h-[34px] bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 font-bold text-xs rounded-xl flex items-center gap-1 shadow-2xs"
-                          title="Open Gate Entry Pass"
-                        >
-                          <span>Pass</span>
-                          <span>↗</span>
-                        </a>
+                        {g.status === 'pending' ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={approvingId === g.inquiryId}
+                              onClick={() => handleApproveVip(g.inquiryId, `${g.husbandName} & ${g.wifeName}`)}
+                              className="px-3 py-1.5 min-h-[34px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs rounded-xl flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                              title="Approve and activate this VIP pass"
+                            >
+                              {approvingId === g.inquiryId ? (
+                                <span>Approving...</span>
+                              ) : (
+                                <>
+                                  <CheckIcon className="w-3.5 h-3.5" />
+                                  <span>Approve Pass</span>
+                                </>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteVip(g._id || g.inquiryId, `${g.husbandName} & ${g.wifeName}`)}
+                              className="px-2.5 py-1.5 min-h-[34px] bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl cursor-pointer"
+                              title="Decline / Delete Request"
+                            >
+                              <span>✕</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <a
+                              href={`/pass/${g.inquiryId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1.5 min-h-[34px] bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 font-bold text-xs rounded-xl flex items-center gap-1 shadow-2xs"
+                              title="Open Gate Entry Pass"
+                            >
+                              <span>Pass</span>
+                              <span>↗</span>
+                            </a>
 
-                        <a
-                          href={`/invitation/${g.inquiryId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-2.5 py-1.5 min-h-[34px] bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-xs rounded-xl flex items-center gap-1 shadow-2xs"
-                          title="Open Personalized Invitation Card"
-                        >
-                          <span>Card</span>
-                          <span>↗</span>
-                        </a>
+                            <a
+                              href={`/invitation/${g.inquiryId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1.5 min-h-[34px] bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-xs rounded-xl flex items-center gap-1 shadow-2xs"
+                              title="Open Personalized Invitation Card"
+                            >
+                              <span>Card</span>
+                              <span>↗</span>
+                            </a>
 
-                        <button
-                          type="button"
-                          onClick={() => handleResendWhatsApp(g)}
-                          disabled={resendingId === g.inquiryId}
-                          className="px-2.5 py-1.5 min-h-[34px] bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
-                          title="Send Official VIP Pass & Invitation Card via Meta WhatsApp API"
-                        >
-                          <WhatsappIcon className={`w-3.5 h-3.5 ${resendingId === g.inquiryId ? 'animate-spin' : ''}`} />
-                          <span>{resendingId === g.inquiryId ? 'Sending...' : 'Meta Send'}</span>
-                        </button>
+                            <button
+                              type="button"
+                              onClick={() => handleResendWhatsApp(g)}
+                              disabled={resendingId === g.inquiryId}
+                              className="px-2.5 py-1.5 min-h-[34px] bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
+                              title="Send Official VIP Pass & Invitation Card via Meta WhatsApp API"
+                            >
+                              <WhatsappIcon className={`w-3.5 h-3.5 ${resendingId === g.inquiryId ? 'animate-spin' : ''}`} />
+                            </button>
+                          </>
+                        )}
+                      </div>
 
+                      <div className="flex items-center gap-1.5">
                         <a
                           href={getWhatsAppMessageUrl(g)}
                           target="_blank"

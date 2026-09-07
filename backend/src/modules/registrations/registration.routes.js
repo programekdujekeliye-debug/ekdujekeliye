@@ -21,7 +21,8 @@ import {
   markFramesExported,
   bulkUpdateFrameAlignments,
   getCouplePhotoRedirect,
-  getPaymentScreenshotRedirect
+  getPaymentScreenshotRedirect,
+  submitVipRequest
 } from './registration.controller.js';
 import { requireAuth } from '../../middleware/auth.js';
 
@@ -30,6 +31,7 @@ export const registrationRouter = Router();
 
 // Public registration & status routes
 registrationRouter.post('/submit', upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), submitRegistration);
+registrationRouter.post('/vip-request', upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), submitVipRequest);
 registrationRouter.get('/status/:inquiryId', getRegistrationStatus);
 
 // Direct Cloudinary CDN Redirects

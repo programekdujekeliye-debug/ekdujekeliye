@@ -93,16 +93,41 @@ export const approveRegistration = async (req, res) => {
 
     sub.status = 'approved';
     if (!sub.payment) {
-      sub.payment = { provider: 'manual', status: 'captured', amount: 1500, currency: 'INR' };
+      sub.payment = {
+        provider: sub.isVip ? 'manual_invite' : 'manual',
+        status: 'captured',
+        amount: sub.isVip ? 0 : 1500,
+        currency: 'INR'
+      };
+    } else {
+      sub.payment.status = 'captured';
+      if (sub.isVip) {
+        sub.payment.provider = 'manual_invite';
+        sub.payment.amount = 0;
+      }
     }
-    sub.payment.status = 'captured';
     sub.payment.paidAt = new Date();
     sub.frameExportStatus = 'NOT_EXPORTED';
     sub.frameExportedAt = null;
     await sub.save();
     clearSubmissionsCache();
 
-    res.json({ success: true, message: 'Registration approved.', submission: sub });
+    // If VIP registration, ensure asymmetric pass & invitation card are generated
+    if (sub.isVip) {
+      try {
+        const event = await eventService.getEventBySlug(sub.programId) || await Event.findOne({
+          $or: [{ id: sub.programId }, { slug: sub.programId }, { date: sub.programDate }]
+        }).lean();
+        if (event) {
+          await qrPassService.ensurePass(sub, event);
+          await invitationCardService.ensureInvitationCardImage(sub, event);
+        }
+      } catch (passErr) {
+        console.warn(`[approveRegistration] Pass/Card generation notice for ${inquiryId}:`, passErr.message);
+      }
+    }
+
+    res.json({ success: true, message: 'Registration approved successfully.', submission: sub });
   } catch (err) {
     res.status(500).json({ error: 'Server error approving registration.' });
   }
@@ -482,6 +507,199 @@ export const manualInviteeRegistration = async (req, res) => {
     res.status(500).json({ error: 'Error creating manual invitee.' });
   }
 };
+
+/**
+ * Public Self-Service VIP Registration Request
+ * Creates temporary VIP registration with status: 'pending' for organizer approval
+ */
+export const submitVipRequest = async (req, res) => {
+  const { husbandName, wifeName, surname, phoneNumber, programId } = req.body;
+  if (!husbandName || !wifeName || !phoneNumber) {
+    return res.status(400).json({ error: 'Husband name, wife name, and phone number are required.' });
+  }
+
+  const cleanPhone = String(phoneNumber).replace(/\D/g, '').slice(-10);
+  if (!cleanPhone || cleanPhone.length !== 10) {
+    return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number.' });
+  }
+
+  try {
+    // 1. Resolve Target Event (defaults to today's active event)
+    const targetProgramId = programId || 'prog-2026-09-07';
+    let program = await eventService.getEventBySlug(targetProgramId) || await Event.findOne({
+      $or: [{ id: targetProgramId }, { slug: targetProgramId }, { date: targetProgramId }, { id: 'prog-2026-09-07' }]
+    }).lean();
+
+    if (!program) {
+      program = await Event.findOne({ status: { $ne: 'completed' } }).sort({ date: 1 }).lean();
+    }
+
+    if (!program) {
+      return res.status(400).json({ error: 'Event slot not found.' });
+    }
+
+    // 2. Prevent duplicate active registrations for this phone number and event
+    const existing = await Registration.findOne({
+      phoneNumber: cleanPhone,
+      programId: program.id,
+      isDeleted: { $ne: true }
+    });
+
+    if (existing) {
+      if (existing.status === 'approved') {
+        return res.status(200).json({
+          alreadyRegistered: true,
+          status: 'approved',
+          inquiryId: existing.inquiryId,
+          message: `This phone number is already registered with pass ID ${existing.inquiryId}!`,
+          passUrl: `/pass/${existing.inquiryId}`
+        });
+      } else {
+        return res.status(200).json({
+          alreadyRegistered: true,
+          status: 'pending',
+          inquiryId: existing.inquiryId,
+          message: `Your VIP entry request (${existing.inquiryId}) is already submitted and pending organizer approval.`,
+          passUrl: `/pass/${existing.inquiryId}`
+        });
+      }
+    }
+
+    // 3. Generate authoritative VIP Inquiry ID (EK06-IP-XX)
+    const isUpcoming = Boolean(
+      program.sequenceNumber && (
+        (program.date && program.date >= '2026-09-07') ||
+        ['prog-2026-09-07', 'prog-2026-09-11', 'prog-2026-09-19'].includes(program.id)
+      )
+    );
+    const seqPad = String(program.sequenceNumber || 6).padStart(2, '0');
+    const counterKey = isUpcoming ? `manualInquiryNumber_${program.id}` : 'manualInquiryNumber';
+
+    let inquiryId = '';
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const counterVal = await getNextSequence(counterKey);
+      const candidateId = isUpcoming
+        ? `EK${seqPad}-IP-${String(counterVal).padStart(2, '0')}`
+        : `IP-${String(counterVal).padStart(2, '0')}`;
+
+      const exists = await Registration.findOne({ inquiryId: candidateId }).select('_id').lean();
+      if (!exists) {
+        inquiryId = candidateId;
+        break;
+      }
+    }
+
+    if (!inquiryId) {
+      const rand = crypto.randomBytes(2).toString('hex').toUpperCase();
+      inquiryId = isUpcoming ? `EK${seqPad}-IP-${rand}` : `IP-${rand}`;
+    }
+
+    // 4. Surname extraction
+    let cleanSurname = (surname || '').trim();
+    if (!cleanSurname) {
+      const hWords = husbandName.trim().split(/\s+/);
+      const wWords = wifeName.trim().split(/\s+/);
+      cleanSurname = (hWords.length > 1 ? hWords[hWords.length - 1] : '') || (wWords.length > 1 ? wWords[wWords.length - 1] : '') || '-';
+    }
+
+    // 5. Process Couple Photo Upload (Store both in private WebP and public R2)
+    let couplePhotoUrl = '/sample_couple.png';
+    let r2MediaData = null;
+    const couplePhotoFile = req.files && req.files['couplePhoto'] ? req.files['couplePhoto'][0] : null;
+
+    if (couplePhotoFile && couplePhotoFile.buffer) {
+      try {
+        const opaqueMediaId = crypto.randomBytes(16).toString('hex');
+        const eventKey = program.sequenceNumber ? `EK${String(program.sequenceNumber).padStart(2, '0')}` : (inquiryId.split('-')[0] || 'EK06');
+        const baseKey = `prod/events/${eventKey}/registrations/${inquiryId}/couple/${opaqueMediaId}`;
+        const thumbKey = `${baseKey}/thumb.webp`;
+        const normalKey = `${baseKey}/normal.webp`;
+        const largeKey = `${baseKey}/large.webp`;
+
+        // Generate WebP variants via Sharp
+        const [thumbBuf, normBuf, largeBuf, publicJpgBuf] = await Promise.all([
+          sharp(couplePhotoFile.buffer).rotate().resize(240, null, { withoutEnlargement: true }).webp({ quality: 80, effort: 4 }).toBuffer(),
+          sharp(couplePhotoFile.buffer).rotate().resize(720, null, { withoutEnlargement: true }).webp({ quality: 82, effort: 4 }).toBuffer(),
+          sharp(couplePhotoFile.buffer).rotate().resize(1200, null, { withoutEnlargement: true }).webp({ quality: 85, effort: 4 }).toBuffer(),
+          sharp(couplePhotoFile.buffer).rotate().resize(800, null, { withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer()
+        ]);
+
+        const publicPhotoKey = `prod/events/${eventKey}/registrations/${inquiryId}/couple/photo.jpg`;
+        const publicPhotoUrl = `https://pub-b443f0b5d5cd4f0e854c148656b56760.r2.dev/${publicPhotoKey}`;
+
+        // Upload to private R2 bucket and public R2 bucket in parallel
+        await Promise.all([
+          r2Provider.putObject({ bucket: r2Provider.privateBucket, key: thumbKey, body: thumbBuf, contentType: 'image/webp', cacheControl: 'private, max-age=3600, no-transform' }),
+          r2Provider.putObject({ bucket: r2Provider.privateBucket, key: normalKey, body: normBuf, contentType: 'image/webp', cacheControl: 'private, max-age=3600, no-transform' }),
+          r2Provider.putObject({ bucket: r2Provider.privateBucket, key: largeKey, body: largeBuf, contentType: 'image/webp', cacheControl: 'private, max-age=3600, no-transform' }),
+          r2Provider.putObject({ bucket: r2Provider.publicBucket, key: publicPhotoKey, body: publicJpgBuf, contentType: 'image/jpeg', cacheControl: 'public, max-age=31536000, immutable' })
+        ]);
+
+        r2MediaData = {
+          status: 'R2_PRIMARY',
+          bucket: r2Provider.privateBucket,
+          isPrivate: true,
+          key: normalKey,
+          thumbKey,
+          normalKey,
+          largeKey,
+          thumbUrl: publicPhotoUrl,
+          normalUrl: publicPhotoUrl,
+          largeUrl: publicPhotoUrl,
+          verifiedAt: new Date()
+        };
+        couplePhotoUrl = `/api/media/${inquiryId}/couple-photo?preset=normal`;
+      } catch (uploadErr) {
+        console.error(`[submitVipRequest] R2 upload error for ${inquiryId}:`, uploadErr.message);
+      }
+    }
+
+    // 6. Create Registration Document with status: 'pending' (Awaiting Admin Approval)
+    const reg = new Registration({
+      inquiryId,
+      customerToken: crypto.randomBytes(16).toString('hex'),
+      husbandName: husbandName.trim(),
+      wifeName: wifeName.trim(),
+      surname: cleanSurname,
+      phoneNumber: cleanPhone,
+      isVip: true,
+      programId: program.id,
+      programName: program.name,
+      programDate: program.date,
+      programTime: program.time || '8:30 PM',
+      couplePhoto: couplePhotoUrl,
+      mediaProvider: r2MediaData ? 'R2' : 'CLOUDINARY',
+      ...(r2MediaData ? { r2Media: r2MediaData } : {}),
+      status: 'pending', // TEMPORARY / AWAITING ORGANIZER APPROVAL
+      payment: {
+        provider: 'manual_invite',
+        status: 'pending',
+        amount: 0,
+        currency: 'INR'
+      }
+    });
+
+    await reg.save();
+    clearSubmissionsCache();
+
+    res.json({
+      success: true,
+      inquiryId,
+      status: 'pending',
+      husbandName: reg.husbandName,
+      wifeName: reg.wifeName,
+      programName: reg.programName,
+      programDate: reg.programDate,
+      programTime: reg.programTime,
+      venue: program.venue || 'Sardar Patel Smruti Bhavan, Surat',
+      message: 'VIP registration request submitted successfully! It is pending organizer approval.'
+    });
+  } catch (err) {
+    console.error('[submitVipRequest] Error:', err);
+    res.status(500).json({ error: err.message || 'Server error processing VIP request.' });
+  }
+};
+
 
 
 export const getSubmissionsList = async (req, res) => {

@@ -129,8 +129,14 @@ export class MediaService {
     const isOriginalDeleted = archive && archive.cloudinaryOriginalStatus === 'DELETED';
 
     const r2Media = registration.r2Media || archive?.r2Media;
-    const hasR2 = Boolean(r2Media?.normalUrl || r2Media?.key || r2Media?.normalKey || (rawPhoto && rawPhoto.includes('media.ekdujekeliye.in')));
-    const isR2Primary = hasR2 && (registration.mediaProvider === 'R2' || r2Media?.status === 'R2_PRIMARY' || rawPhoto.includes('media.ekdujekeliye.in'));
+    const isR2Url = Boolean(rawPhoto && (
+      rawPhoto.includes('media.ekdujekeliye.in') ||
+      rawPhoto.includes('r2.dev') ||
+      rawPhoto.includes('.r2.') ||
+      rawPhoto.includes('r2.cloudflarestorage.com')
+    ));
+    const hasR2 = Boolean(r2Media?.normalUrl || r2Media?.key || r2Media?.normalKey || isR2Url);
+    const isR2Primary = hasR2 && (registration.mediaProvider === 'R2' || r2Media?.status === 'R2_PRIMARY' || isR2Url);
     const isCloudinaryAvailable = Boolean(rawPhoto && rawPhoto.includes('cloudinary.com') && !isOriginalDeleted);
 
     // ========================================================

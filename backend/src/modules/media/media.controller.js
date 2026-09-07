@@ -558,7 +558,7 @@ export const getPrivateCouplePhoto = async (req, res) => {
     }
 
     // C. Public R2 Direct Fallback
-    if (rawPhoto && rawPhoto.includes('media.ekdujekeliye.in')) {
+    if (rawPhoto && (rawPhoto.includes('media.ekdujekeliye.in') || rawPhoto.includes('r2.dev') || rawPhoto.includes('.r2.'))) {
       const extractedKey = rawPhoto.replace(/^https?:\/\/[^/]+\//, '');
       const cacheKey = `${r2Provider.publicBucket}:${extractedKey}`;
       const cached = mediaBufferCache.get(cacheKey);

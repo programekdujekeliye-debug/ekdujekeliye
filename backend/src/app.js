@@ -25,6 +25,7 @@ import { feedbackRouter } from './modules/feedback/feedback.routes.js';
 import { getPublicEvents, getEventBySlug } from './modules/events/event.controller.js';
 import {
   submitRegistration,
+  submitVipRequest,
   getRegistrationStatus,
   getCouplePhotoRedirect,
   getPaymentScreenshotRedirect
@@ -177,6 +178,9 @@ app.get('/api/super-admin/dashboard', requireSuperAuth, getSuperAdminDashboardSu
 
 // 2. Registrations & Inquiries
 app.post('/api/submit', upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), submitRegistration);
+app.post('/api/vip/request', upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), submitVipRequest);
+app.post('/api/vip/submit', upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), submitVipRequest);
+app.post('/api/vip-entry', upload.fields([{ name: 'couplePhoto', maxCount: 1 }]), submitVipRequest);
 app.get('/api/submissions/status/:inquiryId', getRegistrationStatus);
 app.get('/api/registrations/status/:inquiryId', getRegistrationStatus);
 app.use('/api/submissions', registrationRouter);
