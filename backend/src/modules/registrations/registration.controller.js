@@ -707,18 +707,20 @@ export const getSubmissionsList = async (req, res) => {
   const safeLimit = Math.min(Math.max(1, Number(limit) || 50), 10000);
   const safePage = Math.max(1, Number(page) || 1);
 
-  // Fast In-Memory Cache Check (< 1ms)
+  // Fast In-Memory Cache Check (< 1ms) - bypass if cache-buster _t is present
+  const isCacheBusted = Boolean(req.query._t);
   const cacheKey = JSON.stringify({ programId, status, attendance, paymentStatus, isVip, search, sortBy, sortOrder, frameExportStatus, page: safePage, limit: safeLimit });
   const now = Date.now();
-  const cached = submissionsQueryCache.get(cacheKey);
+  const cached = !isCacheBusted ? submissionsQueryCache.get(cacheKey) : null;
   if (cached && now < cached.expiry) {
-    res.set('Cache-Control', 'private, max-age=15, stale-while-revalidate=60');
+    res.set('Cache-Control', 'private, max-age=5, stale-while-revalidate=10');
     res.set('ETag', cached.etag);
     if (req.headers['if-none-match'] === cached.etag) {
       return res.status(304).end();
     }
     return res.json(cached.data);
   }
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
   const andConditions = [
     { isDeleted: { $ne: true } }

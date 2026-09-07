@@ -117,10 +117,11 @@ export const VipPassesPage = () => {
   const fetchVipGuests = useCallback(async () => {
     try {
       setLoading(true);
+      const timestamp = Date.now();
       const url = selectedProgramId && selectedProgramId !== 'all'
-        ? `/api/submissions?isVip=true&programId=${selectedProgramId}&limit=500`
-        : `/api/submissions?isVip=true&limit=500`;
-      const res: any = await apiClient(url);
+        ? `/api/submissions?isVip=true&programId=${selectedProgramId}&limit=500&_t=${timestamp}`
+        : `/api/submissions?isVip=true&limit=500&_t=${timestamp}`;
+      const res: any = await apiClient(url, { skipCache: true });
       const rawList = res?.submissions || res?.data || (Array.isArray(res) ? res : []);
 
       const selectedProg = programs.find((p) => p.id === selectedProgramId);
@@ -244,6 +245,7 @@ export const VipPassesPage = () => {
     try {
       await apiClient(`/api/submissions/${id}`, { method: 'DELETE' });
       toast.success(`VIP pass for ${name} deleted.`);
+      setVipGuests((prev) => prev.filter((g) => g._id !== id && g.inquiryId !== id));
       fetchVipGuests();
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete VIP pass.');
@@ -257,6 +259,23 @@ export const VipPassesPage = () => {
         method: 'POST'
       });
       toast.success(`VIP Pass for ${name} approved successfully!`);
+      // Optimistically update local state immediately so user sees instant approval
+      setVipGuests((prev) =>
+        prev.map((g) =>
+          g.inquiryId === inquiryId
+            ? {
+                ...g,
+                status: 'approved',
+                payment: {
+                  ...g.payment,
+                  status: 'captured',
+                  provider: 'manual_invite',
+                  amount: 0
+                }
+              }
+            : g
+        )
+      );
       fetchVipGuests();
     } catch (err: any) {
       toast.error(err.message || 'Failed to approve VIP pass.');
