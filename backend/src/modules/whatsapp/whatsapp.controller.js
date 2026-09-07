@@ -1749,7 +1749,13 @@ export const retryEventFailedMessages = async (req, res) => {
     };
 
     if (eventId && eventId !== 'all') {
-      const event = await Event.findOne({ $or: [{ id: eventId }, { slug: eventId }] }).lean();
+      const event = await Event.findOne({
+        $or: [
+          { id: eventId },
+          { slug: eventId },
+          ...(mongoose.isValidObjectId(eventId) ? [{ _id: eventId }] : [])
+        ]
+      }).lean();
       const eventIds = [eventId, event?.id, event?.slug, event?.date].filter(Boolean);
       query.eventId = { $in: eventIds };
     }
@@ -1774,6 +1780,26 @@ export const retryEventFailedMessages = async (req, res) => {
 
     for (let i = 0; i < failedMessages.length; i++) {
       const msg = failedMessages[i];
+
+      // If a newer message for this inquiry and template has already succeeded, do not send duplicates
+      const newerSuccess = await WhatsappMessage.findOne({
+        _id: { $ne: msg._id },
+        inquiryId: msg.inquiryId,
+        templateName: msg.templateName,
+        status: { $in: ['SENT', 'DELIVERED', 'READ'] }
+      }).lean();
+      if (newerSuccess) {
+        await WhatsappMessage.updateOne(
+          { _id: msg._id },
+          {
+            $set: {
+              status: WHATSAPP_MESSAGE_STATUSES.CANCELLED,
+              lastErrorMessage: `Superseded: Successfully dispatched via message ${newerSuccess._id} (${newerSuccess.status}).`
+            }
+          }
+        );
+        continue;
+      }
 
       // If this is a pending payment reminder but the attendee has already paid, cancel it to avoid spamming
       if (msg.messageType === 'payment_pending') {
@@ -1812,6 +1838,10 @@ export const retryEventFailedMessages = async (req, res) => {
         lastErrorMessage: null,
         idempotencyKey: `RETRY:${msg.templateName || msg.messageType}:${msg.inquiryId || msg.recipientPhone}:${Date.now()}_${requeuedCount}`
       };
+
+      if (msg.templateName === 'edkl_personal_invitation_24h_v2') {
+        updatePayload.templateLanguage = 'en_US';
+      }
 
       // Sanitize broken media.ekdujekeliye.in in templateParameters to active Cloudflare R2 URL
       if (msg.templateParameters) {
