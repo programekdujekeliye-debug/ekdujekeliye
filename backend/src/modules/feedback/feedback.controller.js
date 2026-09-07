@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { Feedback } from '../../models/Feedback.js';
 import { Registration } from '../../models/Registration.js';
+import { Pass } from '../../models/Pass.js';
 import { Event } from '../../models/Event.js';
 import { eventService } from '../events/event.service.js';
 
@@ -395,6 +396,77 @@ export async function deleteFeedbackRecord(req, res) {
     return res.json({ success: true, message: 'Feedback record deleted successfully.' });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to delete feedback record.' });
+  }
+}
+
+/**
+ * Admin / Test: Reset feedback submission & optional attendance for testing
+ */
+export async function resetFeedbackSubmission(req, res) {
+  try {
+    const { id, token } = req.params;
+    const rawId = id || token;
+    const { resetAttendance } = req.body || req.query || {};
+
+    let filter;
+    if (mongoose.Types.ObjectId.isValid(rawId)) {
+      filter = { $or: [{ _id: rawId }, { token: rawId }, { inquiryId: rawId.toUpperCase() }] };
+    } else {
+      filter = { $or: [{ token: rawId }, { inquiryId: rawId.toUpperCase() }] };
+    }
+
+    const feedback = await Feedback.findOne(filter);
+    if (!feedback) {
+      return res.status(404).json({ error: 'Feedback record not found.' });
+    }
+
+    feedback.isSubmitted = false;
+    feedback.submittedAt = null;
+    feedback.feedbackText = '';
+    feedback.keyTakeaways = [];
+    feedback.overallRating = 5;
+    feedback.contentRating = 5;
+    feedback.speakerRating = 5;
+    feedback.venueRating = 5;
+    feedback.wouldRecommend = true;
+    feedback.connectionRating = 'MUCH_CLOSER';
+    feedback.isTestimonialAllowed = true;
+    await feedback.save();
+
+    let attendanceReset = false;
+    if (resetAttendance === true || resetAttendance === 'true') {
+      const reg = await Registration.findOneAndUpdate(
+        { inquiryId: feedback.inquiryId },
+        {
+          $set: { attendance: 'unmarked' },
+          $unset: {
+            attendanceAt: '',
+            attendanceMethod: '',
+            checkedIn: '',
+            checkedInAt: '',
+            admittedAt: '',
+            scannedBy: '',
+            gateNumber: ''
+          }
+        }
+      );
+      if (reg) {
+        attendanceReset = true;
+        await Pass.updateMany(
+          { inquiryId: feedback.inquiryId },
+          { $set: { firstScannedAt: null, lastScannedAt: null, firstScannedBy: null, scanCount: 0 } }
+        );
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Feedback submission reset successfully. Form is now open for re-submission.',
+      feedback,
+      attendanceReset
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to reset feedback submission: ' + err.message });
   }
 }
 

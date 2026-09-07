@@ -329,40 +329,43 @@ export default function GalleryRedirectPage() {
               </span>
             </div>
 
-            {/* Crucial Gujarati Instruction Requested by User */}
-            <div className="p-3 bg-white/90 rounded-xl border border-rose-200/80 text-xs text-stone-800 leading-relaxed font-semibold">
-              ✨ Instagram પર <span className="text-rose-600 font-black">@ekdujekeliye01</span> અને <span className="text-rose-600 font-black">@sai_photo_surat</span> ને ટેગ કરજો અને <span className="text-rose-600 font-black">#ekdujekeliye</span> સાથે તમારી સુંદર પળો શેર કરજો!
+            {/* Gujarati Instruction for Tagging */}
+            <div className="p-3.5 bg-white/95 rounded-xl border border-rose-200/80 text-xs text-stone-800 leading-relaxed font-semibold space-y-2">
+              <p>
+                ✨ Instagram Story & Reel માં <span className="text-rose-600 font-black">@ekdujekeliye01</span>, <span className="text-rose-600 font-black">@manishvaghasiya01</span> અને <span className="text-rose-600 font-black">@sai_photo_surat</span> ને ટેગ કરજો અને <span className="text-rose-600 font-black">#ekdujekeliye</span> સાથે તમારી સુંદર પળો શેર કરજો!
+              </p>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                <span className="px-2 py-0.5 bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-bold rounded-lg select-all">
+                  @ekdujekeliye01
+                </span>
+                <span className="px-2 py-0.5 bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-bold rounded-lg select-all">
+                  @manishvaghasiya01
+                </span>
+                <span className="px-2 py-0.5 bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-bold rounded-lg select-all">
+                  @sai_photo_surat
+                </span>
+                <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-bold rounded-lg select-all">
+                  #ekdujekeliye
+                </span>
+              </div>
             </div>
 
-            {/* Social Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+            {/* Social Button */}
+            <div className="pt-1">
               <a
                 href="https://www.instagram.com/ekdujekeliye01"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="py-2.5 px-3 bg-gradient-to-r from-fuchsia-600 to-rose-600 hover:from-fuchsia-700 hover:to-rose-700 text-white rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95"
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-fuchsia-600 via-rose-600 to-amber-600 hover:from-fuchsia-700 hover:to-rose-700 text-white rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95"
               >
-                <span>Follow @ekdujekeliye01</span>
-                <ExternalLinkIcon className="w-3.5 h-3.5" />
-              </a>
-
-              <a
-                href="https://www.instagram.com/sai_photo_surat?igsh=MTR1dDlpZ251NWx1Mw=="
-                target="_blank"
-                rel="noopener noreferrer"
-                className="py-2.5 px-3 bg-white hover:bg-stone-50 border border-stone-300 text-stone-800 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs"
-              >
-                <span>Follow @sai_photo_surat</span>
+                <span>Follow @ekdujekeliye01 on Instagram</span>
                 <ExternalLinkIcon className="w-3.5 h-3.5" />
               </a>
             </div>
 
-            {/* Official Photographer Attribution */}
+            {/* Official Photographer Attribution (No phone number) */}
             <div className="flex items-center justify-between text-[11px] text-stone-500 pt-1 border-t border-rose-200/60">
               <span>Official Photography: <strong className="text-stone-700">Sai Photo Surat</strong> (Pradip Lakhani)</span>
-              <a href="tel:+919898240505" className="font-bold text-rose-600 hover:text-rose-700">
-                +91 98982 40505
-              </a>
             </div>
           </div>
 

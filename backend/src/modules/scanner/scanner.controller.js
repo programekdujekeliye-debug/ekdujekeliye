@@ -5,6 +5,7 @@ import { Event } from '../../models/Event.js';
 import { ScanRecord } from '../../models/ScanRecord.js';
 import { qrPassService } from '../passes/qrPass.service.js';
 import { eventService } from '../events/event.service.js';
+import { invalidateDashboardCache } from '../admin/admin.controller.js';
 
 // In-Memory Real-Time Attendance Stats Cache (5s TTL)
 const liveAttendanceStatsCache = new Map();
@@ -16,6 +17,9 @@ export function invalidateLiveAttendanceStatsCache(eventId) {
   } else {
     liveAttendanceStatsCache.clear();
   }
+  try {
+    invalidateDashboardCache();
+  } catch (_) {}
 }
 
 /**
@@ -524,6 +528,8 @@ export async function handleOfflineSync(req, res) {
         });
       }
     }
+
+    invalidateLiveAttendanceStatsCache(eventId);
 
     return res.json({
       success: true,

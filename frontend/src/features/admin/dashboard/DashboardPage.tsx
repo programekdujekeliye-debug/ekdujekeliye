@@ -22,6 +22,8 @@ export const DashboardPage = () => {
   const [vipTotal, setVipTotal] = useState<number>(0);
   const [regularApproved, setRegularApproved] = useState<number>(0);
   const [vipApproved, setVipApproved] = useState<number>(0);
+  const [presentCount, setPresentCount] = useState<number>(0);
+  const [attendanceRate, setAttendanceRate] = useState<number>(0);
   const [capacity, setCapacity] = useState<number>(1184);
   const [availableSlots, setAvailableSlots] = useState<number>(1184);
   const [isHousefull, setIsHousefull] = useState<boolean>(false);
@@ -52,6 +54,8 @@ export const DashboardPage = () => {
         setApprovedCount(app);
         setPendingCount(pend);
         setRejectedCount(rej);
+        setPresentCount(data.stats.present || 0);
+        setAttendanceRate(data.stats.attendanceRate || 0);
         setRegularTotal(regTot);
         setVipTotal(vTot);
         setRegularApproved(regApp);
@@ -81,6 +85,15 @@ export const DashboardPage = () => {
   useEffect(() => {
     if (loadingPrograms && !selectedProgramId) return;
     fetchStats();
+
+    // Fast 4-second live heartbeat for gate attendance synchronization
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchStats();
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
   }, [selectedProgramId, programs, loadingPrograms]);
 
   const fillPercentage = Math.min(100, Math.round((approvedCount / capacity) * 100));
@@ -152,8 +165,8 @@ export const DashboardPage = () => {
         </div>
       </div>
 
-      {/* Operational Metric Cards (4 Cards Grid) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 lg:gap-5">
+      {/* Operational Metric Cards (5 Cards Grid with Live Gate Admitted) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 sm:gap-4">
         <div className="p-4 sm:p-5 bg-white border border-stone-200/90 rounded-2xl shadow-xs space-y-1.5">
           <span className="text-[11px] sm:text-xs text-stone-500 font-bold uppercase tracking-wider block">Total Inquiries</span>
           <div className="flex items-baseline justify-between gap-2">
@@ -174,6 +187,25 @@ export const DashboardPage = () => {
             </span>
           </div>
           <span className="text-[10px] sm:text-[11px] text-emerald-700/80 font-medium block truncate">Confirmed &amp; active passes</span>
+        </div>
+
+        <div className="p-4 sm:p-5 bg-white border border-teal-200/90 rounded-2xl shadow-xs space-y-1.5 relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] sm:text-xs text-teal-800 font-bold uppercase tracking-wider block">Gate Admitted</span>
+            <span className="flex items-center gap-1 text-[10px] font-extrabold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+              Live Sync
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-2xl sm:text-3xl font-black text-teal-700 block truncate">{presentCount}</span>
+            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200">
+              {attendanceRate}% Present
+            </span>
+          </div>
+          <span className="text-[10px] sm:text-[11px] text-teal-700/80 font-medium block truncate">
+            {Math.max(0, approvedCount - presentCount)} couples awaiting arrival
+          </span>
         </div>
 
         <div className="p-4 sm:p-5 bg-white border border-stone-200/90 rounded-2xl shadow-xs space-y-1.5">

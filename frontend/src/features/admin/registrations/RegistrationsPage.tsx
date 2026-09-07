@@ -158,6 +158,33 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Silent 6-second live polling for gate attendance synchronization across devices
+  useEffect(() => {
+    if (viewMode !== 'all') return;
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible' && !searchQuery) {
+        const isVipParam = entryTypeFilter === 'vip' ? 'true' : entryTypeFilter === 'regular' ? 'false' : undefined;
+        registrationsApi.getSubmissions({
+          page: currentPage,
+          limit: pageSize,
+          search: searchQuery,
+          status: statusFilter,
+          paymentStatus: paymentFilter,
+          programId: selectedProgramId,
+          attendance: attendanceFilter,
+          ...(isVipParam !== undefined ? { isVip: isVipParam } : {})
+        }).then(res => {
+          if (res?.submissions) {
+            setSubmissions(res.submissions);
+            setTotalSubmissions(res.totalSubmissions || res.total || 0);
+          }
+        }).catch(() => {});
+      }
+    }, 6000);
+
+    return () => clearInterval(interval);
+  }, [currentPage, selectedProgramId, statusFilter, paymentFilter, attendanceFilter, entryTypeFilter, viewMode, pageSize, searchQuery]);
+
   const getCleanDigits = (phone?: string) => {
     if (!phone) return '';
     return phone.replace(/\D/g, '').slice(-10);
