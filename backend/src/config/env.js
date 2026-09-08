@@ -139,6 +139,7 @@ export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT || 5001,
   PUBLIC_APP_URL: process.env.PUBLIC_APP_URL || (APP_ENV === 'production' ? 'https://www.ekdujekeliye.in' : 'http://localhost:3000'),
+  BACKEND_URL: process.env.BACKEND_URL || (APP_ENV === 'production' ? 'https://api.ekdujekeliye.in' : 'http://localhost:5001'),
 
   // Database
   MONGO_URI: resolvedMongoUri,
@@ -211,7 +212,9 @@ export const env = {
   LEGACY_CLOUDINARY_READ_FALLBACK: process.env.LEGACY_CLOUDINARY_READ_FALLBACK !== 'false',
   HISTORICAL_MEDIA_PROVIDER: (process.env.HISTORICAL_MEDIA_PROVIDER || 'drive').toLowerCase(),
 
-  ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()) : ['*']
+  ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
+    : (APP_ENV === 'production' ? ['https://ekdujekeliye.in', 'https://www.ekdujekeliye.in'] : ['*'])
 };
 
 // Fail-Fast: If MEDIA_WRITE_PROVIDER is R2, ensure all required R2 credentials are present

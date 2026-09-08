@@ -3,11 +3,28 @@ import { env } from './env.js';
 
 export const corsMiddleware = cors({
   origin: (origin, callback) => {
-    // If no origin (e.g. mobile app, curl, server-to-server) or allowed origins contains '*', allow
-    if (!origin || env.ALLOWED_ORIGINS.includes('*') || env.ALLOWED_ORIGINS.includes(origin)) {
+    // If no origin (e.g. mobile app, curl, server-to-server, webhooks) allow
+    if (!origin) {
       return callback(null, true);
     }
-    // Dynamic matching for development/preview URLs
+
+    // In production: strictly enforce canonical frontend domains (no wildcard '*')
+    if (env.APP_ENV === 'production') {
+      const isAllowed =
+        env.ALLOWED_ORIGINS.includes(origin) ||
+        origin === 'https://ekdujekeliye.in' ||
+        origin === 'https://www.ekdujekeliye.in' ||
+        (origin.endsWith('.vercel.app') && origin.includes('ekdujekeliye'));
+      if (isAllowed) {
+        return callback(null, true);
+      }
+      return callback(new Error(`[CORS Blocked] Unauthorized origin in production: ${origin}`));
+    }
+
+    // Development / non-production
+    if (env.ALLOWED_ORIGINS.includes('*') || env.ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
     if (origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('vercel.app') || origin.includes('ekdujekeliye.in')) {
       return callback(null, true);
     }

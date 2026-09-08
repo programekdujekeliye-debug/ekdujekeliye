@@ -55,8 +55,8 @@ This folder contains the complete zero-cost **Google Apps Script** worker respon
 
 | Property | Value | Description |
 | :--- | :--- | :--- |
-| `BACKEND_URL` | `https://ekdujekeliye.onrender.com` | Your live backend URL |
-| `ARCHIVE_WORKER_SECRET` | `edkl_archive_worker_secret_2026` | Matches `ARCHIVE_WORKER_SECRET` in Render |
+| `BACKEND_URL` | `https://api.ekdujekeliye.in` | Your live canonical backend URL |
+| `ARCHIVE_WORKER_SECRET` | `edkl_archive_worker_secret_2026` | Matches `ARCHIVE_WORKER_SECRET` in backend environment |
 | `ROOT_FOLDER_NAME` | `Ek Duje Ke Liye` | Name of the root folder in your Drive |
 
 4. Click **Save script properties**.

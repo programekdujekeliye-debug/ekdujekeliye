@@ -13,7 +13,7 @@
  * 1. Open https://script.google.com and create a new project: "EDKL Drive Archive Worker".
  * 2. Paste this entire Code.gs file.
  * 3. Go to Project Settings -> Script Properties and add:
- *    - BACKEND_URL: https://ekdujekeliye.onrender.com (or your production API URL)
+ *    - BACKEND_URL: https://api.ekdujekeliye.in (or your production API URL)
  *    - ARCHIVE_WORKER_SECRET: 023176b693554f4439e2f67716e0760a8ff953c2aee2165dbd485237ab6297fe
  *    - GOOGLE_MEDIA_VIEW_SECRET: 9fb1ae65a72e7c03977af4cd252ce915652dc100df1732292d161b6adba47510
  *    - ROOT_FOLDER_NAME: Ek Duje Ke Liye (optional, defaults to "Ek Duje Ke Liye")

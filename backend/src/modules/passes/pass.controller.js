@@ -38,14 +38,14 @@ export async function getPassDetails(req, res) {
       return res.redirect(302, `${publicBaseUrl}/pass/${encodeURIComponent(cleanInquiryId)}`);
     }
 
-    // 2. Direct onrender.com host access guard:
-    // Disallow public arbitrary scraping or direct calls to onrender.com host from unauthorized websites
+    // 2. Direct platform host access guard:
+    // Disallow public arbitrary scraping or direct calls to raw platform origins (onrender.com, ondigitalocean.app) from unauthorized websites
     const host = String(req.headers.host || '').toLowerCase();
     const origin = String(req.headers.origin || '').toLowerCase();
     const referer = String(req.headers.referer || '').toLowerCase();
     const xForwardedHost = String(req.headers['x-forwarded-host'] || '').toLowerCase();
 
-    const isDirectRenderCall = host.includes('onrender.com');
+    const isDirectPlatformCall = host.includes('onrender.com') || host.includes('ondigitalocean.app');
     const isFromAuthorizedDomain =
       !origin ||
       origin.includes('ekdujekeliye.in') ||
@@ -56,7 +56,7 @@ export async function getPassDetails(req, res) {
       host.includes('localhost') ||
       env.NODE_ENV !== 'production';
 
-    if (isDirectRenderCall && origin && !isFromAuthorizedDomain) {
+    if (isDirectPlatformCall && origin && !isFromAuthorizedDomain) {
       return res.status(403).json({
         error: 'Direct access to backend API URL is prohibited.',
         message: `Please view digital pass securely via the official portal at ${publicBaseUrl}/pass/${encodeURIComponent(cleanInquiryId)}`
