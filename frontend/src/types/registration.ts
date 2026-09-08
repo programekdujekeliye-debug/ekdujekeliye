@@ -29,6 +29,7 @@ export interface Submission {
   photoZoom?: number;
   photoOffsetX?: number;
   photoOffsetY?: number;
+  photoRotate?: number;
   photoLink?: string;
   isVip?: boolean;
   isDeleted?: boolean;

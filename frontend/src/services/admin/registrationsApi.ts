@@ -138,7 +138,7 @@ export const registrationsApi = {
     });
   },
 
-  async bulkUpdateFrameAlignments(alignments: Array<{ inquiryId: string; photoZoom: number; photoOffsetX: number; photoOffsetY: number }>): Promise<{ success: boolean; modifiedCount: number }> {
+  async bulkUpdateFrameAlignments(alignments: Array<{ inquiryId: string; photoZoom: number; photoOffsetX: number; photoOffsetY: number; photoRotate?: number }>): Promise<{ success: boolean; modifiedCount: number }> {
     return apiClient('/api/submissions/bulk-alignments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

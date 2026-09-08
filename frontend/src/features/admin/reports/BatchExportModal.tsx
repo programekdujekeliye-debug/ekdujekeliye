@@ -193,8 +193,12 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         if (coupleImg) {
+          const rotation = ((sub.photoRotate ?? 0) % 360 + 360) % 360;
+          const isSideways = rotation === 90 || rotation === 270;
+          const visualWidth = isSideways ? coupleImg.height : coupleImg.width;
+          const visualHeight = isSideways ? coupleImg.width : coupleImg.height;
           const targetRatio = drawWidth / drawHeight;
-          const imgRatio = coupleImg.width / coupleImg.height;
+          const imgRatio = visualWidth / visualHeight;
           let tempW = drawWidth;
           let tempH = drawHeight;
           let offsetX = 0;
@@ -214,11 +218,21 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
           const ox = (offsetX - (w - tempW) / 2) + ((sub.photoOffsetX ?? 0) * (canvas.width / 768));
           const oy = (offsetY - (h - tempH) / 2) + ((sub.photoOffsetY ?? 0) * (canvas.height / 1024));
 
+          const centerX = startX + ox + w / 2;
+          const centerY = startY + oy + h / 2;
+          const drawImgW = isSideways ? h : w;
+          const drawImgH = isSideways ? w : h;
+
           ctx.save();
           ctx.beginPath();
           ctx.rect(startX, startY, drawWidth, drawHeight);
           ctx.clip();
-          ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
+
+          ctx.translate(centerX, centerY);
+          if (rotation !== 0) {
+            ctx.rotate((rotation * Math.PI) / 180);
+          }
+          ctx.drawImage(coupleImg, -drawImgW / 2, -drawImgH / 2, drawImgW, drawImgH);
           ctx.restore();
         } else {
           // Placeholder if image failed to load

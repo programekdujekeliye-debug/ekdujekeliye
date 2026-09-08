@@ -48,6 +48,7 @@ const RegistrationSchema = new mongoose.Schema({
   photoZoom: { type: Number, default: 1.0 },
   photoOffsetX: { type: Number, default: 0 },
   photoOffsetY: { type: Number, default: 0 },
+  photoRotate: { type: Number, default: 0 },
   frameExportStatus: {
     type: String,
     enum: ['NOT_EXPORTED', 'EXPORTED', 'MODIFIED'],

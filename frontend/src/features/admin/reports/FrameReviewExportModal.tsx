@@ -333,19 +333,24 @@ const LivePreviewCanvas: React.FC<{
     const drawWidth = canvas.width * 0.84;
     const drawHeight = canvas.height * 0.84;
 
+    const rotation = ((sub.photoRotate ?? 0) % 360 + 360) % 360;
+    const isSideways = rotation === 90 || rotation === 270;
+
     if (coupleImg) {
-      const imgAspect = coupleImg.width / coupleImg.height;
+      const visualWidth = isSideways ? coupleImg.height : coupleImg.width;
+      const visualHeight = isSideways ? coupleImg.width : coupleImg.height;
+      const visualAspect = visualWidth / visualHeight;
       const targetAspect = drawWidth / drawHeight;
       let tempW = drawWidth;
       let tempH = drawHeight;
       let offsetX = 0;
       let offsetY = 0;
 
-      if (imgAspect > targetAspect) {
-        tempW = drawHeight * imgAspect;
+      if (visualAspect > targetAspect) {
+        tempW = drawHeight * visualAspect;
         offsetX = -(tempW - drawWidth) / 2;
       } else {
-        tempH = drawWidth / imgAspect;
+        tempH = drawWidth / visualAspect;
         offsetY = -(tempH - drawHeight) / 2;
       }
 
@@ -355,11 +360,21 @@ const LivePreviewCanvas: React.FC<{
       const ox = offsetX - (w - tempW) / 2 + ((sub.photoOffsetX ?? 0) * (canvas.width / 768));
       const oy = offsetY - (h - tempH) / 2 + ((sub.photoOffsetY ?? 0) * (canvas.height / 1024));
 
+      const centerX = startX + ox + w / 2;
+      const centerY = startY + oy + h / 2;
+      const drawImgW = isSideways ? h : w;
+      const drawImgH = isSideways ? w : h;
+
       ctx.save();
       ctx.beginPath();
       ctx.rect(startX, startY, drawWidth, drawHeight);
       ctx.clip();
-      ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
+
+      ctx.translate(centerX, centerY);
+      if (rotation !== 0) {
+        ctx.rotate((rotation * Math.PI) / 180);
+      }
+      ctx.drawImage(coupleImg, -drawImgW / 2, -drawImgH / 2, drawImgW, drawImgH);
       ctx.restore();
     } else {
       ctx.fillStyle = '#f1f5f9';
@@ -370,7 +385,7 @@ const LivePreviewCanvas: React.FC<{
       ctx.fillText(loadingImg ? 'Loading photo...' : 'No photo uploaded', canvas.width / 2, canvas.height / 2);
     }
 
-    // Draw frame overlay if loaded
+    // Draw frame overlay if loaded - Overlay frame remains strictly static/unrotated
     if (activeFrame) {
       ctx.drawImage(activeFrame, 0, 0, canvas.width, canvas.height);
     }
@@ -382,7 +397,7 @@ const LivePreviewCanvas: React.FC<{
     ctx.textAlign = 'center';
     ctx.fillText(sub.inquiryId, canvas.width / 2, canvas.height * 0.95);
     ctx.restore();
-  }, [coupleImg, activeFrame, sub.photoZoom, sub.photoOffsetX, sub.photoOffsetY, sub.inquiryId, loadingImg]);
+  }, [coupleImg, activeFrame, sub.photoZoom, sub.photoOffsetX, sub.photoOffsetY, sub.photoRotate, sub.inquiryId, loadingImg]);
 
   return (
     <div className="w-[110px] h-[146px] sm:w-[124px] sm:h-[165px] relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-950 shrink-0 shadow-inner select-none">
@@ -599,7 +614,8 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         await registrationsApi.updateSubmission(sub.inquiryId, {
           photoZoom: sub.photoZoom ?? 1.0,
           photoOffsetX: sub.photoOffsetX ?? 0,
-          photoOffsetY: sub.photoOffsetY ?? 0
+          photoOffsetY: sub.photoOffsetY ?? 0,
+          photoRotate: sub.photoRotate ?? 0
         });
         setAutoSavingMap((prev) => ({ ...prev, [sub.inquiryId]: 'saved' }));
         setSubmissions((prev) =>
@@ -628,13 +644,29 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
   // Real-time alignment state update
   const updateCoord = (
     inquiryId: string,
-    field: 'photoZoom' | 'photoOffsetX' | 'photoOffsetY',
+    field: 'photoZoom' | 'photoOffsetX' | 'photoOffsetY' | 'photoRotate',
     value: number
   ) => {
     setSubmissions((prev) =>
       prev.map((sub) => {
         if (sub.inquiryId === inquiryId) {
           const updated = { ...sub, [field]: value };
+          triggerAutoSave(updated);
+          return updated;
+        }
+        return sub;
+      })
+    );
+  };
+
+  // Quick rotation handler (rotates only photo, frame stays fixed)
+  const handleRotatePhoto = (inquiryId: string, deltaDeg: number = 90) => {
+    setSubmissions((prev) =>
+      prev.map((sub) => {
+        if (sub.inquiryId === inquiryId) {
+          const cur = sub.photoRotate ?? 0;
+          const next = ((cur + deltaDeg) % 360 + 360) % 360;
+          const updated = { ...sub, photoRotate: next };
           triggerAutoSave(updated);
           return updated;
         }
@@ -650,7 +682,8 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       await registrationsApi.updateSubmission(sub.inquiryId, {
         photoZoom: sub.photoZoom ?? 1.0,
         photoOffsetX: sub.photoOffsetX ?? 0,
-        photoOffsetY: sub.photoOffsetY ?? 0
+        photoOffsetY: sub.photoOffsetY ?? 0,
+        photoRotate: sub.photoRotate ?? 0
       });
       setSavedSuccessIds((prev) => ({ ...prev, [sub.inquiryId]: true }));
       setSubmissions((prev) =>
@@ -661,6 +694,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                 photoZoom: sub.photoZoom ?? 1.0,
                 photoOffsetX: sub.photoOffsetX ?? 0,
                 photoOffsetY: sub.photoOffsetY ?? 0,
+                photoRotate: sub.photoRotate ?? 0,
                 frameExportStatus: s.frameExportStatus === 'EXPORTED' ? 'MODIFIED' : s.frameExportStatus
               }
             : s
@@ -742,19 +776,24 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       const drawWidth = canvas.width * 0.84;
       const drawHeight = canvas.height * 0.84;
 
+      const rotation = ((sub.photoRotate ?? 0) % 360 + 360) % 360;
+      const isSideways = rotation === 90 || rotation === 270;
+
       if (coupleImg) {
-        const imgAspect = coupleImg.width / coupleImg.height;
+        const visualWidth = isSideways ? coupleImg.height : coupleImg.width;
+        const visualHeight = isSideways ? coupleImg.width : coupleImg.height;
+        const visualAspect = visualWidth / visualHeight;
         const targetAspect = drawWidth / drawHeight;
         let tempW = drawWidth;
         let tempH = drawHeight;
         let offsetX = 0;
         let offsetY = 0;
 
-        if (imgAspect > targetAspect) {
-          tempW = drawHeight * imgAspect;
+        if (visualAspect > targetAspect) {
+          tempW = drawHeight * visualAspect;
           offsetX = -(tempW - drawWidth) / 2;
         } else {
-          tempH = drawWidth / imgAspect;
+          tempH = drawWidth / visualAspect;
           offsetY = -(tempH - drawHeight) / 2;
         }
 
@@ -764,11 +803,21 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         const ox = offsetX - (w - tempW) / 2 + (sub.photoOffsetX ?? 0) * (canvas.width / 768);
         const oy = offsetY - (h - tempH) / 2 + (sub.photoOffsetY ?? 0) * (canvas.height / 1024);
 
+        const centerX = startX + ox + w / 2;
+        const centerY = startY + oy + h / 2;
+        const drawImgW = isSideways ? h : w;
+        const drawImgH = isSideways ? w : h;
+
         ctx.save();
         ctx.beginPath();
         ctx.rect(startX, startY, drawWidth, drawHeight);
         ctx.clip();
-        ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
+
+        ctx.translate(centerX, centerY);
+        if (rotation !== 0) {
+          ctx.rotate((rotation * Math.PI) / 180);
+        }
+        ctx.drawImage(coupleImg, -drawImgW / 2, -drawImgH / 2, drawImgW, drawImgH);
         ctx.restore();
       }
 
@@ -857,19 +906,24 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
           const drawWidth = canvas.width * 0.84;
           const drawHeight = canvas.height * 0.84;
 
+          const rotation = ((sub.photoRotate ?? 0) % 360 + 360) % 360;
+          const isSideways = rotation === 90 || rotation === 270;
+
           if (coupleImg) {
-            const imgAspect = coupleImg.width / coupleImg.height;
+            const visualWidth = isSideways ? coupleImg.height : coupleImg.width;
+            const visualHeight = isSideways ? coupleImg.width : coupleImg.height;
+            const visualAspect = visualWidth / visualHeight;
             const targetAspect = drawWidth / drawHeight;
             let tempW = drawWidth;
             let tempH = drawHeight;
             let offsetX = 0;
             let offsetY = 0;
 
-            if (imgAspect > targetAspect) {
-              tempW = drawHeight * imgAspect;
+            if (visualAspect > targetAspect) {
+              tempW = drawHeight * visualAspect;
               offsetX = -(tempW - drawWidth) / 2;
             } else {
-              tempH = drawWidth / imgAspect;
+              tempH = drawWidth / visualAspect;
               offsetY = -(tempH - drawHeight) / 2;
             }
 
@@ -879,11 +933,21 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
             const ox = offsetX - (w - tempW) / 2 + (sub.photoOffsetX ?? 0) * (canvas.width / 768);
             const oy = offsetY - (h - tempH) / 2 + (sub.photoOffsetY ?? 0) * (canvas.height / 1024);
 
+            const centerX = startX + ox + w / 2;
+            const centerY = startY + oy + h / 2;
+            const drawImgW = isSideways ? h : w;
+            const drawImgH = isSideways ? w : h;
+
             ctx.save();
             ctx.beginPath();
             ctx.rect(startX, startY, drawWidth, drawHeight);
             ctx.clip();
-            ctx.drawImage(coupleImg, startX + ox, startY + oy, w, h);
+
+            ctx.translate(centerX, centerY);
+            if (rotation !== 0) {
+              ctx.rotate((rotation * Math.PI) / 180);
+            }
+            ctx.drawImage(coupleImg, -drawImgW / 2, -drawImgH / 2, drawImgW, drawImgH);
             ctx.restore();
           } else {
             ctx.fillStyle = '#f8fafc';
@@ -933,7 +997,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
       const progName = curProg ? curProg.name : 'Event';
 
       let manifestCsv =
-        'Token ID,Husband Name,Wife Name,Surname,Mobile Number,Print Status,Payment Status,Zoom,Offset Y,Printed Checkbox,Desk Handover Checkbox\n';
+        'Token ID,Husband Name,Wife Name,Surname,Mobile Number,Print Status,Payment Status,Zoom,Offset Y,Rotation,Printed Checkbox,Desk Handover Checkbox\n';
       listToExport.forEach((sub) => {
         const pStatus =
           sub.frameExportStatus === 'EXPORTED'
@@ -944,7 +1008,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         const payStatus = sub.status === 'approved' || sub.payment?.status === 'captured' ? 'PAID' : 'PENDING';
         manifestCsv += `"${sub.inquiryId}","${sub.husbandName}","${sub.wifeName}","${sub.surname || ''}","${
           sub.phoneNumber || ''
-        }","${pStatus}","${payStatus}","${sub.photoZoom ?? 1.0}","${sub.photoOffsetY ?? 0}","[  ] Printed","[  ] Handed Over"\n`;
+        }","${pStatus}","${payStatus}","${sub.photoZoom ?? 1.0}","${sub.photoOffsetY ?? 0}","${sub.photoRotate ?? 0}°","[  ] Printed","[  ] Handed Over"\n`;
       });
       zip.file(`Printing_Manifest_${progName.replace(/\s+/g, '_')}.csv`, manifestCsv);
 
@@ -1470,6 +1534,16 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                             </span>
                           ) : null}
 
+                          {/* Quick Rotate Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleRotatePhoto(sub.inquiryId, 90)}
+                            className="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs"
+                            title="Rotate photo 90° clockwise (Only photo rotates, frame stays fixed)"
+                          >
+                            <span className="text-sm font-black">↻</span>
+                            <span>Rotate{sub.photoRotate ? ` ${sub.photoRotate}°` : ''}</span>
+                          </button>
 
                           <button
                             type="button"
@@ -1480,7 +1554,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                 : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                             }`}
-                            title="Instant Save Zoom and Position"
+                            title="Instant Save Zoom, Position & Rotation"
                           >
                             {isSaving ? (
                               <div className="w-3 h-3 border-2 border-slate-600 border-t-transparent rounded-full animate-spin" />
@@ -1666,9 +1740,10 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                                       updateCoord(sub.inquiryId, 'photoZoom', 1.0);
                                       updateCoord(sub.inquiryId, 'photoOffsetX', 0);
                                       updateCoord(sub.inquiryId, 'photoOffsetY', 0);
+                                      updateCoord(sub.inquiryId, 'photoRotate', 0);
                                     }}
                                     className="px-1.5 h-6 rounded-lg bg-white border border-rose-300 hover:bg-rose-100 text-rose-800 font-bold text-[10px] flex items-center justify-center cursor-pointer shadow-2xs transition-all active:scale-95"
-                                    title="Reset All Coordinates"
+                                    title="Reset All Coordinates & Rotation"
                                   >
                                     ↺
                                   </button>
@@ -1692,8 +1767,6 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                               <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mr-0.5">
                                 Presets:
                               </span>
-
-
 
                               <button
                                 type="button"
@@ -1745,6 +1818,7 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
                                   updateCoord(sub.inquiryId, 'photoZoom', 1.0);
                                   updateCoord(sub.inquiryId, 'photoOffsetX', 0);
                                   updateCoord(sub.inquiryId, 'photoOffsetY', 0);
+                                  updateCoord(sub.inquiryId, 'photoRotate', 0);
                                 }}
                                 className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 rounded-md text-[10px] font-bold cursor-pointer transition-all"
                               >

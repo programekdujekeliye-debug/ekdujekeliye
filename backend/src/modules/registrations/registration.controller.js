@@ -1508,7 +1508,7 @@ export const updateSubmission = async (req, res) => {
     }
 
     // If photo or framing alignment is modified after export, mark as MODIFIED so admin knows it needs reprint
-    if (updateData.photoZoom !== undefined || updateData.photoOffsetX !== undefined || updateData.photoOffsetY !== undefined || updateData.couplePhoto || newPhotoUploaded) {
+    if (updateData.photoZoom !== undefined || updateData.photoOffsetX !== undefined || updateData.photoOffsetY !== undefined || updateData.photoRotate !== undefined || updateData.couplePhoto || newPhotoUploaded) {
       if (existing.frameExportStatus === 'EXPORTED') {
         updateData.frameExportStatus = 'MODIFIED';
       }
@@ -1643,6 +1643,7 @@ export const bulkUpdateFrameAlignments = async (req, res) => {
             photoZoom: item.photoZoom,
             photoOffsetX: item.photoOffsetX,
             photoOffsetY: item.photoOffsetY,
+            ...(item.photoRotate !== undefined ? { photoRotate: item.photoRotate } : {}),
             frameExportStatus: 'MODIFIED'
           }
         }
