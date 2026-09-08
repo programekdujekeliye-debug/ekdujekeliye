@@ -32,6 +32,9 @@ export interface Submission {
   photoRotate?: number;
   photoLink?: string;
   isVip?: boolean;
+  vipLinkCode?: string;
+  vipLinkName?: string;
+  vipCategory?: string;
   isDeleted?: boolean;
   frameExportStatus?: 'NOT_EXPORTED' | 'EXPORTED' | 'MODIFIED';
   frameExportedAt?: string;

@@ -29,10 +29,14 @@ import { registrationsApi } from '../../../services/admin/registrationsApi';
 import { LuxurySelect } from '../../../components/LuxurySelect';
 import toast from 'react-hot-toast';
 
+export type VipCategory = 'TITLE_SPONSOR' | 'POWERED_BY' | 'CO_POWERED_BY' | 'SUPPORTED_BY' | 'VIP_GUEST' | 'CUSTOM';
+
 export interface VipLinkItem {
   _id: string;
   name: string;
   code: string;
+  category?: VipCategory;
+  sponsorName?: string;
   programId?: string;
   programName?: string;
   programDate?: string;
@@ -45,6 +49,78 @@ export interface VipLinkItem {
   createdAt?: string;
 }
 
+export const VIP_TIER_PRESETS: {
+  id: VipCategory;
+  label: string;
+  icon: string;
+  defaultSeats: number;
+  badgeBg: string;
+  borderBg: string;
+  gradient: string;
+  description: string;
+}[] = [
+  {
+    id: 'TITLE_SPONSOR',
+    label: 'Title Sponsor',
+    icon: '🏆',
+    defaultSeats: 20,
+    badgeBg: 'bg-amber-100 text-amber-900 border-amber-300',
+    borderBg: 'border-amber-400/80 bg-gradient-to-br from-amber-500/10 via-amber-100/30 to-amber-50/50',
+    gradient: 'from-amber-500 to-yellow-600',
+    description: 'Title sponsor quota (e.g. 20 couple passes)'
+  },
+  {
+    id: 'POWERED_BY',
+    label: 'Powered By',
+    icon: '⚡',
+    defaultSeats: 15,
+    badgeBg: 'bg-purple-100 text-purple-900 border-purple-300',
+    borderBg: 'border-purple-300/80 bg-gradient-to-br from-purple-500/10 via-purple-100/30 to-purple-50/50',
+    gradient: 'from-purple-600 to-indigo-600',
+    description: 'Powered-by partner quota (e.g. 15 couple passes)'
+  },
+  {
+    id: 'CO_POWERED_BY',
+    label: 'Co-Powered By',
+    icon: '🤝',
+    defaultSeats: 10,
+    badgeBg: 'bg-blue-100 text-blue-900 border-blue-300',
+    borderBg: 'border-blue-300/80 bg-gradient-to-br from-blue-500/10 via-blue-100/30 to-blue-50/50',
+    gradient: 'from-blue-600 to-cyan-600',
+    description: 'Co-powered partner quota (e.g. 10 couple passes)'
+  },
+  {
+    id: 'SUPPORTED_BY',
+    label: 'Supported By',
+    icon: '🎖️',
+    defaultSeats: 10,
+    badgeBg: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+    borderBg: 'border-emerald-300/80 bg-gradient-to-br from-emerald-500/10 via-emerald-100/30 to-emerald-50/50',
+    gradient: 'from-emerald-600 to-teal-600',
+    description: 'Supported-by partner quota (e.g. 10 couple passes)'
+  },
+  {
+    id: 'VIP_GUEST',
+    label: 'VIP Guest Link',
+    icon: '🌟',
+    defaultSeats: 25,
+    badgeBg: 'bg-rose-100 text-rose-900 border-rose-300',
+    borderBg: 'border-rose-300/80 bg-gradient-to-br from-rose-500/10 via-rose-100/30 to-rose-50/50',
+    gradient: 'from-rose-600 to-pink-600',
+    description: 'Special VIP invitees, trustees, committee (e.g. 25 couple passes)'
+  },
+  {
+    id: 'CUSTOM',
+    label: 'Custom VIP Link',
+    icon: '➕',
+    defaultSeats: 0,
+    badgeBg: 'bg-slate-100 text-slate-800 border-slate-300',
+    borderBg: 'border-slate-300/80 bg-slate-50',
+    gradient: 'from-slate-700 to-slate-900',
+    description: 'Custom quota & name for any group'
+  }
+];
+
 export const VipPassesPage = () => {
   const { programs, password, selectedProgramId: globalProgramId, setSelectedProgramId: setGlobalProgramId } = useAdmin();
 
@@ -53,6 +129,7 @@ export const VipPassesPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProgramId, setSelectedProgramId] = useState<string>(globalProgramId || 'all');
   const [attendanceFilter, setAttendanceFilter] = useState('all');
+  const [sponsorFilter, setSponsorFilter] = useState('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -64,9 +141,10 @@ export const VipPassesPage = () => {
   const [vipLinks, setVipLinks] = useState<VipLinkItem[]>([]);
   const [loadingLinks, setLoadingLinks] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
-  const [showCustomLinksSection, setShowCustomLinksSection] = useState(false);
   const [editingLink, setEditingLink] = useState<VipLinkItem | null>(null);
+  const [linkCategory, setLinkCategory] = useState<VipCategory>('CUSTOM');
   const [linkName, setLinkName] = useState('');
+  const [linkSponsorName, setLinkSponsorName] = useState('');
   const [linkCode, setLinkCode] = useState('');
   const [linkProgramId, setLinkProgramId] = useState('');
   const [linkMaxSeats, setLinkMaxSeats] = useState<number>(0);
@@ -177,16 +255,18 @@ export const VipPassesPage = () => {
   const fetchVipLinks = useCallback(async () => {
     try {
       setLoadingLinks(true);
-      const res: any = await apiClient('/api/admin/vip-links?_t=' + Date.now(), { skipCache: true });
-      if (res?.data && Array.isArray(res.data)) {
-        setVipLinks(res.data);
-      }
+      const queryParam = selectedProgramId && selectedProgramId !== 'all'
+        ? `?programId=${selectedProgramId}&_t=${Date.now()}`
+        : `?_t=${Date.now()}`;
+      const res: any = await apiClient(`/api/admin/vip-links${queryParam}`, { skipCache: true });
+      const list = res?.links || res?.data || (Array.isArray(res) ? res : []);
+      setVipLinks(list);
     } catch (err) {
       console.error('Failed to fetch VIP links:', err);
     } finally {
       setLoadingLinks(false);
     }
-  }, []);
+  }, [selectedProgramId]);
 
   useEffect(() => {
     fetchVipGuests();
@@ -338,9 +418,10 @@ export const VipPassesPage = () => {
       const res: any = await apiClient(`/api/admin/vip-links/${link._id}/toggle`, {
         method: 'POST'
       });
-      if (res?.data) {
-        setVipLinks((prev) => prev.map((l) => (l._id === link._id ? res.data : l)));
-        const newStatus = res.data.status;
+      const updated = res?.link || res?.data;
+      if (updated) {
+        setVipLinks((prev) => prev.map((l) => (l._id === link._id ? updated : l)));
+        const newStatus = updated.status;
         if (newStatus === 'HOUSEFULL') {
           toast.success(`VIP Link "${link.name}" is now marked HOUSEFULL! Registration closed.`);
         } else {
@@ -355,10 +436,6 @@ export const VipPassesPage = () => {
   };
 
   const handleDeleteLink = async (link: VipLinkItem) => {
-    if (link.isDefault || link.code === 'default') {
-      toast.error('The default VIP entry link cannot be deleted.');
-      return;
-    }
     if (!confirm(`Are you sure you want to delete VIP link "${link.name}" (${link.code})? Any visitor using this link will see page closed.`)) {
       return;
     }
@@ -374,9 +451,30 @@ export const VipPassesPage = () => {
     }
   };
 
+  const handleOpenPresetLinkModal = (presetId: VipCategory) => {
+    const preset = VIP_TIER_PRESETS.find((p) => p.id === presetId) || VIP_TIER_PRESETS[0];
+    const targetProg = programs.find((p) => p.id === selectedProgramId) || programs[0];
+    const dateSlug = targetProg?.date ? targetProg.date.toLowerCase().replace(/[^a-z0-9]/g, '') : 'event';
+    const randCode = Math.floor(100 + Math.random() * 900);
+    const slugPrefix = presetId.toLowerCase().replace(/_/g, '-');
+
+    setEditingLink(null);
+    setLinkCategory(presetId);
+    setLinkName(`${preset.label}${targetProg?.name ? ` - ${targetProg.name}` : ''}`);
+    setLinkSponsorName('');
+    setLinkCode(`${slugPrefix}-${dateSlug}-${randCode}`);
+    setLinkProgramId(targetProg?.id || '');
+    setLinkMaxSeats(preset.defaultSeats);
+    setLinkStatus('ACTIVE');
+    setLinkNotes('');
+    setShowLinkModal(true);
+  };
+
   const handleOpenCreateLinkModal = () => {
     setEditingLink(null);
+    setLinkCategory('CUSTOM');
     setLinkName('');
+    setLinkSponsorName('');
     setLinkCode('');
     setLinkProgramId(selectedProgramId && selectedProgramId !== 'all' ? selectedProgramId : (programs[0]?.id || ''));
     setLinkMaxSeats(0);
@@ -387,7 +485,9 @@ export const VipPassesPage = () => {
 
   const handleOpenEditLinkModal = (link: VipLinkItem) => {
     setEditingLink(link);
+    setLinkCategory(link.category || 'CUSTOM');
     setLinkName(link.name);
+    setLinkSponsorName(link.sponsorName || '');
     setLinkCode(link.code);
     setLinkProgramId(link.programId || (programs[0]?.id || ''));
     setLinkMaxSeats(link.maxSeats || 0);
@@ -407,6 +507,8 @@ export const VipPassesPage = () => {
       const selectedProg = programs.find((p) => p.id === linkProgramId);
       const payload = {
         name: linkName.trim(),
+        category: linkCategory,
+        sponsorName: linkSponsorName.trim(),
         code: linkCode.trim().toLowerCase().replace(/[^a-z0-9_-]/g, ''),
         programId: linkProgramId || undefined,
         programName: selectedProg?.name || undefined,
@@ -422,9 +524,10 @@ export const VipPassesPage = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        if (res?.data) {
-          setVipLinks((prev) => prev.map((l) => (l._id === editingLink._id ? res.data : l)));
-          toast.success(`VIP link "${res.data.name}" updated!`);
+        const updated = res?.link || res?.data;
+        if (updated) {
+          setVipLinks((prev) => prev.map((l) => (l._id === editingLink._id ? updated : l)));
+          toast.success(`VIP link "${updated.name}" updated!`);
         }
       } else {
         const res: any = await apiClient('/api/admin/vip-links', {
@@ -432,9 +535,10 @@ export const VipPassesPage = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        if (res?.data) {
-          setVipLinks((prev) => [res.data, ...prev]);
-          toast.success(`New VIP link "${res.data.name}" created!`);
+        const created = res?.link || res?.data;
+        if (created) {
+          setVipLinks((prev) => [created, ...prev]);
+          toast.success(`New VIP link "${created.name}" created!`);
         }
       }
       setShowLinkModal(false);
@@ -447,9 +551,7 @@ export const VipPassesPage = () => {
 
   const handleCopySpecificLink = (code: string) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.ekdujekeliye.in';
-    const url = code === 'default'
-      ? `${origin}/vip-entry`
-      : `${origin}/vip-entry?code=${encodeURIComponent(code)}`;
+    const url = `${origin}/vip-entry?code=${encodeURIComponent(code)}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(url);
       setCopiedLinkCode(code);
@@ -460,7 +562,7 @@ export const VipPassesPage = () => {
     }
   };
 
-  // Filter VIP list by search, attendance, and approval status
+  // Filter VIP list by search, attendance, sponsor, and approval status
   const filteredGuests = vipGuests.filter((g) => {
     const q = searchQuery.toLowerCase();
     const matchSearch =
@@ -469,7 +571,10 @@ export const VipPassesPage = () => {
       g.husbandName?.toLowerCase().includes(q) ||
       g.wifeName?.toLowerCase().includes(q) ||
       g.surname?.toLowerCase().includes(q) ||
-      g.phoneNumber?.includes(q);
+      g.phoneNumber?.includes(q) ||
+      (g.vipLinkName && g.vipLinkName.toLowerCase().includes(q)) ||
+      (g.vipCategory && g.vipCategory.toLowerCase().includes(q)) ||
+      (g.vipLinkCode && g.vipLinkCode.toLowerCase().includes(q));
 
     const matchAttendance =
       attendanceFilter === 'all' ||
@@ -481,7 +586,12 @@ export const VipPassesPage = () => {
       (approvalFilter === 'approved' && g.status !== 'pending') ||
       (approvalFilter === 'pending' && g.status === 'pending');
 
-    return matchSearch && matchAttendance && matchApproval;
+    const matchSponsor =
+      sponsorFilter === 'all' ||
+      (g.vipLinkCode === sponsorFilter) ||
+      (g.vipCategory === sponsorFilter);
+
+    return matchSearch && matchAttendance && matchApproval && matchSponsor;
   });
 
   const totalVipCount = vipGuests.length;
@@ -495,7 +605,7 @@ export const VipPassesPage = () => {
       toast.error('No VIP guests to export.');
       return;
     }
-    const headers = ['Pass ID', 'Husband Name', 'Wife Name', 'Surname', 'Phone Number', 'Event Slot', 'Attendance', 'Pass URL'];
+    const headers = ['Pass ID', 'Husband Name', 'Wife Name', 'Surname', 'Phone Number', 'Event Slot', 'Category / Sponsor', 'Link Code', 'Attendance', 'Pass URL'];
     const rows = filteredGuests.map((g) => [
       g.inquiryId,
       `"${g.husbandName}"`,
@@ -503,6 +613,8 @@ export const VipPassesPage = () => {
       `"${g.surname}"`,
       `'${g.phoneNumber}`,
       `"${g.programName || ''} (${g.programDate || ''})"`,
+      `"${g.vipCategory || g.vipLinkName || 'VIP'}"`,
+      `"${g.vipLinkCode || ''}"`,
       g.attendance === 'present' ? 'Present' : 'Pending',
       `${window.location.origin}/pass/${g.inquiryId}`
     ]);
@@ -666,299 +778,309 @@ export const VipPassesPage = () => {
         </div>
       </div>
 
-      {/* VIP Public Self-Registration Share Banner & Dynamic VIP Links */}
+      {/* Dynamic Per-Event VIP Links & Multi-Tier Sponsor Dashboard */}
       {(() => {
-        const defaultLink = vipLinks.find((l) => l.isDefault || l.code === 'default') || {
-          _id: '',
-          name: "Today's VIP Entry Link",
-          code: 'default',
-          status: 'HOUSEFULL' as const,
-          maxSeats: 0,
-          usedSeats: 0,
-          approvedSeats: approvedVipCount,
-          isDefault: true
-        };
-        const customLinks = vipLinks.filter((l) => !l.isDefault && l.code !== 'default');
-        const isDefaultHousefull = defaultLink.status === 'HOUSEFULL' || defaultLink.status === 'CLOSED';
+        const activeProg = programs.find((p) => p.id === selectedProgramId);
+        const eventLinks = vipLinks; // Filtered by programId when selectedProgramId !== 'all'
+        const totalAllocatedSeats = eventLinks.reduce((acc, l) => acc + (l.maxSeats || 0), 0);
+        const totalUsedSeats = eventLinks.reduce((acc, l) => acc + (l.usedSeats || 0), 0);
+        const totalApprovedInLinks = eventLinks.reduce((acc, l) => acc + (l.approvedSeats || 0), 0);
 
         return (
-          <div className="space-y-3">
-            {/* Main Default VIP Link Banner */}
-            <div className={`border rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shadow-xs transition-all ${
-              isDefaultHousefull 
-                ? 'bg-gradient-to-r from-rose-50/90 via-amber-50/40 to-white border-rose-200' 
-                : 'bg-gradient-to-r from-emerald-50/90 via-amber-50/40 to-white border-emerald-200'
-            }`}>
-              <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
-                <div className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center shadow-xs flex-shrink-0 ${
-                  isDefaultHousefull ? 'bg-gradient-to-br from-rose-600 to-amber-600' : 'bg-gradient-to-br from-emerald-600 to-teal-600'
-                }`}>
-                  <SparklesIcon className="w-6 h-6 text-white" />
+          <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
+            {/* Header: Event Context & Overall Quota Bar */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-500/10 via-amber-100/30 to-rose-500/10 border-b border-amber-200/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 bg-amber-600 text-white text-[10px] font-black uppercase rounded-full tracking-wider flex items-center gap-1 shadow-2xs">
+                    <SparklesIcon className="w-3 h-3 text-white" />
+                    <span>VIP &amp; Sponsor Links</span>
+                  </span>
+                  <span className="text-xs font-black text-slate-900">
+                    {activeProg ? `${activeProg.name} (${activeProg.date})` : 'All Event Slots'}
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-bold">
+                    &bull; {eventLinks.length} Active Links
+                  </span>
                 </div>
-                <div className="space-y-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-black uppercase tracking-wider text-slate-900">
-                      Today&apos;s VIP Entry Link &bull; મહેમાન રજીસ્ટ્રેશન લિંક
-                    </span>
-                    {isDefaultHousefull ? (
-                      <span className="px-2.5 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-black rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
-                        <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
-                        🔴 HOUSEFULL &bull; હાલ બંધ છે (Closed)
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
-                        <span className="w-2 h-2 rounded-full bg-emerald-600" />
-                        🟢 ACTIVE &bull; એન્ટ્રી ચાલુ છે (Open)
-                      </span>
-                    )}
-                    <span className="px-2 py-0.5 bg-amber-100 text-amber-900 text-[10px] font-bold rounded-full border border-amber-300">
-                      Approved: {defaultLink.approvedSeats || approvedVipCount} VIPs
-                    </span>
-                  </div>
-                  <p className="text-xs text-stone-600 font-medium">
-                    {isDefaultHousefull
-                      ? 'આ લિંક હાલમાં હાઉસફુલ (Housefull) છે. જાહેર મહેમાનો ફોર્મ ભરી શકશે નહીં.'
-                      : 'આ લિંક હાલમાં એક્ટિવ છે. મહેમાનો ફોર્મ ભરી શકશે અને અહીં Pending Approval માં આવશે.'}
-                  </p>
-                  <div className="text-xs font-mono font-bold text-stone-800 select-all bg-white px-2.5 py-1 rounded-lg border border-slate-200 inline-block shadow-2xs break-all">
-                    {typeof window !== 'undefined' ? `${window.location.origin}/vip-entry` : 'https://www.ekdujekeliye.in/vip-entry'}
-                  </div>
-                </div>
+                <p className="text-xs text-slate-600 font-medium">
+                  Multi-tier sponsor passes &amp; guest invite links. Share specific links with sponsors or trustees with controlled seat quotas.
+                </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-                {/* 1-Click Toggle Default Status */}
-                {defaultLink._id ? (
-                  <button
-                    type="button"
-                    disabled={togglingLinkId === defaultLink._id}
-                    onClick={() => handleToggleLinkStatus(defaultLink)}
-                    className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-black transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95 disabled:opacity-50 ${
-                      isDefaultHousefull
-                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                        : 'bg-rose-600 hover:bg-rose-700 text-white'
-                    }`}
-                    title={isDefaultHousefull ? 'Open this link to accept VIP entries' : 'Close this link and show Housefull'}
-                  >
-                    {togglingLinkId === defaultLink._id ? (
-                      <span>Updating...</span>
-                    ) : isDefaultHousefull ? (
-                      <span>🟢 Re-open Link (ચાલુ કરો)</span>
-                    ) : (
-                      <span>🔴 Mark Housefull (બંધ કરો)</span>
-                    )}
-                  </button>
-                ) : null}
-
-                <button
-                  type="button"
-                  onClick={() => handleCopySpecificLink('default')}
-                  className="flex-1 sm:flex-none px-4 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer whitespace-nowrap"
-                >
-                  <CheckIcon className="w-4 h-4" />
-                  <span>{copiedLinkCode === 'default' ? 'Copied!' : 'Copy VIP Link'}</span>
-                </button>
-
-                <a
-                  href="/vip-entry"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-stone-50 text-stone-800 border border-stone-300 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 whitespace-nowrap"
-                >
-                  <span>Open Form</span>
-                  <ExternalLinkIcon className="w-3.5 h-3.5 text-stone-500" />
-                </a>
-
-                <button
-                  type="button"
-                  onClick={handleOpenCreateLinkModal}
-                  className="flex-1 sm:flex-none px-4 py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-xl text-xs font-extrabold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-                >
-                  <span>+ Create Specific Link</span>
-                </button>
+              {/* Summary Stats Pill */}
+              <div className="flex items-center gap-3 bg-white/90 backdrop-blur-xs border border-amber-200/80 rounded-xl px-3.5 py-2 shadow-2xs">
+                <div className="text-center">
+                  <div className="text-[10px] uppercase font-extrabold text-slate-400">Total Quota</div>
+                  <div className="text-xs font-black text-slate-900">{totalAllocatedSeats > 0 ? `${totalAllocatedSeats} Seats` : 'Unlimited'}</div>
+                </div>
+                <div className="w-px h-6 bg-slate-200" />
+                <div className="text-center">
+                  <div className="text-[10px] uppercase font-extrabold text-amber-600">Registered</div>
+                  <div className="text-xs font-black text-amber-700">{totalUsedSeats}</div>
+                </div>
+                <div className="w-px h-6 bg-slate-200" />
+                <div className="text-center">
+                  <div className="text-[10px] uppercase font-extrabold text-emerald-600">Approved</div>
+                  <div className="text-xs font-black text-emerald-700">{totalApprovedInLinks}</div>
+                </div>
               </div>
             </div>
 
-            {/* Custom / Specific VIP Links Accordion & Manager */}
-            <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <TicketIcon className="w-4 h-4 text-amber-500" />
-                    <span>Specific VIP Links &amp; Quotas &bull; ખાસ મહેમાન/ટ્રસ્ટી લિંક્સ ({customLinks.length})</span>
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-medium">
-                    (Create links with seat quotas for sponsors, committee, or trustees)
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => setShowCustomLinksSection((prev) => !prev)}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1"
-                  >
-                    <span>{showCustomLinksSection ? 'Hide Details ▲' : `Manage Custom Links (${customLinks.length}) ▼`}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleOpenCreateLinkModal}
-                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1"
-                  >
-                    <span>+ New Link</span>
-                  </button>
+            {/* Quick 1-Click Tier Presets Toolbar */}
+            <div className="p-3.5 sm:p-4 bg-slate-50/70 border-b border-slate-200/70">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                  <TicketIcon className="w-3.5 h-3.5 text-amber-500" />
+                  <span>1-Click Generate Tier Link:</span>
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {VIP_TIER_PRESETS.map((tier) => (
+                    <button
+                      key={tier.id}
+                      type="button"
+                      onClick={() => tier.id === 'CUSTOM' ? handleOpenCreateLinkModal() : handleOpenPresetLinkModal(tier.id)}
+                      className={`px-3 py-1.5 text-xs font-extrabold rounded-xl border transition-all shadow-2xs hover:scale-102 active:scale-95 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                        tier.id === 'TITLE_SPONSOR'
+                          ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600'
+                          : tier.id === 'POWERED_BY'
+                          ? 'bg-purple-600 hover:bg-purple-700 text-white border-purple-700'
+                          : tier.id === 'CO_POWERED_BY'
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700'
+                          : tier.id === 'SUPPORTED_BY'
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
+                          : tier.id === 'VIP_GUEST'
+                          ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-700'
+                          : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
+                      }`}
+                      title={tier.description}
+                    >
+                      <span>{tier.icon}</span>
+                      <span>+ {tier.label}</span>
+                      {tier.defaultSeats > 0 && (
+                        <span className="opacity-80 text-[10px]">({tier.defaultSeats})</span>
+                      )}
+                    </button>
+                  ))}
                 </div>
               </div>
+            </div>
 
-              {showCustomLinksSection && (
-                <div className="pt-3 space-y-3">
-                  {loadingLinks ? (
-                    <div className="py-6 text-center text-xs text-slate-400 font-medium">
-                      Loading VIP links...
-                    </div>
-                  ) : customLinks.length === 0 ? (
-                    <div className="py-6 text-center space-y-2 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-                      <p className="text-xs font-bold text-slate-600">
-                        No custom VIP links created yet.
-                      </p>
-                      <p className="text-[11px] text-slate-400 max-w-md mx-auto">
-                        Create a specific link for a group (e.g. &quot;Diamond Sponsors&quot; or &quot;Trustee Family&quot;) with a max seat limit. Once seats are approved, it automatically closes!
-                      </p>
-                      <button
-                        type="button"
-                        onClick={handleOpenCreateLinkModal}
-                        className="mt-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+            {/* VIP Links List / Grid */}
+            <div className="p-4 sm:p-5">
+              {loadingLinks ? (
+                <div className="py-12 text-center text-xs text-slate-400 font-medium">
+                  Loading VIP links...
+                </div>
+              ) : eventLinks.length === 0 ? (
+                <div className="py-10 text-center space-y-3 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50 p-6">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+                    <TicketIcon className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="font-extrabold text-sm text-slate-800">
+                      No VIP Links Created for {activeProg ? activeProg.name : 'this slot'}
+                    </h4>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      Create distinct quota-controlled links for Title Sponsor, Powered By, Co-Powered By, Supported By, or VIP Guest passes with 1 click above.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenPresetLinkModal('TITLE_SPONSOR')}
+                      className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black shadow-xs cursor-pointer"
+                    >
+                      🏆 Create Title Sponsor Link (20 seats)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenPresetLinkModal('VIP_GUEST')}
+                      className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-xs cursor-pointer"
+                    >
+                      🌟 Create VIP Guest Link (25 seats)
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {eventLinks.map((link) => {
+                    const preset = VIP_TIER_PRESETS.find((p) => p.id === link.category) || VIP_TIER_PRESETS[5];
+                    const isClosed = link.status === 'HOUSEFULL' || link.status === 'CLOSED';
+                    const isQuotaFull = link.maxSeats > 0 && (link.usedSeats >= link.maxSeats || link.approvedSeats >= link.maxSeats);
+                    const remainingSeats = link.maxSeats > 0 ? Math.max(0, link.maxSeats - link.usedSeats) : '∞';
+                    const pctUsed = link.maxSeats > 0 ? Math.min(100, Math.round((link.usedSeats / link.maxSeats) * 100)) : 0;
+                    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.ekdujekeliye.in';
+                    const fullUrl = `${origin}/vip-entry?code=${encodeURIComponent(link.code)}`;
+                    const waShareMsg = `નમસ્તે, એક દુજે કે લિયે સેમિનાર (${link.programName || 'VIP Slot'}) માટે તમારી ખાસ VIP રજીસ્ટ્રેશન લિંક:\n${fullUrl}\n\nકૃપા કરી આપની વિગતો ભરી પાસ કન્ફર્મ કરો.`;
+                    const waShareUrl = `https://wa.me/?text=${encodeURIComponent(waShareMsg)}`;
+
+                    return (
+                      <div
+                        key={link._id}
+                        className={`border rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-3.5 transition-all shadow-xs relative ${
+                          isClosed
+                            ? 'bg-rose-50/40 border-rose-200'
+                            : 'bg-white border-slate-200 hover:border-amber-300 hover:shadow-md'
+                        }`}
                       >
-                        + Create First Specific Link
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500 bg-slate-50/80">
-                            <th className="py-2.5 px-3">Link Name &amp; Code</th>
-                            <th className="py-2.5 px-3">Event Slot</th>
-                            <th className="py-2.5 px-3 text-center">Seat Quota</th>
-                            <th className="py-2.5 px-3 text-center">Status</th>
-                            <th className="py-2.5 px-3 text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {customLinks.map((link) => {
-                            const isLinkHousefull = link.status === 'HOUSEFULL' || link.status === 'CLOSED';
-                            const isQuotaReached = link.maxSeats > 0 && link.approvedSeats >= link.maxSeats;
+                        {/* Top: Category Tag & Status Pill */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-2xs flex items-center gap-1 ${preset.badgeBg}`}>
+                              <span>{preset.icon}</span>
+                              <span>{preset.label}</span>
+                            </span>
+                            {link.sponsorName && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                {link.sponsorName}
+                              </span>
+                            )}
+                          </div>
 
-                            return (
-                              <tr key={link._id} className="hover:bg-amber-50/30 transition-colors">
-                                <td className="py-3 px-3">
-                                  <div className="font-bold text-slate-900 text-xs">{link.name}</div>
-                                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                    <span className="font-mono text-[10px] text-amber-900 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-bold">
-                                      code={link.code}
-                                    </span>
-                                    {link.notes && (
-                                      <span className="text-[10px] text-slate-400 italic">
-                                        &bull; {link.notes}
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="py-3 px-3 text-slate-600">
-                                  <div className="font-medium text-xs">{link.programName || 'Any / All Event Slots'}</div>
-                                  {link.programDate && (
-                                    <div className="text-[10px] text-slate-400">{link.programDate}</div>
-                                  )}
-                                </td>
-                                <td className="py-3 px-3 text-center">
-                                  <div className="inline-flex flex-col items-center">
-                                    <span className={`text-xs font-black ${isQuotaReached ? 'text-rose-600' : 'text-slate-800'}`}>
-                                      {link.approvedSeats || 0} / {link.maxSeats > 0 ? link.maxSeats : '∞'}
-                                    </span>
-                                    <span className="text-[9px] uppercase font-bold text-slate-400">
-                                      {link.maxSeats > 0 ? (isQuotaReached ? 'Quota Full' : `${link.maxSeats - (link.approvedSeats || 0)} left`) : 'Unlimited'}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="py-3 px-3 text-center">
-                                  {isLinkHousefull ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-[10px] font-black uppercase">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
-                                      Housefull
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-black uppercase">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                                      Active
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="py-3 px-3 text-right">
-                                  <div className="flex items-center justify-end gap-1.5">
-                                    {/* 1-Click Toggle */}
-                                    <button
-                                      type="button"
-                                      disabled={togglingLinkId === link._id}
-                                      onClick={() => handleToggleLinkStatus(link)}
-                                      className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition-all cursor-pointer ${
-                                        isLinkHousefull
-                                          ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'
-                                          : 'bg-rose-100 hover:bg-rose-200 text-rose-800'
-                                      }`}
-                                      title={isLinkHousefull ? 'Re-open this VIP link' : 'Close this link (Mark Housefull)'}
-                                    >
-                                      {togglingLinkId === link._id ? '...' : isLinkHousefull ? 'Open' : 'Close'}
-                                    </button>
+                          {/* Status Pill */}
+                          {isClosed ? (
+                            <span className="px-2.5 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-black rounded-full uppercase tracking-wider flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse" />
+                              🔴 Housefull
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black rounded-full uppercase tracking-wider flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                              🟢 Active (Open)
+                            </span>
+                          )}
+                        </div>
 
-                                    {/* Copy */}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleCopySpecificLink(link.code)}
-                                      className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors cursor-pointer"
-                                      title="Copy Link URL"
-                                    >
-                                      <CheckIcon className={`w-3.5 h-3.5 ${copiedLinkCode === link.code ? 'text-emerald-600' : 'text-slate-500'}`} />
-                                    </button>
+                        {/* Middle: Link Title & Program slot */}
+                        <div className="space-y-1">
+                          <h4 className="font-black text-slate-900 text-sm leading-tight">
+                            {link.name}
+                          </h4>
+                          <div className="text-[11px] text-slate-500 font-medium">
+                            {link.programName || 'All Event Slots'} {link.programDate ? `• ${link.programDate}` : ''}
+                          </div>
+                          {link.notes && (
+                            <p className="text-[10px] text-slate-400 italic line-clamp-1">
+                              {link.notes}
+                            </p>
+                          )}
+                        </div>
 
-                                    {/* Open Link */}
-                                    <a
-                                      href={`/vip-entry?code=${encodeURIComponent(link.code)}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
-                                      title="Open in new tab"
-                                    >
-                                      <ExternalLinkIcon className="w-3.5 h-3.5 text-slate-500" />
-                                    </a>
+                        {/* URL Pill */}
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2">
+                          <span className="font-mono text-[11px] font-bold text-amber-900 truncate select-all">
+                            /vip-entry?code={link.code}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopySpecificLink(link.code)}
+                            className="text-[10px] font-black text-amber-700 hover:text-amber-800 px-2 py-0.5 rounded bg-amber-100/70 hover:bg-amber-200/70 transition-colors flex-shrink-0 cursor-pointer"
+                          >
+                            {copiedLinkCode === link.code ? '✓ Copied' : 'Copy'}
+                          </button>
+                        </div>
 
-                                    {/* Edit */}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenEditLinkModal(link)}
-                                      className="p-1.5 hover:bg-amber-100 rounded-lg text-amber-700 transition-colors cursor-pointer"
-                                      title="Edit Link & Seats"
-                                    >
-                                      <EditIcon className="w-3.5 h-3.5" />
-                                    </button>
+                        {/* Quota Progress Meter */}
+                        <div className="space-y-1.5 bg-slate-50/80 rounded-xl p-2.5 border border-slate-100">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-700 flex items-center gap-1">
+                              <span>Seats:</span>
+                              <strong className="text-slate-900 font-black">
+                                {link.usedSeats || 0} / {link.maxSeats > 0 ? link.maxSeats : '∞'}
+                              </strong>
+                              <span className="text-[10px] text-slate-400">
+                                ({link.approvedSeats || 0} Approved)
+                              </span>
+                            </span>
+                            <span className={`text-[10px] font-black uppercase ${isQuotaFull ? 'text-rose-600' : 'text-emerald-700'}`}>
+                              {link.maxSeats > 0 ? (isQuotaFull ? '🔴 Housefull' : `${remainingSeats} Left`) : 'Unlimited'}
+                            </span>
+                          </div>
 
-                                    {/* Delete */}
-                                    <button
-                                      type="button"
-                                      disabled={deletingLinkId === link._id}
-                                      onClick={() => handleDeleteLink(link)}
-                                      className="p-1.5 hover:bg-rose-100 rounded-lg text-rose-600 transition-colors cursor-pointer disabled:opacity-50"
-                                      title="Delete Link"
-                                    >
-                                      <TrashIcon className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                          {link.maxSeats > 0 && (
+                            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={`h-full transition-all duration-300 rounded-full ${
+                                  isQuotaFull ? 'bg-rose-600' : pctUsed > 80 ? 'bg-amber-500' : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${pctUsed}%` }}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Actions Row */}
+                        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1.5">
+                          {/* 1-Click Status Toggle */}
+                          <button
+                            type="button"
+                            disabled={togglingLinkId === link._id}
+                            onClick={() => handleToggleLinkStatus(link)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all shadow-2xs flex items-center gap-1 cursor-pointer whitespace-nowrap active:scale-95 disabled:opacity-50 ${
+                              isClosed
+                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                : 'bg-rose-600 hover:bg-rose-700 text-white'
+                            }`}
+                            title={isClosed ? 'Re-open this link for registration' : 'Mark Housefull and close link immediately'}
+                          >
+                            {togglingLinkId === link._id ? (
+                              <span>...</span>
+                            ) : isClosed ? (
+                              <span>🟢 Re-open Link</span>
+                            ) : (
+                              <span>🔴 Declare Housefull</span>
+                            )}
+                          </button>
+
+                          <div className="flex items-center gap-1">
+                            {/* Open Public Form */}
+                            <a
+                              href={`/vip-entry?code=${encodeURIComponent(link.code)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 transition-colors"
+                              title="Open public registration form"
+                            >
+                              <ExternalLinkIcon className="w-3.5 h-3.5 text-slate-500" />
+                            </a>
+
+                            {/* WhatsApp Share */}
+                            <a
+                              href={waShareUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-emerald-700 transition-colors"
+                              title="Share VIP link on WhatsApp"
+                            >
+                              <WhatsappIcon className="w-3.5 h-3.5 text-emerald-600" />
+                            </a>
+
+                            {/* Edit Link */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditLinkModal(link)}
+                              className="p-1.5 hover:bg-amber-100 border border-amber-200 rounded-lg text-amber-700 transition-colors cursor-pointer"
+                              title="Edit link and seat quota"
+                            >
+                              <EditIcon className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Delete Link */}
+                            <button
+                              type="button"
+                              disabled={deletingLinkId === link._id}
+                              onClick={() => handleDeleteLink(link)}
+                              className="p-1.5 hover:bg-rose-100 border border-rose-200 rounded-lg text-rose-600 transition-colors cursor-pointer disabled:opacity-50"
+                              title="Delete VIP link"
+                            >
+                              <TrashIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1027,6 +1149,27 @@ export const VipPassesPage = () => {
                   value: p.id,
                   label: p.name,
                   sublabel: p.date
+                }))
+              ]}
+            />
+          </div>
+
+          <div className="w-full sm:w-48 min-w-0">
+            <LuxurySelect
+              label="VIP Sponsor / Link"
+              value={sponsorFilter}
+              onChange={(val) => setSponsorFilter(val)}
+              options={[
+                { value: 'all', label: 'All VIP Links' },
+                { value: 'TITLE_SPONSOR', label: '🏆 Title Sponsors' },
+                { value: 'POWERED_BY', label: '⚡ Powered By' },
+                { value: 'CO_POWERED_BY', label: '🤝 Co-Powered By' },
+                { value: 'SUPPORTED_BY', label: '🎖️ Supported By' },
+                { value: 'VIP_GUEST', label: '🌟 VIP Guests' },
+                ...vipLinks.map((l) => ({
+                  value: l.code,
+                  label: l.name,
+                  sublabel: l.sponsorName || l.category
                 }))
               ]}
             />
@@ -1113,6 +1256,28 @@ export const VipPassesPage = () => {
                             {g.husbandName} &amp; {g.wifeName}
                           </span>
                           <span className="text-[11px] text-slate-500 font-semibold">{g.surname}</span>
+                          {(g.vipLinkName || g.vipCategory) && (
+                            <div className="mt-1 flex items-center gap-1 flex-wrap">
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-900 border border-amber-300 flex items-center gap-1 shadow-2xs">
+                                <span>
+                                  {g.vipCategory === 'TITLE_SPONSOR'
+                                    ? '🏆 Title Sponsor'
+                                    : g.vipCategory === 'POWERED_BY'
+                                    ? '⚡ Powered By'
+                                    : g.vipCategory === 'CO_POWERED_BY'
+                                    ? '🤝 Co-Powered By'
+                                    : g.vipCategory === 'SUPPORTED_BY'
+                                    ? '🎖️ Supported By'
+                                    : g.vipCategory === 'VIP_GUEST'
+                                    ? '🌟 VIP Guest'
+                                    : '🎫 VIP Link'}
+                                </span>
+                                {g.vipLinkName && g.vipLinkName !== g.vipCategory && (
+                                  <span className="opacity-75 font-bold">({g.vipLinkName})</span>
+                                )}
+                              </span>
+                            </div>
+                          )}
                         </td>
 
                         {/* Phone & WhatsApp */}
@@ -1359,6 +1524,12 @@ export const VipPassesPage = () => {
                       <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-100 text-amber-900 border border-amber-200">
                         Honorary VIP
                       </span>
+                      {(g.vipLinkName || g.vipCategory) && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-200 text-amber-950 border border-amber-400 flex items-center gap-1 shadow-2xs">
+                          {g.vipCategory === 'TITLE_SPONSOR' ? '🏆 ' : g.vipCategory === 'POWERED_BY' ? '⚡ ' : g.vipCategory === 'CO_POWERED_BY' ? '🤝 ' : g.vipCategory === 'SUPPORTED_BY' ? '🎖️ ' : g.vipCategory === 'VIP_GUEST' ? '🌟 ' : '🎫 '}
+                          <span>{g.vipLinkName || g.vipCategory}</span>
+                        </span>
+                      )}
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border whitespace-nowrap ${
                         g.attendance === 'present'
                           ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
@@ -1787,7 +1958,42 @@ export const VipPassesPage = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveLink} className="space-y-4">
+            <form onSubmit={handleSaveLink} className="space-y-3.5">
+              {/* Category Tier Selector */}
+              <div>
+                <label className="block text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                  VIP Category / Tier *
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  {VIP_TIER_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        setLinkCategory(preset.id);
+                        if (!editingLink) {
+                          setLinkMaxSeats(preset.defaultSeats);
+                        }
+                      }}
+                      className={`p-2 rounded-xl text-left border text-xs font-bold transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                        linkCategory === preset.id
+                          ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      <span className="text-sm">{preset.icon}</span>
+                      <span className="text-[11px] font-extrabold leading-tight">{preset.label}</span>
+                      {preset.defaultSeats > 0 && (
+                        <span className={`text-[9px] ${linkCategory === preset.id ? 'text-amber-100' : 'text-slate-400'}`}>
+                          ({preset.defaultSeats} Seats)
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Link Name */}
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
                   Link Name / Title *
@@ -1797,11 +2003,26 @@ export const VipPassesPage = () => {
                   required
                   value={linkName}
                   onChange={(e) => setLinkName(e.target.value)}
-                  placeholder="e.g. Trustee Quota, Diamond Sponsors"
+                  placeholder="e.g. Title Sponsor - Shrimad Group"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl text-xs text-slate-900 font-medium outline-none transition-all"
                 />
               </div>
 
+              {/* Sponsor / Group Name */}
+              <div>
+                <label className="block text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                  Sponsor / Partner Name (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={linkSponsorName}
+                  onChange={(e) => setLinkSponsorName(e.target.value)}
+                  placeholder="e.g. Shrimad Diamonds / Trustee Family"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl text-xs text-slate-900 font-medium outline-none transition-all"
+                />
+              </div>
+
+              {/* Slug Code */}
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
                   Custom Code (Slug) *
@@ -1811,7 +2032,7 @@ export const VipPassesPage = () => {
                   required
                   value={linkCode}
                   onChange={(e) => setLinkCode(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
-                  placeholder="e.g. trustees, sponsor10"
+                  placeholder="e.g. title-sponsor-20, trustees-vip"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl text-xs font-mono text-slate-900 font-bold outline-none transition-all"
                 />
                 <span className="text-[10px] text-slate-400 block mt-1">
@@ -1819,9 +2040,10 @@ export const VipPassesPage = () => {
                 </span>
               </div>
 
+              {/* Event Slot Selector */}
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
-                  Event Program Slot (Optional)
+                  Event Program Slot *
                 </label>
                 <select
                   value={linkProgramId}

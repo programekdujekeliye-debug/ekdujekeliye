@@ -725,55 +725,53 @@ export const submitVipRequest = async (req, res) => {
   }
 
   try {
-    // 1. Resolve Target Event (defaults to today's active event)
-    const targetProgramId = programId || 'prog-2026-09-07';
-    let program = await eventService.getEventBySlug(targetProgramId) || await Event.findOne({
-      $or: [{ id: targetProgramId }, { slug: targetProgramId }, { date: targetProgramId }, { id: 'prog-2026-09-07' }]
-    }).lean();
-
-    if (!program) {
-      program = await Event.findOne({ status: { $ne: 'completed' } }).sort({ date: 1 }).lean();
+    // 1. Resolve VIP Link & verify capacity
+    const linkCode = (req.body.linkCode || req.body.code || '').trim().toLowerCase();
+    if (!linkCode) {
+      return res.status(400).json({ error: 'VIP invitation link code is required.' });
     }
 
-    if (!program) {
-      return res.status(400).json({ error: 'Event slot not found.' });
-    }
-
-    // 2. Check VIP Link status & seat limits
-    const linkCode = (req.body.linkCode || req.body.code || 'default').trim().toLowerCase();
-    let vipLink = await VipLink.findOne({ code: linkCode });
-
-    if (!vipLink && linkCode !== 'default') {
+    const vipLink = await VipLink.findOne({ code: linkCode });
+    if (!vipLink) {
       return res.status(404).json({
         error: 'Invalid or expired VIP invitation link.'
       });
     }
 
-    if (vipLink) {
-      if (vipLink.status === 'HOUSEFULL' || vipLink.status === 'CLOSED') {
-        return res.status(403).json({
-          error: 'HOUSEFULL: આ VIP એન્ટ્રી લિંક પર રજીસ્ટ્રેશન પૂર્ણ થઈ ગયેલ છે (Housefull).',
-          housefull: true,
-          status: vipLink.status
-        });
-      }
-
-      if (vipLink.maxSeats > 0 && vipLink.usedSeats >= vipLink.maxSeats) {
-        vipLink.status = 'HOUSEFULL';
-        await vipLink.save();
-        return res.status(403).json({
-          error: 'HOUSEFULL: આ લિંક પર ઉપલબ્ધ તમામ VIP બેઠકો પૂર્ણ થઈ ગઈ છે (Housefull).',
-          housefull: true,
-          status: 'HOUSEFULL'
-        });
-      }
-    } else {
-      // Default link fallback if not in DB: treat as HOUSEFULL
+    if (vipLink.status === 'HOUSEFULL' || vipLink.status === 'CLOSED') {
       return res.status(403).json({
-        error: 'HOUSEFULL: આજના કાર્યક્રમ માટે VIP મહેમાન એન્ટ્રી બેઠકો પૂર્ણ થઈ ગયેલ છે (Housefull).',
+        error: `HOUSEFULL: આ VIP એન્ટ્રી લિંક (${vipLink.name}) પર રજીસ્ટ્રેશન બંધ છે (Housefull).`,
+        housefull: true,
+        status: vipLink.status
+      });
+    }
+
+    // Live count verification from active database records
+    const liveCount = await Registration.countDocuments({
+      vipLinkCode: vipLink.code,
+      programId: vipLink.programId,
+      isDeleted: { $ne: true }
+    });
+
+    if (vipLink.maxSeats > 0 && liveCount >= vipLink.maxSeats) {
+      vipLink.status = 'HOUSEFULL';
+      vipLink.usedSeats = liveCount;
+      await vipLink.save().catch(() => {});
+      return res.status(403).json({
+        error: `HOUSEFULL: આ લિંક (${vipLink.name}) પર ઉપલબ્ધ તમામ VIP બેઠકો પૂર્ણ થઈ ગઈ છે.`,
         housefull: true,
         status: 'HOUSEFULL'
       });
+    }
+
+    // 2. Resolve Target Event strictly bound to this VIP link
+    const targetProgramId = vipLink.programId || programId;
+    let program = await eventService.getEventBySlug(targetProgramId) || await Event.findOne({
+      $or: [{ id: targetProgramId }, { slug: targetProgramId }]
+    }).lean();
+
+    if (!program) {
+      return res.status(400).json({ error: 'Event slot for this VIP invitation was not found.' });
     }
 
     // 3. Prevent duplicate active registrations for this phone number and event
@@ -901,7 +899,9 @@ export const submitVipRequest = async (req, res) => {
       surname: cleanSurname,
       phoneNumber: cleanPhone,
       isVip: true,
-      vipLinkCode: linkCode,
+      vipLinkCode: vipLink.code,
+      vipLinkName: vipLink.name,
+      vipCategory: vipLink.category || 'CUSTOM',
       programId: program.id,
       programName: program.name,
       programDate: program.date,
@@ -922,8 +922,9 @@ export const submitVipRequest = async (req, res) => {
 
     // Increment used seats on dynamic VIP link and mark Housefull if quota reached
     if (vipLink) {
-      vipLink.usedSeats = (vipLink.usedSeats || 0) + 1;
-      if (vipLink.maxSeats > 0 && vipLink.usedSeats >= vipLink.maxSeats) {
+      const newUsed = (vipLink.usedSeats || 0) + 1;
+      vipLink.usedSeats = newUsed;
+      if (vipLink.maxSeats > 0 && newUsed >= vipLink.maxSeats) {
         vipLink.status = 'HOUSEFULL';
       }
       await vipLink.save().catch(() => {});

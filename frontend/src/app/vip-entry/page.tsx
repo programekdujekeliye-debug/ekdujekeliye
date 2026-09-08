@@ -13,12 +13,10 @@ import {
   CalendarIcon,
   ClockIcon,
   MapPinIcon,
-  ShieldCheckIcon,
   AlertTriangleIcon,
   CheckIcon,
   HeartHandshakeIcon,
   LockIcon,
-  InfoIcon,
   UsersIcon,
   RefreshCwIcon
 } from '../../components/Icons';
@@ -102,7 +100,7 @@ const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 
 
 function VipEntryContent() {
   const searchParams = useSearchParams();
-  const linkCode = (searchParams.get('code') || 'default').trim().toLowerCase();
+  const rawCode = (searchParams.get('code') || '').trim().toLowerCase();
 
   const [loadingLink, setLoadingLink] = useState(true);
   const [linkInfo, setLinkInfo] = useState<{
@@ -111,13 +109,20 @@ function VipEntryContent() {
     status: 'ACTIVE' | 'HOUSEFULL' | 'CLOSED';
     code?: string;
     name?: string;
+    category?: string;
+    sponsorName?: string;
+    programId?: string;
     programName?: string;
     programDate?: string;
+    programTime?: string;
+    venue?: string;
+    city?: string;
     maxSeats?: number;
     usedSeats?: number;
     approvedSeats?: number;
     remainingSeats?: number | null;
     message?: string;
+    error?: string;
   } | null>(null);
 
   const [husbandName, setHusbandName] = useState('');
@@ -135,24 +140,36 @@ function VipEntryContent() {
     wifeName: string;
     status: string;
     programName?: string;
+    programDate?: string;
+    venue?: string;
   } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Check VIP link status and capacity on load
   const fetchLinkStatus = async () => {
+    if (!rawCode) {
+      setLoadingLink(false);
+      setLinkInfo({
+        found: false,
+        isOpen: false,
+        status: 'CLOSED',
+        error: 'કૃપા કરીને આયોજકો દ્વારા આપેલ માન્ય VIP આમંત્રણ લિંકનો ઉપયોગ કરો (VIP Invitation Link required).'
+      });
+      return;
+    }
+
     try {
       setLoadingLink(true);
-      const res = await fetch(`${API_BASE_URL}/api/vip-links/check?code=${encodeURIComponent(linkCode)}`);
+      const res = await fetch(`${API_BASE_URL}/api/vip-links/check?code=${encodeURIComponent(rawCode)}`);
       const data = await res.json();
       setLinkInfo(data);
-    } catch (err) {
-      // Default safe fallback if network or server error
+    } catch {
       setLinkInfo({
         found: true,
         isOpen: false,
         status: 'HOUSEFULL',
-        message: 'આજના કાર્યક્રમ માટે VIP મહેમાન એન્ટ્રી બેઠકો પૂર્ણ થઈ ગયેલ છે (Housefull).'
+        message: 'VIP બેઠકો પૂર્ણ થઈ ગયેલ છે (Housefull).'
       });
     } finally {
       setLoadingLink(false);
@@ -161,7 +178,7 @@ function VipEntryContent() {
 
   useEffect(() => {
     fetchLinkStatus();
-  }, [linkCode]);
+  }, [rawCode]);
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -217,8 +234,8 @@ function VipEntryContent() {
       formData.append('wifeName', cleanW);
       formData.append('surname', surname.trim());
       formData.append('phoneNumber', cleanP);
-      formData.append('programId', 'prog-2026-09-07');
-      formData.append('linkCode', linkCode);
+      formData.append('programId', linkInfo?.programId || '');
+      formData.append('linkCode', rawCode);
       if (couplePhoto) {
         formData.append('couplePhoto', couplePhoto);
       }
@@ -242,7 +259,9 @@ function VipEntryContent() {
         husbandName: data.husbandName || cleanH,
         wifeName: data.wifeName || cleanW,
         status: data.status || 'pending',
-        programName: data.programName || 'Ek Duje Ke Liye - Sardar Patel Smruti Bhavan'
+        programName: data.programName || linkInfo?.programName || 'Ek Duje Ke Liye',
+        programDate: data.programDate || linkInfo?.programDate || '',
+        venue: linkInfo?.venue || ''
       });
 
       toast.success('VIP પાસ વિનંતી સફળતાપૂર્વક નોંધાઈ ગઈ છે!');
@@ -251,6 +270,23 @@ function VipEntryContent() {
       setErrorMessage(err.message || 'VIP પાસ નોંધણી નિષ્ફળ ગઈ. કૃપા કરીને ફરી પ્રયત્ન કરો.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const getCategoryBadgeLabel = () => {
+    switch (linkInfo?.category) {
+      case 'TITLE_SPONSOR':
+        return '🏆 Title Sponsor VIP Pass';
+      case 'POWERED_BY':
+        return '⚡ Powered By Sponsor VIP Pass';
+      case 'CO_POWERED_BY':
+        return '🤝 Co-Powered By Sponsor VIP Pass';
+      case 'SUPPORTED_BY':
+        return '🎖️ Supported By Sponsor VIP Pass';
+      case 'VIP_GUEST':
+        return '🌟 Special VIP Guest Pass';
+      default:
+        return linkInfo?.name || 'VIP Special Guest Pass';
     }
   };
 
@@ -312,15 +348,49 @@ function VipEntryContent() {
             </div>
             <p className="text-sm font-bold text-stone-600">VIP લિંક ચકાસાઈ રહી છે... (Checking VIP Status)</p>
           </div>
+        ) : !rawCode || !linkInfo?.found ? (
+          /* ========================================================================= */
+          /* 🔒 INVITATION REQUIRED SCREEN: When no valid code is provided in URL */
+          /* ========================================================================= */
+          <div className="max-w-2xl mx-auto bg-white border border-stone-200 rounded-3xl p-6 sm:p-10 md:p-12 shadow-2xl text-center space-y-6 animate-fade-in relative overflow-hidden">
+            <div className="w-20 h-20 rounded-3xl bg-amber-50 border-2 border-amber-200 flex items-center justify-center mx-auto shadow-inner text-amber-700">
+              <SparklesIcon className="w-10 h-10 text-amber-600" />
+            </div>
+
+            <div className="space-y-3">
+              <span className="inline-block px-3.5 py-1 bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black rounded-full uppercase tracking-wider">
+                VIP Invitation Only &bull; ખાસ આમંત્રિત મહેમાનો માટે
+              </span>
+              <h1 className="text-2xl sm:text-3xl font-black text-stone-900">
+                વિશેષ VIP આમંત્રણ લિંક જરૂરી છે
+              </h1>
+              <p className="text-xs sm:text-sm text-stone-600 max-w-md mx-auto font-medium leading-relaxed">
+                આ પેજ ફક્ત સ્પોન્સર્સ અને ખાસ આમંત્રિત મહેમાનો માટે છે. કૃપા કરીને આયોજકો અથવા સ્પોન્સર તરફથી આપેલ પર્સનલ VIP લિંકનો ઉપયોગ કરો.
+              </p>
+            </div>
+
+            <div className="pt-4 flex flex-col sm:flex-row gap-3 justify-center">
+              <Link
+                href="/"
+                className="py-3.5 px-6 bg-stone-900 hover:bg-stone-800 text-white font-bold rounded-2xl text-xs sm:text-sm transition-all shadow-md"
+              >
+                મુખ્ય વેબસાઇટ પર જાઓ (Home)
+              </Link>
+              <a
+                href="tel:+918200302328"
+                className="py-3.5 px-6 border border-stone-300 hover:bg-stone-100 text-stone-700 font-bold rounded-2xl text-xs sm:text-sm transition-all"
+              >
+                આયોજક ટીમનો સંપર્ક (+91 82003 02328)
+              </a>
+            </div>
+          </div>
         ) : !linkInfo?.isOpen ? (
           /* ========================================================================= */
-          /* 🛑 HOUSEFULL / CLOSED SCREEN: Prominent, Respectful & Luxury Aesthetic */
+          /* 🛑 HOUSEFULL / CLOSED SCREEN: Dynamic Branded Aesthetic */
           /* ========================================================================= */
           <div className="max-w-2xl mx-auto bg-white border border-rose-200/90 rounded-3xl p-6 sm:p-10 md:p-12 shadow-2xl text-center space-y-7 animate-fade-in relative overflow-hidden">
-            {/* Top Decorative Ribbon */}
             <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-rose-600 via-amber-500 to-rose-600" />
 
-            {/* Housefull Shield Icon */}
             <div className="relative inline-block">
               <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-rose-50 border-2 border-rose-200 flex items-center justify-center mx-auto shadow-inner">
                 <LockIcon className="w-10 h-10 sm:w-12 sm:h-12 text-rose-600" />
@@ -330,7 +400,6 @@ function VipEntryContent() {
               </span>
             </div>
 
-            {/* Badges & Main Housefull Notice */}
             <div className="space-y-3">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-100 text-rose-900 border border-rose-300 font-black text-xs tracking-wider uppercase shadow-xs">
                 <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping" />
@@ -338,30 +407,29 @@ function VipEntryContent() {
               </div>
 
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-stone-900 tracking-tight leading-tight">
-                આજના કાર્યક્રમ માટે VIP રજીસ્ટ્રેશન પૂર્ણ થયેલ છે
+                {linkInfo.name || 'આ લિંક પર'} VIP રજીસ્ટ્રેશન પૂર્ણ થયેલ છે
               </h1>
 
               <p className="text-xs sm:text-sm text-stone-600 max-w-md mx-auto font-medium leading-relaxed">
-                આદરણીય મહેમાનો, સુરત સરદાર પટેલ સ્મૃતિ ભવન ખાતે આજના <strong>"એક દુજે કે લિયે"</strong> વિશેષ સેમિનાર માટે હોલની મહત્તમ ક્ષમતા ભરાઈ ગઈ હોવાથી તમામ VIP બેઠકો સંપૂર્ણપણે પૂર્ણ (Housefull) થઈ ગયેલ છે.
+                આદરણીય મહેમાનો, <strong>{linkInfo.programName || 'એક દુજે કે લિયે'}</strong> કાર્યક્રમ માટે આ VIP લિંક પર ફાળવેલ તમામ બેઠકો પૂર્ણ (Housefull) થઈ ગયેલ છે.
               </p>
             </div>
 
-            {/* Important Notice Box */}
+            {/* Event Details Notice Box */}
             <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-5 text-left space-y-2 text-xs sm:text-sm text-amber-950">
               <div className="flex items-center gap-2 font-black text-amber-900 text-xs sm:text-sm">
                 <AlertTriangleIcon className="w-4 h-4 text-amber-700 flex-shrink-0" />
-                <span>નવી VIP એન્ટ્રી નોંધણી હાલ પૂરતી બંધ છે</span>
+                <span>નવી VIP એન્ટ્રી નોંધણી હાલ બંધ છે</span>
               </div>
               <p className="text-stone-700 text-xs leading-relaxed">
-                સુરક્ષા અને હોલની બેઠક વ્યવસ્થાના નિયમો મુજબ હોલની સંપૂર્ણ ક્ષમતા ભરાઈ ગઈ હોવાથી હવે નવી VIP પાસ અરજી સ્વીકારવામાં આવતી નથી.
+                બેઠક ક્ષમતાના નિયમો મુજબ ફાળવેલી તમામ VIP પાસ બેઠકો ભરાઈ ગઈ હોવાથી નવી અરજી સ્વીકારવામાં આવતી નથી.
               </p>
               <div className="pt-2 border-t border-amber-200/80 flex flex-col sm:flex-row justify-between gap-1 text-[11px] text-stone-600">
-                <span>📍 સરદાર પટેલ સ્મૃતિ ભવન, સુરત</span>
-                <span>🗓️ સોમવાર, ૦૭ સપ્ટેમ્બર ૨૦૨૬ • રાત્રે ૮:૩૦</span>
+                <span>📍 {linkInfo.venue || linkInfo.city || 'Event Venue'}</span>
+                <span>🗓️ {linkInfo.programDate} • {linkInfo.programTime}</span>
               </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="pt-3 flex flex-col sm:flex-row gap-3 justify-center">
               <Link
                 href="/"
@@ -369,7 +437,6 @@ function VipEntryContent() {
               >
                 <span>મુખ્ય પેજ પર જાઓ (Return to Home)</span>
               </Link>
-
               <a
                 href="tel:+918200302328"
                 className="py-3.5 px-6 border border-stone-300 hover:bg-stone-100 text-stone-700 font-bold rounded-2xl text-xs sm:text-sm transition-all flex items-center justify-center gap-2"
@@ -416,19 +483,21 @@ function VipEntryContent() {
             <div className="bg-stone-50 border border-stone-200 rounded-2xl p-5 text-left space-y-2 text-xs sm:text-sm">
               <div className="flex justify-between">
                 <span className="text-stone-500 font-medium">કાર્યક્રમ (Event):</span>
-                <span className="font-bold text-stone-900">એક દુજે કે લિયે (Surat)</span>
+                <span className="font-bold text-stone-900">{submittedData.programName}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-stone-500 font-medium">તારીખ અને સમય:</span>
-                <span className="font-semibold text-stone-900">સોમવાર, ૦૭ સપ્ટેમ્બર ૨૦૨૬ &bull; રાત્રે ૮:૩૦</span>
+                <span className="font-semibold text-stone-900">{submittedData.programDate}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-stone-500 font-medium">સ્થળ (Venue):</span>
-                <span className="font-semibold text-stone-900">સરદાર પટેલ સ્મૃતિ ભવન, સુરત</span>
-              </div>
+              {submittedData.venue && (
+                <div className="flex justify-between">
+                  <span className="text-stone-500 font-medium">સ્થળ (Venue):</span>
+                  <span className="font-semibold text-stone-900">{submittedData.venue}</span>
+                </div>
+              )}
               <div className="flex justify-between border-t border-stone-200 pt-2">
-                <span className="text-stone-500 font-medium">પાસ પ્રકાર:</span>
-                <span className="font-bold text-rose-700">માનવંત અતિથિ પાસ (VIP Complimentary)</span>
+                <span className="text-stone-500 font-medium">આમંત્રણ પ્રકાર:</span>
+                <span className="font-bold text-rose-700">{getCategoryBadgeLabel()}</span>
               </div>
             </div>
 
@@ -461,37 +530,44 @@ function VipEntryContent() {
           </div>
         ) : (
           /* ========================================================================= */
-          /* Normal Registration Form View: 2 Columns (When Link is Open/Active) */
+          /* Dynamic Registration Form View (When Link is Open/Active) */
           /* ========================================================================= */
           <div className="space-y-6">
-            {/* Limited Seats Banner if maxSeats configured */}
-            {linkInfo?.maxSeats && linkInfo.maxSeats > 0 ? (
-              <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-center justify-between gap-3 text-amber-900 text-xs sm:text-sm font-bold shadow-xs">
-                <div className="flex items-center gap-2">
-                  <UsersIcon className="w-5 h-5 text-amber-700 flex-shrink-0" />
-                  <span>વિશેષ VIP આમંત્રિત લિંક &bull; મર્યાદિત ક્ષમતા</span>
+            {/* Sponsor / VIP Category Top Banner */}
+            <div className="bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-amber-500/10 border border-amber-300/80 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl">✨</span>
+                <div>
+                  <span className="text-[11px] font-black uppercase tracking-wider text-amber-900 block">
+                    {getCategoryBadgeLabel()}
+                  </span>
+                  <span className="text-xs font-bold text-stone-700">
+                    {linkInfo.sponsorName ? `Reserved for ${linkInfo.sponsorName}` : linkInfo.name}
+                  </span>
                 </div>
-                <span className="px-3 py-1 bg-amber-200/80 rounded-lg text-amber-950 font-extrabold text-xs">
+              </div>
+              {linkInfo.maxSeats && linkInfo.maxSeats > 0 ? (
+                <span className="px-3 py-1 bg-amber-200/90 rounded-lg text-amber-950 font-black text-xs self-end sm:self-center">
                   {linkInfo.remainingSeats ?? 0} બેઠકો બાકી (Remaining)
                 </span>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               
-              {/* Left Column: Event & VIP Info Card */}
+              {/* Left Column: Dynamic Event & VIP Info Card */}
               <div className="lg:col-span-5 bg-white border border-stone-200/90 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xs font-bold text-rose-700 uppercase tracking-widest block">
-                      Surat &bull; સુરત
+                      {linkInfo.city || 'Gujarat'}
                     </span>
                     <span className="px-2.5 py-0.5 bg-amber-50 border border-amber-300 text-amber-900 text-[10px] font-bold rounded-md uppercase tracking-wider">
-                      VIP Special
+                      VIP Invitation
                     </span>
                   </div>
                   <h2 className="text-xl md:text-2xl font-extrabold text-stone-900 leading-tight">
-                    એક દુજે કે લિયે &bull; સરદાર પટેલ સ્મૃતિ ભવન
+                    {linkInfo.programName || 'એક દુજે કે લિયે'}
                   </h2>
                   <p className="text-xs text-stone-500 mt-1 font-medium">
                     સંબંધોમાં સંવાદ, પ્રેમ અને આત્મીયતાનો અદભુત પરિસંવાદ &bull; મનીષ વઘાસીયા
@@ -504,7 +580,7 @@ function VipEntryContent() {
                     <CalendarIcon className="w-5 h-5 text-rose-600 flex-shrink-0" />
                     <div>
                       <span className="text-xs text-stone-500 block font-medium">તારીખ (Date)</span>
-                      <span className="font-semibold text-stone-900">સોમવાર, ૦૭ સપ્ટેમ્બર ૨૦૨૬</span>
+                      <span className="font-semibold text-stone-900">{linkInfo.programDate || 'Event Date'}</span>
                     </div>
                   </div>
 
@@ -512,27 +588,19 @@ function VipEntryContent() {
                     <ClockIcon className="w-5 h-5 text-amber-600 flex-shrink-0" />
                     <div>
                       <span className="text-xs text-stone-500 block font-medium">સમય (Time)</span>
-                      <span className="font-semibold text-stone-900">રાત્રે ૮:૩૦ વાગ્યે (8:30 PM)</span>
+                      <span className="font-semibold text-stone-900">{linkInfo.programTime || '8:30 PM'}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-3 text-stone-700">
-                    <MapPinIcon className="w-5 h-5 text-stone-500 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <span className="text-xs text-stone-500 block font-medium">સ્થળ (Venue)</span>
-                      <span className="font-semibold text-stone-900">
-                        સરદાર પટેલ સ્મૃતિ ભવન, મીની બજાર પાસે, વરાછા રોડ, સુરત
-                      </span>
-                      <a
-                        href="https://share.google/y1jtFAZXuKusYTiUD"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-rose-700 hover:underline block mt-0.5 font-bold"
-                      >
-                        Google Maps પર જુઓ →
-                      </a>
+                  {linkInfo.venue && (
+                    <div className="flex items-start gap-3 text-stone-700">
+                      <MapPinIcon className="w-5 h-5 text-stone-500 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <span className="text-xs text-stone-500 block font-medium">સ્થળ (Venue)</span>
+                        <span className="font-semibold text-stone-900">{linkInfo.venue}</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="flex items-center gap-3 text-stone-700">
                     <TicketIcon className="w-5 h-5 text-amber-600 flex-shrink-0" />
@@ -548,203 +616,169 @@ function VipEntryContent() {
                 {/* Guidelines Card */}
                 <div className="bg-rose-50 border border-rose-200/80 rounded-2xl p-4 text-xs text-rose-900 space-y-2">
                   <p className="font-bold flex items-center gap-1.5 text-rose-950">
-                    <ShieldCheckIcon className="w-4 h-4 text-rose-600" />
-                    <span>મહત્વપૂર્ણ નિયમો અને સૂચનાઓ:</span>
+                    <span>📌</span>
+                    <span>મહત્વની સૂચનાઓ (Important Guidelines):</span>
                   </p>
-                  <ul className="list-disc pl-4 space-y-1 text-stone-700">
-                    <li>આ કાર્યક્રમ ફક્ત યુગલો (Married / Committed Couples) માટે છે.</li>
-                    <li>કપલ તરીકે બંને પાર્ટનર્સનું સાથે ઉપસ્થિત રહેવું ફરજિયાત છે.</li>
-                    <li>બાળકોને લાવવાની સખત મનાઈ છે.</li>
-                    <li>પાસ પર તમારો ફોટો મુકાશે, જેથી સારો કપલ ફોટો અપલોડ કરવો.</li>
-                    <li>ફોર્મ ભર્યા પછી એડમિન દ્વારા મંજૂર થતાં જ ડિજિટલ પાસ સક્રિય થશે.</li>
+                  <ul className="list-disc list-inside space-y-1 text-stone-700 font-medium pl-1">
+                    <li>આ સેમિનાર ફક્ત પરિણીત યુગલો (Couples) માટે છે.</li>
+                    <li>બાળકોને પ્રવેશ મળશે નહીં (Strictly No Kids).</li>
+                    <li>એન્ટ્રી પાસ ફક્ત આયોજક દ્વારા મંજૂરી બાદ જ એક્ટિવ થશે.</li>
                   </ul>
                 </div>
               </div>
 
-              {/* Right Column: VIP Entry Form */}
-              <div className="lg:col-span-7 bg-white border border-stone-200/90 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
-                <div>
-                  <h3 className="text-xl md:text-2xl font-extrabold text-stone-900">
-                    VIP મહેમાન વિગત (Couple Details)
+              {/* Right Column: Registration Form */}
+              <div className="lg:col-span-7 bg-white border border-stone-200/90 rounded-3xl p-6 md:p-8 shadow-xl">
+                <div className="mb-6 pb-4 border-b border-stone-100">
+                  <span className="text-xs font-bold text-amber-600 uppercase tracking-wider block mb-1">
+                    Registration Form
+                  </span>
+                  <h3 className="text-xl font-black text-stone-900">
+                    VIP યુગલ નોંધણી ફોર્મ
                   </h3>
-                  <p className="text-xs text-stone-600 mt-1 font-medium">
-                    કૃપા કરીને વર-વધૂ બંનેનું નામ અને સાચો વોટ્સએપ નંબર ભરો જેથી પાસ મોકલી શકાય.
+                  <p className="text-xs text-stone-500 font-medium mt-0.5">
+                    કૃપા કરીને આપની વિગતો અને યુગલ ફોટો અપલોડ કરો.
                   </p>
                 </div>
 
                 {errorMessage && (
-                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3 text-rose-800 text-xs font-semibold">
-                    <AlertTriangleIcon className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                  <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm font-semibold flex items-center gap-2">
+                    <AlertTriangleIcon className="w-5 h-5 text-rose-600 flex-shrink-0" />
                     <span>{errorMessage}</span>
                   </div>
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-5">
-                  
-                  {/* Couple Names Grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
-                        પતિનું નામ (Husband Name) <span className="text-rose-600">*</span>
+                      <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                        પતિનું નામ (Husband's Name) *
                       </label>
                       <input
                         type="text"
                         required
                         value={husbandName}
                         onChange={(e) => setHusbandName(e.target.value)}
-                        placeholder="દા.ત. સંજયભાઈ"
-                        className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm font-semibold text-stone-900 focus:outline-none focus:border-rose-500 focus:bg-white transition-all shadow-xs"
+                        placeholder="દા.ત. રમેશભાઈ"
+                        className="w-full px-4 py-3 bg-stone-50 border border-stone-300 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 rounded-xl text-sm font-medium outline-none transition-all"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
-                        પત્નીનું નામ (Wife Name) <span className="text-rose-600">*</span>
+                      <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                        પત્નીનું નામ (Wife's Name) *
                       </label>
                       <input
                         type="text"
                         required
                         value={wifeName}
                         onChange={(e) => setWifeName(e.target.value)}
-                        placeholder="દા.ત. સોનલબેન"
-                        className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm font-semibold text-stone-900 focus:outline-none focus:border-rose-500 focus:bg-white transition-all shadow-xs"
+                        placeholder="દા.ત. ગીતાબેન"
+                        className="w-full px-4 py-3 bg-stone-50 border border-stone-300 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 rounded-xl text-sm font-medium outline-none transition-all"
                       />
                     </div>
                   </div>
 
-                  {/* Surname & WhatsApp Number */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
-                        અટક (Surname)
+                      <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                        અટક (Surname) *
                       </label>
                       <input
                         type="text"
+                        required
                         value={surname}
                         onChange={(e) => setSurname(e.target.value)}
-                        placeholder="દા.ત. પટેલ / વઘાસીયા"
-                        className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm font-semibold text-stone-900 focus:outline-none focus:border-rose-500 focus:bg-white transition-all shadow-xs"
+                        placeholder="દા.ત. પટેલ"
+                        className="w-full px-4 py-3 bg-stone-50 border border-stone-300 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 rounded-xl text-sm font-medium outline-none transition-all"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
-                        વોટ્સએપ મોબાઈલ નંબર <span className="text-rose-600">*</span>
+                      <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                        વોટ્સએપ નંબર (WhatsApp No.) *
                       </label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-3 text-sm font-bold text-stone-500">
-                          +91
-                        </span>
-                        <input
-                          type="tel"
-                          required
-                          maxLength={10}
-                          value={phoneNumber}
-                          onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
-                          placeholder="98250 00000"
-                          className="w-full pl-14 pr-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm font-semibold text-stone-900 focus:outline-none focus:border-rose-500 focus:bg-white transition-all shadow-xs"
-                        />
-                      </div>
+                      <input
+                        type="tel"
+                        required
+                        maxLength={10}
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                        placeholder="10-આંકડાનો મોબાઇલ નંબર"
+                        className="w-full px-4 py-3 bg-stone-50 border border-stone-300 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 rounded-xl text-sm font-bold font-mono outline-none transition-all"
+                      />
                     </div>
                   </div>
 
-                  {/* Couple Photo Upload Card */}
-                  <div className="space-y-2 pt-1">
-                    <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider">
-                      કપલ ફોટો (Couple Photo) <span className="text-rose-600">*</span>
+                  {/* Couple Photo Upload */}
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                      યુગલ ફોટો (Couple Photograph) *
                     </label>
-                    <p className="text-[11px] text-stone-500 font-medium">
-                      પાસ ઉપર તમારો અને તમારા જીવનસાથીનો સુંદર ફોટો મુકાશે, તેથી ક્લિયર ફોટો પસંદ કરો.
-                    </p>
-
                     <input
                       type="file"
                       ref={fileInputRef}
-                      onChange={handlePhotoSelect}
                       accept="image/*"
+                      onChange={handlePhotoSelect}
                       className="hidden"
                     />
 
                     {photoPreview ? (
-                      <div className="relative rounded-2xl border-2 border-rose-300 bg-rose-50/50 p-4 flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                          <img
-                            src={photoPreview}
-                            alt="Couple Preview"
-                            className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl border border-rose-300 shadow-sm"
-                          />
-                          <div>
-                            <span className="text-xs font-bold text-stone-900 block">
-                              ફોટો પસંદ થઈ ગયો છે!
-                            </span>
-                            <span className="text-[11px] text-stone-500 block">
-                              {couplePhoto?.name || 'couple_photo.jpg'}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => fileInputRef.current?.click()}
-                              className="text-xs font-bold text-rose-700 hover:text-rose-800 underline mt-1 block cursor-pointer"
-                            >
-                              ફોટો બદલો (Change Photo)
-                            </button>
-                          </div>
+                      <div className="relative rounded-2xl overflow-hidden border-2 border-rose-300 p-2 bg-rose-50/50 flex items-center gap-4">
+                        <img
+                          src={photoPreview}
+                          alt="Couple Preview"
+                          className="w-20 h-24 object-cover rounded-xl shadow-xs shrink-0"
+                        />
+                        <div className="space-y-1">
+                          <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                            <CheckIcon className="w-4 h-4 text-emerald-600" />
+                            <span>ફોટો પસંદ થઈ ગયો છે!</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="text-xs text-rose-700 hover:text-rose-800 font-bold underline block cursor-pointer"
+                          >
+                            બીજો ફોટો પસંદ કરો (Change)
+                          </button>
                         </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCouplePhoto(null);
-                            setPhotoPreview(null);
-                          }}
-                          className="p-2 text-stone-400 hover:text-rose-600 rounded-xl hover:bg-white transition-all cursor-pointer"
-                          title="Remove Photo"
-                        >
-                          ✕
-                        </button>
                       </div>
                     ) : (
                       <div
                         onClick={() => fileInputRef.current?.click()}
-                        className="border-2 border-dashed border-stone-300 hover:border-rose-400 bg-stone-50/70 hover:bg-rose-50/30 rounded-2xl p-6 text-center cursor-pointer transition-all space-y-2 group"
+                        className="border-2 border-dashed border-stone-300 hover:border-rose-400 rounded-2xl p-6 text-center cursor-pointer transition-colors bg-stone-50 hover:bg-rose-50/40 group"
                       >
-                        <div className="w-12 h-12 rounded-full bg-rose-100/70 text-rose-600 flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
-                          <CameraIcon className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <span className="text-xs sm:text-sm font-bold text-stone-900 block">
-                            કપલ ફોટો અપલોડ કરવા ક્લિક કરો
-                          </span>
-                          <span className="text-[11px] text-stone-500 block mt-0.5">
-                            PNG, JPG અથવા WEBP (મોબાઈલ ગેલેરીમાંથી પસંદ કરો)
-                          </span>
-                        </div>
+                        <CameraIcon className="w-8 h-8 text-stone-400 group-hover:text-rose-500 mx-auto mb-2 transition-colors" />
+                        <span className="text-xs font-bold text-stone-700 block">
+                          પતિ-પત્ની બંનેનો સાથે ફોટો અપલોડ કરો
+                        </span>
+                        <span className="text-[11px] text-stone-400 mt-1 block">
+                          (Click to select couple photo from gallery or camera)
+                        </span>
                       </div>
                     )}
                   </div>
 
                   {/* Submit Button */}
-                  <div className="pt-3">
+                  <div className="pt-2">
                     <button
                       type="submit"
                       disabled={submitting}
-                      className="w-full py-4 px-6 bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 hover:from-rose-700 hover:to-amber-700 active:scale-[0.99] text-white font-extrabold rounded-2xl text-sm sm:text-base transition-all shadow-lg shadow-rose-600/25 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                      className="w-full py-4 bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-extrabold rounded-2xl text-sm transition-all shadow-lg shadow-rose-600/25 flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-50"
                     >
                       {submitting ? (
                         <>
-                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                           <span>વિનંતી સબમિટ થઈ રહી છે...</span>
                         </>
                       ) : (
                         <>
-                          <SparklesIcon className="w-5 h-5" />
-                          <span>VIP પાસ વિનંતી સબમિટ કરો (Request Pass)</span>
+                          <SparklesIcon className="w-4 h-4" />
+                          <span>VIP પાસ માટે વિનંતી કરો (Submit VIP Request)</span>
                         </>
                       )}
                     </button>
-
-                    <p className="text-center text-[11px] text-stone-500 font-medium mt-2.5">
-                      🔒 આ એક વિશેષ આમંત્રણ ફોર્મ છે. એડમિન દ્વારા ચકાસણી થયા બાદ તમારો પાસ માન્ય ગણાશે.
-                    </p>
                   </div>
                 </form>
               </div>
@@ -754,13 +788,8 @@ function VipEntryContent() {
       </main>
 
       {/* Official Footer */}
-      <footer className="py-6 border-t border-stone-200 bg-white/70 backdrop-blur-xs text-center text-xs text-stone-500 font-medium z-10">
-        <div className="max-w-6xl mx-auto px-4 space-y-1">
-          <p>© 2026 Ek Duje Ke Liye &bull; Manish Vaghasiya. સર્વાધિકાર સુરક્ષિત.</p>
-          <p className="text-[11px] text-stone-400">
-            સરદાર પટેલ સ્મૃતિ ભવન, સુરત &bull; સંબંધોમાં પ્રેમ અને સુખમય દાંપત્યજીવનનો પાવક સેમિનાર
-          </p>
-        </div>
+      <footer className="py-6 px-6 border-t border-stone-200 text-center text-xs text-stone-500 bg-white/70 backdrop-blur-sm z-10">
+        <p>© 2026 Ek Duje Ke Liye &bull; Manish Vaghasiya. All rights reserved.</p>
       </footer>
     </div>
   );

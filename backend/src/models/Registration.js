@@ -38,6 +38,8 @@ const RegistrationSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
   },
   vipLinkCode: { type: String, default: null, index: true },
+  vipLinkName: { type: String, default: null },
+  vipCategory: { type: String, default: null },
   attendance: { type: mongoose.Schema.Types.Mixed, default: 'unmarked' },
   attendanceAt: { type: Date, default: null },
   attendanceMarkedAt: { type: Date, default: null },

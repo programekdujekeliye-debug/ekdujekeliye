@@ -4,46 +4,47 @@ import { Registration } from '../../models/Registration.js';
 
 /**
  * Public endpoint to check VIP link status, housefull state, and remaining seats
- * GET /api/vip-links/check?code=...&programId=...
+ * GET /api/vip-links/check?code=...
  */
 export const checkVipLink = async (req, res) => {
   try {
-    const rawCode = (req.query.code || 'default').trim().toLowerCase();
-    const programId = req.query.programId;
+    const rawCode = (req.query.code || '').trim().toLowerCase();
 
-    let query = { code: rawCode };
-    let link = await VipLink.findOne(query).lean();
+    // If no code supplied, return invitation-required guidance
+    if (!rawCode) {
+      return res.status(400).json({
+        found: false,
+        isOpen: false,
+        status: 'CLOSED',
+        error: 'કૃપા કરીને આયોજકો દ્વારા આપેલ માન્ય VIP આમંત્રણ લિંકનો ઉપયોગ કરો (VIP Invitation Link is required).'
+      });
+    }
 
-    // If specific code not found and code wasn't 'default', return 404
-    if (!link && rawCode !== 'default') {
+    const link = await VipLink.findOne({ code: rawCode }).lean();
+
+    // If specific code not found, return 404
+    if (!link) {
       return res.status(404).json({
         found: false,
         isOpen: false,
         status: 'CLOSED',
-        error: 'Invalid or expired VIP invitation link.'
+        error: 'આ VIP આમંત્રણ લિંક અમાન્ય છે અથવા સમાપ્ત થઈ ગઈ છે (Invalid or expired VIP invitation link).'
       });
     }
 
-    // If default link not yet created in DB, fallback to safe default (HOUSEFULL)
-    if (!link) {
-      return res.json({
-        found: true,
-        isOpen: false,
-        status: 'HOUSEFULL',
-        code: 'default',
-        name: "Today's VIP Entry Link",
-        programName: 'Ek Duje Ke Liye - Sardar Patel Smruti Bhavan',
-        programDate: '2026-09-07',
-        maxSeats: 0,
-        usedSeats: 0,
-        approvedSeats: 0,
-        remainingSeats: null,
-        message: 'આજના કાર્યક્રમ માટે VIP મહેમાન એન્ટ્રી બેઠકો પૂર્ણ થઈ ગયેલ છે (Housefull).'
-      });
-    }
+    // Resolve event details for venue and time
+    const event = await Event.findOne({
+      $or: [{ id: link.programId }, { slug: link.programId }]
+    }).lean();
 
-    // Dynamic verification of capacity
-    const isCapacityExceeded = link.maxSeats > 0 && link.usedSeats >= link.maxSeats;
+    // Live verification of capacity from actual database records
+    const liveCount = await Registration.countDocuments({
+      vipLinkCode: link.code,
+      programId: link.programId,
+      isDeleted: { $ne: true }
+    });
+
+    const isCapacityExceeded = link.maxSeats > 0 && liveCount >= link.maxSeats;
     let effectiveStatus = link.status;
     if (effectiveStatus === 'ACTIVE' && isCapacityExceeded) {
       effectiveStatus = 'HOUSEFULL';
@@ -57,17 +58,22 @@ export const checkVipLink = async (req, res) => {
       status: effectiveStatus,
       code: link.code,
       name: link.name,
+      category: link.category || 'CUSTOM',
+      sponsorName: link.sponsorName || '',
       programId: link.programId,
-      programName: link.programName,
-      programDate: link.programDate,
+      programName: event?.name || link.programName || 'Ek Duje Ke Liye',
+      programDate: event?.date || link.programDate || '',
+      programTime: event?.time || '8:30 PM',
+      venue: event?.venue || '',
+      city: event?.city || '',
       maxSeats: link.maxSeats,
-      usedSeats: link.usedSeats,
+      usedSeats: liveCount,
       approvedSeats: link.approvedSeats,
-      remainingSeats: link.maxSeats > 0 ? Math.max(0, link.maxSeats - link.usedSeats) : null,
+      remainingSeats: link.maxSeats > 0 ? Math.max(0, link.maxSeats - liveCount) : null,
       message: isOpen
         ? 'VIP રજીસ્ટ્રેશન ખુલ્લું છે.'
         : effectiveStatus === 'HOUSEFULL'
-          ? 'આજના કાર્યક્રમ માટે VIP મહેમાન એન્ટ્રી બેઠકો પૂર્ણ થઈ ગયેલ છે (Housefull).'
+          ? `આ લિંક (${link.name}) પર ઉપલબ્ધ તમામ VIP બેઠકો પૂર્ણ થઈ ગયેલ છે (Housefull).`
           : 'આ VIP એન્ટ્રી લિંક હાલમાં બંધ છે.'
     });
   } catch (err) {
@@ -77,45 +83,26 @@ export const checkVipLink = async (req, res) => {
 };
 
 /**
- * Admin: Get all VIP links with real-time submission metrics
- * GET /api/admin/vip-links
+ * Admin: Get all VIP links with real-time submission metrics, optionally filtered by programId
+ * GET /api/admin/vip-links?programId=...
  */
 export const getVipLinks = async (req, res) => {
   try {
-    // Ensure default link exists
-    let defaultLink = await VipLink.findOne({ code: 'default' });
-    if (!defaultLink) {
-      defaultLink = await VipLink.create({
-        name: "Today's VIP Entry Link",
-        code: 'default',
-        isDefault: true,
-        programId: 'prog-2026-09-07',
-        programName: 'Ek Duje Ke Liye - Sardar Patel Smruti Bhavan',
-        programDate: '2026-09-07',
-        maxSeats: 0,
-        status: 'HOUSEFULL',
-        notes: 'Primary public VIP registration link'
-      });
-    }
+    const { programId } = req.query;
+    const query = programId && programId !== 'all' ? { programId } : {};
 
-    const links = await VipLink.find().sort({ isDefault: -1, createdAt: -1 }).lean();
+    const links = await VipLink.find(query).sort({ createdAt: -1 }).lean();
 
-    // Refresh live counts for all links based on registrations
+    // Refresh live counts for all links based on active registrations
     const enriched = await Promise.all(links.map(async (l) => {
       const liveCount = await Registration.countDocuments({
-        $or: [
-          { vipLinkCode: l.code },
-          ...(l.isDefault ? [{ isVip: true, vipLinkCode: { $in: [null, '', 'default'] } }] : [])
-        ],
+        vipLinkCode: l.code,
         programId: l.programId,
         isDeleted: { $ne: true }
       });
 
       const liveApproved = await Registration.countDocuments({
-        $or: [
-          { vipLinkCode: l.code },
-          ...(l.isDefault ? [{ isVip: true, vipLinkCode: { $in: [null, '', 'default'] } }] : [])
-        ],
+        vipLinkCode: l.code,
         programId: l.programId,
         status: 'approved',
         isDeleted: { $ne: true }
@@ -129,7 +116,7 @@ export const getVipLinks = async (req, res) => {
       };
     }));
 
-    res.json({ success: true, links: enriched });
+    res.json({ success: true, links: enriched, data: enriched });
   } catch (err) {
     console.error('[getVipLinks] Error:', err);
     res.status(500).json({ error: 'Failed to fetch VIP links.', details: err.message });
@@ -137,18 +124,31 @@ export const getVipLinks = async (req, res) => {
 };
 
 /**
- * Admin: Create a new custom VIP link with seat limits
+ * Admin: Create a new custom VIP link with seat limits bound to a specific event
  * POST /api/admin/vip-links
  */
 export const createVipLink = async (req, res) => {
   try {
-    const { name, code, programId, maxSeats = 0, status = 'ACTIVE', notes = '' } = req.body;
+    const {
+      name,
+      code,
+      programId,
+      category = 'CUSTOM',
+      sponsorName = '',
+      maxSeats = 0,
+      status = 'ACTIVE',
+      notes = ''
+    } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Link name is required.' });
     }
 
-    // Generate or clean code
+    if (!programId) {
+      return res.status(400).json({ error: 'Program/Event is required to generate a dynamic VIP link.' });
+    }
+
+    // Generate or clean slug code
     let cleanCode = (code || '').trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-');
     if (!cleanCode) {
       cleanCode = `vip-${Math.random().toString(36).substring(2, 8)}`;
@@ -157,21 +157,24 @@ export const createVipLink = async (req, res) => {
     // Check code collision
     const existing = await VipLink.findOne({ code: cleanCode });
     if (existing) {
-      return res.status(400).json({ error: `Link code "${cleanCode}" is already in use. Please choose another.` });
+      return res.status(400).json({ error: `Link code "${cleanCode}" is already in use. Please choose another slug.` });
     }
 
     // Resolve event details
-    const targetProgramId = programId || 'prog-2026-09-07';
     const event = await Event.findOne({
-      $or: [{ id: targetProgramId }, { slug: targetProgramId }]
+      $or: [{ id: programId }, { slug: programId }]
     }).lean();
 
     const link = new VipLink({
       name: name.trim(),
       code: cleanCode,
-      programId: event?.id || targetProgramId,
+      category: ['TITLE_SPONSOR', 'POWERED_BY', 'CO_POWERED_BY', 'SUPPORTED_BY', 'VIP_GUEST', 'CUSTOM'].includes(category)
+        ? category
+        : 'CUSTOM',
+      sponsorName: sponsorName.trim(),
+      programId: event?.id || programId,
       programName: event?.name || 'Ek Duje Ke Liye',
-      programDate: event?.date || '2026-09-07',
+      programDate: event?.date || '',
       maxSeats: Math.max(0, Number(maxSeats) || 0),
       status: ['ACTIVE', 'HOUSEFULL', 'CLOSED'].includes(status) ? status : 'ACTIVE',
       notes: notes.trim(),
@@ -180,7 +183,12 @@ export const createVipLink = async (req, res) => {
     });
 
     await link.save();
-    res.status(201).json({ success: true, link, message: `VIP link created: /vip-entry?code=${cleanCode}` });
+    res.status(201).json({
+      success: true,
+      link,
+      data: link,
+      message: `VIP link created: /vip-entry?code=${cleanCode}`
+    });
   } catch (err) {
     console.error('[createVipLink] Error:', err);
     res.status(500).json({ error: 'Failed to create VIP link.', details: err.message });
@@ -188,13 +196,13 @@ export const createVipLink = async (req, res) => {
 };
 
 /**
- * Admin: Update VIP link (status, seats, name)
+ * Admin: Update VIP link (status, seats, name, sponsorName, category, notes)
  * PATCH /api/admin/vip-links/:id
  */
 export const updateVipLink = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, maxSeats, status, notes, programId } = req.body;
+    const { name, maxSeats, status, notes, programId, category, sponsorName } = req.body;
 
     const link = await VipLink.findById(id);
     if (!link) {
@@ -202,6 +210,8 @@ export const updateVipLink = async (req, res) => {
     }
 
     if (name !== undefined) link.name = name.trim();
+    if (category !== undefined) link.category = category;
+    if (sponsorName !== undefined) link.sponsorName = sponsorName.trim();
     if (maxSeats !== undefined) link.maxSeats = Math.max(0, Number(maxSeats) || 0);
     if (status !== undefined && ['ACTIVE', 'HOUSEFULL', 'CLOSED'].includes(status)) {
       link.status = status;
@@ -218,7 +228,12 @@ export const updateVipLink = async (req, res) => {
     }
 
     await link.save();
-    res.json({ success: true, link, message: 'VIP link updated successfully.' });
+    res.json({
+      success: true,
+      link,
+      data: link,
+      message: 'VIP link updated successfully.'
+    });
   } catch (err) {
     console.error('[updateVipLink] Error:', err);
     res.status(500).json({ error: 'Failed to update VIP link.', details: err.message });
@@ -226,7 +241,7 @@ export const updateVipLink = async (req, res) => {
 };
 
 /**
- * Admin: Toggle VIP link between ACTIVE and HOUSEFULL
+ * Admin: 1-Click Toggle VIP link between ACTIVE and HOUSEFULL
  * POST /api/admin/vip-links/:id/toggle
  */
 export const toggleVipLinkStatus = async (req, res) => {
@@ -243,6 +258,7 @@ export const toggleVipLinkStatus = async (req, res) => {
     res.json({
       success: true,
       link,
+      data: link,
       message: `Link "${link.name}" is now ${link.status}!`
     });
   } catch (err) {
@@ -261,10 +277,6 @@ export const deleteVipLink = async (req, res) => {
     const link = await VipLink.findById(id);
     if (!link) {
       return res.status(404).json({ error: 'VIP link not found.' });
-    }
-
-    if (link.isDefault || link.code === 'default') {
-      return res.status(400).json({ error: 'Cannot delete the primary default VIP link. You can set it to HOUSEFULL or CLOSED instead.' });
     }
 
     await VipLink.findByIdAndDelete(id);

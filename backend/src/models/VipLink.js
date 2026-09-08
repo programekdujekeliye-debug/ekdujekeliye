@@ -4,8 +4,18 @@ const VipLinkSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    trim: true,
-    default: "Today's VIP Entry Link"
+    trim: true
+  },
+  category: {
+    type: String,
+    enum: ['TITLE_SPONSOR', 'POWERED_BY', 'CO_POWERED_BY', 'SUPPORTED_BY', 'VIP_GUEST', 'CUSTOM'],
+    default: 'CUSTOM',
+    index: true
+  },
+  sponsorName: {
+    type: String,
+    default: '',
+    trim: true
   },
   code: {
     type: String,
@@ -18,16 +28,15 @@ const VipLinkSchema = new mongoose.Schema({
   programId: {
     type: String,
     required: true,
-    default: 'prog-2026-09-07',
     index: true
   },
   programName: {
     type: String,
-    default: 'Ek Duje Ke Liye - Sardar Patel Smruti Bhavan'
+    default: ''
   },
   programDate: {
     type: String,
-    default: '2026-09-07'
+    default: ''
   },
   maxSeats: {
     type: Number,
@@ -44,7 +53,7 @@ const VipLinkSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['ACTIVE', 'HOUSEFULL', 'CLOSED'],
-    default: 'HOUSEFULL',
+    default: 'ACTIVE',
     index: true
   },
   isDefault: {
@@ -58,12 +67,14 @@ const VipLinkSchema = new mongoose.Schema({
   },
   createdBy: {
     type: String,
-    default: 'system'
+    default: 'admin'
   }
 }, {
   collection: 'vip_links',
   timestamps: true
 });
+
+VipLinkSchema.index({ programId: 1, status: 1 });
 
 export const VipLink = mongoose.models.VipLink || mongoose.model('VipLink', VipLinkSchema);
 export default VipLink;
