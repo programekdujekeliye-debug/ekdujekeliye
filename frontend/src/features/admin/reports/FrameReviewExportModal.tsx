@@ -992,23 +992,30 @@ export const FrameReviewExportModal: React.FC<FrameReviewExportModalProps> = ({
         }
       });
 
-      // Generate Printing Manifest CSV
+      // Generate Printing Manifest CSV (File, Token ID, Name only)
       const curProg = programs.find((p) => p.id === selectedProgramId);
       const progName = curProg ? curProg.name : 'Event';
 
-      let manifestCsv =
-        'Token ID,Husband Name,Wife Name,Surname,Mobile Number,Print Status,Payment Status,Zoom,Offset Y,Rotation,Printed Checkbox,Desk Handover Checkbox\n';
+      let manifestCsv = '\uFEFFFile,Token ID,Name\n';
       listToExport.forEach((sub) => {
-        const pStatus =
-          sub.frameExportStatus === 'EXPORTED'
-            ? 'Already Exported'
-            : sub.frameExportStatus === 'MODIFIED'
-            ? 'Adjusted'
-            : 'New';
-        const payStatus = sub.status === 'approved' || sub.payment?.status === 'captured' ? 'PAID' : 'PENDING';
-        manifestCsv += `"${sub.inquiryId}","${sub.husbandName}","${sub.wifeName}","${sub.surname || ''}","${
-          sub.phoneNumber || ''
-        }","${pStatus}","${payStatus}","${sub.photoZoom ?? 1.0}","${sub.photoOffsetY ?? 0}","${sub.photoRotate ?? 0}°","[  ] Printed","[  ] Handed Over"\n`;
+        const cleanHusband = (sub.husbandName || '').trim().replace(/\s+/g, '_');
+        const cleanWife = (sub.wifeName || '').trim().replace(/\s+/g, '_');
+        const cleanSurname = (sub.surname || '').trim().replace(/\s+/g, '_');
+        const filename = `${sub.inquiryId}_${cleanHusband}_${cleanWife}_${cleanSurname}.png`.replace(
+          /[^a-zA-Z0-9_.-]/g,
+          '_'
+        );
+        const coupleName = [
+          sub.husbandName && sub.wifeName
+            ? `${sub.husbandName} & ${sub.wifeName}`
+            : sub.husbandName || sub.wifeName || '',
+          sub.surname || ''
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+
+        manifestCsv += `"${filename.replace(/"/g, '""')}","${(sub.inquiryId || '').replace(/"/g, '""')}","${coupleName.replace(/"/g, '""')}"\n`;
       });
       zip.file(`Printing_Manifest_${progName.replace(/\s+/g, '_')}.csv`, manifestCsv);
 

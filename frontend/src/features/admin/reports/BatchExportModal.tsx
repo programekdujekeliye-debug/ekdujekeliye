@@ -272,11 +272,24 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
       }
     }
 
-    // Bundle Printing Manifest CSV inside ZIP
-    let manifestCsv = "Token ID,Husband Name,Wife Name,Surname,Mobile Number,Print Status,Printed Checkbox,Desk Handover Checkbox\n";
+    // Bundle Printing Manifest CSV inside ZIP (File, Token ID, Name only)
+    let manifestCsv = "\uFEFFFile,Token ID,Name\n";
     photosList.forEach((sub) => {
-      const pStatus = sub.frameExportStatus === 'EXPORTED' ? 'Already Exported' : sub.frameExportStatus === 'MODIFIED' ? 'Adjusted' : 'New';
-      manifestCsv += `"${sub.inquiryId}","${sub.husbandName}","${sub.wifeName}","${sub.surname || ''}","${sub.phoneNumber || ''}","${pStatus}","[  ] Printed","[  ] Handed Over"\n`;
+      const cleanHusband = (sub.husbandName || '').trim().replace(/\s+/g, '_');
+      const cleanWife = (sub.wifeName || '').trim().replace(/\s+/g, '_');
+      const cleanSurname = (sub.surname || '').trim().replace(/\s+/g, '_');
+      const filename = `${sub.inquiryId}_${cleanHusband}_${cleanWife}_${cleanSurname}.png`.replace(/[^a-zA-Z0-9_.-]/g, '_');
+      const coupleName = [
+        sub.husbandName && sub.wifeName
+          ? `${sub.husbandName} & ${sub.wifeName}`
+          : sub.husbandName || sub.wifeName || '',
+        sub.surname || ''
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+
+      manifestCsv += `"${filename.replace(/"/g, '""')}","${(sub.inquiryId || '').replace(/"/g, '""')}","${coupleName.replace(/"/g, '""')}"\n`;
     });
     zip.file(`Printing_Manifest_${progName.replace(/\s+/g, '_')}.csv`, manifestCsv);
 
