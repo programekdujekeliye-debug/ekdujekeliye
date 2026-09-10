@@ -4,6 +4,7 @@ import { qrPassService } from './qrPass.service.js';
 import { eventService } from '../events/event.service.js';
 import { mediaService } from '../media/media.service.js';
 import { env } from '../../config/env.js';
+import { formatToDDMMYYYY } from '../../utils/dateFormat.js';
 
 /**
  * Get Digital Pass Details by Inquiry ID
@@ -132,7 +133,7 @@ export async function getPassDetails(req, res) {
       status: pass.status,
       programId: submission.programId,
       programName: event?.name || submission.programName,
-      programDate: event?.date || submission.programDate,
+      programDate: formatToDDMMYYYY(event?.date || submission.programDate),
       programTime: event?.time || submission.programTime || '8:30 PM',
       venue: event?.venue || submission.venue || '',
       venueAddress: event?.venueAddress || '',

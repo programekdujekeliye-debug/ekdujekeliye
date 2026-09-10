@@ -23,6 +23,7 @@ import {
   HeartIcon
 } from '../../../components/Icons';
 import { getOptimizedPhotoUrl } from '../../../utils/mediaPresets';
+import { formatToDDMMYYYY } from '../../../utils/dateFormat';
 import toast from 'react-hot-toast';
 
 const TAKEAWAY_LABELS: Record<string, { eng: string; guj: string }> = {
@@ -643,7 +644,7 @@ export const FeedbackDashboardPage = () => {
                       {item.coupleName || `Inquiry #${item.inquiryId}`}
                     </span>
                     <span className="text-[10px] text-slate-400 font-medium block">
-                      {item.programDate || 'Seminar Attendee'}
+                      {formatToDDMMYYYY(item.programDate) || 'Seminar Attendee'}
                     </span>
                   </div>
 
@@ -720,7 +721,7 @@ export const FeedbackDashboardPage = () => {
 
                       {/* Event Date */}
                       <td className="py-3 px-3 whitespace-nowrap text-slate-600 font-medium">
-                        {fb.programDate || fb.eventId}
+                        {fb.programDate ? formatToDDMMYYYY(fb.programDate) : fb.eventId}
                       </td>
 
                       {/* Ratings */}
@@ -889,7 +890,7 @@ export const FeedbackDashboardPage = () => {
                     {selectedFeedback.coupleName || 'Respected Couple'}
                   </h3>
                   <span className="text-xs text-slate-500 font-mono block">
-                    Inquiry #{selectedFeedback.inquiryId} • {selectedFeedback.programDate || selectedFeedback.eventId}
+                    Inquiry #{selectedFeedback.inquiryId} • {selectedFeedback.programDate ? formatToDDMMYYYY(selectedFeedback.programDate) : selectedFeedback.eventId}
                   </span>
                 </div>
               </div>

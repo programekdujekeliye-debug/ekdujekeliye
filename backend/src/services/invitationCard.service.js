@@ -7,6 +7,7 @@ import { Event } from '../models/Event.js';
 import { eventService } from '../modules/events/event.service.js';
 import { storageService } from './storage.service.js';
 import { r2Provider } from '../integrations/r2/r2.provider.js';
+import { formatToDDMMYYYY } from '../utils/dateFormat.js';
 
 // In-Memory Template & SVG Caches for sub-10ms response times
 const transparentTemplateCache = new Map();
@@ -52,7 +53,7 @@ export class InvitationCardService {
     const coupleTitle = `${husband} & ${wife} ${surname}`.trim() || 'Respected Couple';
 
     const eventName = event?.name || registration.programName || 'Ek Duje Ke Liye Seminar';
-    const eventDate = event?.date || registration.programDate || 'Upcoming Date';
+    const eventDate = formatToDDMMYYYY(event?.date || registration.programDate) || 'Upcoming Date';
     const eventTime = event?.time || registration.programTime || '8:30 PM';
     const venue = event?.venue || 'Sardar Smruti Bhavan, Surat';
     const inquiryId = registration.inquiryId;

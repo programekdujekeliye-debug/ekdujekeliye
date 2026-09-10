@@ -8,6 +8,7 @@ import { sendUtilityTemplate, maskPhoneNumber, getCachedMetaTemplateStatus } fro
 import { ensureFeedbackToken } from '../modules/feedback/feedback.controller.js';
 import { invitationCardService } from './invitationCard.service.js';
 import { TEMPLATE_REGISTRY } from '../integrations/whatsapp/templateRegistry.js';
+import { formatToDDMMYYYY } from '../utils/dateFormat.js';
 
 let isWorkerRunning = false;
 
@@ -133,7 +134,7 @@ export class CommunicationSchedulerService {
     const phone = registration.phoneNumber;
     const customerName = `${registration.husbandName || ''} & ${registration.wifeName || ''}`.trim() || 'Respected Couple';
     const eventName = event.name || '';
-    const eventDate = event.date || '';
+    const eventDate = formatToDDMMYYYY(event.date) || '';
     const eventTime = event.time || '8:30 PM';
     const venue = event.venue || '';
     const executionSource = opts.executionSource || 'NORMAL';

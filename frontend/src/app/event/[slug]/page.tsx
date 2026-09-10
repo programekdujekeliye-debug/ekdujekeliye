@@ -18,6 +18,8 @@ import {
   AlertTriangleIcon
 } from '../../../components/Icons';
 import toast from 'react-hot-toast';
+import { formatIndianDate, formatToDDMMYYYY } from '../../../utils/dateFormat';
+export { formatIndianDate };
 
 interface ProgramDetail {
   id: string;
@@ -51,23 +53,6 @@ interface ProgramDetail {
   isHousefull?: boolean;
   isClosed?: boolean;
 }
-
-export const formatIndianDate = (dateStr?: string): string => {
-  if (!dateStr || dateStr.toLowerCase() === 'tbd') return 'તારીખ ટૂંક સમયમાં (TBD)';
-  const ymdMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (ymdMatch) {
-    const year = ymdMatch[1];
-    const month = ymdMatch[2].padStart(2, '0');
-    const day = ymdMatch[3].padStart(2, '0');
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    const monthName = months[parseInt(month, 10) - 1] || month;
-    return `${day}/${month}/${year} (${day} ${monthName} ${year})`;
-  }
-  return dateStr;
-};
 
 const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.75): Promise<File> => {
   return new Promise((resolve) => {

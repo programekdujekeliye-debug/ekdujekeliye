@@ -23,6 +23,7 @@ import {
   EditIcon
 } from '../../../components/Icons';
 import { getOptimizedPhotoUrl, resolveDisplayImageUrl } from '../../../utils/mediaPresets';
+import { formatToDDMMYYYY } from '../../../utils/dateFormat';
 import toast from 'react-hot-toast';
 
 export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean }) => {
@@ -645,7 +646,7 @@ export const RegistrationsPage = ({ isEmbedded = false }: { isEmbedded?: boolean
                             <span className="text-slate-900 font-semibold truncate block max-w-[170px]">
                               {sub.programName || 'N/A'}
                             </span>
-                            <span className="text-[10px] text-slate-400">{sub.programDate}</span>
+                            <span className="text-[10px] text-slate-400">{formatToDDMMYYYY(sub.programDate)}</span>
                           </td>
                           <td className="px-4 py-3.5">
                             {isPaid ? (

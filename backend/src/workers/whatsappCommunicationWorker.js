@@ -5,6 +5,7 @@ import { sendUtilityTemplate } from '../integrations/whatsapp/whatsapp.service.j
 import { ensureFeedbackToken } from '../modules/feedback/feedback.controller.js';
 import { invitationCardService } from '../services/invitationCard.service.js';
 import { env } from '../config/env.js';
+import { formatToDDMMYYYY } from '../utils/dateFormat.js';
 
 /**
  * Helper to parse event date and time into Asia/Kolkata Date object
@@ -91,7 +92,7 @@ export async function runAutomaticWhatsAppWorker() {
     const hoursUntilEvent = msUntilEvent / (1000 * 60 * 60);
 
     const eventName = ev.name || 'Ek Duje Ke Liye Seminar';
-    const eventDate = ev.date;
+    const eventDate = formatToDDMMYYYY(ev.date);
     const eventTime = ev.time || '8:30 PM';
     const venue = ev.venue || 'Event Venue';
 

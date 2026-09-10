@@ -6,6 +6,7 @@ import { WhatsappConversation } from '../../models/WhatsappConversation.js';
 import { Registration } from '../../models/Registration.js';
 import { whatsappTemplateService } from './whatsappTemplate.service.js';
 import { invitationCardService } from '../../services/invitationCard.service.js';
+import { formatToDDMMYYYY } from '../../utils/dateFormat.js';
 
 // In-Memory cache of Meta template statuses (refreshed every 5 minutes)
 let metaTemplateStatusCache = new Map();
@@ -459,11 +460,16 @@ export async function sendWhatsAppMessage(rawParams = {}) {
 
   const bodyParameters = [];
   const bodyVars = templateDef.bodyVariables || templateDef.requiredVariables || [];
+  const DATE_PARAM_KEYS = new Set(['eventDate', 'programDate', 'updatedDate', 'date', 'scheduledDate']);
   if (bodyComponent && bodyVars.length > 0) {
     bodyVars.forEach(varKey => {
+      let val = variables[varKey] !== undefined ? String(variables[varKey]) : '';
+      if (DATE_PARAM_KEYS.has(varKey) && val) {
+        val = formatToDDMMYYYY(val);
+      }
       bodyParameters.push({
         type: 'text',
-        text: String(variables[varKey] || '')
+        text: val
       });
     });
   }

@@ -17,6 +17,8 @@ import {
   ShieldCheckIcon,
   SparklesIcon
 } from '../../../components/Icons';
+import { formatIndianDate, formatToDDMMYYYY } from '../../../utils/dateFormat';
+export { formatIndianDate };
 
 interface PaymentStatusResponse {
   inquiryId: string;
@@ -53,23 +55,6 @@ interface PaymentStatusResponse {
     price?: number;
   } | null;
 }
-
-export const formatIndianDate = (dateStr?: string): string => {
-  if (!dateStr || dateStr.toLowerCase() === 'tbd') return 'તારીખ ટૂંક સમયમાં (TBD)';
-  const ymdMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (ymdMatch) {
-    const year = ymdMatch[1];
-    const month = ymdMatch[2].padStart(2, '0');
-    const day = ymdMatch[3].padStart(2, '0');
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    const monthName = months[parseInt(month, 10) - 1] || month;
-    return `${day}/${month}/${year} (${day} ${monthName} ${year})`;
-  }
-  return dateStr;
-};
 
 export default function PaymentRetryPage() {
   const params = useParams();

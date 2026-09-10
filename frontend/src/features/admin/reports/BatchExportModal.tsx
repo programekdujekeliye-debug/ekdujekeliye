@@ -11,6 +11,7 @@ import { LuxurySelect } from '../../../components/LuxurySelect';
 import { FrameReviewExportModal } from './FrameReviewExportModal';
 import { getOptimizedPhotoUrl } from '../../../utils/mediaPresets';
 import toast from 'react-hot-toast';
+import { formatToDDMMYYYY } from '../../../utils/dateFormat';
 
 interface BatchExportModalProps {
   isOpen: boolean;
@@ -428,7 +429,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
           `"${(s.surname || '').replace(/"/g, '""')}"`,
           `'${s.phoneNumber}`,
           `"${(s.programName || '').replace(/"/g, '""')}"`,
-          s.programDate || '',
+          formatToDDMMYYYY(s.programDate),
           amt,
           s.payment?.status || s.status || 'pending',
           s.payment?.razorpayPaymentId || s.payment?.provider || 'Online',
@@ -466,7 +467,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
         : 'All Seminar Batches';
 
     const progObj = programs.find((p) => p.id === exportProgramId);
-    const progDate = progObj?.date || '';
+    const progDate = progObj?.date ? formatToDDMMYYYY(progObj.date) : '';
     const progVenue = progObj?.venue || '';
 
     // Helper for extracting numeric token for ascending sort

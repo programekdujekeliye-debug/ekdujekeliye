@@ -1,7 +1,4 @@
-/**
- * Central Meta WhatsApp Template Registry for Ek Duje Ke Liye (EDKL)
- * Strict Meta UTILITY categorization compliance (zero promotional copy, URL button for pass delivery, sequential variables)
- */
+import { formatToDDMMYYYY } from '../../utils/dateFormat.js';
 
 export const CORE_TEMPLATES = {
   // 1. Payment Confirmed + Digital Pass (Primary Pass Delivery)
@@ -25,7 +22,7 @@ export const CORE_TEMPLATES = {
             [
               'Jaynesh',
               'Ek Duje Ke Liye Seminar',
-              '15 September 2026',
+              '15-09-2026',
               '8:30 PM',
               'Sardar Smruti Bhavan, Surat',
               'EK06-02'
@@ -69,7 +66,7 @@ export const CORE_TEMPLATES = {
               'Jaynesh & Pooja',
               'Ek Duje Ke Liye Seminar',
               'EK01-02',
-              '15 September 2026',
+              '15-09-2026',
               '8:30 PM',
               'Sardar Smruti Bhavan, Surat',
               '₹1500'
@@ -113,7 +110,7 @@ export const CORE_TEMPLATES = {
               'Jaynesh',
               'Ek Duje Ke Liye Seminar',
               'EK06-02',
-              '15 September 2026',
+              '15-09-2026',
               '8:30 PM',
               'Sardar Smruti Bhavan, Surat',
               'Pending Payment'
@@ -147,7 +144,7 @@ export const CORE_TEMPLATES = {
             [
               'Jaynesh',
               'Ek Duje Ke Liye Seminar',
-              '16 September 2026',
+              '16-09-2026',
               '8:30 PM',
               'Sardar Smruti Bhavan, Surat',
               'EK06-02'
@@ -191,7 +188,7 @@ export const CORE_TEMPLATES = {
               'Jaynesh',
               'Ek Duje Ke Liye Seminar',
               'EK06-02',
-              '15 September 2026'
+              '15-09-2026'
             ]
           ]
         }
@@ -264,7 +261,7 @@ export const CORE_TEMPLATES = {
             [
               'Jaynesh & Pooja',
               'Ek Duje Ke Liye Seminar',
-              '7 September 2026',
+              '07-09-2026',
               '8:30 PM',
               'Sardar Patel Smruti Bhavan, Surat',
               'EK06-02'
@@ -315,7 +312,7 @@ export const CORE_TEMPLATES = {
             [
               'Jaynesh & Pooja',
               'Ek Duje Ke Liye Seminar',
-              '7 September 2026',
+              '07-09-2026',
               '8:30 PM',
               'Sardar Patel Smruti Bhavan, Surat',
               'EK06-02'
@@ -495,6 +492,14 @@ export function validateTemplateVariables(templateKey, providedVariables = {}) {
     return { valid: false, error: `Template '${templateKey}' is not registered.` };
   }
 
+  // Standardize all date variables to DD-MM-YYYY format
+  const DATE_KEYS = ['eventDate', 'programDate', 'updatedDate', 'date', 'scheduledDate'];
+  for (const dKey of DATE_KEYS) {
+    if (providedVariables[dKey]) {
+      providedVariables[dKey] = formatToDDMMYYYY(providedVariables[dKey]);
+    }
+  }
+
   // Auto-fill smart fallback aliases for edkl_post_event_memories_feedback_v1
   if (templateKey === 'edkl_post_event_memories_feedback_v1') {
     if (!providedVariables.galleryToken) {
@@ -546,7 +551,10 @@ export function renderTemplatePreview(templateKey, variables = {}) {
   const bodyVars = template.bodyVariables || template.requiredVariables || [];
   bodyVars.forEach((varKey, index) => {
     const placeholder = new RegExp(`\\{\\{${index + 1}\\}\\}`, 'g');
-    const val = variables[varKey] !== undefined ? String(variables[varKey]) : `[${varKey}]`;
+    let val = variables[varKey] !== undefined ? String(variables[varKey]) : `[${varKey}]`;
+    if (['eventDate', 'programDate', 'updatedDate', 'date', 'scheduledDate'].includes(varKey) && variables[varKey]) {
+      val = formatToDDMMYYYY(val);
+    }
     text = text.replace(placeholder, val);
   });
   return text;

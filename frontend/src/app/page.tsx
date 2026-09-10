@@ -27,6 +27,7 @@ import {
   CheckIcon,
   LinktreeIcon
 } from '../components/Icons';
+import { formatIndianDate, formatToDDMMYYYY } from '../utils/dateFormat';
 
 interface Program {
   id: string;
@@ -173,26 +174,6 @@ const FALLBACK_PROGRAMS: Program[] = [
     earlyRegistrationMode: false
   }
 ];
-
-// Helper to format date in Indian English format: 07/09/2026 (07 September 2026)
-function formatIndianDate(dateStr?: string): string {
-  if (!dateStr || dateStr.toUpperCase() === 'TBD') {
-    return 'Date to be declared (તારીખ ટૂંક સમયમાં જાહેર થશે)';
-  }
-  const parts = dateStr.split('-');
-  if (parts.length === 3) {
-    const year = parts[0];
-    const month = parseInt(parts[1], 10);
-    const day = parts[2];
-    const monthNames = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    const monthName = monthNames[month - 1] || parts[1];
-    return `${day}/${parts[1]}/${year} (${day} ${monthName} ${year})`;
-  }
-  return dateStr;
-}
 
 export default function HomePage() {
   const [programs, setPrograms] = useState<Program[]>(FALLBACK_PROGRAMS);

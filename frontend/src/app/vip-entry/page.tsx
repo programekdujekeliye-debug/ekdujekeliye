@@ -21,6 +21,7 @@ import {
   RefreshCwIcon
 } from '../../components/Icons';
 import toast from 'react-hot-toast';
+import { formatToDDMMYYYY } from '../../utils/dateFormat';
 
 // Client-side image compression helper matching main event registration
 const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 0.8): Promise<File> => {
@@ -426,7 +427,7 @@ function VipEntryContent() {
               </p>
               <div className="pt-2 border-t border-amber-200/80 flex flex-col sm:flex-row justify-between gap-1 text-[11px] text-stone-600">
                 <span>📍 {linkInfo.venue || linkInfo.city || 'Event Venue'}</span>
-                <span>🗓️ {linkInfo.programDate} • {linkInfo.programTime}</span>
+                <span>🗓️ {formatToDDMMYYYY(linkInfo.programDate)} • {linkInfo.programTime}</span>
               </div>
             </div>
 
@@ -487,7 +488,7 @@ function VipEntryContent() {
               </div>
               <div className="flex justify-between">
                 <span className="text-stone-500 font-medium">તારીખ અને સમય:</span>
-                <span className="font-semibold text-stone-900">{submittedData.programDate}</span>
+                <span className="font-semibold text-stone-900">{formatToDDMMYYYY(submittedData.programDate)}</span>
               </div>
               {submittedData.venue && (
                 <div className="flex justify-between">
@@ -580,7 +581,7 @@ function VipEntryContent() {
                     <CalendarIcon className="w-5 h-5 text-rose-600 flex-shrink-0" />
                     <div>
                       <span className="text-xs text-stone-500 block font-medium">તારીખ (Date)</span>
-                      <span className="font-semibold text-stone-900">{linkInfo.programDate || 'Event Date'}</span>
+                      <span className="font-semibold text-stone-900">{formatToDDMMYYYY(linkInfo.programDate) || 'Event Date'}</span>
                     </div>
                   </div>
 

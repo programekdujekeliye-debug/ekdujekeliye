@@ -15,6 +15,7 @@ import {
   Share2Icon,
   AlertTriangleIcon
 } from '@/components/Icons';
+import { formatToDDMMYYYY } from '@/utils/dateFormat';
 
 export default function GalleryRedirectPage() {
   const params = useParams();
@@ -206,7 +207,7 @@ export default function GalleryRedirectPage() {
                 {eventDate && (
                   <div className="flex items-center gap-1">
                     <CalendarIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
-                    <span>{eventDate}</span>
+                    <span>{formatToDDMMYYYY(eventDate)}</span>
                   </div>
                 )}
                 {eventVenue && (

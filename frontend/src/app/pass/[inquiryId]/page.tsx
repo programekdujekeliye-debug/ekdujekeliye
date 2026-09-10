@@ -16,6 +16,7 @@ import {
   CalendarIcon,
   ClockIcon
 } from '../../../components/Icons';
+import { formatToDDMMYYYY } from '../../../utils/dateFormat';
 
 interface PassData {
   passId: string;
@@ -299,7 +300,7 @@ export default function DigitalPassPage() {
 
     ctx.fillStyle = '#44403c';
     ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.fillText(`📅  ${data.programDate}    •    ⏰  ${data.programTime}`, regX + 22, evBoxY + 74);
+    ctx.fillText(`📅  ${formatToDDMMYYYY(data.programDate)}    •    ⏰  ${data.programTime}`, regX + 22, evBoxY + 74);
 
     ctx.fillStyle = '#57534e';
     ctx.font = '500 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -559,7 +560,7 @@ export default function DigitalPassPage() {
             </div>
             <div className="flex items-center gap-1.5 text-[11px] text-stone-600">
               <CalendarIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
-              <span>{pass.programDate}</span>
+              <span>{formatToDDMMYYYY(pass.programDate)}</span>
               <span className="text-stone-300">&bull;</span>
               <ClockIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
               <span>{pass.programTime}</span>

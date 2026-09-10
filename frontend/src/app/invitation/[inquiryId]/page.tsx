@@ -15,6 +15,7 @@ import {
   Share2Icon,
   CheckCircleIcon
 } from '../../../components/Icons';
+import { formatToDDMMYYYY } from '../../../utils/dateFormat';
 
 interface SubmissionData {
   _id?: string;
@@ -185,8 +186,9 @@ export default function PersonalizedInvitationPage() {
       ctx.textAlign = 'center';
       ctx.fillText(sub.program?.name || sub.programName || 'Ek Duje Ke Liye', canvas.width / 2, 72);
 
-      const eventDateStr = sub.program?.date || sub.programDate || '';
-      if (eventDateStr && eventDateStr !== 'TBD') {
+      const rawEventDate = sub.program?.date || sub.programDate || '';
+      const eventDateStr = formatToDDMMYYYY(rawEventDate);
+      if (eventDateStr && !eventDateStr.includes('TBD')) {
         ctx.font = 'bold 15px sans-serif';
         ctx.fillStyle = '#f8fafc';
         ctx.fillText(`Date: ${eventDateStr} • Surat`, canvas.width / 2, 102);
@@ -528,7 +530,7 @@ export default function PersonalizedInvitationPage() {
       `Couple: ${coupleName}\n` +
       `Registration ID: ${submission.inquiryId}\n` +
       `Event: ${submission.program?.name || submission.programName || 'Ek Duje Ke Liye'}\n` +
-      `Date: ${submission.program?.date || submission.programDate || '11 September 2026'}\n\n` +
+      `Date: ${formatToDDMMYYYY(submission.program?.date || submission.programDate) || '11-09-2026'}\n\n` +
       `કાર્ડ જોવા અને ડાઉનલોડ કરવા માટે આ લિંક ઓપન કરો:\n` +
       `https://www.ekdujekeliye.in/invitation/${submission.inquiryId}`
     );
@@ -729,7 +731,7 @@ export default function PersonalizedInvitationPage() {
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-stone-600">
             <CalendarIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
-            <span>{submission.program?.date || submission.programDate || ''}</span>
+            <span>{formatToDDMMYYYY(submission.program?.date || submission.programDate)}</span>
             <span className="text-stone-300">&bull;</span>
             <ClockIcon className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
             <span>{submission.program?.time || submission.programTime || '8:30 PM'}</span>

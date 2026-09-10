@@ -31,6 +31,7 @@ import {
 import toast from 'react-hot-toast';
 import { clearApiClientCache } from '../../../services/apiClient';
 import { safeSessionStorage } from '../../../utils/safeStorage';
+import { formatToDDMMYYYY } from '../../../utils/dateFormat';
 
 type SectionId = 'schedule' | 'pricing' | 'media' | 'invitation' | 'speaker' | 'pass_seo';
 
@@ -1712,7 +1713,7 @@ export const EventsPage: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <CalendarIcon className="w-3.5 h-3.5 text-stone-400 flex-shrink-0" />
                       <span className="font-medium text-stone-800">
-                        {isTbd ? 'Date to be announced' : `${prog.date} (${prog.time || '8:30 PM'})`}
+                        {isTbd ? 'Date to be announced' : `${formatToDDMMYYYY(prog.date)} (${prog.time || '8:30 PM'})`}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">

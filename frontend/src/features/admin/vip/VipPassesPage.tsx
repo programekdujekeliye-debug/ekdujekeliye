@@ -27,6 +27,7 @@ import { getOptimizedPhotoUrl, resolveDisplayImageUrl } from '../../../utils/med
 import { EditRegistrationModal } from '../registrations/EditRegistrationModal';
 import { registrationsApi } from '../../../services/admin/registrationsApi';
 import { LuxurySelect } from '../../../components/LuxurySelect';
+import { formatToDDMMYYYY } from '../../../utils/dateFormat';
 import toast from 'react-hot-toast';
 
 export type VipCategory = 'TITLE_SPONSOR' | 'POWERED_BY' | 'CO_POWERED_BY' | 'SUPPORTED_BY' | 'VIP_GUEST' | 'CUSTOM';
@@ -612,7 +613,7 @@ export const VipPassesPage = () => {
       `"${g.wifeName}"`,
       `"${g.surname}"`,
       `'${g.phoneNumber}`,
-      `"${g.programName || ''} (${g.programDate || ''})"`,
+      `"${g.programName || ''} (${formatToDDMMYYYY(g.programDate)})"`,
       `"${g.vipCategory || g.vipLinkName || 'VIP'}"`,
       `"${g.vipLinkCode || ''}"`,
       g.attendance === 'present' ? 'Present' : 'Pending',
@@ -958,7 +959,7 @@ export const VipPassesPage = () => {
                             {link.name}
                           </h4>
                           <div className="text-[11px] text-slate-500 font-medium">
-                            {link.programName || 'All Event Slots'} {link.programDate ? `• ${link.programDate}` : ''}
+                            {link.programName || 'All Event Slots'} {link.programDate ? `• ${formatToDDMMYYYY(link.programDate)}` : ''}
                           </div>
                           {link.notes && (
                             <p className="text-[10px] text-slate-400 italic line-clamp-1">
@@ -1307,7 +1308,7 @@ export const VipPassesPage = () => {
                         {/* Program Slot */}
                         <td className="py-3.5 px-4 text-slate-600">
                           <div className="font-bold text-slate-800 truncate">{g.programName || 'VIP Seminar Slot'}</div>
-                          <div className="text-[10px] text-slate-500">{g.programDate} &bull; {g.programTime || '8:30 PM'}</div>
+                          <div className="text-[10px] text-slate-500">{formatToDDMMYYYY(g.programDate)} &bull; {g.programTime || '8:30 PM'}</div>
                         </td>
 
                         {/* Payment Pill */}
@@ -1574,7 +1575,7 @@ export const VipPassesPage = () => {
                         <p className="text-xs text-slate-600 font-semibold">{g.surname}</p>
                         <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 pt-0.5">
                           <MapPinIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                          <span className="truncate">{g.programName || 'VIP Special Guest'} ({g.programDate})</span>
+                          <span className="truncate">{g.programName || 'VIP Special Guest'} ({formatToDDMMYYYY(g.programDate)})</span>
                         </div>
                       </div>
                     </div>

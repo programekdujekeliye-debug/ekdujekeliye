@@ -8,6 +8,7 @@ import { eventService } from '../events/event.service.js';
 import { qrPassService } from '../passes/qrPass.service.js';
 import { sendUtilityTemplate } from '../../integrations/whatsapp/whatsapp.service.js';
 import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
+import { formatToDDMMYYYY } from '../../utils/dateFormat.js';
 
 export class PaymentService {
   /**
@@ -279,7 +280,7 @@ export class PaymentService {
 
       const customerName = `${submission.husbandName || ''} & ${submission.wifeName || ''}`.trim() || 'Guest';
       const eventName = event?.name || submission.programName || 'Ek Duje Ke Liye Seminar';
-      const eventDate = event?.date || submission.programDate || '';
+      const eventDate = formatToDDMMYYYY(event?.date || submission.programDate) || '';
       const eventTime = event?.time || submission.programTime || '8:30 PM';
       const venue = event?.venue || 'Sardar Smruti Bhavan, Surat';
 

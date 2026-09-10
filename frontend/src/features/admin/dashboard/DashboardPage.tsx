@@ -11,6 +11,7 @@ import {
   CalendarIcon,
   BuildingIcon
 } from '../../../components/Icons';
+import { formatToDDMMYYYY } from '../../../utils/dateFormat';
 
 export const DashboardPage = () => {
   const { selectedProgramId, programs, loadingPrograms } = useAdmin();
@@ -72,9 +73,9 @@ export const DashboardPage = () => {
         setEventStatus(effectiveStatus);
 
         if (data.selectedEvent) {
-          setSelectedEventName(`${data.selectedEvent.name} (${data.selectedEvent.date})`);
+          setSelectedEventName(`${data.selectedEvent.name} (${formatToDDMMYYYY(data.selectedEvent.date)})`);
         } else if (matched) {
-          setSelectedEventName(`${matched.name} (${matched.date})`);
+          setSelectedEventName(`${matched.name} (${formatToDDMMYYYY(matched.date)})`);
         } else {
           setSelectedEventName('All Events Scope');
         }

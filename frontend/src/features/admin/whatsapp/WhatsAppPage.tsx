@@ -37,6 +37,7 @@ import { WhatsAppInbox } from './WhatsAppInbox';
 import { LuxurySelect, SelectOption } from '../../../components/LuxurySelect';
 import { useAdmin } from '../context/AdminContext';
 import toast from 'react-hot-toast';
+import { formatToDDMMYYYY } from '../../../utils/dateFormat';
 
 export const WhatsAppPage = () => {
   const {
@@ -1268,7 +1269,7 @@ export const WhatsAppPage = () => {
                                 <span className="text-[10px] font-mono text-rose-700 font-bold">{row.inquiryId}</span>
                                 {selectedEventId === 'all' && (row.programDate || row.programName) && (
                                   <span className="text-[9px] px-1.5 py-0.2 bg-amber-50 text-amber-800 border border-amber-200/80 rounded font-semibold whitespace-nowrap">
-                                    {row.programDate || row.programName}
+                                    {row.programDate ? formatToDDMMYYYY(row.programDate) : row.programName}
                                   </span>
                                 )}
                               </div>
