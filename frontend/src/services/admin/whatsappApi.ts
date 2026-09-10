@@ -258,7 +258,7 @@ export const whatsappApi = {
     });
   },
 
-  async runWorker(options?: { simulatedNow?: string; eventId?: string }): Promise<{ success: boolean; summary?: any; error?: string }> {
+  async runWorker(options?: { simulatedNow?: string; eventId?: string; forceRun?: boolean }): Promise<{ success: boolean; summary?: any; error?: string }> {
     return apiClient('/api/whatsapp/run-worker-admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

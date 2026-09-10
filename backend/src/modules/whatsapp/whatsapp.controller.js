@@ -1653,8 +1653,8 @@ export const sendSpecificBroadcast = async (req, res) => {
  */
 export const runSchedulerWorker = async (req, res) => {
   try {
-    const { simulatedNow, eventId } = req.body || {};
-    const summary = await communicationSchedulerService.processScheduledJobs({ simulatedNow, eventId });
+    const { simulatedNow, eventId, forceRun } = req.body || {};
+    const summary = await communicationSchedulerService.processScheduledJobs({ simulatedNow, eventId, forceRun: forceRun ?? true });
     if (summary?.reason === 'CONCURRENCY_LOCK_ACTIVE') {
       return res.json({
         success: true,
@@ -1753,11 +1753,33 @@ export const retryEventFailedMessages = async (req, res) => {
         $or: [
           { id: eventId },
           { slug: eventId },
+          { date: eventId },
           ...(mongoose.isValidObjectId(eventId) ? [{ _id: eventId }] : [])
         ]
       }).lean();
       const eventIds = [eventId, event?.id, event?.slug, event?.date].filter(Boolean);
-      query.eventId = { $in: eventIds };
+
+      const eventRegs = await Registration.find({
+        $or: [
+          { programId: { $in: eventIds } },
+          ...(event?.date ? [{ programDate: event.date }] : [])
+        ],
+        isDeleted: { $ne: true }
+      }).select('_id inquiryId').lean();
+
+      const regIds = eventRegs.map(r => r.inquiryId).filter(Boolean);
+      const regObjectIds = eventRegs.map(r => r._id).filter(Boolean);
+
+      query.$and = [
+        {
+          $or: [
+            { eventId: { $in: eventIds } },
+            ...(event?.date ? [{ eventDate: event.date }] : []),
+            ...(regIds.length > 0 ? [{ inquiryId: { $in: regIds } }] : []),
+            ...(regObjectIds.length > 0 ? [{ registrationId: { $in: regObjectIds } }] : [])
+          ]
+        }
+      ];
     }
 
     // Exclude users who explicitly opted out of WhatsApp
@@ -1824,12 +1846,9 @@ export const retryEventFailedMessages = async (req, res) => {
         }
       }
 
-      // Schedule with 800ms spacing between jobs to prevent burst rate limits
-      const scheduledTime = new Date(now.getTime() + requeuedCount * 800);
-
       const updatePayload = {
         status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
-        scheduledFor: scheduledTime,
+        scheduledFor: now, // Due immediately so worker processes it right away
         lockedAt: null,
         attemptCount: 0,
         providerErrorCode: null,
@@ -1866,7 +1885,7 @@ export const retryEventFailedMessages = async (req, res) => {
     }
 
     // Trigger communication worker in background to start immediate staggered dispatch
-    communicationSchedulerService.processScheduledJobs({ eventId, batchSize: 50 }).catch(err => {
+    communicationSchedulerService.processScheduledJobs({ eventId, batchSize: 100, forceRun: true }).catch(err => {
       console.warn('[RetryFailedWorker] Background run warning:', err.message);
     });
 

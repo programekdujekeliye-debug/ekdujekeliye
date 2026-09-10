@@ -10,7 +10,7 @@ import { invitationCardService } from './invitationCard.service.js';
 import { TEMPLATE_REGISTRY } from '../integrations/whatsapp/templateRegistry.js';
 import { formatToDDMMYYYY } from '../utils/dateFormat.js';
 
-let isWorkerRunning = false;
+let workerStartedAt = null;
 
 export class CommunicationSchedulerService {
   /**
@@ -363,12 +363,13 @@ export class CommunicationSchedulerService {
    * Process all due scheduled communications with strict eligibility revalidation, concurrency locking, and batch limits
    */
   async processScheduledJobs(options = {}) {
-    if (isWorkerRunning && !options.ignoreLock) {
+    const isLocked = workerStartedAt && (Date.now() - workerStartedAt < 3 * 60 * 1000);
+    if (isLocked && !options.ignoreLock && !options.forceRun) {
       console.warn('[CommunicationScheduler] Worker run skipped: Previous worker invocation is still active.');
       return { success: false, reason: 'CONCURRENCY_LOCK_ACTIVE' };
     }
 
-    isWorkerRunning = true;
+    workerStartedAt = Date.now();
     try {
       // Determine canonical NOW timestamp (supports TEST simulated clock)
       let currentNow = new Date();
@@ -383,34 +384,64 @@ export class CommunicationSchedulerService {
 
       const batchLimit = options.batchSize || 100;
 
-      // 1. Stale Lease Recovery: Reclaim jobs locked > 5 minutes ago if worker crashed
-      const staleThreshold = new Date(Date.now() - 5 * 60 * 1000);
+      // 1. Stale Lease Recovery: Reclaim jobs locked > 2 minutes ago or stuck with null lockedAt
+      const staleThreshold = new Date(Date.now() - 2 * 60 * 1000);
       await WhatsappMessage.updateMany(
         {
           status: 'SENDING',
-          lockedAt: { $lte: staleThreshold },
-          attemptCount: { $lt: 3 }
+          $or: [
+            { lockedAt: { $lte: staleThreshold } },
+            { lockedAt: null },
+            { lockedAt: { $exists: false } }
+          ],
+          attemptCount: { $lt: 5 }
         },
         {
           $set: { status: WHATSAPP_MESSAGE_STATUSES.QUEUED, lockedAt: null }
         }
       );
 
-      // 2. Fetch candidates for current window
+      // 2. Fetch candidates for current window (due now, or null/missing scheduledFor)
       const candidateQuery = {
         status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
-        scheduledFor: { $lte: currentNow }
+        $or: [
+          { scheduledFor: { $lte: currentNow } },
+          { scheduledFor: null },
+          { scheduledFor: { $exists: false } }
+        ]
       };
       if (options.eventId && options.eventId !== 'all') {
         const eventDoc = await Event.findOne({
           $or: [
             { id: options.eventId },
             { slug: options.eventId },
+            { date: options.eventId },
             ...(mongoose.isValidObjectId(options.eventId) ? [{ _id: options.eventId }] : [])
           ]
         }).lean();
         const eventIds = [options.eventId, eventDoc?.id, eventDoc?.slug, eventDoc?.date].filter(Boolean);
-        candidateQuery.eventId = { $in: eventIds };
+
+        const eventRegs = await Registration.find({
+          $or: [
+            { programId: { $in: eventIds } },
+            ...(eventDoc?.date ? [{ programDate: eventDoc.date }] : [])
+          ],
+          isDeleted: { $ne: true }
+        }).select('_id inquiryId').lean();
+
+        const regIds = eventRegs.map(r => r.inquiryId).filter(Boolean);
+        const regObjectIds = eventRegs.map(r => r._id).filter(Boolean);
+
+        candidateQuery.$and = [
+          {
+            $or: [
+              { eventId: { $in: eventIds } },
+              ...(eventDoc?.date ? [{ eventDate: eventDoc.date }] : []),
+              ...(regIds.length > 0 ? [{ inquiryId: { $in: regIds } }] : []),
+              ...(regObjectIds.length > 0 ? [{ registrationId: { $in: regObjectIds } }] : [])
+            ]
+          }
+        ];
       }
 
       const candidateJobs = await WhatsappMessage.find(candidateQuery)
@@ -625,8 +656,19 @@ export class CommunicationSchedulerService {
 
         if (sendResult.success) {
           summary.sent++;
+          job.status = WHATSAPP_MESSAGE_STATUSES.SENT;
+          job.lockedAt = null;
+          job.providerMessageId = sendResult.providerMessageId || job.providerMessageId;
+          await job.save();
         } else {
           summary.failed++;
+          job.status = WHATSAPP_MESSAGE_STATUSES.FAILED;
+          job.lastErrorMessage = sendResult.error || sendResult.message || 'Dispatch failed';
+          job.lastErrorCode = sendResult.code || sendResult.status;
+          job.providerErrorCode = sendResult.code || sendResult.status;
+          job.providerErrorMessage = sendResult.message || sendResult.error;
+          job.lockedAt = null;
+          await job.save();
         }
 
         // Throttle 800ms between messages to respect Meta Cloud API rate limits
@@ -639,13 +681,14 @@ export class CommunicationSchedulerService {
         summary.failed++;
         job.status = WHATSAPP_MESSAGE_STATUSES.FAILED;
         job.lastErrorMessage = err.message;
+        job.lockedAt = null;
         await job.save();
       }
     }
 
     return summary;
   } finally {
-    isWorkerRunning = false;
+    workerStartedAt = null;
   }
   }
 
