@@ -461,6 +461,26 @@ export const CORE_TEMPLATES = {
         text: `🙏🏻 રાજકોટવાસીઓનો હૃદયપૂર્વક આભાર!\nરાજકોટમાં યોજાયેલ “એક દૂજે કે લિયે” કાર્યક્રમને મળેલા સુંદર પ્રતિસાદ અને પ્રેમ બદલ આપ સૌનો ખૂબ ખૂબ આભાર. ❤️\n\nહવે આવતીકાલે જામનગરમાં “એક દૂજે કે લિયે”નો ખાસ Couples Show યોજાઈ રહ્યો છે.\nજો તમારા પરિવાર, મિત્રો અથવા ઓળખીતાઓ જામનગરમાં રહેતા હોય, તો આ માહિતી તેમની સાથે જરૂર શેર કરજો. તમે તમારા પ્રિય Coupleને આ કાર્યક્રમની Ticket Gift પણ કરી શકો છો. 🎁\n\n📍 સ્થળ: M. P. Shah Town Hall, Jamnagar\n📅 તારીખ: 10 September 2026\n⏰ સમય: રાત્રે 8:30 વાગ્યે\n\n🎟️ Ticket Booking:\nhttps://app.wowsly.com/e/3196/ek-duje-ke-liye\n\n📞 વધુ માહિતી માટે:\n8320208784 / 8866033383\n\nઆવતીકાલે જામનગરમાં મળીએ. ❤️\nEk Duje Ke Liye Team`
       }
     ]
+  },
+
+  // 17. Jamnagar Couples Show Pass & Arrival Alert
+  edkl_jamnagar_hall_pass_v1: {
+    key: 'edkl_jamnagar_hall_pass_v1',
+    metaName: 'edkl_jamnagar_hall_pass_v1',
+    category: 'UTILITY',
+    section: 'BROADCAST',
+    language: 'gu',
+    purpose: 'Jamnagar Show Couple Pass & Hall Arrival Notification',
+    trigger: 'jamnagar_hall_pass_broadcast',
+    bodyVariables: ['customerName'],
+    buttonVariables: [],
+    requiredVariables: ['customerName'],
+    components: [
+      {
+        type: 'BODY',
+        text: 'નમસ્તે {{1}},\n\nતમારું *“એક દૂજે કે લિયે – જામનગર”* કાર્યક્રમ માટેનું રજિસ્ટ્રેશન પૂર્ણ થઈ ગયું છે.\n\nતમારો *Couple Pass હોલ પર જ આપવામાં આવશે*, એટલે અલગથી પાસ લેવા ક્યાંય જવાની જરૂર નથી.\n\n📍 એમ. પી. શાહ ટાઉન હોલ, જામનગર\n📅 આજે, 10 સપ્ટેમ્બર 2026\n⏰ રાત્રે 8:30 વાગ્યે\n\nબસ જોજો હો, ભૂલાય નહીં 😊\n*આજે જ કાર્યક્રમ છે અને હવે આવવાનો સમય થઈ ગયો છે.*\n\nસમયસર હોલ પર આવી જજો.\n\nકોઈ માહિતીની જરૂર હોય તો સંપર્ક કરો:\n8320208784 / 9904225313\n\nEk Duje Ke Liye Team'
+      }
+    ]
   }
 };
 

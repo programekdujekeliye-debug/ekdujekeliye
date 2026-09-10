@@ -15,9 +15,10 @@ export const getBroadcastOverview = async (req, res) => {
   try {
     const broadcastFilter = {
       $or: [
-        { trigger: 'marketing_broadcast' },
+        { trigger: { $in: ['marketing_broadcast', 'jamnagar_hall_pass_broadcast', 'jamnagar_hall_pass_broadcast_retry'] } },
         { templateCategory: 'MARKETING' },
-        { idempotencyKey: { $regex: '^MKT_BROADCAST' } }
+        { templateName: 'edkl_jamnagar_hall_pass_v1' },
+        { idempotencyKey: { $regex: '^(MKT_BROADCAST|JAMNAGAR)' } }
       ]
     };
 
@@ -88,12 +89,18 @@ export const getBroadcastOverview = async (req, res) => {
     const campaigns = campaignsAgg.map(c => {
       const templateDef = TEMPLATE_REGISTRY[c._id];
       const isLiveNow = c.sendingCount > 0;
+      let audience = 'Past Event Attendees (Paid Registrations)';
+      if (c._id === 'edkl_september_special_invite_v1') {
+        audience = 'Rich & Royal Salon (Clean Contacts)';
+      } else if (c._id === 'edkl_jamnagar_hall_pass_v1') {
+        audience = 'Jamnagar Registrations (CSV 10-9-2026)';
+      }
       return {
         id: `camp_${c._id || 'general'}`,
         templateName: c._id || 'edkl_all_couples_invite_v1',
         title: templateDef?.purpose || 'General Couple Seminar Invitation & Gift Broadcast',
-        category: 'MARKETING',
-        audience: c._id === 'edkl_september_special_invite_v1' ? 'Rich & Royal Salon (Clean Contacts)' : 'Past Event Attendees (Paid Registrations)',
+        category: templateDef?.category || 'MARKETING',
+        audience,
         totalRecipients: c.totalRecipients,
         sentCount: c.sentCount,
         deliveredCount: c.deliveredCount,
@@ -153,9 +160,10 @@ export const getBroadcastLogs = async (req, res) => {
 
     const filter = {
       $or: [
-        { trigger: 'marketing_broadcast' },
+        { trigger: { $in: ['marketing_broadcast', 'jamnagar_hall_pass_broadcast', 'jamnagar_hall_pass_broadcast_retry'] } },
         { templateCategory: 'MARKETING' },
-        { idempotencyKey: { $regex: '^MKT_BROADCAST' } }
+        { templateName: 'edkl_jamnagar_hall_pass_v1' },
+        { idempotencyKey: { $regex: '^(MKT_BROADCAST|JAMNAGAR)' } }
       ]
     };
 
