@@ -14,7 +14,8 @@ import {
   AlertTriangleIcon,
   PhoneIcon,
   UserIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  SparklesIcon
 } from '../../../components/Icons';
 
 interface PaymentStatusResponse {
@@ -38,7 +39,19 @@ interface PaymentStatusResponse {
   venueAddress?: string;
   isPaymentEnabled?: boolean;
   earlyRegistrationMode?: boolean;
-  paymentOpeningNote?: string;
+  isHousefull?: boolean;
+  isClosed?: boolean;
+  isCompleted?: boolean;
+  nextUpcomingEvent?: {
+    id?: string;
+    slug?: string;
+    name?: string;
+    date?: string;
+    time?: string;
+    city?: string;
+    venue?: string;
+    price?: number;
+  } | null;
 }
 
 export const formatIndianDate = (dateStr?: string): string => {
@@ -68,11 +81,34 @@ export default function PaymentRetryPage() {
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   const [paySuccess, setPaySuccess] = useState(false);
+  const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
 
   useEffect(() => {
     if (!inquiryId) return;
     fetchStatus();
   }, [inquiryId]);
+
+  useEffect(() => {
+    if (!statusData || paySuccess || statusData.passAvailable) return;
+    if (statusData.isCompleted) {
+      setRedirectCountdown(7);
+      const timer = setInterval(() => {
+        setRedirectCountdown((prev) => {
+          if (prev === null) return null;
+          if (prev <= 1) {
+            clearInterval(timer);
+            const target = statusData.nextUpcomingEvent?.slug
+              ? `/event/${statusData.nextUpcomingEvent.slug}`
+              : '/';
+            router.push(target);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [statusData, paySuccess, router]);
 
   const fetchStatus = async () => {
     try {
@@ -383,8 +419,76 @@ export default function PaymentRetryPage() {
               </p>
             </div>
 
-            {/* Early Registration Mode: Online Payment Disabled Notice */}
-            {statusData.isPaymentEnabled === false || statusData.earlyRegistrationMode ? (
+            {/* Completed Event State: Payment Closed & Redirect to Upcoming */}
+            {statusData.isCompleted ? (
+              <div className="space-y-4">
+                <div className="p-5 bg-stone-50 border border-stone-200/90 rounded-3xl text-left space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 text-stone-800 font-extrabold text-[11px] rounded-lg uppercase tracking-wider">
+                      <span>🏁 EVENT COMPLETED • કાર્યક્રમ પૂર્ણ થયેલ છે</span>
+                    </span>
+                    {redirectCountdown !== null && redirectCountdown > 0 && (
+                      <span className="text-[11px] font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-3 py-0.5 rounded-full animate-pulse">
+                        Redirecting in {redirectCountdown}s...
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 text-xs text-stone-700 leading-relaxed font-medium">
+                    <p className="font-extrabold text-stone-900 text-sm">
+                      આ સેમિનાર પૂર્ણ થઈ ગયેલ છે (Event Already Concluded).
+                    </p>
+                    <p>
+                      <strong>ગુજરાતી:</strong> આ કાર્યક્રમની તારીખ પૂર્ણ થઈ ગઈ હોવાથી હવે પેમેન્ટ સ્વીકારવામાં આવતું નથી. તમે નીચે આપેલ નવા આગામી સેમિનાર માટે સીટ બુક કરાવી શકો છો.
+                    </p>
+                    <p className="text-stone-500">
+                      <strong>English:</strong> This event has already taken place and is now concluded. Online payments are closed. Please register for our next upcoming event below.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  disabled
+                  className="w-full py-4 bg-stone-200 text-stone-400 font-bold rounded-2xl cursor-not-allowed text-xs uppercase tracking-wider"
+                >
+                  Event Concluded / Closed (કાર્યક્રમ પૂર્ણ થયેલ છે)
+                </button>
+
+                {/* Redirect Card to Next Upcoming Event */}
+                {statusData.nextUpcomingEvent ? (
+                  <div className="p-5 bg-gradient-to-br from-rose-50 via-amber-50 to-rose-50 border-2 border-rose-300 rounded-3xl space-y-3 text-left shadow-md">
+                    <div className="flex items-center gap-2">
+                      <SparklesIcon className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                      <span className="text-xs font-black uppercase text-rose-900 tracking-wider">
+                        Next Upcoming Seminar (આગામી નવો સેમિનાર)
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="font-extrabold text-stone-900 text-base">
+                        {statusData.nextUpcomingEvent.name}
+                      </h4>
+                      <p className="text-xs text-stone-600 font-medium">
+                        📍 {statusData.nextUpcomingEvent.city} &bull; {formatIndianDate(statusData.nextUpcomingEvent.date)} {statusData.nextUpcomingEvent.time ? `(${statusData.nextUpcomingEvent.time})` : ''}
+                      </p>
+                    </div>
+                    <Link
+                      href={`/event/${statusData.nextUpcomingEvent.slug}`}
+                      className="w-full py-3.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-extrabold rounded-2xl transition-all shadow-lg shadow-rose-600/25 flex items-center justify-center gap-2 text-xs uppercase tracking-wider cursor-pointer active:scale-[0.99]"
+                    >
+                      <SparklesIcon className="w-4 h-4" />
+                      <span>Register for Upcoming Seminar Now →</span>
+                    </Link>
+                  </div>
+                ) : (
+                  <Link
+                    href="/"
+                    className="inline-block w-full py-3.5 bg-stone-900 hover:bg-stone-800 text-white font-extrabold rounded-2xl transition-all text-center text-xs shadow-md cursor-pointer"
+                  >
+                    ← Browse All Upcoming Seminars (બધા સેમિનાર જુઓ)
+                  </Link>
+                )}
+              </div>
+            ) : statusData.isPaymentEnabled === false || statusData.earlyRegistrationMode ? (
               <div className="space-y-3">
                 <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-left text-xs space-y-2 text-stone-800">
                   <div className="font-extrabold text-rose-900 text-xs flex items-center gap-1.5">
@@ -405,6 +509,35 @@ export default function PaymentRetryPage() {
                 >
                   Online Payment Opening Soon (ઓનલાઈન પેમેન્ટ ટૂંક સમયમાં શરૂ થશે)
                 </button>
+              </div>
+            ) : (statusData.isHousefull || statusData.isClosed) ? (
+              <div className="space-y-3">
+                <div className="p-4 bg-rose-50 border border-rose-300 rounded-2xl text-left text-xs space-y-2 text-stone-800">
+                  <div className="font-extrabold text-rose-900 text-sm flex items-center gap-1.5">
+                    <AlertTriangleIcon className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                    <span>🚨 {statusData.isClosed ? 'REGISTRATION CLOSED • નોંધણી બંધ છે' : 'HOUSEFULL • તમામ બેઠકો પૂર્ણ થયેલ છે'}</span>
+                  </div>
+                  <p className="text-stone-700 leading-relaxed font-medium">
+                    <strong>ગુજરાતી:</strong> {statusData.isClosed ? 'આ કાર્યક્રમ માટે રજીસ્ટ્રેશન બંધ કરવામાં આવેલ છે.' : 'આ કાર્યક્રમ માટે તમામ નિર્ધારિત બેઠકો પૂર્ણ (Housefull) થઈ ગઈ છે. તેથી હવે પેમેન્ટ સ્વીકારવામાં આવતું નથી.'}
+                  </p>
+                  <p className="text-stone-700 leading-relaxed font-medium">
+                    <strong>English:</strong> {statusData.isClosed ? 'Registrations for this seminar are currently closed.' : 'This seminar is completely Housefull. Full capacity has been reached, so online payment is now closed.'}
+                  </p>
+                </div>
+
+                <button
+                  disabled
+                  className="w-full py-4 bg-stone-200 text-stone-500 font-bold rounded-2xl cursor-not-allowed text-xs uppercase tracking-wider"
+                >
+                  {statusData.isClosed ? 'Registration Closed (નોંધણી બંધ છે)' : 'Housefull / Sold Out (બેઠકો પૂર્ણ થયેલ છે)'}
+                </button>
+
+                <Link
+                  href="/"
+                  className="inline-block w-full py-3.5 bg-stone-900 hover:bg-stone-800 text-white font-bold rounded-2xl transition-all text-center text-xs shadow-md cursor-pointer"
+                >
+                  ← View Other Upcoming Events (અન્ય સેમિનાર જુઓ)
+                </Link>
               </div>
             ) : (
               <button

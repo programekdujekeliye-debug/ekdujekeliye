@@ -57,6 +57,55 @@ export class PaymentService {
       throw err;
     }
 
+    // Guard: Event Completed / Concluded Guard
+    if (event) {
+      let isCompleted = event.status === 'completed' || event.status === 'archived';
+      if (!isCompleted && event.date && event.date.toUpperCase() !== 'TBD' && event.date.toUpperCase() !== 'TBA') {
+        const eventStartAt = communicationSchedulerService.parseEventDateTime(event.date, event.time || '8:30 PM');
+        if (eventStartAt && Date.now() >= eventStartAt.getTime()) {
+          isCompleted = true;
+        }
+      }
+
+      if (isCompleted) {
+        const err = new Error('આ સેમિનાર પૂર્ણ (Completed) થઈ ગયેલ છે. હવે પેમેન્ટ સ્વીકારવામાં આવતું નથી. (This seminar has already concluded. Online payment is closed.)');
+        err.status = 400;
+        err.code = 'EVENT_COMPLETED';
+        throw err;
+      }
+    }
+
+    // Guard: Event Capacity & Housefull / Closed Guard
+    if (event) {
+      const progIdentifiers = [event.id, event.slug, submission.programId, event.date, submission.programDate].filter(Boolean);
+      const capacity = event.capacity && event.capacity > 0 ? event.capacity : 1000;
+
+      const approvedCount = await Registration.countDocuments({
+        $or: [
+          { programId: { $in: progIdentifiers } },
+          ...(submission.programDate ? [{ programDate: submission.programDate }] : []),
+          ...(event.date ? [{ programDate: event.date }] : [])
+        ],
+        status: 'approved',
+        isDeleted: { $ne: true }
+      });
+
+      const isCapacityFull = capacity > 0 && approvedCount >= capacity;
+      const isHousefull = isCapacityFull || event.status === 'housefull' || event.isHousefull === true;
+      const isClosed = event.status === 'registration_closed' || event.isInquiryClosed === true;
+
+      if (isHousefull || isClosed) {
+        const err = new Error(
+          isClosed
+            ? 'આ સેમિનાર માટે રજીસ્ટ્રેશન બંધ કરવામાં આવેલ છે. (Registrations for this seminar are closed.)'
+            : 'આ સેમિનાર માટે તમામ બેઠકો પૂર્ણ (Housefull) થઈ ગઈ છે. હવે પેમેન્ટ સ્વીકારવામાં આવતું નથી. (This seminar is completely Housefull. Online payment is now closed.)'
+        );
+        err.status = 400;
+        err.code = isClosed ? 'EVENT_REGISTRATION_CLOSED' : 'EVENT_HOUSEFULL';
+        throw err;
+      }
+    }
+
     const amountInr = event?.price || submission.payment?.amount || 1500;
 
     const receipt = `RCPT_${submission.inquiryId}_${Date.now()}`.substring(0, 40);
@@ -151,6 +200,39 @@ export class PaymentService {
     submission.frameExportStatus = 'NOT_EXPORTED';
     submission.frameExportedAt = null;
     await submission.save();
+
+    // Check if event just reached full capacity and auto-mark event as housefull in DB & cache
+    try {
+      const eventObj = await Event.findOne({
+        $or: [
+          { id: submission.programId },
+          { slug: submission.programId },
+          { date: submission.programDate }
+        ]
+      });
+      if (eventObj && eventObj.capacity > 0) {
+        const progIdentifiers = [eventObj.id, eventObj.slug, submission.programId, eventObj.date, submission.programDate].filter(Boolean);
+        const currentApproved = await Registration.countDocuments({
+          $or: [
+            { programId: { $in: progIdentifiers } },
+            ...(submission.programDate ? [{ programDate: submission.programDate }] : []),
+            ...(eventObj.date ? [{ programDate: eventObj.date }] : [])
+          ],
+          status: 'approved',
+          isDeleted: { $ne: true }
+        });
+        if (currentApproved >= eventObj.capacity && eventObj.status !== 'completed' && eventObj.status !== 'archived') {
+          eventObj.status = 'housefull';
+          eventObj.isHousefull = true;
+          await eventObj.save();
+          if (eventService && typeof eventService.invalidateCache === 'function') {
+            eventService.invalidateCache();
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[PaymentService] Error checking/updating event housefull status:', e.message);
+    }
 
     // Record verified transaction in ledger
     try {

@@ -2,6 +2,7 @@ import { paymentService } from './payment.service.js';
 import { Registration } from '../../models/Registration.js';
 import { Event } from '../../models/Event.js';
 import { eventService } from '../events/event.service.js';
+import { communicationSchedulerService } from '../../services/communicationScheduler.service.js';
 import { verifyWebhookSignature, getRazorpayKeyId } from '../../integrations/razorpay/razorpay.service.js';
 
 export const createOrder = async (req, res) => {
@@ -106,6 +107,60 @@ export const getPaymentStatus = async (req, res) => {
     const isPaid = submission.payment?.status === 'captured' || submission.status === 'approved';
     const coupleName = `${submission.husbandName || ''} & ${submission.wifeName || ''} ${submission.surname || ''}`.trim();
 
+    let isCompleted = false;
+    let isHousefull = false;
+    let isClosed = false;
+    let nextUpcomingEvent = null;
+
+    if (!isPaid && program) {
+      // Check if event has completed or concluded
+      isCompleted = program.status === 'completed' || program.status === 'archived';
+      if (!isCompleted && program.date && program.date.toUpperCase() !== 'TBD' && program.date.toUpperCase() !== 'TBA') {
+        const eventStartAt = communicationSchedulerService.parseEventDateTime(program.date, program.time || '8:30 PM');
+        if (eventStartAt && Date.now() >= eventStartAt.getTime()) {
+          isCompleted = true;
+        }
+      }
+
+      const progIdentifiers = [program.id, program.slug, submission.programId, program.date, submission.programDate].filter(Boolean);
+      const capacity = program.capacity && program.capacity > 0 ? program.capacity : 1000;
+      const approvedCount = await Registration.countDocuments({
+        $or: [
+          { programId: { $in: progIdentifiers } },
+          ...(submission.programDate ? [{ programDate: submission.programDate }] : []),
+          ...(program.date ? [{ programDate: program.date }] : [])
+        ],
+        status: 'approved',
+        isDeleted: { $ne: true }
+      });
+      isHousefull = (capacity > 0 && approvedCount >= capacity) || program.status === 'housefull' || program.isHousefull === true;
+      isClosed = program.status === 'registration_closed' || program.isInquiryClosed === true;
+
+      // Find the next upcoming available event to redirect attendees to
+      if (isCompleted || isHousefull || isClosed) {
+        try {
+          const upcomingList = await eventService.getPublicUpcomingEvents();
+          if (upcomingList && upcomingList.length > 0) {
+            const candidate = upcomingList.find(e => e.id !== program.id && e.slug !== program.slug) || upcomingList[0];
+            if (candidate) {
+              nextUpcomingEvent = {
+                id: candidate.id,
+                slug: candidate.slug,
+                name: candidate.name,
+                date: candidate.date,
+                time: candidate.time,
+                city: candidate.city,
+                venue: candidate.venue,
+                price: candidate.price
+              };
+            }
+          }
+        } catch (e) {
+          console.warn('[getPaymentStatus] Error retrieving upcoming event:', e.message);
+        }
+      }
+    }
+
     res.json({
       inquiryId: submission.inquiryId,
       status: submission.status,
@@ -126,6 +181,10 @@ export const getPaymentStatus = async (req, res) => {
       phoneNumber: submission.phoneNumber,
       isPaid,
       passAvailable: isPaid,
+      isCompleted,
+      isHousefull,
+      isClosed,
+      nextUpcomingEvent,
       isPaymentEnabled: program?.isPaymentEnabled !== false,
       earlyRegistrationMode: Boolean(program?.earlyRegistrationMode || program?.isPaymentEnabled === false),
       paymentOpeningNote: program?.paymentOpeningNote || ''
