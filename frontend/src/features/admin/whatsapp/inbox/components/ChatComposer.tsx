@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SendIcon, LockIcon, FileTextIcon } from '@/components/Icons';
+import { SendIcon, LockIcon, FileTextIcon, MessageSquareIcon } from '@/components/Icons';
 import { QuickRepliesBar } from './QuickRepliesBar';
 
 interface ChatComposerProps {
@@ -92,13 +92,14 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             <button
               type="button"
               onClick={() => setMode('reply')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
                 mode === 'reply'
                   ? 'bg-[#881337] text-white shadow-xs'
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              💬 WhatsApp Chat
+              <MessageSquareIcon className="w-2.5 h-2.5" />
+              <span>WhatsApp Chat</span>
             </button>
             <button
               type="button"

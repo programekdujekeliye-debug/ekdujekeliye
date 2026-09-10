@@ -128,7 +128,7 @@ export const ContactDetailsDrawer: React.FC<ContactDetailsDrawerProps> = ({
                   className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-full font-bold text-xs border border-emerald-200 transition-colors flex items-center gap-1.5 shadow-2xs"
                 >
                   <MessageCircleIcon className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>WhatsApp Direct ↗</span>
+                  <span>WhatsApp Direct</span>
                 </a>
               </div>
             </div>

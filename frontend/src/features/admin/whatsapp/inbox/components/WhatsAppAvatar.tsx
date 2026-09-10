@@ -56,7 +56,7 @@ export const WhatsAppAvatar: React.FC<WhatsAppAvatarProps> = ({
         />
       ) : (
         <div
-          className={`${sizeClasses} rounded-full bg-gradient-to-br from-[#881337] to-[#BE123C] text-white flex items-center justify-center font-black shadow-2xs border border-white/40`}
+          className={`${sizeClasses} rounded-full bg-[#881337] text-white flex items-center justify-center font-black shadow-2xs border border-stone-200`}
         >
           {initials}
         </div>
