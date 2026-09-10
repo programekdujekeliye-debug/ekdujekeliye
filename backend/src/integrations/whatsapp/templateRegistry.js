@@ -443,6 +443,25 @@ export const CORE_TEMPLATES = {
     ]
   },
 
+  // 13. Jamnagar Couple Show Invitation & Rajkot Thanks Broadcast
+  edkl_jamnagar_couples_show_v1: {
+    key: 'edkl_jamnagar_couples_show_v1',
+    metaName: 'edkl_jamnagar_couples_show_v1',
+    category: 'MARKETING',
+    section: 'CORE',
+    language: 'gu',
+    purpose: 'Marketing broadcast thanking Rajkot and inviting / gifting tickets for Jamnagar Couples Show',
+    trigger: 'marketing_broadcast',
+    bodyVariables: [],
+    buttonVariables: [],
+    requiredVariables: [],
+    components: [
+      {
+        type: 'BODY',
+        text: `🙏🏻 રાજકોટવાસીઓનો હૃદયપૂર્વક આભાર!\nરાજકોટમાં યોજાયેલ “એક દૂજે કે લિયે” કાર્યક્રમને મળેલા સુંદર પ્રતિસાદ અને પ્રેમ બદલ આપ સૌનો ખૂબ ખૂબ આભાર. ❤️\n\nહવે આવતીકાલે જામનગરમાં “એક દૂજે કે લિયે”નો ખાસ Couples Show યોજાઈ રહ્યો છે.\nજો તમારા પરિવાર, મિત્રો અથવા ઓળખીતાઓ જામનગરમાં રહેતા હોય, તો આ માહિતી તેમની સાથે જરૂર શેર કરજો. તમે તમારા પ્રિય Coupleને આ કાર્યક્રમની Ticket Gift પણ કરી શકો છો. 🎁\n\n📍 સ્થળ: M. P. Shah Town Hall, Jamnagar\n📅 તારીખ: 10 September 2026\n⏰ સમય: રાત્રે 8:30 વાગ્યે\n\n🎟️ Ticket Booking:\nhttps://app.wowsly.com/e/3196/ek-duje-ke-liye\n\n📞 વધુ માહિતી માટે:\n8320208784 / 8866033383\n\nઆવતીકાલે જામનગરમાં મળીએ. ❤️\nEk Duje Ke Liye Team`
+      }
+    ]
+  }
 };
 
 export const TEMPLATE_REGISTRY = CORE_TEMPLATES;
