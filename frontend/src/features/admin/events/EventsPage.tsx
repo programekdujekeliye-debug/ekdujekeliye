@@ -251,11 +251,21 @@ export const EventsPage: React.FC = () => {
 
   const handleStartEdit = (prog: Program) => {
     setEditingProgram(prog);
+    const capacity = prog.capacity || 1000;
+    const approved = prog.approvedCount ?? prog.bookingsCount ?? 0;
+    let initialStatus = prog.status || 'upcoming';
+    if (initialStatus === 'housefull' && approved < capacity) {
+      initialStatus = (approved / capacity >= 0.85) ? 'few_seats' : 'upcoming';
+    } else if (capacity > 0 && approved >= capacity && initialStatus !== 'completed' && initialStatus !== 'archived') {
+      initialStatus = 'housefull';
+    }
+
     setFormData({
       ...prog,
+      status: initialStatus,
       isDateFinal: prog.isDateFinal !== false,
       price: prog.price !== undefined ? prog.price : 1500,
-      capacity: prog.capacity || 1000,
+      capacity,
       cardTemplate: prog.cardTemplate || prog.cardTemplateUrl || '',
       cardTemplateUrl: prog.cardTemplateUrl || prog.cardTemplate || '',
       photoLink: prog.photoLink || ''
@@ -692,12 +702,20 @@ export const EventsPage: React.FC = () => {
       setSubmitting(true);
       setError('');
 
+      const approved = editingProgram ? (editingProgram.approvedCount ?? editingProgram.bookingsCount ?? 0) : 0;
+      const finalFormData = { ...formData };
+      if (finalFormData.capacity && finalFormData.capacity > approved && finalFormData.status === 'housefull') {
+        finalFormData.status = (approved / finalFormData.capacity >= 0.85) ? 'few_seats' : 'upcoming';
+      } else if (finalFormData.capacity && approved >= finalFormData.capacity && finalFormData.status !== 'completed' && finalFormData.status !== 'archived') {
+        finalFormData.status = 'housefull';
+      }
+
       if (editingProgram) {
-        await eventsApi.updateEvent(editingProgram.id, formData);
-        toast.success(`Event "${formData.name}" updated successfully.`);
+        await eventsApi.updateEvent(editingProgram.id, finalFormData);
+        toast.success(`Event "${finalFormData.name}" updated successfully.`);
       } else {
-        await eventsApi.createEvent(formData);
-        toast.success(`Event "${formData.name}" created successfully.`);
+        await eventsApi.createEvent(finalFormData);
+        toast.success(`Event "${finalFormData.name}" created successfully.`);
       }
 
       // Invalidate local client-side caches so updates reflect immediately
@@ -945,10 +963,34 @@ export const EventsPage: React.FC = () => {
             type="number"
             required
             value={formData.capacity || ''}
-            onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })}
+            onChange={(e) => {
+              const newCap = Number(e.target.value);
+              const approved = editingProgram ? (editingProgram.approvedCount ?? editingProgram.bookingsCount ?? 0) : 0;
+              let newStatus = formData.status || 'upcoming';
+              if (newCap > approved && (newStatus === 'housefull' || !newStatus)) {
+                newStatus = (newCap > 0 && (approved / newCap >= 0.85)) ? 'few_seats' : 'upcoming';
+              } else if (newCap > 0 && approved >= newCap && newStatus !== 'completed' && newStatus !== 'archived') {
+                newStatus = 'housefull';
+              }
+              setFormData({ ...formData, capacity: newCap, status: newStatus });
+            }}
             placeholder="e.g. 500"
             className="w-full px-3.5 py-2.5 bg-white border border-stone-300 rounded-xl text-base sm:text-xs font-medium text-stone-900 focus:outline-none focus:border-rose-500"
           />
+          {editingProgram && (
+            <div className="mt-1.5 text-[11px] font-semibold text-stone-500 flex items-center justify-between flex-wrap gap-1">
+              <span>Confirmed: <b className="text-stone-800">{editingProgram.approvedCount ?? editingProgram.bookingsCount ?? 0}</b> couples</span>
+              {(formData.capacity || 0) > (editingProgram.approvedCount ?? editingProgram.bookingsCount ?? 0) ? (
+                <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  ✓ {(formData.capacity || 0) - (editingProgram.approvedCount ?? editingProgram.bookingsCount ?? 0)} seats open for booking
+                </span>
+              ) : (
+                <span className="text-rose-700 font-bold bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                  🚨 Capacity full (Marked Housefull)
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <div>
@@ -1609,7 +1651,8 @@ export const EventsPage: React.FC = () => {
             const capacity = prog.capacity && prog.capacity > 0 ? prog.capacity : 1000;
             const approved = prog.approvedCount ?? prog.bookingsCount ?? 0;
             const pending = prog.pendingCount ?? 0;
-            const isHousefull = prog.status === 'housefull' || Boolean(prog.isHousefull) || approved >= capacity;
+            const isCapacityReached = capacity > 0 && approved >= capacity;
+            const isHousefull = isCapacityReached;
             const availableSlots = isHousefull ? 0 : Math.max(0, capacity - approved);
             const fillPercentage = Math.min(100, Math.round((approved / capacity) * 100));
 
@@ -1643,6 +1686,8 @@ export const EventsPage: React.FC = () => {
                           ? 'bg-stone-100 text-stone-600 border-stone-200'
                           : isTbd
                           ? 'bg-sky-50 text-sky-700 border-sky-200'
+                          : prog.status === 'registration_closed' || prog.isInquiryClosed
+                          ? 'bg-stone-600 text-white border-stone-700 shadow-xs'
                           : prog.status === 'few_seats' || fillPercentage >= 85
                           ? 'bg-amber-50 text-amber-700 border-amber-200'
                           : 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -1654,6 +1699,8 @@ export const EventsPage: React.FC = () => {
                         ? 'COMPLETED'
                         : isTbd
                         ? 'Date TBA'
+                        : prog.status === 'registration_closed' || prog.isInquiryClosed
+                        ? 'CLOSED'
                         : prog.status === 'few_seats' || fillPercentage >= 85
                         ? 'FEW SEATS LEFT'
                         : 'UPCOMING'}
@@ -1702,7 +1749,9 @@ export const EventsPage: React.FC = () => {
                     <div className="grid grid-cols-3 gap-1 pt-1 text-[11px] text-center border-t border-stone-200/60 font-bold">
                       <div className="text-emerald-700">✓ {approved} Confirmed</div>
                       <div className="text-amber-700">⏳ {pending} Pending</div>
-                      <div className="text-stone-700">{availableSlots} Left</div>
+                      <div className={isHousefull ? "text-rose-700 font-extrabold" : "text-emerald-700 font-extrabold"}>
+                        {availableSlots} Left
+                      </div>
                     </div>
                   </div>
 

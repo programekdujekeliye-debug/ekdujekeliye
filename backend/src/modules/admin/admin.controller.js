@@ -523,9 +523,17 @@ export const getAdminDashboardSummary = async (req, res) => {
 
     const s = statsList[0] || { total: 0, approved: 0, pending: 0, inquiry: 0, rejected: 0, present: 0, vipTotal: 0, vipApproved: 0, regularTotal: 0, regularApproved: 0 };
     const eventCapacity = selectedEventObj?.capacity || 1000;
-    const isHousefull = selectedEventObj ? (selectedEventObj.status === 'housefull' || s.approved >= eventCapacity) : (s.approved >= eventCapacity);
+    const isCapacityReached = eventCapacity > 0 && s.approved >= eventCapacity;
+    const isHousefull = isCapacityReached;
     const isClosed = selectedEventObj?.status === 'registration_closed';
     const availableSlots = (isHousefull || isClosed) ? 0 : Math.max(0, eventCapacity - s.approved);
+
+    let eventStatus = selectedEventObj?.status || (isHousefull ? 'housefull' : 'upcoming');
+    if (isCapacityReached && eventStatus !== 'completed' && eventStatus !== 'archived') {
+      eventStatus = 'housefull';
+    } else if (eventStatus === 'housefull' && !isCapacityReached) {
+      eventStatus = (eventCapacity > 0 && (s.approved / eventCapacity >= 0.85)) ? 'few_seats' : 'upcoming';
+    }
 
     const result = {
       stats: {
@@ -543,7 +551,7 @@ export const getAdminDashboardSummary = async (req, res) => {
         availableSlots,
         isHousefull,
         isClosed,
-        status: selectedEventObj?.status || (isHousefull ? 'housefull' : 'upcoming'),
+        status: eventStatus,
         attendanceRate: s.approved > 0 ? parseFloat(((s.present / s.approved) * 100).toFixed(1)) : 0
       },
       selectedEvent: selectedEventObj ? {
@@ -553,7 +561,7 @@ export const getAdminDashboardSummary = async (req, res) => {
         time: selectedEventObj.time,
         venue: selectedEventObj.venue,
         capacity: eventCapacity,
-        status: selectedEventObj.status,
+        status: eventStatus,
         isHousefull,
         isClosed
       } : null,

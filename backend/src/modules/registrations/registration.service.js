@@ -94,8 +94,13 @@ export class RegistrationService {
         ]
       });
 
-      if (program.status === 'housefull' || program.status === 'registration_closed' || program.isInquiryClosed === true || activeCount >= capacity) {
-        const err = new Error('Housefull: This program slot is currently closed for new registrations.');
+      const isCapacityReached = capacity > 0 && activeCount >= capacity;
+      if (program.status === 'registration_closed' || program.isInquiryClosed === true || isCapacityReached) {
+        const err = new Error(
+          program.status === 'registration_closed' || program.isInquiryClosed === true
+            ? 'Registrations for this program slot are currently closed.'
+            : 'Housefull: This program slot is currently at full capacity.'
+        );
         err.status = 400;
         throw err;
       }

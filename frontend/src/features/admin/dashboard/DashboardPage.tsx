@@ -45,9 +45,15 @@ export const DashboardPage = () => {
         const vApp = data.stats.vipApproved || 0;
         const matched = programs.find((p) => p.id === selectedProgramId || p.slug === selectedProgramId);
         const cap = matched?.capacity && matched.capacity > 0 ? matched.capacity : (data.selectedEvent?.capacity || data.stats.capacity || 1000);
-        const status = matched?.status || data.selectedEvent?.status || data.stats.status || 'upcoming';
-        const housefull = status === 'housefull' || Boolean(matched?.isHousefull) || Boolean(data.stats.isHousefull) || (cap > 0 && app >= cap);
-        const isClosed = status === 'registration_closed' || Boolean(data.stats.isClosed);
+        const rawStatus = matched?.status || data.selectedEvent?.status || data.stats.status || 'upcoming';
+        const isCapacityFull = cap > 0 && app >= cap;
+        const housefull = isCapacityFull;
+        const isClosed = rawStatus === 'registration_closed' || Boolean(data.stats.isClosed);
+        const effectiveStatus = isCapacityFull
+          ? 'housefull'
+          : rawStatus === 'housefull'
+          ? (cap > 0 && app / cap >= 0.85 ? 'few_seats' : 'upcoming')
+          : rawStatus;
         const avail = (housefull || isClosed) ? 0 : Math.max(0, cap - app);
 
         setTotalInquiries(total);
@@ -63,7 +69,7 @@ export const DashboardPage = () => {
         setCapacity(cap);
         setAvailableSlots(avail);
         setIsHousefull(housefull);
-        setEventStatus(status);
+        setEventStatus(effectiveStatus);
 
         if (data.selectedEvent) {
           setSelectedEventName(`${data.selectedEvent.name} (${data.selectedEvent.date})`);

@@ -326,14 +326,20 @@ export class EventService {
       }
 
       const capacity = prog.capacity && prog.capacity > 0 ? prog.capacity : 1000;
-      const isCapacityReached = approved >= capacity;
-      const isHousefull = prog.status === 'housefull' || isCapacityReached;
+      const isCapacityReached = capacity > 0 && approved >= capacity;
+      const isHousefull = isCapacityReached;
       const availableSlots = isHousefull ? 0 : Math.max(0, capacity - approved);
       const totalBooked = approved + pending;
 
       let eventStatus = prog.status;
       if (isCapacityReached && eventStatus !== 'completed' && eventStatus !== 'archived') {
         eventStatus = 'housefull';
+      } else if (eventStatus === 'housefull' && !isCapacityReached) {
+        // Auto-heal status if capacity was increased or registrations changed
+        eventStatus = (capacity > 0 && (approved / capacity >= 0.85)) ? 'few_seats' : 'upcoming';
+        if (prog._id) {
+          Event.updateOne({ _id: prog._id }, { $set: { status: eventStatus, isHousefull: false, bookingsCount: approved } }).exec().catch(() => {});
+        }
       }
 
       return {

@@ -241,6 +241,35 @@ export const updateEvent = async (req, res) => {
       }
     }
 
+    // Dynamic capacity & status normalization:
+    // Ensure that increasing capacity automatically re-opens booking, and reaching capacity marks housefull
+    const targetCapacity = updates.capacity !== undefined ? Number(updates.capacity) : (event.capacity || 1000);
+    const approvedCount = await Registration.countDocuments({
+      programId: { $in: [event.id, event.slug, event.date, id].filter(Boolean) },
+      status: 'approved',
+      isDeleted: { $ne: true }
+    });
+
+    const isCapacityReached = targetCapacity > 0 && approvedCount >= targetCapacity;
+
+    if (isCapacityReached) {
+      if (updates.status !== 'completed' && updates.status !== 'archived') {
+        updates.status = 'housefull';
+        updates.isHousefull = true;
+      }
+    } else {
+      // Capacity is not full: if status was or is 'housefull', auto-reopen to 'few_seats' or 'upcoming'
+      if (updates.status === 'housefull' || (!updates.status && event.status === 'housefull')) {
+        updates.status = (targetCapacity > 0 && (approvedCount / targetCapacity >= 0.85)) ? 'few_seats' : 'upcoming';
+      }
+      updates.isHousefull = false;
+      if (event.status === 'housefull' && event.isInquiryClosed) {
+        updates.isInquiryClosed = false;
+        updates.isRegistrationOpen = true;
+      }
+    }
+    updates.bookingsCount = approvedCount;
+
     Object.assign(event, updates);
     await event.save();
     eventService.invalidateCache();
