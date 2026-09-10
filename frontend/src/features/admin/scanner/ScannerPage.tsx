@@ -19,6 +19,7 @@ import {
 import { canUseOfflineEd25519, verifyQrTokenOffline } from '../../../services/offlineCrypto';
 import { playScanFeedback } from '../../../services/scannerFeedback';
 import { LuxurySelect } from '../../../components/LuxurySelect';
+import { resolveDisplayImageUrl } from '../../../utils/mediaPresets';
 import {
   CheckCircleIcon,
   AlertTriangleIcon,
@@ -75,7 +76,8 @@ export const ScannerPage: React.FC = () => {
   const [torchOn, setTorchOn] = useState<boolean>(false);
   const [isScanningCooldown, setIsScanningCooldown] = useState<boolean>(false);
   const [latestResult, setLatestResult] = useState<ScanDisplayResult | null>(null);
-  const [autoDismissProgress, setAutoDismissProgress] = useState<number>(100);
+  const [photoError, setPhotoError] = useState<boolean>(false);
+  const [showPhotoModal, setShowPhotoModal] = useState<boolean>(false);
 
   // Offline Prep & Sync Stats
   const [preparedEvent, setPreparedEvent] = useState<PreparedEventData | null>(null);
@@ -101,9 +103,15 @@ export const ScannerPage: React.FC = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const sequenceRef = useRef<number>(1);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const barcodeDetectorRef = useRef<any>(null);
-  const dismissTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const dismissTimerRef = useRef<any>(null);
+  const loopTimerRef = useRef<any>(null);
+
+  // High-Performance Scanner Engine (Zero Buffer Re-Allocation)
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const offscreenCtxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const isFrameBusyRef = useRef<boolean>(false);
+  const frameTickCountRef = useRef<number>(0);
 
   // CRITICAL SYNCHRONOUS LOCKS TO ELIMINATE +2 DUPLICATE SCANS
   const isProcessingRef = useRef<boolean>(false);
@@ -112,7 +120,7 @@ export const ScannerPage: React.FC = () => {
   const activeEventId = selectedProgramId !== 'all' ? selectedProgramId : programs[0]?.id || '';
   const currentProgram = programs.find((p) => p.id === activeEventId) || programs[0];
 
-  // 1. Initialize Device ID & Network Listeners
+  // 1. Initialize Device ID, Network Listeners & Dedicated Offscreen Canvas
   useEffect(() => {
     getOrCreateDeviceId().then(setDeviceId);
 
@@ -131,6 +139,15 @@ export const ScannerPage: React.FC = () => {
       } catch (_) {
         barcodeDetectorRef.current = null;
       }
+    }
+
+    // Allocate fixed 380x380 offscreen canvas buffer ONCE (zero per-frame churn)
+    if (typeof document !== 'undefined') {
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = 380;
+      offCanvas.height = 380;
+      offscreenCanvasRef.current = offCanvas;
+      offscreenCtxRef.current = offCanvas.getContext('2d', { willReadFrequently: true });
     }
 
     // Auto-start camera on mount with safety margin
@@ -170,7 +187,7 @@ export const ScannerPage: React.FC = () => {
     refreshLocalStats();
   }, [refreshLocalStats]);
 
-  // 3. Fast Heartbeat (3s) for Multi-Device Gate Sync (6 to 9 Phones Live)
+  // 3. Heartbeat for Multi-Device Gate Sync (10s intervals, throttled during scanning)
   const fetchServerStats = useCallback(async () => {
     if (!isOnline || !activeEventId) return;
     try {
@@ -188,49 +205,40 @@ export const ScannerPage: React.FC = () => {
   useEffect(() => {
     fetchServerStats();
 
-    // Fast 3-second heartbeat polling when window is visible
+    // 10-second heartbeat polling when window is visible and not actively processing
     const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible' && !isProcessingRef.current) {
         fetchServerStats();
       }
-    }, 3000);
+    }, 10000);
 
     return () => clearInterval(interval);
   }, [fetchServerStats]);
 
-  // 4. Auto-dismiss timer for scan feedback (Smooth 3.5s countdown bar)
+  // 4. Auto-dismiss timer for scan feedback (Smooth 3.6s via single timer, zero state re-renders)
   useEffect(() => {
     if (latestResult) {
-      setAutoDismissProgress(100);
-      if (dismissTimerRef.current) clearInterval(dismissTimerRef.current);
+      setPhotoError(false);
+      setShowPhotoModal(false);
+      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
 
-      const startTime = Date.now();
-      const totalDuration = 3500; // 3.5 seconds
-
-      dismissTimerRef.current = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const remainingFraction = Math.max(0, 1 - elapsed / totalDuration);
-        setAutoDismissProgress(Math.round(remainingFraction * 100));
-
-        if (elapsed >= totalDuration) {
-          if (dismissTimerRef.current) clearInterval(dismissTimerRef.current);
-          setLatestResult(null);
-        }
-      }, 50);
+      dismissTimerRef.current = setTimeout(() => {
+        setLatestResult(null);
+      }, 3600);
     } else {
-      if (dismissTimerRef.current) clearInterval(dismissTimerRef.current);
+      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
     }
 
     return () => {
-      if (dismissTimerRef.current) clearInterval(dismissTimerRef.current);
+      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
     };
   }, [latestResult]);
 
   // 5. High-Reliability Camera Engine with Safe Hardware Delay & Fallbacks
   const stopCamera = useCallback(() => {
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current);
-      scanIntervalRef.current = null;
+    if (loopTimerRef.current) {
+      clearTimeout(loopTimerRef.current);
+      loopTimerRef.current = null;
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => {
@@ -245,6 +253,7 @@ export const ScannerPage: React.FC = () => {
     }
     setCameraActive(false);
     setTorchOn(false);
+    isFrameBusyRef.current = false;
   }, []);
 
   const startCamera = async () => {
@@ -363,49 +372,80 @@ export const ScannerPage: React.FC = () => {
     }, 200);
   };
 
-  // 6. Ultra-Fast Auto-Capture Loop with Synchronous Duplicate Lock
+  // 6. Ultra-Fast Center-Reticle Auto-Capture Loop
   const scanCurrentFrame = useCallback(async () => {
-    // SYNCHRONOUS LOCK: If another frame is already processing or cooldown is active, return IMMEDIATELY
-    if (!videoRef.current || !cameraActive || isProcessingRef.current) return;
+    // SYNCHRONOUS LOCK: If another frame is processing, or cooldown, or latestResult card is showing
+    if (
+      !videoRef.current ||
+      !cameraActive ||
+      isProcessingRef.current ||
+      isFrameBusyRef.current ||
+      latestResult !== null
+    ) {
+      return;
+    }
 
     const video = videoRef.current;
     if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return;
 
-    // 1. Hardware BarcodeDetector Check (Fastest hardware path)
-    if (barcodeDetectorRef.current) {
-      try {
-        const barcodes = await barcodeDetectorRef.current.detect(video);
-        if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-          const rawVal = barcodes[0].rawValue.trim();
-          if (rawVal) {
-            triggerScan(rawVal);
-            return;
+    isFrameBusyRef.current = true;
+    try {
+      // 1. Hardware BarcodeDetector Check (Fastest hardware path)
+      if (barcodeDetectorRef.current) {
+        try {
+          const barcodes = await barcodeDetectorRef.current.detect(video);
+          if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+            const rawVal = barcodes[0].rawValue.trim();
+            if (rawVal) {
+              triggerScan(rawVal);
+              return;
+            }
           }
+          // Native detector found 0 barcodes: exit cleanly without burning CPU on canvas
+          return;
+        } catch (_) {
+          // Native detector failed: fallback to canvas below
         }
-      } catch (_) {
-        // Fallback to canvas
       }
+
+      // 2. High-Speed Fixed Center-Reticle Canvas + jsQR
+      const canvas = offscreenCanvasRef.current || canvasRef.current;
+      const ctx = offscreenCtxRef.current || canvas?.getContext('2d', { willReadFrequently: true });
+      if (!canvas || !ctx) return;
+
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      const tick = ++frameTickCountRef.current;
+
+      // Center crop: sample central 74% square reticle where gate staff aligns pass
+      // Sample full frame on every 8th tick as a wide-angle fallback
+      if (tick % 8 === 0) {
+        ctx.drawImage(video, 0, 0, vw, vh, 0, 0, 380, 380);
+      } else {
+        const minDim = Math.min(vw, vh);
+        const cropSize = Math.floor(minDim * 0.74);
+        const sx = Math.floor((vw - cropSize) / 2);
+        const sy = Math.floor((vh - cropSize) / 2);
+        ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, 380, 380);
+      }
+
+      const imageData = ctx.getImageData(0, 0, 380, 380);
+
+      // Pass tickets are dark QR on white background -> dontInvert executes in ~6-8ms
+      // Attempt both only once every 8 frames as an emergency fallback
+      const code = jsQR(imageData.data, 380, 380, {
+        inversionAttempts: tick % 8 === 0 ? 'attemptBoth' : 'dontInvert'
+      });
+
+      if (code && code.data && code.data.trim()) {
+        triggerScan(code.data.trim());
+      }
+    } catch (_) {
+      // frame error caught for resilience
+    } finally {
+      isFrameBusyRef.current = false;
     }
-
-    // 2. High-Speed Canvas + jsQR Fallback
-    if (!canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return;
-
-    canvas.width = Math.min(video.videoWidth, 640);
-    canvas.height = Math.min(video.videoHeight, 480);
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(imageData.data, imageData.width, imageData.height, {
-      inversionAttempts: 'attemptBoth'
-    });
-
-    if (code && code.data && code.data.trim()) {
-      triggerScan(code.data.trim());
-    }
-  }, [cameraActive]);
+  }, [cameraActive, latestResult]);
 
   // Synchronously evaluate debounce before scheduling async execution
   const triggerScan = (rawToken: string) => {
@@ -428,22 +468,34 @@ export const ScannerPage: React.FC = () => {
     handleQrDetected(rawToken);
   };
 
+  // High-performance controlled frame loop (Paused while result card is visible)
   useEffect(() => {
-    if (cameraActive) {
-      scanIntervalRef.current = setInterval(scanCurrentFrame, 120);
-    } else {
-      if (scanIntervalRef.current) {
-        clearInterval(scanIntervalRef.current);
-        scanIntervalRef.current = null;
+    let isCancelled = false;
+
+    const runLoop = async () => {
+      if (isCancelled) return;
+      if (cameraActive && !latestResult && !isScanningCooldown) {
+        await scanCurrentFrame();
       }
-    }
-    return () => {
-      if (scanIntervalRef.current) {
-        clearInterval(scanIntervalRef.current);
-        scanIntervalRef.current = null;
+      if (!isCancelled) {
+        // Schedule next scan tick with 50ms delay (~18 fps scan rate)
+        // Leaving 80%+ CPU/GPU bandwidth for silky-smooth 60fps video rendering
+        loopTimerRef.current = setTimeout(runLoop, 50);
       }
     };
-  }, [cameraActive, scanCurrentFrame]);
+
+    if (cameraActive && !latestResult) {
+      loopTimerRef.current = setTimeout(runLoop, 60);
+    }
+
+    return () => {
+      isCancelled = true;
+      if (loopTimerRef.current) {
+        clearTimeout(loopTimerRef.current);
+        loopTimerRef.current = null;
+      }
+    };
+  }, [cameraActive, latestResult, isScanningCooldown, scanCurrentFrame]);
 
   // 7. QR Detected Dispatcher
   const handleQrDetected = async (rawQrToken: string) => {
@@ -465,11 +517,11 @@ export const ScannerPage: React.FC = () => {
         timestamp: new Date().toLocaleTimeString()
       });
     } finally {
-      // Cooldown timer: release lock after 1.5s so next pass can be scanned smoothly
+      // Release scanning lock after 1.2s so next pass can be scanned smoothly
       setTimeout(() => {
         isProcessingRef.current = false;
         setIsScanningCooldown(false);
-      }, 1500);
+      }, 1200);
     }
   };
 
@@ -688,6 +740,8 @@ export const ScannerPage: React.FC = () => {
     }
 
     const isDup = await isPassScannedOnThisDevice(activeEventId, payload.passId);
+    const rosterItem = preparedEvent?.roster?.[payload.passId];
+
     if (isDup) {
       playScanFeedback('ALREADY_SCANNED');
       setLatestResult({
@@ -695,6 +749,11 @@ export const ScannerPage: React.FC = () => {
         title: 'ALREADY SCANNED ON THIS DEVICE',
         message: 'Pass has already been admitted through this scanner device.',
         passId: payload.passId,
+        inquiryId: rosterItem?.inquiryId,
+        coupleName: rosterItem?.coupleName,
+        couplePhoto: rosterItem?.couplePhoto,
+        isVip: rosterItem?.isVip,
+        phoneNumber: rosterItem?.phoneNumber,
         scannedByDevice: deviceId,
         scannedByOperator: 'Gate Staff (Offline)',
         timestamp: new Date().toLocaleTimeString()
@@ -711,7 +770,9 @@ export const ScannerPage: React.FC = () => {
       deviceId,
       deviceSequence: currentSeq,
       scannedAtDevice: new Date().toISOString(),
-      syncStatus: 'PENDING'
+      syncStatus: 'PENDING',
+      coupleName: rosterItem?.coupleName,
+      inquiryId: rosterItem?.inquiryId
     };
 
     await saveOfflineScan(newScan);
@@ -720,9 +781,15 @@ export const ScannerPage: React.FC = () => {
     playScanFeedback('VALID');
     setLatestResult({
       type: 'VALID_OFFLINE',
-      title: 'VALID OFFLINE (PENDING SYNC)',
+      title: 'ENTRY APPROVED (OFFLINE)',
       message: 'Cryptographic Ed25519 signature verified. Saved to local device roster.',
       passId: payload.passId,
+      inquiryId: rosterItem?.inquiryId,
+      coupleName: rosterItem?.coupleName || 'Verified Attendee',
+      couplePhoto: rosterItem?.couplePhoto || null,
+      isVip: rosterItem?.isVip || false,
+      phoneNumber: rosterItem?.phoneNumber || '',
+      slotName: currentProgram?.name,
       scannedByDevice: deviceId,
       scannedByOperator: 'Gate Staff (Offline)',
       timestamp: new Date().toLocaleTimeString()
@@ -1195,7 +1262,7 @@ export const ScannerPage: React.FC = () => {
                         : 'bg-rose-100 text-rose-800'
                     }`}
                   >
-                    {latestResult.type === 'VALID' ? '2 Adults Admitted' : latestResult.type}
+                    {latestResult.type === 'VALID' || latestResult.type === 'VALID_OFFLINE' ? '2 Adults Admitted' : latestResult.type}
                   </span>
                 </div>
                 <p className="text-xs text-stone-600 mt-0.5 font-medium">{latestResult.message}</p>
@@ -1219,32 +1286,42 @@ export const ScannerPage: React.FC = () => {
           {(latestResult.coupleName || latestResult.inquiryId || latestResult.passId) && (
             <div className="mt-4 pt-3.5 border-t border-stone-100">
               <div className="flex items-start gap-3.5">
-                {/* Couple Photo or Avatar */}
-                {latestResult.couplePhoto ? (
-                  <div className="relative flex-shrink-0">
+                {/* Couple Photo Thumbnail with fallback & click to expand */}
+                <div
+                  className="relative flex-shrink-0 cursor-pointer group"
+                  onClick={(e) => {
+                    if (latestResult.couplePhoto && !photoError) {
+                      e.stopPropagation();
+                      setShowPhotoModal(true);
+                    }
+                  }}
+                  title={latestResult.couplePhoto ? "Tap to inspect enlarged photo" : undefined}
+                >
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-stone-200 shadow-md bg-stone-100 flex items-center justify-center relative">
                     <img
-                      src={latestResult.couplePhoto}
+                      src={photoError || !latestResult.couplePhoto ? '/sample_couple.png' : resolveDisplayImageUrl(latestResult.couplePhoto, 'normal')}
                       alt={latestResult.coupleName || 'Couple Photo'}
-                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-stone-200 shadow-sm"
+                      onError={() => setPhotoError(true)}
+                      className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                     />
-                    {latestResult.isVip && (
-                      <span className="absolute -top-1 -right-1 bg-amber-500 text-stone-950 font-black text-[8px] px-1.5 py-0.5 rounded-full shadow-xs border border-amber-300">
-                        VIP
-                      </span>
+                    {latestResult.couplePhoto && !photoError && (
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center pointer-events-none">
+                        <ImageIcon className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 drop-shadow-md transition-opacity" />
+                      </div>
                     )}
                   </div>
-                ) : (
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-stone-100 border border-stone-200 flex flex-col items-center justify-center text-stone-400 flex-shrink-0">
-                    <UsersIcon className="w-6 h-6 text-stone-500" />
-                    <span className="text-[8px] font-bold text-stone-500 uppercase mt-0.5">No Photo</span>
-                  </div>
-                )}
+                  {latestResult.isVip && (
+                    <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-stone-950 font-black text-[9px] px-2 py-0.5 rounded-full shadow-xs border border-amber-300">
+                      VIP
+                    </span>
+                  )}
+                </div>
 
                 {/* Names & VIP Ribbon */}
                 <div className="flex-1 min-w-0 space-y-1">
                   {latestResult.isVip && (
                     <div className="inline-flex items-center gap-1 bg-amber-50 border border-amber-300 text-amber-900 px-2 py-0.5 rounded-md text-[10px] font-black tracking-wider uppercase">
-                      <span>⭐ VIP PASS &bull; PRIORITY SEATING</span>
+                      <span>VIP PASS &bull; PRIORITY SEATING</span>
                     </div>
                   )}
 
@@ -1289,9 +1366,9 @@ export const ScannerPage: React.FC = () => {
                 {latestResult.firstScannedAt && (
                   <div className="text-amber-900 font-bold pt-1 border-t border-amber-200/70 text-[11px] flex items-center justify-between">
                     <span>
-                      ⚠️ First Check-in: {new Date(latestResult.firstScannedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      First Check-in: {new Date(latestResult.firstScannedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </span>
-                    <span className="text-[10px] text-amber-700">
+                    <span className="text-[10px] text-amber-700 font-mono">
                       Scan #{latestResult.scanCount || 2}
                     </span>
                   </div>
@@ -1314,13 +1391,61 @@ export const ScannerPage: React.FC = () => {
               <span className="text-stone-400 text-[10px] font-medium">(Tap anywhere to scan next)</span>
             </button>
 
-            {/* Countdown line indicator */}
-            <div className="w-full h-1 bg-stone-100 rounded-full overflow-hidden">
+            {/* Hardware-accelerated CSS countdown line indicator (Zero React state churn) */}
+            <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden">
               <div
-                className="h-full bg-rose-500 transition-all duration-75 ease-linear"
-                style={{ width: `${autoDismissProgress}%` }}
+                key={latestResult.timestamp}
+                className="h-full bg-rose-600 rounded-full"
+                style={{
+                  animation: 'shrinkProgress 3600ms linear forwards'
+                }}
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Expanded Couple Photo Modal */}
+      {showPhotoModal && latestResult?.couplePhoto && !photoError && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in-50 duration-150"
+          onClick={() => setShowPhotoModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl p-4 max-w-sm w-full shadow-2xl border border-stone-200 relative space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2.5 border-b border-stone-100">
+              <div>
+                <h4 className="font-black text-sm text-stone-900 truncate">
+                  {latestResult.coupleName || 'Attendee Photo'}
+                </h4>
+                <p className="text-[10px] text-stone-500 font-mono">
+                  {latestResult.inquiryId || latestResult.passId}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPhotoModal(false)}
+                className="text-stone-400 hover:text-stone-700 p-1.5 rounded-full hover:bg-stone-100"
+              >
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="aspect-square w-full rounded-2xl overflow-hidden bg-stone-100 border border-stone-200 shadow-inner">
+              <img
+                src={resolveDisplayImageUrl(latestResult.couplePhoto, 'large')}
+                alt={latestResult.coupleName || 'Attendee Photo'}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPhotoModal(false)}
+              className="w-full py-2.5 bg-stone-900 text-white font-bold text-xs rounded-xl hover:bg-stone-800 transition-colors"
+            >
+              Close Inspection
+            </button>
           </div>
         </div>
       )}
@@ -1400,6 +1525,17 @@ export const ScannerPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Hardware-accelerated CSS Keyframe Animations */}
+      <style jsx global>{`
+        @keyframes shrinkProgress {
+          0% {
+            width: 100%;
+          }
+          100% {
+            width: 0%;
+          }
+        }
+      `}</style>
     </div>
   );
 };

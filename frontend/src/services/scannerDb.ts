@@ -34,6 +34,14 @@ export interface PreparedEventData {
     publicKeySpkiBase64: string;
   };
   revokedPassIds: string[];
+  roster?: Record<string, {
+    passId: string;
+    inquiryId?: string;
+    coupleName?: string;
+    couplePhoto?: string | null;
+    isVip?: boolean;
+    phoneNumber?: string;
+  }>;
   cachedAt: string;
 }
 

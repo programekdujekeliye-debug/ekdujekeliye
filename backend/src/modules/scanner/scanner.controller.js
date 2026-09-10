@@ -349,6 +349,28 @@ export async function prepareOfflineEvent(req, res) {
     // Fetch compact revocation list for this event (passIds that are revoked)
     const revokedPasses = await Pass.find({ eventId, status: 'REVOKED' }).select('passId version').lean();
 
+    // Fetch active passes with lightweight attendee roster for offline visual verification
+    const activePasses = await Pass.find({ eventId, status: 'ACTIVE' })
+      .select('passId inquiryId registrationId')
+      .populate({
+        path: 'registrationId',
+        select: 'husbandName wifeName surname couplePhoto isVip phoneNumber'
+      })
+      .lean();
+
+    const roster = {};
+    for (const p of activePasses) {
+      const reg = p.registrationId;
+      roster[p.passId] = {
+        passId: p.passId,
+        inquiryId: p.inquiryId,
+        coupleName: reg ? `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim() : 'Registered Couple',
+        couplePhoto: reg?.couplePhoto || null,
+        isVip: Boolean(reg?.isVip),
+        phoneNumber: reg?.phoneNumber || ''
+      };
+    }
+
     return res.json({
       success: true,
       eventId: event.id,
@@ -358,6 +380,7 @@ export async function prepareOfflineEvent(req, res) {
       venue: event.venue || '',
       publicKey: pubKey,
       revokedPassIds: revokedPasses.map(p => p.passId),
+      roster,
       cachedAt: new Date().toISOString()
     });
   } catch (err) {
