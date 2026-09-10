@@ -86,9 +86,9 @@ export const WhatsAppInboxPage = () => {
   };
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-20">
+    <div className="space-y-2.5 sm:space-y-4 max-w-7xl mx-auto pb-4 md:pb-16">
       {/* Top Header */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xs border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-5 shadow-xs border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center shadow-xs flex-shrink-0">
             <MessageSquareIcon className="w-5 h-5" />

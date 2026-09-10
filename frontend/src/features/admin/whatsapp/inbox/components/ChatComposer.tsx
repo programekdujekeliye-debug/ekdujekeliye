@@ -55,7 +55,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   // 1. If 24-Hour Session is Expired:
   if (!isWindowActive) {
     return (
-      <div className="p-3.5 bg-amber-50/95 border-t border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3 flex-shrink-0">
+      <div className="p-3 sm:p-3.5 bg-amber-50/95 border-t border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3 flex-shrink-0 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
         <div className="text-center sm:text-left">
           <p className="text-xs font-black text-amber-950 flex items-center gap-1.5 justify-center sm:justify-start">
             <span className="w-2 h-2 rounded-full bg-amber-500" />
@@ -69,9 +69,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         <button
           type="button"
           onClick={onOpenTemplateModal}
-          className="w-full sm:w-auto px-4 py-2 bg-[#881337] hover:bg-[#70102d] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+          className="w-full sm:w-auto px-4 py-2.5 bg-[#881337] hover:bg-[#70102d] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap min-h-[42px]"
         >
-          <FileTextIcon className="w-3.5 h-3.5 text-rose-200" />
+          <FileTextIcon className="w-4 h-4 text-rose-200" />
           <span>Choose Approved Template</span>
         </button>
       </div>
@@ -80,7 +80,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
   // 2. Active Session: Live Chat Composer
   return (
-    <div className="bg-[#F5F2EB] border-t border-stone-200 flex-shrink-0">
+    <div className="bg-[#F5F2EB] border-t border-stone-200 flex-shrink-0 pb-[max(env(safe-area-inset-bottom),0.5rem)]">
       {/* Quick Replies Bar */}
       {mode === 'reply' && <QuickRepliesBar onSelectReply={handleSelectQuickReply} />}
 

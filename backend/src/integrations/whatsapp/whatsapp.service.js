@@ -351,7 +351,7 @@ export async function sendWhatsAppMessage(rawParams = {}) {
           inquiryId: targetRegistration?.inquiryId || inquiryId || null,
           eventId: targetRegistration?.programId || eventId || null,
           customerName,
-          status: 'OPEN',
+          status: 'CLOSED', // Pure outbound notifications start CLOSED; reopened to OPEN when attendee replies
           unreadCount: 0,
           lastMessageAt: new Date(),
           lastMessagePreview: renderedContent || `[Template: ${templateDef.metaName}]`,
@@ -1114,6 +1114,10 @@ export const handleWebhookEvent = async (req, res) => {
                 receivedAt: timestamp,
                 rawProviderResponse: msg
               });
+
+              import('../../modules/whatsapp/whatsapp.controller.js')
+                .then(m => m.invalidateConversationStatsCache?.())
+                .catch(() => {});
             }
           }
         }

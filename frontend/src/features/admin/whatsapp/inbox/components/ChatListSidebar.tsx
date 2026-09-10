@@ -24,14 +24,15 @@ interface ChatListSidebarProps {
   events: Program[];
   search: string;
   onSearchChange: (search: string) => void;
-  filter: 'all' | 'unread' | 'inbound' | 'open' | 'window_open' | 'window_expired' | 'closed';
-  onFilterChange: (filter: 'all' | 'unread' | 'inbound' | 'open' | 'window_open' | 'window_expired' | 'closed') => void;
+  filter: 'all' | 'unread' | 'inbound' | 'open' | 'window_open' | 'window_expired' | 'window_expiring_soon' | 'unassigned' | 'closed';
+  onFilterChange: (filter: 'all' | 'unread' | 'inbound' | 'open' | 'window_open' | 'window_expired' | 'window_expiring_soon' | 'unassigned' | 'closed') => void;
   selectedEventId: string;
   onEventChange: (eventId: string) => void;
   onNewChatClick: () => void;
   onSyncHistorical: () => void;
   onRefresh: () => void;
   unreadTotal: number;
+  openTotal?: number;
   totalChats: number;
 }
 
@@ -55,6 +56,7 @@ export const ChatListSidebar: React.FC<ChatListSidebarProps> = ({
   onSyncHistorical,
   onRefresh,
   unreadTotal,
+  openTotal = 0,
   totalChats
 }) => {
   const eventSelectOptions = [
@@ -163,6 +165,7 @@ export const ChatListSidebar: React.FC<ChatListSidebarProps> = ({
         {/* Status Filter Chips */}
         <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-[11px]">
           {[
+            { id: 'open', label: `Active Open (${openTotal})`, highlight: openTotal > 0 },
             { id: 'unread', label: `Unread (${unreadTotal})`, highlight: unreadTotal > 0 },
             { id: 'all', label: `All (${totalChats})` },
             { id: 'inbound', label: 'Inbound Replies' },

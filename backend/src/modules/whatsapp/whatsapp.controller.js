@@ -2050,10 +2050,38 @@ export const getConversations = async (req, res) => {
 
 // Aggregated Statistics Cache for WhatsApp Inbox
 let conversationStatsCache = { data: null, etag: '', expiry: 0 };
+let hasRanInitialStatusRepair = false;
 
 export function invalidateConversationStatsCache() {
   conversationStatsCache = { data: null, etag: '', expiry: 0 };
 }
+
+/**
+ * Self-healing repair: Ensure pure automated outbound dispatches without any customer reply,
+ * unread count, or staff notes are marked CLOSED so they do not falsely inflate open support tickets.
+ */
+export const repairConversationStatuses = async () => {
+  try {
+    const res = await WhatsappConversation.updateMany(
+      {
+        lastInboundAt: null,
+        unreadCount: { $lte: 0 },
+        $or: [
+          { notes: { $exists: false } },
+          { notes: { $size: 0 } }
+        ],
+        status: 'OPEN'
+      },
+      { $set: { status: 'CLOSED' } }
+    );
+    if (res.modifiedCount > 0) {
+      console.log(`[WhatsApp Inbox] Repaired ${res.modifiedCount} automated outbound conversations to 'CLOSED'.`);
+      invalidateConversationStatsCache();
+    }
+  } catch (err) {
+    console.warn('[WhatsApp Inbox] Status repair warning:', err.message);
+  }
+};
 
 /**
  * Get aggregated statistics for the WhatsApp Inbox overview
@@ -2070,28 +2098,23 @@ export const getConversationStats = async (req, res) => {
       return res.json(conversationStatsCache.data);
     }
 
+    if (!hasRanInitialStatusRepair) {
+      hasRanInitialStatusRepair = true;
+      await repairConversationStatuses();
+    }
+
     const nowDate = new Date();
     const twoHoursLater = new Date(nowDate.getTime() + 2 * 60 * 60 * 1000);
 
-    const baseFilter = {
-      $or: [
-        { lastInboundAt: { $ne: null } },
-        { unreadCount: { $gt: 0 } },
-        { 'notes.0': { $exists: true } },
-        { registrationId: { $ne: null } }
-      ]
-    };
-
     const [openCount, unreadCount, unassignedCount, windowExpiringSoonCount, totalConversations] = await Promise.all([
-      WhatsappConversation.countDocuments({ ...baseFilter, status: 'OPEN' }),
-      WhatsappConversation.countDocuments({ ...baseFilter, unreadCount: { $gt: 0 } }),
-      WhatsappConversation.countDocuments({ ...baseFilter, status: 'OPEN', assignedAdminId: null }),
+      WhatsappConversation.countDocuments({ status: 'OPEN' }),
+      WhatsappConversation.countDocuments({ unreadCount: { $gt: 0 } }),
+      WhatsappConversation.countDocuments({ status: 'OPEN', assignedAdminId: null }),
       WhatsappConversation.countDocuments({
-        ...baseFilter,
         status: 'OPEN',
         customerServiceWindowExpiresAt: { $gt: nowDate, $lte: twoHoursLater }
       }),
-      WhatsappConversation.countDocuments(baseFilter)
+      WhatsappConversation.countDocuments({})
     ]);
 
     const result = {
@@ -2296,6 +2319,7 @@ export const replyConversation = async (req, res) => {
       executionSource: 'ADMIN_REPLY'
     });
 
+    invalidateConversationStatsCache();
     res.json({
       success: sendRes.success,
       status: sendRes.status,
@@ -2379,6 +2403,7 @@ export const templateReplyConversation = async (req, res) => {
       );
     }
 
+    invalidateConversationStatsCache();
     res.json({
       success: sendRes.success,
       status: sendRes.status,
@@ -2425,6 +2450,7 @@ export const addConversationNote = async (req, res) => {
       return res.status(404).json({ error: 'Conversation not found.' });
     }
 
+    invalidateConversationStatsCache();
     res.json({ success: true, notes: conversation.notes });
   } catch (err) {
     res.status(500).json({ error: 'Error adding internal note.', details: err.message });
@@ -2452,6 +2478,7 @@ export const markConversationAsRead = async (req, res) => {
       { $set: { readByAdminAt: new Date() } }
     );
 
+    invalidateConversationStatsCache();
     res.json({ success: true, unreadCount: 0 });
   } catch (err) {
     res.status(500).json({ error: 'Error marking conversation as read.', details: err.message });
@@ -2481,6 +2508,7 @@ export const assignConversation = async (req, res) => {
       return res.status(404).json({ error: 'Conversation not found.' });
     }
 
+    invalidateConversationStatsCache();
     res.json({ success: true, conversation });
   } catch (err) {
     res.status(500).json({ error: 'Error assigning conversation.', details: err.message });
@@ -2509,6 +2537,7 @@ export const updateConversationStatus = async (req, res) => {
       return res.status(404).json({ error: 'Conversation not found.' });
     }
 
+    invalidateConversationStatsCache();
     res.json({ success: true, status: conversation.status });
   } catch (err) {
     res.status(500).json({ error: 'Error updating status.', details: err.message });
@@ -2646,6 +2675,7 @@ export const checkOrCreateConversationByPhone = async (req, res) => {
       );
     }
 
+    invalidateConversationStatsCache();
     res.json({
       success: true,
       conversationId: conversation._id,
@@ -2723,7 +2753,7 @@ export const syncHistoricalConversations = async (req, res) => {
           inquiryId: reg?.inquiryId || null,
           eventId: reg?.programId || null,
           customerName,
-          status: 'OPEN',
+          status: hasInbound || unreadCount > 0 ? 'OPEN' : 'CLOSED',
           unreadCount,
           lastMessageAt: lastMsg ? lastMsg.createdAt : new Date(),
           lastMessagePreview: lastMsg ? (lastMsg.content || (lastMsg.templateName ? `Template: ${lastMsg.templateName}` : 'Synced chat')) : 'Synced Registration',
@@ -2762,6 +2792,10 @@ export const syncHistoricalConversations = async (req, res) => {
         linkedMessagesCount += msgIdsToLink.length;
       }
     }
+
+    // Auto-repair legacy pure outbound records & refresh stats cache
+    await repairConversationStatuses();
+    invalidateConversationStatsCache();
 
     res.json({
       success: true,

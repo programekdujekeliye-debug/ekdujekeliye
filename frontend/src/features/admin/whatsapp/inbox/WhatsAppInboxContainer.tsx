@@ -93,51 +93,189 @@ export const WhatsAppInboxContainer: React.FC<WhatsAppInboxContainerProps> = ({
   return (
     <div className="space-y-3 w-full">
       {/* ========================================================================= */}
-      {/* 1. TOP METRICS STRIP (THE AUTHENTIC 5 STAT CARDS) */}
+      {/* 1. TOP METRICS STRIP: DESKTOP 5-CARD GRID & MOBILE INTERACTIVE PILL STRIP */}
       {/* ========================================================================= */}
-      <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 ${showMobileChat ? 'hidden md:grid' : 'grid'}`}>
-        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
-          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Total Inquiries</span>
-          <div className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">{stats.totalConversations}</div>
-          <span className="text-[10px] text-slate-400 font-medium">All historical chats</span>
+      
+      {/* Mobile Horizontal Pill Ribbon (< md) */}
+      <div className={`md:hidden flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none select-none ${showMobileChat ? 'hidden' : 'flex'}`}>
+        <button
+          type="button"
+          onClick={() => setFilters(prev => ({ ...prev, filter: 'all' }))}
+          className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border shadow-2xs flex items-center gap-1.5 cursor-pointer ${
+            filters.filter === 'all'
+              ? 'bg-slate-900 text-white border-slate-900'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <span>All Chats</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-800 text-[10px] font-black">
+            {stats.totalConversations}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setFilters(prev => ({ ...prev, filter: 'open' }))}
+          className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border shadow-2xs flex items-center gap-1.5 cursor-pointer ${
+            filters.filter === 'open'
+              ? 'bg-emerald-700 text-white border-emerald-700'
+              : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100/80'
+          }`}
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+          <span>Active Open</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-white text-emerald-800 text-[10px] font-black shadow-2xs">
+            {stats.openCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setFilters(prev => ({ ...prev, filter: 'unread' }))}
+          className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border shadow-2xs flex items-center gap-1.5 cursor-pointer ${
+            filters.filter === 'unread'
+              ? 'bg-rose-700 text-white border-rose-700'
+              : stats.unreadCount > 0
+              ? 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          {stats.unreadCount > 0 && <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse" />}
+          <span>Unread</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-white text-rose-800 text-[10px] font-black shadow-2xs">
+            {stats.unreadCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setFilters(prev => ({ ...prev, filter: 'window_expiring_soon' }))}
+          className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border shadow-2xs flex items-center gap-1.5 cursor-pointer ${
+            filters.filter === 'window_expiring_soon'
+              ? 'bg-amber-700 text-white border-amber-700'
+              : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+          }`}
+        >
+          <span>&lt; 2h Window</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-white text-amber-900 text-[10px] font-black shadow-2xs">
+            {stats.windowExpiringSoonCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setFilters(prev => ({ ...prev, filter: 'unassigned' }))}
+          className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border shadow-2xs flex items-center gap-1.5 cursor-pointer ${
+            filters.filter === 'unassigned'
+              ? 'bg-slate-700 text-white border-slate-700'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <span>Unassigned</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-800 text-[10px] font-black">
+            {stats.unassignedCount}
+          </span>
+        </button>
+      </div>
+
+      {/* Desktop 5 Interactive KPI Cards (>= md) */}
+      <div className="hidden md:grid grid-cols-5 gap-3">
+        <div
+          onClick={() => setFilters(prev => ({ ...prev, filter: 'all' }))}
+          className={`p-3.5 rounded-2xl border transition-all shadow-xs cursor-pointer select-none ${
+            filters.filter === 'all'
+              ? 'bg-slate-900 text-white border-slate-900 ring-2 ring-slate-900/20'
+              : 'bg-white hover:bg-slate-50 border-slate-200/90 text-slate-900'
+          }`}
+        >
+          <span className={`text-[10px] font-extrabold uppercase tracking-wider block ${filters.filter === 'all' ? 'text-slate-300' : 'text-slate-400'}`}>
+            Total Inquiries
+          </span>
+          <div className="text-2xl font-black mt-0.5">{stats.totalConversations}</div>
+          <span className={`text-[10px] font-medium ${filters.filter === 'all' ? 'text-slate-300' : 'text-slate-500'}`}>
+            All directory contacts
+          </span>
         </div>
 
-        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50/30 shadow-xs">
-          <span className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider block">Active Open</span>
-          <div className="text-xl sm:text-2xl font-black text-emerald-800 mt-0.5">{stats.openCount}</div>
-          <span className="text-[10px] text-emerald-600 font-medium">Requiring support</span>
+        <div
+          onClick={() => setFilters(prev => ({ ...prev, filter: 'open' }))}
+          className={`p-3.5 rounded-2xl border transition-all shadow-xs cursor-pointer select-none ${
+            filters.filter === 'open'
+              ? 'bg-emerald-800 text-white border-emerald-800 ring-2 ring-emerald-600/30'
+              : 'bg-emerald-50/40 hover:bg-emerald-50/80 border-emerald-200 text-emerald-900'
+          }`}
+        >
+          <span className={`text-[10px] font-extrabold uppercase tracking-wider block flex items-center gap-1.5 ${filters.filter === 'open' ? 'text-emerald-200' : 'text-emerald-700'}`}>
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            Active Open
+          </span>
+          <div className="text-2xl font-black mt-0.5">{stats.openCount}</div>
+          <span className={`text-[10px] font-medium ${filters.filter === 'open' ? 'text-emerald-200' : 'text-emerald-700'}`}>
+            Requiring support
+          </span>
         </div>
 
-        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-rose-200 bg-rose-50/30 shadow-xs">
-          <span className="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider block flex items-center gap-1.5">
+        <div
+          onClick={() => setFilters(prev => ({ ...prev, filter: 'unread' }))}
+          className={`p-3.5 rounded-2xl border transition-all shadow-xs cursor-pointer select-none ${
+            filters.filter === 'unread'
+              ? 'bg-rose-800 text-white border-rose-800 ring-2 ring-rose-600/30'
+              : 'bg-rose-50/40 hover:bg-rose-50/80 border-rose-200 text-rose-900'
+          }`}
+        >
+          <span className={`text-[10px] font-extrabold uppercase tracking-wider block flex items-center gap-1.5 ${filters.filter === 'unread' ? 'text-rose-200' : 'text-rose-700'}`}>
             <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
             Unread
           </span>
-          <div className="text-xl sm:text-2xl font-black text-rose-700 mt-0.5">{stats.unreadCount}</div>
-          <span className="text-[10px] text-rose-600 font-medium">Awaiting operator reply</span>
+          <div className="text-2xl font-black mt-0.5">{stats.unreadCount}</div>
+          <span className={`text-[10px] font-medium ${filters.filter === 'unread' ? 'text-rose-200' : 'text-rose-700'}`}>
+            Awaiting operator reply
+          </span>
         </div>
 
-        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-amber-200 bg-amber-50/20 shadow-xs">
-          <span className="text-[10px] font-extrabold text-amber-700 uppercase tracking-wider block">Expiring Soon</span>
-          <div className="text-xl sm:text-2xl font-black text-amber-800 mt-0.5">{stats.windowExpiringSoonCount}</div>
-          <span className="text-[10px] text-amber-700 font-medium">&lt; 2h window left</span>
+        <div
+          onClick={() => setFilters(prev => ({ ...prev, filter: 'window_expiring_soon' }))}
+          className={`p-3.5 rounded-2xl border transition-all shadow-xs cursor-pointer select-none ${
+            filters.filter === 'window_expiring_soon'
+              ? 'bg-amber-800 text-white border-amber-800 ring-2 ring-amber-600/30'
+              : 'bg-amber-50/30 hover:bg-amber-50/70 border-amber-200 text-amber-900'
+          }`}
+        >
+          <span className={`text-[10px] font-extrabold uppercase tracking-wider block ${filters.filter === 'window_expiring_soon' ? 'text-amber-200' : 'text-amber-700'}`}>
+            Expiring Soon
+          </span>
+          <div className="text-2xl font-black mt-0.5">{stats.windowExpiringSoonCount}</div>
+          <span className={`text-[10px] font-medium ${filters.filter === 'window_expiring_soon' ? 'text-amber-200' : 'text-amber-700'}`}>
+            &lt; 2h window left
+          </span>
         </div>
 
-        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 shadow-xs col-span-2 sm:col-span-1">
-          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Unassigned</span>
-          <div className="text-xl sm:text-2xl font-black text-slate-700 mt-0.5">{stats.unassignedCount}</div>
-          <span className="text-[10px] text-slate-400 font-medium">Team claim pool</span>
+        <div
+          onClick={() => setFilters(prev => ({ ...prev, filter: 'unassigned' }))}
+          className={`p-3.5 rounded-2xl border transition-all shadow-xs cursor-pointer select-none ${
+            filters.filter === 'unassigned'
+              ? 'bg-slate-800 text-white border-slate-800 ring-2 ring-slate-600/30'
+              : 'bg-white hover:bg-slate-50 border-slate-200/90 text-slate-800'
+          }`}
+        >
+          <span className={`text-[10px] font-extrabold uppercase tracking-wider block ${filters.filter === 'unassigned' ? 'text-slate-300' : 'text-slate-400'}`}>
+            Unassigned
+          </span>
+          <div className="text-2xl font-black mt-0.5">{stats.unassignedCount}</div>
+          <span className={`text-[10px] font-medium ${filters.filter === 'unassigned' ? 'text-slate-300' : 'text-slate-500'}`}>
+            Team claim pool
+          </span>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. MAIN WHATSAPP WEB STYLE 2-PANE APP CONTAINER */}
+      {/* 2. MAIN WHATSAPP 2-PANE APP CONTAINER (WITH ZERO-COLLISION MOBILE VIEW) */}
       {/* ========================================================================= */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl sm:rounded-3xl shadow-sm overflow-hidden flex flex-col md:flex-row h-[calc(100dvh-170px)] md:h-[calc(100vh-210px)] min-h-[600px] max-h-[920px]">
+      <div className="bg-white border border-slate-200/90 rounded-2xl sm:rounded-3xl shadow-sm overflow-hidden flex flex-col md:flex-row h-[calc(100dvh-170px)] md:h-[calc(100vh-210px)] md:min-h-[640px] md:max-h-[920px]">
         {/* ========================================================================= */}
         {/* LEFT DIRECTORY PANE (WhatsApp Web Sidebar) */}
         {/* ========================================================================= */}
-        <div className={`w-full md:w-[370px] lg:w-[420px] flex flex-col border-r border-slate-200/90 bg-[#FAF9F6] flex-shrink-0 ${showMobileChat ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`w-full md:w-[370px] lg:w-[410px] flex flex-col border-r border-slate-200/90 bg-[#FAF9F6] flex-shrink-0 h-full ${showMobileChat ? 'hidden md:flex' : 'flex'}`}>
           <ChatListSidebar
             conversations={conversations}
             selectedConvId={selectedConvId}
@@ -158,14 +296,19 @@ export const WhatsAppInboxContainer: React.FC<WhatsAppInboxContainerProps> = ({
             onSyncHistorical={syncHistorical}
             onRefresh={refreshConversations}
             unreadTotal={stats.unreadCount}
+            openTotal={stats.openCount}
             totalChats={pagination.total}
           />
         </div>
 
         {/* ========================================================================= */}
-        {/* RIGHT CHAT PANE (WhatsApp Web Chat Canvas) */}
+        {/* RIGHT CHAT PANE (Full-Screen on Mobile when Chat Opened, 2-Pane on Desktop) */}
         {/* ========================================================================= */}
-        <div className={`flex-1 flex flex-col bg-[#F0EBE3] relative overflow-hidden min-w-0 ${!showMobileChat ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`flex-1 flex flex-col bg-[#F0EBE3] relative overflow-hidden min-w-0 ${
+          showMobileChat
+            ? 'fixed inset-0 z-50 flex flex-col bg-[#F0EBE3] md:relative md:inset-auto md:z-auto md:flex'
+            : 'hidden md:flex'
+        }`}>
           {selectedConvId && activeConv ? (
             <>
               {/* Top Bar Header */}
