@@ -909,7 +909,7 @@ export default function EventDetailPage() {
                 <ul className="list-disc pl-4 space-y-1 text-stone-700">
                   <li>Program format exclusively for couples (2 persons per pass — married, engaged, or committed).</li>
                   <li>Children are strictly not permitted inside the seminar hall.</li>
-                  <li><strong className="text-amber-900 font-bold">Non-Refundable &amp; Non-Transferable:</strong> સેમિનાર ફી કોઈપણ સંજોગોમાં રિફંડ કે ટ્રાન્સફર થશે નહીં.</li>
+                  <li><strong className="text-amber-900 font-bold">Non-Refundable &amp; No Event Transfer:</strong> સેમિનાર ફી કોઈપણ સંજોગોમાં રિફંડ કે આગામી ઇવેન્ટમાં ટ્રાન્સફર થશે નહીં. ન આવી શકો તો પોતાની જાતે અન્ય કપલને પાસ આપી શકો છો (પર્સનલાઇઝ્ડ ગિફ્ટ/ફોટો બદલાશે નહીં).</li>
                   <li>{isEarlyReg ? 'Digital pass issued after online payment opens and is completed.' : 'Instant digital pass issued immediately upon Razorpay payment.'}</li>
                 </ul>
               </div>
@@ -1082,13 +1082,13 @@ export default function EventDetailPage() {
                   )}
 
                   {/* Non-Refundable & Non-Transferable Warning Box */}
-                  <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-center space-y-1">
+                  <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-center space-y-1.5">
                     <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-amber-900">
                       <AlertTriangleIcon className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                      <span>Non-Refundable &amp; Non-Transferable Policy</span>
+                      <span>Non-Refundable &amp; No Event Transfer Policy</span>
                     </div>
                     <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
-                      સેમિનાર રજીસ્ટ્રેશન ફી કોઈપણ સંજોગોમાં રિફંડ થશે નહીં કે અન્ય કોઈ વ્યક્તિના નામે ટ્રાન્સફર થશે નહીં.
+                      સેમિનાર ફી 100% નોન-રિફંડેબલ છે અને આગામી ઇવેન્ટમાં ટ્રાન્સફર થશે નહીં. જો તમે ન આવી શકો તો તમારી જાતે અન્ય કપલને પાસ આપી શકો છો (ઓર્ગેનાઇઝર દ્વારા ટ્રાન્સફર નહીં થાય, અને પર્સનલાઇઝ્ડ ગિફ્ટ/ફોટો નવા કપલના નામથી મળશે નહીં).
                     </p>
                   </div>
 

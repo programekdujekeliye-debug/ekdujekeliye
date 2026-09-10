@@ -79,8 +79,12 @@ const FAQ_ITEMS = [
     answer: "ઓનલાઇન પેમેન્ટ સફળ થતાં જ સ્ક્રીન પર ડિજિટલ કપલ પાસ ડાઉનલોડ કરવા મળશે અને તમારા રજીસ્ટર્ડ WhatsApp નંબર પર પણ તરત જ મોકલી દેવામાં આવશે."
   },
   {
-    question: "જો કોઈ કારણસર તારીખ બદલવી હોય તો? (Can we change the slot?)",
-    answer: "જો તમે હજુ સુધી પેમેન્ટ ના કર્યું હોય તો તમે સ્લોટ બદલી શકો છો. કન્ફર્મ થયેલા પાસ માટે હેલ્પલાઇન +91 82003 02328 પર સંપર્ક કરી શકો છો."
+    question: "જો પેમેન્ટ કર્યા પછી ન આવી શકીએ તો તારીખ બદલી શકાય કે ટ્રાન્સફર થાય? (Can we change date?)",
+    answer: "ના. સેમિનાર ફી 100% નોન-રિફંડેબલ છે અને ઓર્ગેનાઇઝર્સ દ્વારા આગામી કે બીજા કોઈ ઇવેન્ટમાં ટ્રાન્સફર થશે નહીં. જો તમે કોઈ કારણસર ન આવી શકો, તો તમે તમારી જાતે (at your own end) સગાં-સંબંધી કે મિત્ર કપલને તમારો પાસ આપી શકો છો (ઓર્ગેનાઇઝર્સ અન્ય કપલ શોધી આપશે નહીં). ખાસ નોંધ: પર્સનલાઇઝ્ડ ગિફ્ટ અને ફોટો મૂળ રજીસ્ટર્ડ કપલના નામથી જ રહેશે; નવા કપલને તેમના નામની નવી ગિફ્ટ કે ફોટો મળશે નહીં."
+  },
+  {
+    question: "શું સેમિનાર રજીસ્ટ્રેશન ફી રિફંડ મળી શકે? (Is refund possible?)",
+    answer: "ના, એકવાર પેમેન્ટ થઈ ગયા પછી કોઈ પણ સંજોગોમાં સેમિનાર ફી રિફંડ મળવાપાત્ર નથી (Strictly 100% Non-Refundable). ભૂલથી પેમેન્ટ થયું હોય કે ન આવી શકો તો પણ રિફંડ મળશે નહીં."
   }
 ];
 
@@ -691,9 +695,9 @@ export default function HomePage() {
                       <div className="flex items-center justify-between gap-2 text-[11px] text-stone-500 font-semibold bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5">
                         <span className="text-amber-800 flex items-center gap-1.5 font-bold">
                           <AlertTriangleIcon className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-                          <span>Non-Refundable &amp; Non-Transferable</span>
+                          <span>Non-Refundable &amp; No Event Transfer</span>
                         </span>
-                        <span className="text-stone-400 font-normal">(ફી રિફંડ કે ટ્રાન્સફર થશે નહીં)</span>
+                        <span className="text-stone-500 font-medium text-[10px]">(ફી રિફંડ કે અન્ય ઇવેન્ટમાં ટ્રાન્સફર થશે નહીં)</span>
                       </div>
 
                       <div className="flex items-center justify-between gap-4">
@@ -1224,8 +1228,8 @@ export default function HomePage() {
               <li>
                 <Link href="/shipping-delivery-policy" className="hover:text-rose-600 transition-colors">Shipping &amp; Delivery Policy</Link>
               </li>
-              <li className="pt-2 text-[11px] text-amber-800 font-medium">
-                Passes are strictly non-refundable and valid only for registered couples.
+              <li className="pt-2 text-[11px] text-amber-800 font-medium leading-relaxed">
+                Passes are strictly non-refundable and non-transferable to other events. If unable to attend, passes may be handed over at your own end (gifts/photos remain personalized for original registrant).
               </li>
             </ul>
           </div>

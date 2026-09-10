@@ -83,79 +83,199 @@ export default function CancellationRefundPolicyPage() {
               <span>Official Cancellation &amp; Refund Policy</span>
             </div>
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-stone-900 tracking-tight">
-              Cancellation &amp; Refund Policy
+              Cancellation, Refund &amp; Transfer Policy
             </h1>
             <p className="text-xs text-stone-500 mt-2 font-medium">
-              Last Updated: August 2026 &bull; Domain: www.ekdujekeliye.in
+              Official Policy &bull; Domain: www.ekdujekeliye.in &bull; Valid for all Ek Duje Ke Liye Couple Programs
             </p>
           </div>
 
-          <div className="space-y-6 text-sm text-stone-700 leading-relaxed">
+          {/* Quick Summary Highlights Card */}
+          <div className="bg-gradient-to-br from-rose-50 via-amber-50/50 to-stone-50 border-2 border-rose-200/80 rounded-2xl p-5 sm:p-6 space-y-4">
+            <div className="flex items-center gap-2 text-rose-900 font-extrabold text-sm sm:text-base">
+              <AlertTriangleIcon className="w-5 h-5 text-rose-600 flex-shrink-0" />
+              <span>Key Policy Highlights at a Glance (મહત્વપૂર્ણ નિયમો)</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
+              <div className="p-3.5 bg-white/90 border border-rose-100 rounded-xl shadow-xs">
+                <span className="font-black text-rose-900 block mb-1">❌ 1. No Refund Means No Refund</span>
+                <p className="text-stone-700">
+                  સેમિનાર ફી 100% નોન-રિફંડેબલ છે. કોઈપણ સંજોગોમાં, ભૂલથી પેમેન્ટ થયું હોય કે ન આવી શકો તો પણ રિફંડ મળશે નહીં.
+                </p>
+              </div>
+              <div className="p-3.5 bg-white/90 border border-amber-200 rounded-xl shadow-xs">
+                <span className="font-black text-amber-900 block mb-1">🚫 2. No Transfer to Other Events</span>
+                <p className="text-stone-700">
+                  ઓર્ગેનાઇઝર્સ દ્વારા તમારી ટિકિટ અન્ય તારીખ કે આગામી કોઈ ઇવેન્ટમાં ટ્રાન્સફર કરી શકાશે નહીં.
+                </p>
+              </div>
+              <div className="p-3.5 bg-white/90 border border-blue-200 rounded-xl shadow-xs">
+                <span className="font-black text-blue-900 block mb-1">🤝 3. You May Pass to Another Couple</span>
+                <p className="text-stone-700">
+                  જો તમે ન આવી શકો તો તમે તમારી જાતે (at your own end) અન્ય કપલને પાસ આપી શકો છો. આ કામ તમારે જાતે કરવાનું રહેશે.
+                </p>
+              </div>
+              <div className="p-3.5 bg-white/90 border border-purple-200 rounded-xl shadow-xs">
+                <span className="font-black text-purple-900 block mb-1">🎁 4. Gifts &amp; Photos Are Fixed</span>
+                <p className="text-stone-700">
+                  પર્સનલાઇઝ્ડ ગિફ્ટ અને ફોટો ફ્રેમ મૂળ કપલના નામથી જ રહેશે. નવા કપલને તેમના નામની નવી ગિફ્ટ કે ફોટો મળશે નહીં.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-7 text-sm text-stone-700 leading-relaxed">
             {/* Section 1 */}
             <section className="space-y-3">
               <h2 className="text-base sm:text-lg font-bold text-stone-900">
-                1. Nature of Services
+                1. Nature of Registrations &amp; Limited Capacity
               </h2>
               <p>
-                <strong>{brand}</strong> is an interactive relationship seminar and couple program led by{' '}
-                <strong>{speaker}</strong>. Fees collected on <strong>www.ekdujekeliye.in</strong> are registration fees for reserved couple seating and digital entry passes at scheduled live workshops.
+                <strong>{brand}</strong> is an exclusive, high-demand relationship development program and live interactive workshop for couples led by{' '}
+                <strong>{speaker}</strong>. Registration fees collected on <strong>www.ekdujekeliye.in</strong> are dedicated towards reserved auditorium seating, specialized couple engagement kits, customized gift mementos, and operational arrangements. Because seats are strictly limited per batch and logistic commitments are confirmed immediately, all bookings are governed by the strict terms detailed below.
               </p>
             </section>
 
-            {/* Section 2: Strict Non-Refundable Policy */}
-            <section className="space-y-3 bg-amber-50/80 border border-amber-200/90 rounded-2xl p-5 sm:p-6">
-              <h2 className="text-base sm:text-lg font-extrabold text-amber-900 flex items-center gap-2">
-                <AlertTriangleIcon className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                <span>2. 100% Non-Refundable &amp; Non-Transferable Policy</span>
+            {/* Section 2: Strict 100% Non-Refundable Policy */}
+            <section className="space-y-3 bg-red-50/60 border border-red-200/90 rounded-2xl p-5 sm:p-6">
+              <h2 className="text-base sm:text-lg font-extrabold text-red-900 flex items-center gap-2">
+                <AlertTriangleIcon className="w-5 h-5 text-red-600 flex-shrink-0" />
+                <span>2. 100% Non-Refundable Policy — &ldquo;No Refund Means Strictly No Refund&rdquo;</span>
               </h2>
               <p className="text-stone-900 font-bold text-xs sm:text-sm">
-                કોઈપણ સંજોગોમાં સેમિનાર નોંધણી ફી રિફંડ કે બીજા કોઈ વ્યક્તિને ટ્રાન્સફર થશે નહીં.
+                સેમિનાર રજીસ્ટ્રેશન ફી કોઈપણ સંજોગોમાં રિફંડ થશે નહીં. &ldquo;નો રિફંડ&rdquo; એટલે કોઈ પણ શરતે રકમ પરત મળવાપાત્ર નથી.
               </p>
               <ul className="list-disc pl-5 space-y-2 text-stone-700 text-xs">
                 <li>
-                  <strong>No Cancellations &amp; No Refunds:</strong> Once a couple registration fee is paid through our authorized gateway (Razorpay) or official accounts, it is <strong>100% non-refundable</strong> under any personal circumstances, schedule conflicts, late arrival, or absenteeism.
+                  <strong>Absolute Non-Refundability:</strong> Once a registration payment is completed through our payment gateway (Razorpay) or official bank accounts, it is <strong>100% non-refundable</strong>.
                 </li>
                 <li>
-                  <strong>Strictly Non-Transferable:</strong> Admission passes are issued exclusively in the name and photograph of the registered couple. Passes cannot be re-assigned, transferred, or resold to any other couple or individual.
+                  <strong>Personal Circumstances &amp; Accidental Payments:</strong> No refunds will be issued for accidental bookings, mistaken payments, personal or family emergencies, medical reasons, travel cancellations, work conflicts, weather conditions, late arrival, or absenteeism.
                 </li>
                 <li>
-                  <strong>Operational Rationale:</strong> Auditorium seats, venue arrangements, program materials, and logistical resources are reserved and pre-funded in advance based on confirmed registrations.
+                  <strong>Operational Rationale:</strong> Auditorium seats, audio-visual production, personalized gift production, and venue hospitality are pre-funded and committed based on confirmed seats.
                 </li>
               </ul>
             </section>
 
-            {/* Section 3 */}
-            <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-stone-900">
-                3. Organizer Rescheduling
+            {/* Section 3: No Transfer to Upcoming or Other Events */}
+            <section className="space-y-3 bg-amber-50/70 border border-amber-200/90 rounded-2xl p-5 sm:p-6">
+              <h2 className="text-base sm:text-lg font-extrabold text-amber-900 flex items-center gap-2">
+                <AlertTriangleIcon className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                <span>3. Strictly No Transfer to Other or Upcoming Events</span>
               </h2>
-              <p>
-                In the rare event that a seminar batch must be rescheduled by the organizers due to administrative necessity or force majeure:
+              <p className="text-stone-900 font-bold text-xs sm:text-sm">
+                ઓર્ગેનાઇઝર્સ દ્વારા તમારો પાસ આગામી તારીખ, બીજા શહેર કે ભવિષ્યના કોઈ પણ સેમિનારમાં ટ્રાન્સફર કરવામાં આવશે નહીં.
               </p>
-              <ul className="list-disc pl-5 space-y-1.5 text-stone-600">
-                <li>All confirmed couple registrations will automatically be transferred and honored for the rescheduled seminar date at no additional charge.</li>
-                <li>Participants will be notified immediately of the revised date and venue via WhatsApp, SMS, and email.</li>
+              <ul className="list-disc pl-5 space-y-2 text-stone-700 text-xs">
+                <li>
+                  <strong>Event-Specific Validity:</strong> Each couple pass is issued exclusively for the specific event date, venue, and time slot selected during checkout.
+                </li>
+                <li>
+                  <strong>No Rescheduling or Carry-Forward by Organizers:</strong> The Ek Duje Ke Liye organization and management team will <strong>NOT</strong> carry forward, postpone, or adjust your pass to any future seminar batch or different city under any request.
+                </li>
               </ul>
             </section>
 
-            {/* Section 4 */}
-            <section className="space-y-3">
+            {/* Section 4: Self-Handover to Another Couple */}
+            <section className="space-y-3 bg-stone-50 border border-stone-200/90 rounded-2xl p-5 sm:p-6">
               <h2 className="text-base sm:text-lg font-bold text-stone-900">
-                4. Gateway Technical Errors &amp; Duplicate Debits
+                4. What If You Paid by Mistake or Cannot Attend? (Transfer at Your Own End)
               </h2>
-              <p>
-                In the rare case of a technical glitch during payment processing (e.g., amount debited from your bank but network interruption prevented receipt generation):
+              <p className="text-stone-800 text-xs sm:text-sm">
+                જો તમે ભૂલથી પેમેન્ટ કરી દીધું હોય અથવા અણધાર્યા સંજોગોને કારણે સેમિનારમાં ન આવી શકો:
               </p>
-              <ul className="list-disc pl-5 space-y-1.5 text-stone-600">
-                <li>Please message our support helpline with your bank transaction reference number.</li>
-                <li>If a duplicate debit is verified by Razorpay, the redundant payment will be credited back to your original payment method within 5–7 banking days.</li>
+              <div className="space-y-2.5 text-xs text-stone-700">
+                <div className="p-3 bg-white border border-stone-200 rounded-xl space-y-1">
+                  <p className="font-bold text-stone-900">
+                    &bull; તમે તમારી જાતે અન્ય કોઈ કપલને પાસ આપી શકો છો (Self-Arranged Transfer):
+                  </p>
+                  <p>
+                    You are permitted to hand over or give your confirmed pass to another couple (such as your relatives, friends, or family members) <strong>entirely at your own initiative and responsibility</strong>.
+                  </p>
+                </div>
+                <div className="p-3 bg-white border border-stone-200 rounded-xl space-y-1">
+                  <p className="font-bold text-stone-900">
+                    &bull; સંસ્થા તમારા માટે કોઈ કપલ શોધી આપશે નહીં (We Will Not Find or Manage This for You):
+                  </p>
+                  <p>
+                    The Ek Duje Ke Liye team will <strong>NOT</strong> find a replacement couple, will not resell your pass, and will not manage the exchange. Finding another couple to take your pass is strictly your own responsibility at your own end.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            {/* Section 5: Personalized Gifts & Photo Frame Exception */}
+            <section className="space-y-3 bg-purple-50/70 border border-purple-200 rounded-2xl p-5 sm:p-6">
+              <h2 className="text-base sm:text-lg font-extrabold text-purple-950 flex items-center gap-2">
+                <ShieldCheckIcon className="w-5 h-5 text-purple-700 flex-shrink-0" />
+                <span>5. Important Clause: Personalized Gifts &amp; Framed Photos</span>
+              </h2>
+              <div className="p-3.5 bg-white border border-purple-200/80 rounded-xl space-y-2 text-xs">
+                <p className="font-bold text-purple-900 text-xs sm:text-sm">
+                  પર્સનલાઇઝ્ડ ગિફ્ટ અને ફોટો ફ્રેમ બાબતે અત્યંત મહત્વપૂર્ણ સ્પષ્ટતા:
+                </p>
+                <p className="text-stone-700 leading-relaxed">
+                  સેમિનારના વેલકમ કીટ્સ, ગિફ્ટ હેમ્પર્સ, મોમેન્ટો અને પ્રિન્ટેડ ફોટો ફ્રેમ્સ રજીસ્ટ્રેશન વખતે આપેલી વિગતો અને ફોટો અનુસાર <strong>મૂળ રજીસ્ટર્ડ કપલના નામથી જ અગાઉથી તૈયાર થઈ જાય છે</strong>.
+                </p>
+                <p className="text-stone-700 leading-relaxed">
+                  તેથી, જો તમે તમારી જગ્યાએ કોઈ અન્ય કપલને તમારો પાસ આપો છો, તો <strong>નવા આવનાર કપલને તેમના નામની નવી પર્સનલાઇઝ્ડ ગિફ્ટ કે ફોટો મળશે નહીં</strong>. પ્રિન્ટ થયેલી ગિફ્ટ અને ફોટો મૂળ રજીસ્ટ્રેશન મુજબના જ રહેશે. સ્થળ પર કોઈ નવું પ્રિન્ટિંગ કે નામ બદલી આપવામાં આવશે નહીં.
+                </p>
+              </div>
+              <ul className="list-disc pl-5 space-y-1.5 text-stone-700 text-xs">
+                <li>
+                  The replacement couple is welcome to attend the seminar sessions and participate fully in all stage activities using the original entry pass.
+                </li>
+                <li>
+                  Any personalized merchandise, certificates, or photo items will bear the names and photo of the original registrant only.
+                </li>
               </ul>
             </section>
 
-            {/* Section 5 */}
+            {/* Section 6: Admission Rules */}
             <section className="space-y-3">
               <h2 className="text-base sm:text-lg font-bold text-stone-900">
-                5. Contact Support Desk
+                6. Admission Guidelines for Passes Handed Over
+              </h2>
+              <ul className="list-disc pl-5 space-y-1.5 text-stone-600 text-xs">
+                <li>Every pass admits exactly one couple (2 adults: husband &amp; wife / engaged / committed couple).</li>
+                <li>Children and single attendees are strictly not allowed into the seminar hall under any circumstances.</li>
+                <li>The attendee couple must present the original digital pass (PDF / QR code) at the reception desk for verification and entry.</li>
+              </ul>
+            </section>
+
+            {/* Section 7: Gateway Errors */}
+            <section className="space-y-3">
+              <h2 className="text-base sm:text-lg font-bold text-stone-900">
+                7. Gateway Technical Errors &amp; Duplicate Debits
+              </h2>
+              <p className="text-xs text-stone-600 leading-relaxed">
+                In the rare event that your bank account was debited multiple times for a single registration due to a payment gateway interruption:
+              </p>
+              <ul className="list-disc pl-5 space-y-1 text-stone-600 text-xs">
+                <li>Please send your bank transaction reference (UTR / Razorpay Payment ID) to our support desk.</li>
+                <li>Once verified by our payment gateway partner, duplicate redundant debits are automatically refunded back to the original payment source within 5–7 business days.</li>
+              </ul>
+            </section>
+
+            {/* Section 8: Organizer Rescheduling */}
+            <section className="space-y-3">
+              <h2 className="text-base sm:text-lg font-bold text-stone-900">
+                8. Organizer Rescheduling (Administrative Necessity)
+              </h2>
+              <p className="text-xs text-stone-600 leading-relaxed">
+                In the rare event that an event session must be rescheduled by the organizers due to force majeure, venue changes, or administrative necessity:
+              </p>
+              <ul className="list-disc pl-5 space-y-1 text-stone-600 text-xs">
+                <li>All confirmed couple registrations will automatically be honored on the newly scheduled date at no additional fee.</li>
+                <li>Registered attendees will be updated via WhatsApp, SMS, and email with the revised event schedule.</li>
+              </ul>
+            </section>
+
+            {/* Section 9: Contact Support Desk */}
+            <section className="space-y-3">
+              <h2 className="text-base sm:text-lg font-bold text-stone-900">
+                9. Official Support Desk
               </h2>
               <div className="bg-stone-50 border border-stone-200 rounded-2xl p-5 text-xs space-y-2.5 text-stone-700">
                 <p><strong>Initiative:</strong> {brand} &bull; Led by {speaker}</p>
@@ -198,3 +318,4 @@ export default function CancellationRefundPolicyPage() {
     </div>
   );
 }
+

@@ -105,24 +105,30 @@ export default function TermsPage() {
               </p>
             </section>
 
-            {/* Section 2: Strict Non-Refundable Policy */}
-            <section className="space-y-3 bg-amber-50/80 border border-amber-200/90 rounded-2xl p-5 sm:p-6">
-              <h2 className="text-base sm:text-lg font-extrabold text-amber-900 flex items-center gap-2">
-                <AlertTriangleIcon className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                <span>2. Strict 100% Non-Refundable &amp; Non-Transferable Policy</span>
+            {/* Section 2: Strict Non-Refundable & Transfer Policy */}
+            <section className="space-y-3 bg-red-50/60 border border-red-200/90 rounded-2xl p-5 sm:p-6">
+              <h2 className="text-base sm:text-lg font-extrabold text-red-900 flex items-center gap-2">
+                <AlertTriangleIcon className="w-5 h-5 text-red-600 flex-shrink-0" />
+                <span>2. Strict 100% Non-Refundable &amp; Event Transfer Policy</span>
               </h2>
               <p className="text-stone-900 font-bold text-xs sm:text-sm">
-                કોઈપણ સંજોગોમાં સેમિનાર નોંધણી ફી રિફંડ કે બીજા કોઈ વ્યક્તિને ટ્રાન્સફર થશે નહીં.
+                સેમિનાર નોંધણી ફી 100% નોન-રિફંડેબલ છે અને આગામી કે બીજા કોઈ ઇવેન્ટમાં ટ્રાન્સફર થશે નહીં.
               </p>
               <ul className="list-disc pl-5 space-y-2 text-stone-700 text-xs">
                 <li>
-                  <strong>No Refunds:</strong> All payments made for couple seminar registration fees are <strong>100% Non-Refundable</strong> under any personal circumstances, absenteeism, schedule conflicts, or late arrival.
+                  <strong>No Refunds Under Any Circumstances:</strong> All registration fee payments made through Razorpay or official channels are <strong>100% Non-Refundable</strong>. No refunds will be provided for mistaken bookings, personal emergencies, schedule conflicts, weather, late arrival, or absenteeism (&ldquo;No Refund Means Strictly No Refund&rdquo;).
                 </li>
                 <li>
-                  <strong>No Transfers:</strong> Entry passes are personalized and issued exclusively to the registered couple named and pictured on the digital pass. Passes cannot be transferred, resold, or assigned to other couples or individuals.
+                  <strong>No Transfer to Upcoming or Other Events:</strong> Passes are valid solely for the scheduled date and batch booked. The Ek Duje Ke Liye organizers will <strong>NOT</strong> transfer, carry forward, or adjust registrations to any future seminar, upcoming date, or other city.
                 </li>
                 <li>
-                  <strong>Advance Logistic Commitments:</strong> Seminar auditorium seats, event kits, and seating arrangements are reserved and pre-funded in advance based on confirmed registrations.
+                  <strong>Self-Arranged Handover (At Your Own End):</strong> If you mistakenly paid or cannot attend, you are permitted to give your confirmed pass to another couple at your own level and responsibility. The Ek Duje Ke Liye team will <strong>NOT</strong> find or coordinate a replacement couple for you.
+                </li>
+                <li>
+                  <strong>Personalized Gifts &amp; Photo Frame Exception:</strong> All seminar welcome kits, customized gifts, mementos, and framed photos are prepared exclusively with the names and photograph of the original registered couple. If another couple attends in your place, <strong>they will NOT receive gifts or photos personalized in their name</strong>.
+                </li>
+                <li>
+                  <strong>Advance Commitments:</strong> Auditorium seating, venue production, and customized couple kits are pre-funded immediately upon registration confirmation.
                 </li>
               </ul>
             </section>

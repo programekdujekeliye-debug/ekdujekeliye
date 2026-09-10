@@ -373,13 +373,13 @@ export default function PaymentRetryPage() {
             </div>
 
             {/* Non-Refundable Policy */}
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-center space-y-0.5">
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-center space-y-1">
               <span className="text-[11px] font-bold text-amber-900 flex items-center justify-center gap-1.5">
                 <AlertTriangleIcon className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-                <span>Non-Refundable &amp; Non-Transferable</span>
+                <span>Non-Refundable &amp; No Event Transfer Policy</span>
               </span>
-              <p className="text-[10px] text-amber-800 font-medium">
-                સેમિનાર ફી કોઈપણ સંજોગોમાં રિફંડ કે ટ્રાન્સફર થશે નહીં.
+              <p className="text-[10px] text-amber-800 font-medium leading-relaxed">
+                સેમિનાર ફી 100% નોન-રિફંડેબલ છે અને આગામી ઇવેન્ટમાં ટ્રાન્સફર થશે નહીં. ન આવી શકો તો તમારી જાતે અન્ય કપલને પાસ આપી શકો છો (પર્સનલાઇઝ્ડ ગિફ્ટ/ફોટો બદલાશે નહીં).
               </p>
             </div>
 
