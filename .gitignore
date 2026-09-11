@@ -36,6 +36,7 @@ Docs/
 # These exceptions are intentional; do not remove them when changing documentation ignores.
 !AGENTS.md
 !ANTIGRAVITY.md
+!README.md
 !PROJECT_RULEBOOK.md
 !rules/
 !rules/**
