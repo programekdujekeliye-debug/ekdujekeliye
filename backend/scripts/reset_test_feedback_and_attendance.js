@@ -7,8 +7,7 @@ import { ScanRecord } from '../src/models/ScanRecord.js';
 import { invalidateLiveAttendanceStatsCache } from '../src/modules/scanner/scanner.controller.js';
 import { invalidateDashboardCache } from '../src/modules/admin/admin.controller.js';
 
-const PROD_URI = 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
-const uri = process.env.PROD_MONGO_URI || PROD_URI;
+const uri = process.env.PROD_MONGO_URI || process.env.MONGO_URI;
 
 export async function resetTestRecord(inquiryId = 'EK06-03') {
   await mongoose.connect(uri);

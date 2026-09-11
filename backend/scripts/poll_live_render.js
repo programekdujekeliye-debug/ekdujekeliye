@@ -1,5 +1,5 @@
 async function pollLiveDeployment() {
-  const workerSecret = '023176b693554f4439e2f67716e0760a8ff953c2aee2165dbd485237ab6297fe';
+  const workerSecret = process.env.ARCHIVE_WORKER_SECRET || '';
   const liveUrl = 'https://ekdujekeliye-s9fx.onrender.com';
   
   console.log('Polling Render live deployment at:', liveUrl);

@@ -5,8 +5,7 @@ import { ensureFeedbackToken } from '../src/modules/feedback/feedback.controller
 import { Registration } from '../src/models/Registration.js';
 import { Event } from '../src/models/Event.js';
 
-const PROD_URI = 'mongodb+srv://programekdujekeliye_db_user:xSBKESML3bxquG7e@cluster0.dsixmq0.mongodb.net/ekdujekeliye?retryWrites=true&w=majority';
-const uri = process.env.PROD_MONGO_URI || PROD_URI;
+const uri = process.env.PROD_MONGO_URI || process.env.MONGO_URI;
 
 async function run() {
   await mongoose.connect(uri);
