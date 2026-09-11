@@ -113,27 +113,28 @@ export const approveRegistration = async (req, res) => {
     await sub.save();
     clearSubmissionsCache();
 
-    // If VIP registration, ensure asymmetric pass & invitation card are generated
-    if (sub.isVip) {
-      try {
-        const event = await eventService.getEventBySlug(sub.programId) || await Event.findOne({
-          $or: [{ id: sub.programId }, { slug: sub.programId }, { date: sub.programDate }]
-        }).lean();
-        if (event) {
-          await qrPassService.ensurePass(sub, event);
+    // Ensure asymmetric pass & communication lifecycle are triggered for ANY approved registration (VIP or Normal)
+    try {
+      const event = await eventService.getEventBySlug(sub.programId) || await Event.findOne({
+        $or: [{ id: sub.programId }, { slug: sub.programId }, { date: sub.programDate }]
+      }).lean();
+      if (event) {
+        await qrPassService.ensurePass(sub, event);
+        if (sub.isVip) {
           await invitationCardService.ensureInvitationCardImage(sub, event);
         }
-      } catch (passErr) {
-        console.warn(`[approveRegistration] Pass/Card generation notice for ${inquiryId}:`, passErr.message);
+        await communicationSchedulerService.scheduleRegistrationLifecycle(sub, event);
       }
+    } catch (passErr) {
+      console.warn(`[approveRegistration] Pass/Card/Lifecycle generation notice for ${inquiryId}:`, passErr.message);
+    }
 
-      // Increment approved count on dynamic VIP link if applicable
-      if (sub.vipLinkCode) {
-        await VipLink.updateOne(
-          { code: sub.vipLinkCode },
-          { $inc: { approvedSeats: 1 } }
-        ).catch(() => {});
-      }
+    // Increment approved count on dynamic VIP link if applicable
+    if (sub.isVip && sub.vipLinkCode) {
+      await VipLink.updateOne(
+        { code: sub.vipLinkCode },
+        { $inc: { approvedSeats: 1 } }
+      ).catch(() => {});
     }
 
     res.json({ success: true, message: 'Registration approved successfully.', submission: sub });
@@ -686,12 +687,13 @@ export const adminCreateRegistration = async (req, res) => {
     await sub.save();
     clearSubmissionsCache();
 
-    // If marked paid/captured, schedule communication lifecycle
+    // If marked paid/captured, ensure digital pass is issued and schedule communication lifecycle
     if (isPaid) {
       try {
+        await qrPassService.ensurePass(sub, program);
         await communicationSchedulerService.scheduleRegistrationLifecycle(sub, program);
       } catch (schErr) {
-        console.warn(`[AdminCreateRegistration] Scheduling notice for ${inquiryId}:`, schErr.message);
+        console.warn(`[AdminCreateRegistration] Pass/Scheduling notice for ${inquiryId}:`, schErr.message);
       }
     }
 

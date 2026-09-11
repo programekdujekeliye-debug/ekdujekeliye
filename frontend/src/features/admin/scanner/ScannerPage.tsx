@@ -1453,15 +1453,15 @@ export const ScannerPage: React.FC = () => {
       {/* 4. Manual Fallback Input Form */}
       <div className="bg-white border border-stone-200/90 rounded-3xl p-4 sm:p-5 shadow-xs space-y-2.5">
         <label className="text-[11px] font-extrabold text-stone-700 uppercase tracking-wider block">
-          Manual Pass ID / Registration Lookup
+          Fast Gate Entry: Mobile No / Pass ID / Inquiry Lookup
         </label>
         <form onSubmit={handleManualSubmit} className="flex gap-2">
           <input
             type="text"
             value={manualCode}
             onChange={(e) => setManualCode(e.target.value)}
-            placeholder="e.g. EK06-IP-05 or EK06-425"
-            className="flex-1 bg-stone-50 border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 focus:outline-none uppercase font-mono"
+            placeholder="Mobile No (e.g. 9876543210), Inquiry ID, or Pass ID"
+            className="flex-1 bg-stone-50 border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 focus:outline-none font-mono"
           />
           <button
             type="submit"

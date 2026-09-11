@@ -41,10 +41,11 @@ export const createRazorpayOrder = async ({ inquiryId, amount, currency = 'INR',
 };
 
 export const verifyCheckoutSignature = ({ razorpay_order_id, razorpay_payment_id, razorpay_signature }) => {
-  const secret = process.env.RAZORPAY_KEY_SECRET || env.RAZORPAY_KEY_SECRET;
-  if (!secret || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+  const rawSecret = process.env.RAZORPAY_KEY_SECRET || env.RAZORPAY_KEY_SECRET;
+  if (!rawSecret || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
     return false;
   }
+  const secret = String(rawSecret).trim();
 
   const expectedSignature = crypto
     .createHmac('sha256', secret)
@@ -64,10 +65,11 @@ export const verifyCheckoutSignature = ({ razorpay_order_id, razorpay_payment_id
 };
 
 export const verifyWebhookSignature = ({ rawBody, signature }) => {
-  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || env.RAZORPAY_WEBHOOK_SECRET;
-  if (!webhookSecret || !rawBody || !signature) {
+  const rawWebhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || env.RAZORPAY_WEBHOOK_SECRET;
+  if (!rawWebhookSecret || !rawBody || !signature) {
     return false;
   }
+  const webhookSecret = String(rawWebhookSecret).trim();
 
   try {
     const expectedSignature = crypto

@@ -69,14 +69,18 @@ function initKeys() {
   const pubPem = publicKeyObject.export({ type: 'spki', format: 'pem' });
   publicKeySpkiBase64 = publicKeyObject.export({ type: 'spki', format: 'der' }).toString('base64');
 
+  const keysTargetFile = candidateFiles[1] || candidateFiles[0];
   try {
-    fs.writeFileSync(KEYS_FILE, JSON.stringify({
+    const parentDir = path.dirname(keysTargetFile);
+    if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
+    fs.writeFileSync(keysTargetFile, JSON.stringify({
       keyId: KEY_ID,
       createdAt: new Date().toISOString(),
       privateKeyPem: privPem,
       publicKeyPem: pubPem,
       publicKeySpkiBase64
     }, null, 2), { mode: 0o600 });
+    console.log(`[QrPassService] Successfully saved new keys to ${keysTargetFile}`);
   } catch (err) {
     console.warn('[QrPassService] Could not persist keys file:', err.message);
   }
@@ -187,16 +191,24 @@ export async function ensurePass(registration, event) {
   });
 
   if (pass) {
+    let needsSave = false;
+    if (!pass.registrationId && registration._id) {
+      pass.registrationId = registration._id;
+      needsSave = true;
+    }
     if (!pass.qrToken) {
       const payload = {
         v: 1,
-        eventId: pass.eventId,
+        eventId: pass.eventId || eventId,
         passId: pass.passId,
         version: pass.version || 1,
-        issuedAt: Math.floor(pass.issuedAt.getTime() / 1000),
+        issuedAt: Math.floor((pass.issuedAt ? pass.issuedAt.getTime() : Date.now()) / 1000),
         keyId: KEY_ID
       };
       pass.qrToken = signPassPayload(payload);
+      needsSave = true;
+    }
+    if (needsSave) {
       await pass.save();
     }
     return pass;
@@ -295,6 +307,15 @@ export async function reissuePass(inquiryId, reason = 'Security token reissue') 
   return existing;
 }
 
+export function exportKeysPem() {
+  initKeys();
+  return {
+    privateKeyPem: privateKeyObject ? privateKeyObject.export({ type: 'pkcs8', format: 'pem' }) : '',
+    publicKeyPem: publicKeyObject ? publicKeyObject.export({ type: 'spki', format: 'pem' }) : '',
+    publicKeySpkiBase64
+  };
+}
+
 export const qrPassService = {
   signPassPayload,
   verifyPassToken,
@@ -303,5 +324,6 @@ export const qrPassService = {
   getPassByInquiryId,
   revokePass,
   reissuePass,
-  canonicalStringify
+  canonicalStringify,
+  exportKeysPem
 };

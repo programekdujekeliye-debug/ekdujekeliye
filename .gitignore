@@ -32,6 +32,19 @@ docs/
 DOCS/
 Docs/
 
+# IMPORTANT: Project governance and AI development rules must stay version-controlled.
+# These exceptions are intentional; do not remove them when changing documentation ignores.
+!AGENTS.md
+!ANTIGRAVITY.md
+!PROJECT_RULEBOOK.md
+!rules/
+!rules/**
+!scripts/generate-codebase-inventory.js
+!docs/
+docs/*
+!docs/CODEBASE_ANALYSIS.md
+!docs/CODEBASE_FILE_INVENTORY.md
+
 # Photo directories & raw camera photo dumps
 Photo/
 photo/
