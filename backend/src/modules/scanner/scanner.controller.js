@@ -97,58 +97,96 @@ export async function handleOnlineScan(req, res) {
       });
     }
 
+    const cleanToken = String(qrToken).trim();
     const operatorUserId = req.user?.username || req.user?.role || 'gate_staff';
     const scanId = `SCAN-${crypto.randomBytes(8).toString('hex')}`;
     const scannedAt = scannedAtDevice ? new Date(scannedAtDevice) : new Date();
 
-    // A. Cryptographic Signature Verification
-    let verifyResult = qrPassService.verifyPassToken(qrToken);
+    // 1. Resolve Canonical Event & All Valid Alias Identifiers (id, slug, date, _id)
+    const isObjectId = typeof eventId === 'string' && /^[0-9a-fA-F]{24}$/.test(eventId);
+    const activeEvent = await Event.findOne({
+      $or: [
+        { id: eventId },
+        { slug: eventId },
+        { date: eventId },
+        ...(isObjectId ? [{ _id: eventId }] : [])
+      ]
+    }).lean();
 
-    // Resilient Server Restart Fallback:
-    // If cryptographic verification failed (e.g. key rotated after cloud deploy/restart),
-    // check if this exact qrToken exists in our authoritative Pass collection for this event.
+    const canonicalEventId = activeEvent?.id || eventId;
+    const validEventIds = Array.from(new Set([
+      eventId,
+      canonicalEventId,
+      activeEvent?.slug,
+      activeEvent?.date
+    ].filter(Boolean)));
+
+    // A. Cryptographic Signature Verification & Resilient Multi-Format Fallback
+    let verifyResult = qrPassService.verifyPassToken(cleanToken);
+
+    // Resilient Fallback: If cryptographic signature didn't verify (e.g. key rotated after deploy,
+    // pass URL scanned from screen, raw inquiryId, or older pass format)
     if (!verifyResult.valid) {
-      const dbPass = await Pass.findOne({ qrToken, eventId });
-      if (dbPass) {
+      let candidatePass = null;
+
+      // Fallback 1: Direct match in Pass collection by qrToken
+      candidatePass = await Pass.findOne({ qrToken: cleanToken });
+
+      // Fallback 2: If token contains dot (base64url payload.signature), extract passId from payload
+      if (!candidatePass && cleanToken.includes('.')) {
+        try {
+          const rawPayload = JSON.parse(Buffer.from(cleanToken.split('.')[0], 'base64url').toString('utf8'));
+          if (rawPayload?.passId) {
+            candidatePass = await Pass.findOne({ passId: rawPayload.passId });
+          }
+        } catch (_) {}
+      }
+
+      // Fallback 3: If token is a pass URL (e.g. https://.../pass/EDKL-...) or raw inquiryId / passId
+      if (!candidatePass) {
+        let extractedId = cleanToken;
+        const passUrlMatch = cleanToken.match(/\/pass\/([A-Za-z0-9_-]+)/i);
+        if (passUrlMatch) {
+          extractedId = passUrlMatch[1];
+        }
+        candidatePass = await Pass.findOne({
+          $or: [
+            { passId: extractedId.toUpperCase() },
+            { inquiryId: { $regex: new RegExp(`^${extractedId.trim()}$`, 'i') } }
+          ]
+        });
+
+        // Fallback 4: If not yet issued in Pass, check if Registration exists and auto-issue
+        if (!candidatePass) {
+          const matchedReg = await Registration.findOne({
+            inquiryId: { $regex: new RegExp(`^${extractedId.trim()}$`, 'i') },
+            isDeleted: { $ne: true }
+          });
+          if (matchedReg && (matchedReg.status === 'approved' || matchedReg.payment?.status === 'captured')) {
+            candidatePass = await qrPassService.ensurePass(matchedReg, activeEvent || { id: canonicalEventId });
+          }
+        }
+      }
+
+      if (candidatePass) {
         verifyResult = {
           valid: true,
           payload: {
-            v: dbPass.version || 1,
-            eventId: dbPass.eventId,
-            passId: dbPass.passId,
-            version: dbPass.version || 1,
-            issuedAt: dbPass.issuedAt ? Math.floor(dbPass.issuedAt.getTime() / 1000) : 0,
-            keyId: dbPass.keyId
+            v: candidatePass.version || 1,
+            eventId: candidatePass.eventId,
+            passId: candidatePass.passId,
+            version: candidatePass.version || 1,
+            issuedAt: candidatePass.issuedAt ? Math.floor(candidatePass.issuedAt.getTime() / 1000) : 0,
+            keyId: candidatePass.keyId
           }
         };
-      } else if (qrToken.includes('.')) {
-        // Additional Resilient Fallback: Decode payload and verify passId against DB
-        try {
-          const rawPayload = JSON.parse(Buffer.from(qrToken.split('.')[0], 'base64url').toString('utf8'));
-          if (rawPayload && rawPayload.passId) {
-            const foundByPassId = await Pass.findOne({ passId: rawPayload.passId, eventId, status: 'ACTIVE' });
-            if (foundByPassId) {
-              verifyResult = {
-                valid: true,
-                payload: {
-                  v: foundByPassId.version || 1,
-                  eventId: foundByPassId.eventId,
-                  passId: foundByPassId.passId,
-                  version: foundByPassId.version || 1,
-                  issuedAt: foundByPassId.issuedAt ? Math.floor(foundByPassId.issuedAt.getTime() / 1000) : 0,
-                  keyId: foundByPassId.keyId
-                }
-              };
-            }
-          }
-        } catch (_) {}
       }
     }
 
     if (!verifyResult.valid) {
       await ScanRecord.create({
         scanId,
-        eventId,
+        eventId: canonicalEventId,
         deviceId,
         operatorUserId,
         mode: 'ONLINE',
@@ -160,17 +198,43 @@ export async function handleOnlineScan(req, res) {
 
       return res.json({
         result: 'INVALID_SIGNATURE',
-        message: 'Invalid cryptographic QR signature. Pass may be counterfeit.'
+        message: 'Invalid cryptographic QR signature or unrecognized pass format.'
       });
     }
 
     const payload = verifyResult.payload;
 
-    // B. Wrong Event Check
-    if (payload.eventId && payload.eventId !== eventId) {
+    // B. Wrong Event / Old Seminar Check
+    const isMatchingCurrentEvent = !payload.eventId || validEventIds.includes(payload.eventId);
+    if (!isMatchingCurrentEvent) {
+      // Look up previous/other seminar details to give clear, respectful guidance
+      const otherEvent = await Event.findOne({
+        $or: [
+          { id: payload.eventId },
+          { slug: payload.eventId },
+          { date: payload.eventId },
+          ...(typeof payload.eventId === 'string' && /^[0-9a-fA-F]{24}$/.test(payload.eventId) ? [{ _id: payload.eventId }] : [])
+        ]
+      }).lean();
+
+      let otherCoupleName = 'Registered Couple';
+      let otherCouplePhoto = null;
+      let otherIsVip = false;
+      let otherPhone = '';
+      const otherPass = await Pass.findOne({ passId: payload.passId }).lean();
+      if (otherPass?.registrationId) {
+        const otherReg = await Registration.findById(otherPass.registrationId).lean();
+        if (otherReg) {
+          otherCoupleName = `${otherReg.husbandName || ''} & ${otherReg.wifeName || ''} ${otherReg.surname || ''}`.trim();
+          otherCouplePhoto = resolveScannerCouplePhoto(otherReg);
+          otherIsVip = Boolean(otherReg.isVip);
+          otherPhone = otherReg.phoneNumber || '';
+        }
+      }
+
       await ScanRecord.create({
         scanId,
-        eventId,
+        eventId: canonicalEventId,
         passId: payload.passId,
         deviceId,
         operatorUserId,
@@ -184,16 +248,25 @@ export async function handleOnlineScan(req, res) {
       return res.json({
         result: 'WRONG_EVENT',
         passId: payload.passId,
-        message: 'This pass is for a different seminar batch or venue.',
-        passEventId: payload.eventId
+        inquiryId: otherPass?.inquiryId,
+        coupleName: otherCoupleName,
+        couplePhoto: otherCouplePhoto,
+        isVip: otherIsVip,
+        phoneNumber: otherPhone,
+        registeredForEvent: otherEvent?.name || payload.eventId,
+        registeredForDate: otherEvent?.date || '',
+        passEventId: payload.eventId,
+        message: otherEvent
+          ? `This pass was registered for an earlier seminar: "${otherEvent.name}" (${otherEvent.date}). It cannot be used for tonight's seminar.`
+          : `This pass is registered for another seminar session (${payload.eventId}), not tonight's batch.`
       });
     }
 
-    // C. Atomic Attendance Marking (Race-Condition Free)
+    // C. Atomic Attendance Marking (Race-Condition Free, Supporting All Event Aliases)
     const updatedPass = await Pass.findOneAndUpdate(
       {
         passId: payload.passId,
-        eventId,
+        eventId: { $in: validEventIds },
         firstScannedAt: null,
         status: 'ACTIVE'
       },
@@ -205,7 +278,8 @@ export async function handleOnlineScan(req, res) {
             deviceId,
             operatorUserId,
             mode: 'ONLINE'
-          }
+          },
+          eventId: canonicalEventId // Consolidate to canonical event ID
         },
         $inc: { scanCount: 1 }
       },
@@ -237,7 +311,7 @@ export async function handleOnlineScan(req, res) {
 
       await ScanRecord.create({
         scanId,
-        eventId,
+        eventId: canonicalEventId,
         passId: updatedPass.passId,
         registrationId: updatedPass.registrationId,
         inquiryId: updatedPass.inquiryId,
@@ -250,8 +324,8 @@ export async function handleOnlineScan(req, res) {
         receivedAtServer: new Date()
       });
 
-      invalidateLiveAttendanceStatsCache(eventId);
-      const liveStats = await getEventLiveAttendanceStats(eventId);
+      invalidateLiveAttendanceStatsCache(canonicalEventId);
+      const liveStats = await getEventLiveAttendanceStats(canonicalEventId);
 
       return res.json({
         result: 'VALID',
@@ -269,12 +343,12 @@ export async function handleOnlineScan(req, res) {
       });
     }
 
-    // D. Not updated: Check why (Duplicate, Revoked, or Unknown)
+    // D. Not updated: Check why (Duplicate, Revoked, Unscanned Event Alias Mismatch, or Same-Device Echo)
     const currentPass = await Pass.findOne({ passId: payload.passId });
     if (!currentPass) {
       await ScanRecord.create({
         scanId,
-        eventId,
+        eventId: canonicalEventId,
         passId: payload.passId,
         deviceId,
         operatorUserId,
@@ -291,10 +365,10 @@ export async function handleOnlineScan(req, res) {
       });
     }
 
-    if (currentPass.status === 'REVOKED') {
+    if (currentPass.status === 'REVOKED' || currentPass.status === 'CANCELLED') {
       await ScanRecord.create({
         scanId,
-        eventId,
+        eventId: canonicalEventId,
         passId: currentPass.passId,
         registrationId: currentPass.registrationId,
         inquiryId: currentPass.inquiryId,
@@ -315,6 +389,118 @@ export async function handleOnlineScan(req, res) {
       });
     }
 
+    // CRITICAL FIX FOR FIRST-TIME SCANS:
+    // If firstScannedAt is null, the pass was NEVER SCANNED!
+    if (!currentPass.firstScannedAt) {
+      currentPass.firstScannedAt = new Date();
+      currentPass.lastScannedAt = new Date();
+      currentPass.firstScannedBy = {
+        deviceId,
+        operatorUserId,
+        mode: 'ONLINE'
+      };
+      currentPass.scanCount = 1;
+      currentPass.status = 'ACTIVE';
+      currentPass.eventId = canonicalEventId;
+      await currentPass.save();
+
+      let coupleName = 'Verified Attendee';
+      let reg = null;
+      if (currentPass.registrationId) {
+        reg = await Registration.findByIdAndUpdate(
+          currentPass.registrationId,
+          {
+            $set: {
+              attendance: 'present',
+              attendanceAt: new Date(),
+              attendanceMethod: 'QR'
+            }
+          },
+          { returnDocument: 'after' }
+        );
+        if (reg) {
+          coupleName = `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim();
+        }
+      }
+
+      const couplePhoto = resolveScannerCouplePhoto(reg);
+
+      await ScanRecord.create({
+        scanId,
+        eventId: canonicalEventId,
+        passId: currentPass.passId,
+        registrationId: currentPass.registrationId,
+        inquiryId: currentPass.inquiryId,
+        deviceId,
+        operatorUserId,
+        mode: 'ONLINE',
+        result: 'ACCEPTED',
+        deviceSequence,
+        scannedAtDevice: scannedAt,
+        receivedAtServer: new Date()
+      });
+
+      invalidateLiveAttendanceStatsCache(canonicalEventId);
+      const liveStats = await getEventLiveAttendanceStats(canonicalEventId);
+
+      return res.json({
+        result: 'VALID',
+        passId: currentPass.passId,
+        inquiryId: currentPass.inquiryId,
+        coupleName,
+        couplePhoto,
+        isVip: Boolean(reg?.isVip),
+        phoneNumber: reg?.phoneNumber || '',
+        firstScannedAt: currentPass.firstScannedAt,
+        scannedByDevice: deviceId,
+        scannedByOperator: operatorUserId,
+        message: 'Entry Approved.',
+        liveStats
+      });
+    }
+
+    // RESOLVE ATTENDEE DETAILS
+    let coupleName = 'Registered Couple';
+    let couplePhoto = null;
+    let isVip = false;
+    let phoneNumber = '';
+    const reg = await Registration.findById(currentPass.registrationId);
+    if (reg) {
+      coupleName = `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim();
+      couplePhoto = resolveScannerCouplePhoto(reg);
+      isVip = Boolean(reg.isVip);
+      phoneNumber = reg.phoneNumber || '';
+    }
+
+    const liveStats = await getEventLiveAttendanceStats(canonicalEventId);
+
+    // SAME-DEVICE RECENT ECHO GUARD (Within 8 seconds):
+    // If the SAME scanner device scanned this pass within the last 8 seconds,
+    // this is the same attendee still standing in front of the camera frame.
+    // Return idempotent VALID confirmation instead of flashing a duplicate warning!
+    const isSameDeviceRecentEcho =
+      currentPass.firstScannedBy?.deviceId === deviceId &&
+      currentPass.firstScannedAt &&
+      (Date.now() - new Date(currentPass.firstScannedAt).getTime() < 8000);
+
+    if (isSameDeviceRecentEcho) {
+      return res.json({
+        result: 'VALID',
+        passId: currentPass.passId,
+        inquiryId: currentPass.inquiryId,
+        coupleName,
+        couplePhoto,
+        isVip,
+        phoneNumber,
+        firstScannedAt: currentPass.firstScannedAt,
+        scannedByDevice: deviceId,
+        scannedByOperator: operatorUserId,
+        message: 'Entry Approved (Already verified on this scanner).',
+        liveStats
+      });
+    }
+
+    // Genuine Duplicate Scan:
     // Debounce check: If this device already triggered a DUPLICATE for this pass in the last 4 seconds,
     // do NOT create an extra ScanRecord (prevents +2 counter jump from back-to-back camera frames)
     const recentDuplicate = await ScanRecord.findOne({
@@ -335,7 +521,7 @@ export async function handleOnlineScan(req, res) {
 
       await ScanRecord.create({
         scanId,
-        eventId,
+        eventId: canonicalEventId,
         passId: currentPass.passId,
         registrationId: currentPass.registrationId,
         inquiryId: currentPass.inquiryId,
@@ -348,20 +534,6 @@ export async function handleOnlineScan(req, res) {
         receivedAtServer: new Date()
       });
     }
-
-    let coupleName = 'Registered Couple';
-    let couplePhoto = null;
-    let isVip = false;
-    let phoneNumber = '';
-    const reg = await Registration.findById(currentPass.registrationId);
-    if (reg) {
-      coupleName = `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim();
-      couplePhoto = resolveScannerCouplePhoto(reg);
-      isVip = Boolean(reg.isVip);
-      phoneNumber = reg.phoneNumber || '';
-    }
-
-    const liveStats = await getEventLiveAttendanceStats(eventId);
 
     return res.json({
       result: 'ALREADY_SCANNED',
@@ -483,6 +655,25 @@ export async function handleOfflineSync(req, res) {
     const operatorUserId = req.user?.username || req.user?.role || 'gate_staff';
     const results = [];
 
+    // 1. Resolve Canonical Event & All Valid Alias Identifiers (id, slug, date, _id)
+    const isObjectId = typeof eventId === 'string' && /^[0-9a-fA-F]{24}$/.test(eventId);
+    const activeEvent = await Event.findOne({
+      $or: [
+        { id: eventId },
+        { slug: eventId },
+        { date: eventId },
+        ...(isObjectId ? [{ _id: eventId }] : [])
+      ]
+    }).lean();
+
+    const canonicalEventId = activeEvent?.id || eventId;
+    const validEventIds = Array.from(new Set([
+      eventId,
+      canonicalEventId,
+      activeEvent?.slug,
+      activeEvent?.date
+    ].filter(Boolean)));
+
     // Process scans in chronological device order
     const sortedScans = [...scans].sort((a, b) => {
       const timeA = new Date(a.scannedAtDevice || 0).getTime();
@@ -509,7 +700,10 @@ export async function handleOfflineSync(req, res) {
       // Verify QR signature independently on server
       let verifyResult = qrPassService.verifyPassToken(qrToken);
       if (!verifyResult.valid) {
-        const dbPass = await Pass.findOne({ qrToken, eventId });
+        const dbPass = await Pass.findOne({
+          qrToken,
+          eventId: { $in: validEventIds }
+        });
         if (dbPass) {
           verifyResult = {
             valid: true,
@@ -528,7 +722,7 @@ export async function handleOfflineSync(req, res) {
       if (!verifyResult.valid) {
         await ScanRecord.create({
           scanId: `SCAN-OFF-${crypto.randomBytes(8).toString('hex')}`,
-          eventId,
+          eventId: canonicalEventId,
           deviceId,
           operatorUserId,
           mode: 'OFFLINE_SYNC',
@@ -545,10 +739,11 @@ export async function handleOfflineSync(req, res) {
 
       const payload = verifyResult.payload;
 
-      if (payload.eventId && payload.eventId !== eventId) {
+      const isMatchingCurrentEvent = !payload.eventId || validEventIds.includes(payload.eventId);
+      if (!isMatchingCurrentEvent) {
         await ScanRecord.create({
           scanId: `SCAN-OFF-${crypto.randomBytes(8).toString('hex')}`,
-          eventId,
+          eventId: canonicalEventId,
           passId: payload.passId,
           deviceId,
           operatorUserId,
@@ -564,11 +759,11 @@ export async function handleOfflineSync(req, res) {
         continue;
       }
 
-      // Atomic attendance claim
+      // Atomic attendance claim (supporting all event aliases)
       const updatedPass = await Pass.findOneAndUpdate(
         {
           passId: payload.passId,
-          eventId,
+          eventId: { $in: validEventIds },
           firstScannedAt: null,
           status: 'ACTIVE'
         },
@@ -580,7 +775,8 @@ export async function handleOfflineSync(req, res) {
               deviceId,
               operatorUserId,
               mode: 'OFFLINE_SYNC'
-            }
+            },
+            eventId: canonicalEventId
           },
           $inc: { scanCount: 1 }
         },
@@ -601,7 +797,7 @@ export async function handleOfflineSync(req, res) {
 
         await ScanRecord.create({
           scanId: `SCAN-OFF-${crypto.randomBytes(8).toString('hex')}`,
-          eventId,
+          eventId: canonicalEventId,
           passId: updatedPass.passId,
           registrationId: updatedPass.registrationId,
           inquiryId: updatedPass.inquiryId,
@@ -628,7 +824,7 @@ export async function handleOfflineSync(req, res) {
 
         await ScanRecord.create({
           scanId: `SCAN-OFF-${crypto.randomBytes(8).toString('hex')}`,
-          eventId,
+          eventId: canonicalEventId,
           passId: payload.passId,
           registrationId: currentPass?.registrationId,
           inquiryId: currentPass?.inquiryId,
@@ -653,7 +849,7 @@ export async function handleOfflineSync(req, res) {
       }
     }
 
-    invalidateLiveAttendanceStatsCache(eventId);
+    invalidateLiveAttendanceStatsCache(canonicalEventId);
 
     return res.json({
       success: true,
@@ -677,8 +873,28 @@ export async function handleManualAttendance(req, res) {
     }
 
     const clean = identifier.trim();
-    let pass = await Pass.findOne({
+
+    // 1. Resolve Canonical Event & All Valid Alias Identifiers (id, slug, date, _id)
+    const isObjectId = typeof eventId === 'string' && /^[0-9a-fA-F]{24}$/.test(eventId);
+    const activeEvent = await Event.findOne({
+      $or: [
+        { id: eventId },
+        { slug: eventId },
+        { date: eventId },
+        ...(isObjectId ? [{ _id: eventId }] : [])
+      ]
+    }).lean();
+
+    const canonicalEventId = activeEvent?.id || eventId;
+    const validEventIds = Array.from(new Set([
       eventId,
+      canonicalEventId,
+      activeEvent?.slug,
+      activeEvent?.date
+    ].filter(Boolean)));
+
+    let pass = await Pass.findOne({
+      eventId: { $in: validEventIds },
       $or: [
         { passId: clean.toUpperCase() },
         { inquiryId: { $regex: new RegExp(`^${clean}$`, 'i') } }
@@ -713,14 +929,69 @@ export async function handleManualAttendance(req, res) {
 
         // Self-Healing: If attendee was approved but pass record was never created, generate it on the spot!
         if (!pass && (matchedReg.status === 'approved' || matchedReg.payment?.status === 'captured')) {
-          const eventObj = await eventService.getEventBySlug(eventId);
-          pass = await qrPassService.ensurePass(matchedReg, eventObj || { id: eventId });
+          pass = await qrPassService.ensurePass(matchedReg, activeEvent || { id: canonicalEventId });
         }
+      }
+    }
+
+    // If still not found by event-scoped lookup, search across ANY pass to detect old seminar codes
+    if (!pass) {
+      const anyPass = await Pass.findOne({
+        $or: [
+          { passId: clean.toUpperCase() },
+          { inquiryId: { $regex: new RegExp(`^${clean}$`, 'i') } }
+        ]
+      });
+
+      if (anyPass) {
+        pass = anyPass;
       }
     }
 
     if (!pass) {
       return res.status(404).json({ result: 'NOT_FOUND', message: 'No pass found matching identifier or phone number.' });
+    }
+
+    // Check if pass belongs to an OLD seminar
+    const isMatchingCurrentEvent = !pass.eventId || validEventIds.includes(pass.eventId);
+    if (!isMatchingCurrentEvent) {
+      const otherEvent = await Event.findOne({
+        $or: [
+          { id: pass.eventId },
+          { slug: pass.eventId },
+          { date: pass.eventId },
+          ...(typeof pass.eventId === 'string' && /^[0-9a-fA-F]{24}$/.test(pass.eventId) ? [{ _id: pass.eventId }] : [])
+        ]
+      }).lean();
+
+      let coupleName = 'Registered Couple';
+      let couplePhoto = null;
+      let isVip = false;
+      let phoneNumber = '';
+      if (pass.registrationId) {
+        const reg = await Registration.findById(pass.registrationId).lean();
+        if (reg) {
+          coupleName = `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim();
+          couplePhoto = resolveScannerCouplePhoto(reg);
+          isVip = Boolean(reg.isVip);
+          phoneNumber = reg.phoneNumber || '';
+        }
+      }
+
+      return res.json({
+        result: 'WRONG_EVENT',
+        passId: pass.passId,
+        inquiryId: pass.inquiryId,
+        coupleName,
+        couplePhoto,
+        isVip,
+        phoneNumber,
+        registeredForEvent: otherEvent?.name || pass.eventId,
+        registeredForDate: otherEvent?.date || '',
+        message: otherEvent
+          ? `This pass was registered for an earlier seminar: "${otherEvent.name}" (${otherEvent.date}). It cannot be used for tonight's seminar.`
+          : `This pass is registered for another seminar session (${pass.eventId}), not tonight's batch.`
+      });
     }
 
     if (pass.firstScannedAt) {
@@ -737,7 +1008,7 @@ export async function handleManualAttendance(req, res) {
           phoneNumber = reg.phoneNumber || '';
         }
       }
-      const liveStats = await getEventLiveAttendanceStats(eventId);
+      const liveStats = await getEventLiveAttendanceStats(canonicalEventId);
 
       return res.json({
         result: 'ALREADY_SCANNED',
@@ -763,6 +1034,7 @@ export async function handleManualAttendance(req, res) {
       mode: 'ONLINE'
     };
     pass.scanCount = 1;
+    pass.eventId = canonicalEventId;
     await pass.save();
 
     let coupleName = 'Registered Couple';
@@ -789,8 +1061,8 @@ export async function handleManualAttendance(req, res) {
       }
     }
 
-    invalidateLiveAttendanceStatsCache(eventId);
-    const liveStats = await getEventLiveAttendanceStats(eventId);
+    invalidateLiveAttendanceStatsCache(canonicalEventId);
+    const liveStats = await getEventLiveAttendanceStats(canonicalEventId);
 
     return res.json({
       result: 'VALID',

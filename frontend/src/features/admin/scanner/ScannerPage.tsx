@@ -116,6 +116,7 @@ export const ScannerPage: React.FC = () => {
   // CRITICAL SYNCHRONOUS LOCKS TO ELIMINATE +2 DUPLICATE SCANS
   const isProcessingRef = useRef<boolean>(false);
   const lastScannedTokenRef = useRef<{ token: string; timestamp: number } | null>(null);
+  const recentlyAdmittedPassesRef = useRef<Map<string, number>>(new Map());
 
   const activeEventId = selectedProgramId !== 'all' ? selectedProgramId : programs[0]?.id || '';
   const currentProgram = programs.find((p) => p.id === activeEventId) || programs[0];
@@ -451,11 +452,23 @@ export const ScannerPage: React.FC = () => {
   const triggerScan = (rawToken: string) => {
     const now = Date.now();
 
-    // 3.5s Debounce guard: drop if same token scanned back-to-back
+    // Clean up admitted tickets older than 20 seconds
+    recentlyAdmittedPassesRef.current.forEach((time, id) => {
+      if (now - time > 20000) recentlyAdmittedPassesRef.current.delete(id);
+    });
+
+    // If this exact token or an admitted passId in this token was already approved recently on this device, skip
+    for (const [admittedPassId, admitTime] of recentlyAdmittedPassesRef.current.entries()) {
+      if (rawToken.includes(admittedPassId) && now - admitTime < 15000) {
+        return;
+      }
+    }
+
+    // 12s Debounce guard: drop if same token scanned back-to-back on this camera
     if (
       lastScannedTokenRef.current &&
       lastScannedTokenRef.current.token === rawToken &&
-      now - lastScannedTokenRef.current.timestamp < 3500
+      now - lastScannedTokenRef.current.timestamp < 12000
     ) {
       return;
     }
@@ -601,6 +614,9 @@ export const ScannerPage: React.FC = () => {
     }
 
     if (data.result === 'VALID') {
+      if (data.passId) {
+        recentlyAdmittedPassesRef.current.set(data.passId, Date.now());
+      }
       playScanFeedback('VALID');
       setLatestResult({
         type: 'VALID',
@@ -642,9 +658,14 @@ export const ScannerPage: React.FC = () => {
       playScanFeedback('INVALID');
       setLatestResult({
         type: 'WRONG_EVENT',
-        title: 'WRONG SEMINAR BATCH',
-        message: `Pass is registered for '${data.registeredForEvent || 'another session'}', not the current batch.`,
+        title: 'OLD SEMINAR PASS / WRONG BATCH',
+        message: data.message || `Pass is registered for '${data.registeredForEvent || 'another session'}', not the current batch.`,
         passId: data.passId,
+        inquiryId: data.inquiryId,
+        coupleName: data.coupleName,
+        couplePhoto: data.couplePhoto,
+        isVip: data.isVip,
+        phoneNumber: data.phoneNumber,
         scannedByDevice: deviceId,
         scannedByOperator: 'Gate Staff',
         timestamp: new Date().toLocaleTimeString()
@@ -1262,7 +1283,13 @@ export const ScannerPage: React.FC = () => {
                         : 'bg-rose-100 text-rose-800'
                     }`}
                   >
-                    {latestResult.type === 'VALID' || latestResult.type === 'VALID_OFFLINE' ? '2 Adults Admitted' : latestResult.type}
+                    {latestResult.type === 'VALID' || latestResult.type === 'VALID_OFFLINE'
+                      ? '2 Adults Admitted'
+                      : latestResult.type === 'WRONG_EVENT'
+                      ? 'Old Seminar / Wrong Batch'
+                      : latestResult.type === 'ALREADY_SCANNED'
+                      ? 'Duplicate Entry'
+                      : latestResult.type}
                   </span>
                 </div>
                 <p className="text-xs text-stone-600 mt-0.5 font-medium">{latestResult.message}</p>
