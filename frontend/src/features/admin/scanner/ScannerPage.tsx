@@ -1299,6 +1299,7 @@ export const ScannerPage: React.FC = () => {
                 >
                   <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-stone-200 shadow-md bg-stone-100 flex items-center justify-center relative">
                     <img
+                      key={latestResult.passId || latestResult.inquiryId || latestResult.couplePhoto || 'photo'}
                       src={photoError || !latestResult.couplePhoto ? '/sample_couple.png' : resolveDisplayImageUrl(latestResult.couplePhoto, 'normal')}
                       alt={latestResult.coupleName || 'Couple Photo'}
                       onError={() => setPhotoError(true)}

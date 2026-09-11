@@ -145,7 +145,8 @@ export class MediaService {
       rawPhoto.includes('media.ekdujekeliye.in') ||
       rawPhoto.includes('r2.dev') ||
       rawPhoto.includes('.r2.') ||
-      rawPhoto.includes('r2.cloudflarestorage.com')
+      rawPhoto.includes('r2.cloudflarestorage.com') ||
+      rawPhoto.includes('/api/media/')
     ));
     const hasR2 = Boolean(r2Media?.normalUrl || r2Media?.key || r2Media?.normalKey || isR2Url);
     const isR2Primary = hasR2 && (registration.mediaProvider === 'R2' || r2Media?.status === 'R2_PRIMARY' || isR2Url);

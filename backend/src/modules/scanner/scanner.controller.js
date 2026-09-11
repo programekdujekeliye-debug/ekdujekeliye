@@ -5,7 +5,18 @@ import { Event } from '../../models/Event.js';
 import { ScanRecord } from '../../models/ScanRecord.js';
 import { qrPassService } from '../passes/qrPass.service.js';
 import { eventService } from '../events/event.service.js';
+import { mediaService } from '../media/media.service.js';
 import { invalidateDashboardCache } from '../admin/admin.controller.js';
+
+function resolveScannerCouplePhoto(reg) {
+  if (!reg) return null;
+  try {
+    const mediaState = mediaService.resolveRegistrationMediaSync(reg);
+    return mediaState?.couplePhoto || reg.couplePhoto || null;
+  } catch (_) {
+    return reg.couplePhoto || null;
+  }
+}
 
 // In-Memory Real-Time Attendance Stats Cache (5s TTL)
 const liveAttendanceStatsCache = new Map();
@@ -222,6 +233,8 @@ export async function handleOnlineScan(req, res) {
         }
       }
 
+      const couplePhoto = resolveScannerCouplePhoto(reg);
+
       await ScanRecord.create({
         scanId,
         eventId,
@@ -245,7 +258,7 @@ export async function handleOnlineScan(req, res) {
         passId: updatedPass.passId,
         inquiryId: updatedPass.inquiryId,
         coupleName,
-        couplePhoto: reg?.couplePhoto || null,
+        couplePhoto,
         isVip: Boolean(reg?.isVip),
         phoneNumber: reg?.phoneNumber || '',
         firstScannedAt: updatedPass.firstScannedAt,
@@ -343,7 +356,7 @@ export async function handleOnlineScan(req, res) {
     const reg = await Registration.findById(currentPass.registrationId);
     if (reg) {
       coupleName = `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim();
-      couplePhoto = reg.couplePhoto;
+      couplePhoto = resolveScannerCouplePhoto(reg);
       isVip = Boolean(reg.isVip);
       phoneNumber = reg.phoneNumber || '';
     }
@@ -421,7 +434,7 @@ export async function prepareOfflineEvent(req, res) {
       .select('passId inquiryId registrationId')
       .populate({
         path: 'registrationId',
-        select: 'husbandName wifeName surname couplePhoto isVip phoneNumber'
+        select: 'husbandName wifeName surname couplePhoto isVip phoneNumber r2Media mediaProvider'
       })
       .lean();
 
@@ -432,7 +445,7 @@ export async function prepareOfflineEvent(req, res) {
         passId: p.passId,
         inquiryId: p.inquiryId,
         coupleName: reg ? `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim() : 'Registered Couple',
-        couplePhoto: reg?.couplePhoto || null,
+        couplePhoto: resolveScannerCouplePhoto(reg),
         isVip: Boolean(reg?.isVip),
         phoneNumber: reg?.phoneNumber || ''
       };
@@ -719,7 +732,7 @@ export async function handleManualAttendance(req, res) {
         const reg = await Registration.findById(pass.registrationId);
         if (reg) {
           coupleName = `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim();
-          couplePhoto = reg.couplePhoto;
+          couplePhoto = resolveScannerCouplePhoto(reg);
           isVip = Boolean(reg.isVip);
           phoneNumber = reg.phoneNumber || '';
         }
@@ -757,16 +770,20 @@ export async function handleManualAttendance(req, res) {
     let isVip = false;
     let phoneNumber = '';
     if (pass.registrationId) {
-      const reg = await Registration.findByIdAndUpdate(pass.registrationId, {
-        $set: {
-          attendance: 'present',
-          attendanceAt: new Date(),
-          attendanceMethod: 'MANUAL_ENTRY'
-        }
-      });
+      const reg = await Registration.findByIdAndUpdate(
+        pass.registrationId,
+        {
+          $set: {
+            attendance: 'present',
+            attendanceAt: new Date(),
+            attendanceMethod: 'MANUAL_ENTRY'
+          }
+        },
+        { returnDocument: 'after' }
+      );
       if (reg) {
         coupleName = `${reg.husbandName || ''} & ${reg.wifeName || ''} ${reg.surname || ''}`.trim();
-        couplePhoto = reg.couplePhoto;
+        couplePhoto = resolveScannerCouplePhoto(reg);
         isVip = Boolean(reg.isVip);
         phoneNumber = reg.phoneNumber || '';
       }
