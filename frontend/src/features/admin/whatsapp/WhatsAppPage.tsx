@@ -491,7 +491,7 @@ export const WhatsAppPage = () => {
       if (res.success && res.stats) {
         setInboxUnreadCount(res.stats.unreadCount || 0);
       }
-    } catch (_) {}
+    } catch (_) { }
   };
 
   useEffect(() => {
@@ -707,13 +707,12 @@ export const WhatsAppPage = () => {
 
     return (
       <div className="space-y-0.5" title={row.healthReason || (isActionNeeded ? 'Attention required' : 'Lifecycle normal')}>
-        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-          isActionNeeded
+        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase ${isActionNeeded
             ? 'bg-rose-50 text-rose-800 border border-rose-300'
             : isWaiting
-            ? 'bg-amber-50 text-amber-800 border border-amber-300'
-            : 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-        }`}>
+              ? 'bg-amber-50 text-amber-800 border border-amber-300'
+              : 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+          }`}>
           {isActionNeeded ? 'ACTION NEEDED' : isWaiting ? 'WAITING' : 'HEALTHY'}
         </span>
         {row.healthReason && isActionNeeded && (
@@ -768,22 +767,20 @@ export const WhatsAppPage = () => {
         <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 self-start md:self-auto overflow-x-auto scrollbar-none w-full md:w-auto">
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 flex-1 md:flex-none justify-center ${
-              activeTab === 'dashboard'
+            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 flex-1 md:flex-none justify-center ${activeTab === 'dashboard'
                 ? 'bg-rose-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
+              }`}
           >
             <ActivityIcon className="w-3.5 h-3.5" />
             <span>Event Dashboard</span>
           </button>
           <button
             onClick={() => setActiveTab('inbox')}
-            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 flex-1 md:flex-none justify-center ${
-              activeTab === 'inbox'
+            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 flex-1 md:flex-none justify-center ${activeTab === 'inbox'
                 ? 'bg-rose-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
+              }`}
           >
             <MessageCircleIcon className="w-3.5 h-3.5" />
             <span>Support Inbox</span>
@@ -795,22 +792,20 @@ export const WhatsAppPage = () => {
           </button>
           <button
             onClick={() => setActiveTab('templates')}
-            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 flex-1 md:flex-none justify-center ${
-              activeTab === 'templates'
+            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 flex-1 md:flex-none justify-center ${activeTab === 'templates'
                 ? 'bg-rose-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
+              }`}
           >
             <FileTextIcon className="w-3.5 h-3.5" />
             <span>Templates &amp; Sandbox</span>
           </button>
           <button
             onClick={() => setActiveTab('logs')}
-            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 flex-1 md:flex-none justify-center ${
-              activeTab === 'logs'
+            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 flex-1 md:flex-none justify-center ${activeTab === 'logs'
                 ? 'bg-rose-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
+              }`}
           >
             <ClockIcon className="w-3.5 h-3.5" />
             <span>Live Audit Logs</span>
@@ -1025,11 +1020,10 @@ export const WhatsAppPage = () => {
             {/* 6. Action Needed */}
             <div
               onClick={() => setHealthFilter(healthFilter === 'ACTION_NEEDED' ? 'ALL' : 'ACTION_NEEDED')}
-              className={`border rounded-2xl sm:rounded-3xl p-4 shadow-xs space-y-1.5 cursor-pointer transition-all ${
-                healthFilter === 'ACTION_NEEDED'
+              className={`border rounded-2xl sm:rounded-3xl p-4 shadow-xs space-y-1.5 cursor-pointer transition-all ${healthFilter === 'ACTION_NEEDED'
                   ? 'bg-rose-50 border-rose-300 ring-2 ring-rose-500/30'
                   : 'bg-white border-slate-200 hover:border-rose-300'
-              }`}
+                }`}
             >
               <span className="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider block flex items-center justify-between">
                 <span>Action Needed</span>
@@ -1098,10 +1092,43 @@ export const WhatsAppPage = () => {
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
                   {[
                     { key: 'payment_pending', label: 'Payment Reminder', eligible: summary?.paymentPendingRegistrations ?? 0, stats: dashboardData?.messageTypeStats?.['payment_pending'] },
-                    { key: 'payment_confirmation', label: 'Payment Confirmed', eligible: summary?.confirmedRegistrations ?? 0, stats: dashboardData?.messageTypeStats?.['payment_confirmation'] || dashboardData?.messageTypeStats?.['pass_delivery'] },
+                    {
+                      key: 'payment_confirmation',
+                      label: 'Payment Confirmed',
+                      eligible: summary?.confirmedRegistrations ?? 0,
+                      stats: (() => {
+                        const pc = dashboardData?.messageTypeStats?.['payment_confirmation'];
+                        const pd = dashboardData?.messageTypeStats?.['pass_delivery'];
+                        const queued = (pc?.queued || 0) + (pd?.queued || 0);
+                        const sent = (pc?.sent || 0) + (pd?.sent || 0);
+                        const delivered = (pc?.delivered || 0) + (pd?.delivered || 0);
+                        const read = (pc?.read || 0) + (pd?.read || 0);
+                        const failed = (pc?.failed || 0) + (pd?.failed || 0);
+                        const deliveryRate = sent > 0 ? Math.round((delivered / sent) * 100) : 0;
+                        const readRate = delivered > 0 ? Math.round((read / delivered) * 100) : 0;
+                        return { queued, sent, delivered, read, failed, deliveryRate, readRate };
+                      })()
+                    },
                     { key: 'reminder', label: '48h Pass Reminder', eligible: summary?.confirmedRegistrations ?? 0, stats: dashboardData?.messageTypeStats?.['reminder'] },
                     { key: 'invitation', label: '24h Invitation (Image Header)', eligible: summary?.confirmedRegistrations ?? 0, stats: dashboardData?.messageTypeStats?.['invitation'] },
-                    { key: 'post_event', label: 'Post Event (Photos + Feedback)', eligible: (summary?.attendedRegistrations && summary.attendedRegistrations > 0) ? summary.attendedRegistrations : (summary?.confirmedRegistrations ?? 0), stats: dashboardData?.messageTypeStats?.['post_event'] || dashboardData?.messageTypeStats?.['gallery_ready'] || dashboardData?.messageTypeStats?.['feedback_request'] }
+                    {
+                      key: 'post_event',
+                      label: 'Post Event (Photos + Feedback)',
+                      eligible: (summary?.attendedRegistrations && summary.attendedRegistrations > 0) ? summary.attendedRegistrations : (summary?.confirmedRegistrations ?? 0),
+                      stats: (() => {
+                        const pe = dashboardData?.messageTypeStats?.['post_event'];
+                        const fr = dashboardData?.messageTypeStats?.['feedback_request'];
+                        const gr = dashboardData?.messageTypeStats?.['gallery_ready'];
+                        const queued = (pe?.queued || 0) + (fr?.queued || 0) + (gr?.queued || 0);
+                        const sent = (pe?.sent || 0) + (fr?.sent || 0) + (gr?.sent || 0);
+                        const delivered = (pe?.delivered || 0) + (fr?.delivered || 0) + (gr?.delivered || 0);
+                        const read = (pe?.read || 0) + (fr?.read || 0) + (gr?.read || 0);
+                        const failed = (pe?.failed || 0) + (fr?.failed || 0) + (gr?.failed || 0);
+                        const deliveryRate = sent > 0 ? Math.round((delivered / sent) * 100) : 0;
+                        const readRate = delivered > 0 ? Math.round((read / delivered) * 100) : 0;
+                        return { queued, sent, delivered, read, failed, deliveryRate, readRate };
+                      })()
+                    }
                   ].map((row) => {
                     const m = row.stats || { queued: 0, sent: 0, delivered: 0, read: 0, failed: 0, deliveryRate: 0, readRate: 0 };
                     return (
@@ -1280,11 +1307,10 @@ export const WhatsAppPage = () => {
                         <td className="py-2.5 px-3 font-mono text-slate-600">{row.maskedPhone}</td>
 
                         <td className="py-2.5 px-3">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
-                            row.paymentStatus === 'PAID'
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${row.paymentStatus === 'PAID'
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                               : 'bg-amber-100 text-amber-800 border border-amber-300'
-                          }`}>
+                            }`}>
                             {row.paymentStatus}
                           </span>
                         </td>
@@ -1469,7 +1495,7 @@ export const WhatsAppPage = () => {
             {/* Right: Live WhatsApp Device Simulator */}
             <div className="lg:col-span-5 bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xs flex flex-col items-center justify-center">
               <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-3">Live WhatsApp Preview</span>
-              
+
               {/* Phone Frame */}
               <div className="w-[280px] sm:w-[300px] bg-[#EFEAE2] border-8 border-slate-800 rounded-[36px] shadow-lg overflow-hidden flex flex-col h-[460px] relative">
                 {/* Phone Top Notch */}
@@ -2027,11 +2053,10 @@ export const WhatsAppPage = () => {
                       setSpecificBroadcastMode('TEMPLATE');
                       setSpecificPreviewData(null);
                     }}
-                    className={`p-2.5 rounded-xl border text-left font-bold transition-all cursor-pointer ${
-                      specificBroadcastMode === 'TEMPLATE'
+                    className={`p-2.5 rounded-xl border text-left font-bold transition-all cursor-pointer ${specificBroadcastMode === 'TEMPLATE'
                         ? 'bg-indigo-50 border-indigo-500 text-indigo-900 ring-1 ring-indigo-500/30'
                         : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
+                      }`}
                   >
                     <span className="block text-xs">Approved Template</span>
                     <span className="text-[10px] font-normal text-slate-500">Allowed outside 24h window</span>
@@ -2043,11 +2068,10 @@ export const WhatsAppPage = () => {
                       setSpecificBroadcastMode('FREE_TEXT');
                       setSpecificPreviewData(null);
                     }}
-                    className={`p-2.5 rounded-xl border text-left font-bold transition-all cursor-pointer ${
-                      specificBroadcastMode === 'FREE_TEXT'
+                    className={`p-2.5 rounded-xl border text-left font-bold transition-all cursor-pointer ${specificBroadcastMode === 'FREE_TEXT'
                         ? 'bg-indigo-50 border-indigo-500 text-indigo-900 ring-1 ring-indigo-500/30'
                         : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
+                      }`}
                   >
                     <span className="block text-xs">Free Text Message</span>
                     <span className="text-[10px] font-normal text-slate-500">Only 24h window-open</span>

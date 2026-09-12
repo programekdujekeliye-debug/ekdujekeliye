@@ -440,7 +440,7 @@ export const getEventCommunicationDashboard = async (req, res) => {
         { $match: eventMsgMatch },
         {
           $group: {
-            _id: { messageType: '$messageType', status: '$status' },
+            _id: { messageType: '$messageType', templateName: '$templateName', status: '$status' },
             count: { $sum: 1 }
           }
         }
@@ -502,7 +502,8 @@ export const getEventCommunicationDashboard = async (req, res) => {
     };
 
     breakdown.forEach(item => {
-      const type = item._id?.messageType;
+      let type = item._id?.messageType;
+      const tpl = item._id?.templateName;
       const status = item._id?.status;
       const count = item.count || 0;
 
@@ -524,6 +525,28 @@ export const getEventCommunicationDashboard = async (req, res) => {
         totalMessagesScheduled += count;
       }
 
+      // Canonicalize type based on templateName and messageType
+      if (
+        tpl === 'edkl_post_event_memories_feedback_v1' ||
+        type === 'post_event' ||
+        type === 'feedback_request' ||
+        type === 'gallery_ready'
+      ) {
+        type = 'post_event';
+      } else if (tpl === 'edkl_event_pass_reminder_v2' || type === 'reminder') {
+        type = 'reminder';
+      } else if (tpl === 'edkl_personal_invitation_24h_v2' || type === 'invitation') {
+        type = 'invitation';
+      } else if (tpl === 'edkl_payment_confirmed_pass_v1' || type === 'payment_confirmation' || type === 'pass_delivery') {
+        type = 'payment_confirmation';
+      } else if (
+        tpl === 'edkl_payment_pending_v1' ||
+        tpl === 'edkl_polite_payment_pending_v1' ||
+        type === 'payment_pending'
+      ) {
+        type = 'payment_pending';
+      }
+
       if (messageTypeStats[type]) {
         if (status === 'QUEUED' || status === 'SENDING') messageTypeStats[type].queued += count;
         if (status === 'SENT' || status === 'DELIVERED' || status === 'READ') messageTypeStats[type].sent += count;
@@ -532,6 +555,10 @@ export const getEventCommunicationDashboard = async (req, res) => {
         if (status === 'FAILED') messageTypeStats[type].failed += count;
       }
     });
+
+    // Mirror post_event stats to feedback_request and gallery_ready for backward compatibility
+    messageTypeStats.feedback_request = { ...messageTypeStats.post_event, eligible: attendedRegistrations };
+    messageTypeStats.gallery_ready = { ...messageTypeStats.post_event, eligible: attendedRegistrations };
 
     // Calculate rates
     Object.keys(messageTypeStats).forEach(type => {
@@ -1293,14 +1320,28 @@ export const getPostEventStatus = async (req, res) => {
       eventId: { $in: [event.id, event.slug] },
       $or: [
         { messageType: 'post_event' },
+        { messageType: 'feedback_request' },
         { messageType: 'gallery_ready' },
         { templateName: 'edkl_post_event_memories_feedback_v1' }
       ],
       status: { $in: ['QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'READ'] }
     });
 
+    const failedCount = await WhatsappMessage.countDocuments({
+      eventId: { $in: [event.id, event.slug] },
+      $or: [
+        { messageType: 'post_event' },
+        { messageType: 'feedback_request' },
+        { messageType: 'gallery_ready' },
+        { templateName: 'edkl_post_event_memories_feedback_v1' }
+      ],
+      status: 'FAILED'
+    });
+
     let lifecycleStatus = 'NOT_READY';
-    if (alreadySentCount > 0 && alreadySentCount >= eligibleWhatsappCount && eligibleWhatsappCount > 0) {
+    if (alreadySentCount > 0 && (alreadySentCount + failedCount >= eligibleWhatsappCount || alreadySentCount >= eligibleWhatsappCount) && eligibleWhatsappCount > 0) {
+      lifecycleStatus = 'SENT';
+    } else if (alreadySentCount > 0) {
       lifecycleStatus = 'SENT';
     } else if (isPastMidnight) {
       lifecycleStatus = 'READY_TO_SEND';
@@ -1374,7 +1415,21 @@ export const triggerPostEventSend = async (req, res) => {
 
       const idempotencyKey = `POST_EVENT:${event.id || event.slug}:${reg._id}:v1`;
 
-      const existing = await WhatsappMessage.findOne({ idempotencyKey }).lean();
+      const existing = await WhatsappMessage.findOne({
+        $or: [
+          { idempotencyKey },
+          {
+            inquiryId: reg.inquiryId,
+            templateName: 'edkl_post_event_memories_feedback_v1',
+            status: { $in: ['QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'READ'] }
+          },
+          {
+            registrationId: reg._id,
+            templateName: 'edkl_post_event_memories_feedback_v1',
+            status: { $in: ['QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'READ'] }
+          }
+        ]
+      }).lean();
       if (existing) {
         alreadySentCount++;
         continue;

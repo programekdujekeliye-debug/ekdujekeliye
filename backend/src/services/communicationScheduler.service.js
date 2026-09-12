@@ -401,6 +401,26 @@ export class CommunicationSchedulerService {
         }
       );
 
+      // 1b. Stale Lease Timeout: Mark jobs locked > 2 minutes ago with attemptCount >= 5 as FAILED
+      await WhatsappMessage.updateMany(
+        {
+          status: 'SENDING',
+          $or: [
+            { lockedAt: { $lte: staleThreshold } },
+            { lockedAt: null },
+            { lockedAt: { $exists: false } }
+          ],
+          attemptCount: { $gte: 5 }
+        },
+        {
+          $set: {
+            status: WHATSAPP_MESSAGE_STATUSES.FAILED,
+            lockedAt: null,
+            lastErrorMessage: 'Message delivery timed out after 5 attempts without confirmation.'
+          }
+        }
+      );
+
       // 2. Fetch candidates for current window (due now, or null/missing scheduledFor)
       const candidateQuery = {
         status: WHATSAPP_MESSAGE_STATUSES.QUEUED,
@@ -740,7 +760,7 @@ export class CommunicationSchedulerService {
     await WhatsappMessage.updateMany(
       {
         eventId: event.id || event.slug,
-        messageType: 'feedback_request',
+        messageType: { $in: ['post_event', 'feedback_request'] },
         status: WHATSAPP_MESSAGE_STATUSES.QUEUED
       },
       {
